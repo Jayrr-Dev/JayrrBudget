@@ -1,13 +1,9 @@
 import { integer, real, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
-export const plaidItems = sqliteTable("plaid_items", {
+export const institutions = sqliteTable("institutions", {
   id: integer("id").primaryKey({ autoIncrement: true }),
-  itemId: text("item_id").notNull().unique(),
-  accessToken: text("access_token").notNull(),
-  institutionId: text("institution_id"),
-  institutionName: text("institution_name"),
-  cursor: text("cursor"),
-  daysRequested: integer("days_requested").notNull().default(730),
+  institutionId: text("institution_id").notNull().unique(),
+  name: text("name"),
   createdAt: integer("created_at", { mode: "timestamp_ms" })
     .notNull()
     .$defaultFn(() => new Date()),
@@ -18,10 +14,10 @@ export const plaidItems = sqliteTable("plaid_items", {
 
 export const accounts = sqliteTable("accounts", {
   id: integer("id").primaryKey({ autoIncrement: true }),
-  plaidAccountId: text("plaid_account_id").notNull().unique(),
-  itemId: text("item_id")
+  accountId: text("account_id").notNull().unique(),
+  institutionId: text("institution_id")
     .notNull()
-    .references(() => plaidItems.itemId, { onDelete: "cascade" }),
+    .references(() => institutions.institutionId, { onDelete: "cascade" }),
   name: text("name").notNull(),
   officialName: text("official_name"),
   mask: text("mask"),
@@ -71,13 +67,13 @@ export const statementUploads = sqliteTable("statement_uploads", {
 
 export const transactions = sqliteTable("transactions", {
   id: integer("id").primaryKey({ autoIncrement: true }),
-  plaidTransactionId: text("plaid_transaction_id").notNull().unique(),
+  transactionId: text("transaction_id").notNull().unique(),
   accountId: text("account_id")
     .notNull()
-    .references(() => accounts.plaidAccountId, { onDelete: "cascade" }),
-  itemId: text("item_id")
+    .references(() => accounts.accountId, { onDelete: "cascade" }),
+  institutionId: text("institution_id")
     .notNull()
-    .references(() => plaidItems.itemId, { onDelete: "cascade" }),
+    .references(() => institutions.institutionId, { onDelete: "cascade" }),
   name: text("name").notNull(),
   merchantName: text("merchant_name"),
   merchantEntityId: text("merchant_entity_id"),
@@ -112,7 +108,7 @@ export const transactions = sqliteTable("transactions", {
   counterpartiesJson: text("counterparties_json"),
   paymentMetaJson: text("payment_meta_json"),
   runningBalance: real("running_balance"),
-  source: text("source").notNull().default("plaid"),
+  source: text("source").notNull().default("statement"),
   statementUploadId: integer("statement_upload_id").references(
     () => statementUploads.id,
     { onDelete: "set null" },

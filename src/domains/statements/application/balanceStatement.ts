@@ -242,7 +242,7 @@ export type StatementBalanceCheck = {
 };
 
 /**
- * Plaid signs: positive = money out.
+ * Ledger signs: positive = money out.
  * Cards/LOC: opening + sum = closing.
  * Chequing/savings: opening - sum = closing.
  */

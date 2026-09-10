@@ -1,5 +1,5 @@
 export type DashboardAccount = {
-  plaidAccountId: string;
+  accountId: string;
   name: string;
   officialName: string | null;
   mask: string | null;
@@ -11,7 +11,7 @@ export type DashboardAccount = {
 };
 
 export type DashboardTransaction = {
-  plaidTransactionId: string;
+  transactionId: string;
   accountId: string;
   name: string;
   merchantName: string | null;
@@ -45,9 +45,8 @@ export type DashboardTransaction = {
 };
 
 export type DashboardInstitution = {
-  itemId: string;
-  institutionName: string | null;
-  daysRequested: number;
+  institutionId: string;
+  name: string | null;
 };
 
 export type DashboardData = {
@@ -58,5 +57,4 @@ export type DashboardData = {
   transactionCount: number;
   earliestDate: string | null;
   latestDate: string | null;
-  daysRequested: number;
 };

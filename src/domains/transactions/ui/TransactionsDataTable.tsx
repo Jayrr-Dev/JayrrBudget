@@ -4,7 +4,7 @@ import { createColumnHelper } from "@tanstack/react-table";
 import { useMemo } from "react";
 import { DataTable } from "@/components/ui/data-table";
 import type { DataTableFeatures } from "@/components/ui/data-table-features";
-import { formatPlaidSpend } from "@/domains/dashboard/domain/money";
+import { formatLedgerSpend } from "@/domains/dashboard/domain/money";
 import type { DashboardTransaction } from "@/domains/dashboard/domain/types";
 
 const columnHelper =
@@ -172,7 +172,7 @@ export const transactionColumns = columnHelper.columns([
             isSpend ? "text-[var(--spend)]" : "text-[var(--income)]"
           }`}
         >
-          {formatPlaidSpend(amount, row.original.isoCurrencyCode ?? "CAD")}
+          {formatLedgerSpend(amount, row.original.isoCurrencyCode ?? "CAD")}
         </div>
       );
     },

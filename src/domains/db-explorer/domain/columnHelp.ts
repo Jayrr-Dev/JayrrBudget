@@ -1,14 +1,14 @@
 /** One-line "what you use this for" notes. Not type docs. */
 
 export const TABLE_HELP: Record<string, string> = {
-  plaid_items:
-    "A linked bank login. One row per Plaid connection.",
+  institutions:
+    "A bank or card issuer. Statement accounts hang off this.",
   accounts:
     "A real account at that bank. Checking, credit card, etc.",
   statement_uploads:
     "One PDF statement you uploaded. Totals live here, not on each line.",
   transactions:
-    "The ledger. Every spend or credit, from Plaid or a statement.",
+    "The ledger. Every spend or credit from a statement.",
   entities:
     "Who you paid: company, brand, or product. Used to group merchants.",
   taxonomy_nodes:
@@ -26,21 +26,17 @@ export const TABLE_HELP: Record<string, string> = {
 };
 
 export const COLUMN_HELP: Record<string, Record<string, string>> = {
-  plaid_items: {
-    id: "This connection's number.",
-    item_id: "Plaid's id for this bank login. Accounts and spends point here.",
-    access_token: "Secret we send Plaid to pull this bank again. Do not share.",
-    institution_id: "Plaid's code for the bank (CIBC, etc.).",
-    institution_name: "Bank name you see in the UI.",
-    cursor: "Bookmark so the next sync only fetches new spends.",
-    days_requested: "How far back we asked Plaid to go, in days.",
-    created_at: "When this bank was first linked.",
-    updated_at: "When we last synced or changed this link.",
+  institutions: {
+    id: "This bank's number.",
+    institution_id: "Stable key for the bank. Accounts and spends point here.",
+    name: "Bank name you see in the UI.",
+    created_at: "When this bank was first saved.",
+    updated_at: "When we last changed this bank row.",
   },
   accounts: {
     id: "This account's number.",
-    plaid_account_id: "Plaid's id for the account. Ledger rows point here.",
-    item_id: "Which bank login this account belongs to.",
+    account_id: "Stable key for the account. Ledger rows point here.",
+    institution_id: "Which bank this account belongs to.",
     name: "Nickname on the dashboard.",
     official_name: "The bank's longer product name.",
     mask: "Last four digits. Match statements and CSV files with this.",
@@ -82,12 +78,12 @@ export const COLUMN_HELP: Record<string, Record<string, string>> = {
   },
   transactions: {
     id: "This ledger row's number. Enrichment and labels point here.",
-    plaid_transaction_id: "Plaid's id, or a made-up id for statement lines.",
-    account_id: "Which account this spend hit (Plaid account id).",
-    item_id: "Which bank login it came from.",
+    transaction_id: "Stable key for this line. Statement imports reuse it.",
+    account_id: "Which account this spend hit.",
+    institution_id: "Which bank it came from.",
     name: "What you show in the list. Bank memo or merchant.",
-    merchant_name: "Store name Plaid or the PDF gave us.",
-    merchant_entity_id: "Plaid's merchant id, if they know the store.",
+    merchant_name: "Store name from the statement.",
+    merchant_entity_id: "Optional merchant id if we stored one.",
     merchant_category_code: "Card network store type (MCC). Coarse.",
     original_description: "Ugly bank text before cleanup.",
     amount: "How much. Positive = money out. Negative = money in.",
@@ -98,16 +94,16 @@ export const COLUMN_HELP: Record<string, Record<string, string>> = {
     authorized_datetime: "Swipe time, if present.",
     pending: "Still settling. Skip for 'real spent' until this is off.",
     pending_transaction_id: "If this posted row replaced a pending one, that id.",
-    category_primary: "Plaid's big bucket (FOOD_AND_DRINK).",
-    category_detailed: "Plaid's finer bucket. Ours may override later.",
-    category_confidence: "How sure Plaid was about that bucket.",
+    category_primary: "Big spend bucket (FOOD_AND_DRINK).",
+    category_detailed: "Finer bucket. Ours may override later.",
+    category_confidence: "How sure the parser was about that bucket.",
     payment_channel: "In store, online, or other.",
     transaction_code: "Bank code: purchase, payment, fee, and so on.",
     check_number: "Check number, if it was a check.",
-    account_owner: "Whose name is on the account, if Plaid sent it.",
+    account_owner: "Whose name is on the account, if we have it.",
     website: "Merchant site, for logos and lookup.",
     logo_url: "Picture for the merchant in the UI.",
-    category_icon_url: "Plaid's icon for their category.",
+    category_icon_url: "Icon for the category, if we stored one.",
     location_city: "City of the swipe, if known.",
     location_region: "State or province of the swipe.",
     location_postal_code: "Postal code of the swipe.",
@@ -116,10 +112,10 @@ export const COLUMN_HELP: Record<string, Record<string, string>> = {
     location_lon: "Map pin longitude.",
     location_address: "Street of the store.",
     location_store_number: "Chain store number (#1234).",
-    counterparties_json: "Raw Plaid 'who else was in this payment' blob.",
-    payment_meta_json: "Raw Plaid payment extras. Rarely used in UI.",
+    counterparties_json: "Raw 'who else was in this payment' blob.",
+    payment_meta_json: "Statement extras: reference, foreign amount, period.",
     running_balance: "Account balance after this line, if the bank sent it.",
-    source: "Where the row came from: plaid or statement.",
+    source: "Where the row came from, usually statement.",
     statement_upload_id: "Which PDF created or updated this row.",
     bank_direction: "debit or credit after CSV cross-check. Trust this for sign.",
     history_match: "matched = found in CSV. unmatched = PDF-only in that window.",

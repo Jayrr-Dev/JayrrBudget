@@ -1,13 +1,12 @@
 import { alias } from "drizzle-orm/sqlite-core";
 import { and, count, desc, eq, inArray, max, min } from "drizzle-orm";
-import { PLAID_TRANSACTIONS_DAYS_REQUESTED } from "@/domains/banking/infrastructure/plaid-client";
 import type { DashboardData } from "@/domains/dashboard/domain/types";
 import { isChannelMirrorTag } from "@/domains/enrichment/domain/channelTags";
 import { getDb } from "@/shared/db";
 import {
   accounts,
   entities,
-  plaidItems,
+  institutions,
   taxonomyNodes,
   transactionEnrichment,
   transactionLabels,
@@ -27,17 +26,16 @@ export async function getDashboard(): Promise<GetDashboardResult> {
     const category = alias(taxonomyNodes, "category_node");
     const typeNode = alias(taxonomyNodes, "type_node");
 
-    const [itemRows, accountRows, txnRows, stats] = await Promise.all([
+    const [institutionRows, accountRows, txnRows, stats] = await Promise.all([
       db
         .select({
-          itemId: plaidItems.itemId,
-          institutionName: plaidItems.institutionName,
-          daysRequested: plaidItems.daysRequested,
+          institutionId: institutions.institutionId,
+          name: institutions.name,
         })
-        .from(plaidItems),
+        .from(institutions),
       db
         .select({
-          plaidAccountId: accounts.plaidAccountId,
+          accountId: accounts.accountId,
           name: accounts.name,
           officialName: accounts.officialName,
           mask: accounts.mask,
@@ -51,7 +49,7 @@ export async function getDashboard(): Promise<GetDashboardResult> {
       db
         .select({
           id: transactions.id,
-          plaidTransactionId: transactions.plaidTransactionId,
+          transactionId: transactions.transactionId,
           accountId: transactions.accountId,
           name: transactions.name,
           merchantName: transactions.merchantName,
@@ -142,7 +140,7 @@ export async function getDashboard(): Promise<GetDashboardResult> {
     }
 
     const data: DashboardData = {
-      institutions: itemRows,
+      institutions: institutionRows,
       accounts: accountRows,
       transactions: txnRows.map(({ id, ...txn }) => ({
         ...txn,
@@ -157,8 +155,6 @@ export async function getDashboard(): Promise<GetDashboardResult> {
       transactionCount: Number(stats[0]?.transactionCount ?? 0),
       earliestDate: stats[0]?.earliestDate ?? null,
       latestDate: stats[0]?.latestDate ?? null,
-      daysRequested:
-        itemRows[0]?.daysRequested ?? PLAID_TRANSACTIONS_DAYS_REQUESTED,
     };
 
     return { ok: true, data };

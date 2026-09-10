@@ -111,7 +111,7 @@ async function wipeLedger() {
     "transactions",
     "statement_uploads",
     "accounts",
-    "plaid_items",
+    "institutions",
     "entities",
     "taxonomy_nodes",
   ];
@@ -123,7 +123,7 @@ async function wipeLedger() {
       (select count(*) from transactions) as txns,
       (select count(*) from statement_uploads) as uploads,
       (select count(*) from accounts) as accounts,
-      (select count(*) from plaid_items) as items`,
+      (select count(*) from institutions) as items`,
   );
   return after.rows[0];
 }

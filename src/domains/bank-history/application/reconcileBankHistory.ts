@@ -88,7 +88,7 @@ export async function reconcileBankHistory(): Promise<ReconcileBankHistoryResult
   const history = (await db.select().from(bankHistoryRows)) as HistoryRow[];
   const accountRows = await db.select().from(accounts);
   const maskByAccountId = new Map(
-    accountRows.map((row) => [row.plaidAccountId, row.mask ?? ""]),
+    accountRows.map((row) => [row.accountId, row.mask ?? ""]),
   );
 
   const statement = (

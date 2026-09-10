@@ -233,7 +233,7 @@ export function BankAccountsDashboard({
   const selectedAccount = useMemo(() => {
     if (!selectedAccountId) return null;
     return (
-      accounts.find((account) => account.plaidAccountId === selectedAccountId) ??
+      accounts.find((account) => account.accountId === selectedAccountId) ??
       null
     );
   }, [accounts, selectedAccountId]);
@@ -241,7 +241,7 @@ export function BankAccountsDashboard({
   const selectedTransactions = useMemo(() => {
     if (!selectedAccount) return [];
     return transactions.filter(
-      (txn) => txn.accountId === selectedAccount.plaidAccountId,
+      (txn) => txn.accountId === selectedAccount.accountId,
     );
   }, [transactions, selectedAccount]);
 
@@ -274,12 +274,12 @@ export function BankAccountsDashboard({
           <ul className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)]">
             {section.accounts.map((account, index) => (
               <li
-                key={account.plaidAccountId}
+                key={account.accountId}
                 className={index > 0 ? "border-t border-[var(--border)]" : ""}
               >
                 <AccountRow
                   account={account}
-                  href={accountDetailHref(account.plaidAccountId)}
+                  href={accountDetailHref(account.accountId)}
                 />
               </li>
             ))}

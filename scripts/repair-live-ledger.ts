@@ -23,7 +23,7 @@ async function flipDepositorySigns() {
     const rows = await db
       .select({ id: transactions.id, amount: transactions.amount })
       .from(transactions)
-      .where(eq(transactions.accountId, account.plaidAccountId));
+      .where(eq(transactions.accountId, account.accountId));
     if (rows.length === 0) continue;
 
     const negative = rows.filter((row) => row.amount < 0).length;
@@ -72,13 +72,13 @@ async function mergeWrongVisaMask() {
     const existing = await db
       .select()
       .from(accounts)
-      .where(eq(accounts.plaidAccountId, nextId))
+      .where(eq(accounts.accountId, nextId))
       .limit(1);
 
     if (!existing[0]) {
       await db.insert(accounts).values({
-        plaidAccountId: nextId,
-        itemId: account.itemId,
+        accountId: nextId,
+        institutionId: account.institutionId,
         name: account.name,
         officialName: account.officialName,
         mask: "1654",
@@ -94,7 +94,7 @@ async function mergeWrongVisaMask() {
     const txns = await db
       .select({ id: transactions.id })
       .from(transactions)
-      .where(eq(transactions.accountId, account.plaidAccountId));
+      .where(eq(transactions.accountId, account.accountId));
     for (const txn of txns) {
       await db
         .update(transactions)
@@ -108,7 +108,7 @@ async function mergeWrongVisaMask() {
       .set({ accountMask: "1654" })
       .where(eq(statementUploads.accountMask, "3945"));
 
-    await db.delete(accounts).where(eq(accounts.plaidAccountId, account.plaidAccountId));
+    await db.delete(accounts).where(eq(accounts.accountId, account.accountId));
   }
 
   return { moved, from: "3945", to: "1654" };

@@ -107,7 +107,7 @@ export function isDepositoryStatement(accountType: string | null | undefined) {
   return type === "chequing" || type === "savings";
 }
 
-/** Plaid-style ledger: positive = money out. Deposit closing = opening - sum. */
+/** Ledger signs: positive = money out. Deposit closing = opening - sum. */
 export function statementEffectOnBalance(
   accountType: string | null | undefined,
   transactionSum: number,
@@ -136,7 +136,7 @@ function flipAmounts(parsed: ParsedStatement): ParsedStatement {
 }
 
 /**
- * CIBC chequing prints withdrawals as negative cash. Ledger wants Plaid signs.
+ * CIBC chequing prints withdrawals as negative cash. Ledger wants positive = out.
  * If opening+sum=closing on a deposit account, flip every amount.
  */
 export function alignParsedAmountSigns(parsed: ParsedStatement): ParsedStatement {

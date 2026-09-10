@@ -7,14 +7,14 @@ const client = createClient({
 });
 
 await client.execute(
-  "DELETE FROM transactions WHERE source = 'statement' OR item_id = 'manual-statements'",
+  "DELETE FROM transactions WHERE source = 'statement' OR institution_id = 'manual-statements'",
 );
 await client.execute(
-  "DELETE FROM accounts WHERE item_id = 'manual-statements' OR plaid_account_id LIKE 'manual-stmt-%'",
+  "DELETE FROM accounts WHERE institution_id = 'manual-statements' OR account_id LIKE 'manual-stmt-%'",
 );
 await client.execute("DELETE FROM statement_uploads");
 await client.execute(
-  "DELETE FROM plaid_items WHERE item_id = 'manual-statements'",
+  "DELETE FROM institutions WHERE institution_id = 'manual-statements'",
 );
 
 const after = await client.execute(

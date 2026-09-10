@@ -85,7 +85,7 @@ function compareRows(a: Row, b: Row, sortKey: SortKey, sortDir: SortDir) {
   switch (sortKey) {
     case "date": {
       if (a.date === b.date) {
-        cmp = a.plaidTransactionId.localeCompare(b.plaidTransactionId);
+        cmp = a.transactionId.localeCompare(b.transactionId);
       } else {
         cmp = a.date < b.date ? -1 : 1;
       }
@@ -129,7 +129,7 @@ function compareRows(a: Row, b: Row, sortKey: SortKey, sortDir: SortDir) {
 
   // Stable tie-break: newest date first, then id.
   if (a.date !== b.date) return a.date < b.date ? 1 : -1;
-  return b.plaidTransactionId.localeCompare(a.plaidTransactionId);
+  return b.transactionId.localeCompare(a.transactionId);
 }
 
 function SortHeader({
@@ -194,7 +194,7 @@ export function AccountPastTransactions({
   const rows = useMemo(() => {
     const chronological = [...transactions].sort((a, b) => {
       if (a.date === b.date) {
-        return b.plaidTransactionId.localeCompare(a.plaidTransactionId);
+        return b.transactionId.localeCompare(a.transactionId);
       }
       return a.date < b.date ? 1 : -1;
     });
@@ -386,7 +386,7 @@ export function AccountPastTransactions({
                 const isCredit = txn.amount < 0;
                 return (
                   <tr
-                    key={txn.plaidTransactionId}
+                    key={txn.transactionId}
                     className="border-b border-[#e5e9ef]"
                   >
                     <td className="whitespace-nowrap py-3.5 pr-3 text-[#1a2330]">

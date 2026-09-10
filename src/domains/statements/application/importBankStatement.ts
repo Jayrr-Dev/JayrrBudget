@@ -13,7 +13,7 @@ import { loadCategoryVocabulary } from "@/domains/statements/application/categor
 import { polishParsedStatement } from "@/domains/statements/application/polishParsedStatement";
 import { runCategoryHygienePipeline } from "@/domains/statements/application/runCategoryHygienePipeline";
 import {
-  MANUAL_ITEM_ID,
+  MANUAL_INSTITUTION_ID,
   manualAccountId,
   normalizeStatementText,
   statementFileHash,
@@ -36,7 +36,7 @@ import { createClient } from "@libsql/client";
 import { getDb } from "@/shared/db";
 import {
   accounts,
-  plaidItems,
+  institutions,
   statementUploads,
   transactions,
 } from "@/shared/db/schema";
@@ -67,17 +67,14 @@ async function ensureManualLedger() {
 
   const existingItem = await db
     .select()
-    .from(plaidItems)
-    .where(eq(plaidItems.itemId, MANUAL_ITEM_ID))
+    .from(institutions)
+    .where(eq(institutions.institutionId, MANUAL_INSTITUTION_ID))
     .limit(1);
 
   if (!existingItem[0]) {
-    await db.insert(plaidItems).values({
-      itemId: MANUAL_ITEM_ID,
-      accessToken: "manual",
-      institutionId: "manual",
-      institutionName: "Manual statement uploads",
-      daysRequested: 0,
+    await db.insert(institutions).values({
+      institutionId: MANUAL_INSTITUTION_ID,
+      name: "Manual statement uploads",
     });
   }
 }
@@ -137,7 +134,7 @@ function datesNear(
 
 type SoftMatchRow = {
   id: number;
-  plaidTransactionId: string;
+  transactionId: string;
   name: string;
   merchantName: string | null;
   amount: number;
@@ -372,12 +369,12 @@ export async function importBankStatement(params: {
     const existingAccount = await db
       .select()
       .from(accounts)
-      .where(eq(accounts.plaidAccountId, accountId))
+      .where(eq(accounts.accountId, accountId))
       .limit(1);
 
     const accountValues = {
-      plaidAccountId: accountId,
-      itemId: MANUAL_ITEM_ID,
+      accountId,
+      institutionId: MANUAL_INSTITUTION_ID,
       name:
         parsed.accountName ||
         parsed.institutionName ||
@@ -395,7 +392,7 @@ export async function importBankStatement(params: {
       await db
         .update(accounts)
         .set(accountValues)
-        .where(eq(accounts.plaidAccountId, accountId));
+        .where(eq(accounts.accountId, accountId));
     } else {
       await db.insert(accounts).values(accountValues);
     }
@@ -403,7 +400,7 @@ export async function importBankStatement(params: {
     const existingOnAccount = await db
       .select({
         id: transactions.id,
-        plaidTransactionId: transactions.plaidTransactionId,
+        transactionId: transactions.transactionId,
         name: transactions.name,
         merchantName: transactions.merchantName,
         amount: transactions.amount,
@@ -421,7 +418,7 @@ export async function importBankStatement(params: {
 
     const softPool: SoftMatchRow[] = existingOnAccount.map((row) => ({
       id: row.id,
-      plaidTransactionId: row.plaidTransactionId,
+      transactionId: row.transactionId,
       name: row.name,
       merchantName: row.merchantName,
       amount: row.amount,
@@ -484,7 +481,7 @@ export async function importBankStatement(params: {
           statementUploadId: transactions.statementUploadId,
         })
         .from(transactions)
-        .where(eq(transactions.plaidTransactionId, externalId))
+        .where(eq(transactions.transactionId, externalId))
         .limit(1);
 
       const softTwin =
@@ -508,7 +505,7 @@ export async function importBankStatement(params: {
         await db
           .update(transactions)
           .set({
-            plaidTransactionId: externalId,
+            transactionId: externalId,
             accountId,
             name: txn.description,
             merchantName:
@@ -562,9 +559,9 @@ export async function importBankStatement(params: {
       const [inserted] = await db
         .insert(transactions)
         .values({
-          plaidTransactionId: externalId,
+          transactionId: externalId,
           accountId,
-          itemId: MANUAL_ITEM_ID,
+          institutionId: MANUAL_INSTITUTION_ID,
           name: txn.description,
           merchantName: txn.merchantName,
           amount: txn.amount,

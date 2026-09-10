@@ -7,7 +7,7 @@ import {
   bankHistoryFiles,
   bankHistoryRows,
   entities,
-  plaidItems,
+  institutions,
   statementUploads,
   taxonomyNodes,
   transactionEnrichment,
@@ -25,7 +25,7 @@ import type {
 } from "@/domains/db-explorer/domain/types";
 
 const TABLE_MAP = {
-  plaid_items: plaidItems,
+  institutions,
   accounts,
   statement_uploads: statementUploads,
   transactions,

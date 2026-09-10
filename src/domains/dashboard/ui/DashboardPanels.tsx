@@ -1,12 +1,9 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { ButtonGroup } from "@/components/ui/button-group";
-import { isPlaidEnabled } from "@/domains/banking/infrastructure/plaid-client";
-import { ConnectBankButton } from "@/domains/banking/ui/ConnectBankButton";
-import { formatMoney, formatPlaidSpend } from "@/domains/dashboard/domain/money";
+import { formatMoney, formatLedgerSpend } from "@/domains/dashboard/domain/money";
 import type {
   DashboardAccount,
   DashboardData,
@@ -15,13 +12,7 @@ import type {
 import { fetchDashboard } from "@/domains/dashboard/queries/fetchDashboard";
 import { queryKeys } from "@/domains/dashboard/queries/query-keys";
 import { StatementUpload } from "@/domains/statements/ui/StatementUpload";
-import { requestSyncTransactions } from "@/domains/transactions/queries/syncTransactions";
-import { removeLinkedBanks } from "@/domains/banking/queries/removeLinkedBanks";
-import { toast } from "sonner";
-import { errorMessage } from "@/shared/lib/error-message";
 import { formatDisplayDate } from "@/shared/lib/format-date";
-
-const plaidEnabled = isPlaidEnabled();
 
 export function useDashboard() {
   return useQuery({
@@ -36,58 +27,9 @@ export function DashboardToolbar({
   onImported?: () => Promise<void> | void;
 } = {}) {
   const queryClient = useQueryClient();
-  const sync = useMutation({
-    mutationFn: (options?: {
-      resetCursor?: boolean;
-      waitForHistory?: boolean;
-    }) => requestSyncTransactions(options),
-    onSuccess: async () => {
-      toast.success("Bank history synced");
-      await queryClient.invalidateQueries({ queryKey: queryKeys.dashboard });
-    },
-    onError: (error) => {
-      toast.error("Sync failed", {
-        description: errorMessage(error),
-      });
-    },
-  });
-  const resetBanks = useMutation({
-    mutationFn: removeLinkedBanks,
-    onSuccess: async () => {
-      toast.success("Linked banks removed");
-      await queryClient.invalidateQueries({ queryKey: queryKeys.dashboard });
-    },
-    onError: (error) => {
-      toast.error("Could not reset banks", {
-        description: errorMessage(error),
-      });
-    },
-  });
 
   return (
     <div className="flex flex-wrap items-start justify-end gap-2">
-      {plaidEnabled ? (
-        <ButtonGroup>
-          <ConnectBankButton
-            onLinked={async () => {
-              await sync.mutateAsync({
-                resetCursor: true,
-                waitForHistory: true,
-              });
-            }}
-          />
-          <Button
-            type="button"
-            variant="outline"
-            disabled={sync.isPending}
-            onClick={() =>
-              sync.mutate({ resetCursor: true, waitForHistory: true })
-            }
-          >
-            {sync.isPending ? "Syncing history…" : "Full history sync"}
-          </Button>
-        </ButtonGroup>
-      ) : null}
       <StatementUpload
         onImported={async () => {
           await queryClient.invalidateQueries({
@@ -102,25 +44,6 @@ export function DashboardToolbar({
       >
         Open canvas
       </Button>
-      {plaidEnabled ? (
-        <Button
-          type="button"
-          variant="outline"
-          disabled={resetBanks.isPending}
-          className="border-red-300 text-red-800 hover:bg-red-50 hover:text-red-900"
-          onClick={() => {
-            if (
-              window.confirm(
-                "Remove linked banks and wipe local data so you can re-connect with a fresh 2-year history request?",
-              )
-            ) {
-              resetBanks.mutate();
-            }
-          }}
-        >
-          {resetBanks.isPending ? "Removing…" : "Reset & re-link"}
-        </Button>
-      ) : null}
     </div>
   );
 }
@@ -143,8 +66,7 @@ export function OverviewPanel({ data }: { data: DashboardData }) {
           value={String(data.transactionCount)}
         />
       </section>
-      <section className="grid gap-4 sm:grid-cols-3">
-        <Stat label="History requested" value={`${data.daysRequested} days`} />
+      <section className="grid gap-4 sm:grid-cols-2">
         <Stat label="Earliest txn" value={formatDisplayDate(data.earliestDate)} />
         <Stat label="Latest txn" value={formatDisplayDate(data.latestDate)} />
       </section>
@@ -176,7 +98,7 @@ export function AccountsPanel({
         <ul className="divide-y divide-[var(--border)] overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)]">
           {accounts.map((account) => (
             <li
-              key={account.plaidAccountId}
+              key={account.accountId}
               className="flex items-center justify-between gap-4 px-4 py-3"
             >
               <div>
@@ -236,7 +158,7 @@ export function TransactionsList({
               .join(", ");
             return (
               <li
-                key={txn.plaidTransactionId}
+                key={txn.transactionId}
                 className="flex items-start justify-between gap-4 px-4 py-3"
               >
                 <div className="min-w-0">
@@ -278,7 +200,7 @@ export function TransactionsList({
                     isSpend ? "text-[var(--spend)]" : "text-[var(--income)]"
                   }`}
                 >
-                  {formatPlaidSpend(
+                  {formatLedgerSpend(
                     txn.amount,
                     txn.isoCurrencyCode ?? "USD",
                   )}

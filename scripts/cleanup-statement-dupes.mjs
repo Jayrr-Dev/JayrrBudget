@@ -78,8 +78,8 @@ async function main() {
 
   const accounts = (
     await client.execute(
-      `SELECT plaid_account_id, name, official_name, mask, type, subtype
-       FROM accounts WHERE item_id = 'manual-statements'`,
+      `SELECT account_id, name, official_name, mask, type, subtype
+       FROM accounts WHERE institution_id = 'manual-statements'`,
     )
   ).rows;
 
@@ -98,7 +98,7 @@ async function main() {
       accountMask: a.mask,
       accountType,
     });
-    accountMeta.set(a.plaid_account_id, {
+    accountMeta.set(a.account_id, {
       stableId,
       institutionName: a.official_name || a.name,
       mask: a.mask,
@@ -106,24 +106,23 @@ async function main() {
     });
   }
 
-  // Ensure stable accounts exist (copy from any legacy row).
   for (const a of accounts) {
-    const meta = accountMeta.get(a.plaid_account_id);
+    const meta = accountMeta.get(a.account_id);
     if (!meta) continue;
     const existing = await client.execute({
-      sql: `SELECT plaid_account_id FROM accounts WHERE plaid_account_id = ?`,
+      sql: `SELECT account_id FROM accounts WHERE account_id = ?`,
       args: [meta.stableId],
     });
     if (existing.rows.length === 0) {
       await client.execute({
         sql: `INSERT INTO accounts (
-          plaid_account_id, item_id, name, official_name, mask, type, subtype,
+          account_id, institution_id, name, official_name, mask, type, subtype,
           current_balance, available_balance, iso_currency_code, updated_at
         )
-        SELECT ?, item_id, name, official_name, mask, type, subtype,
+        SELECT ?, institution_id, name, official_name, mask, type, subtype,
                current_balance, available_balance, iso_currency_code, ?
-        FROM accounts WHERE plaid_account_id = ?`,
-        args: [meta.stableId, Date.now(), a.plaid_account_id],
+        FROM accounts WHERE account_id = ?`,
+        args: [meta.stableId, Date.now(), a.account_id],
       });
       console.log("created stable account", meta.stableId);
     }
@@ -131,7 +130,7 @@ async function main() {
 
   const txns = (
     await client.execute(
-      `SELECT id, plaid_transaction_id, account_id, name, amount, date,
+      `SELECT id, transaction_id, account_id, name, amount, date,
               statement_upload_id
        FROM transactions
        WHERE source = 'statement'
@@ -154,7 +153,6 @@ async function main() {
   let rekeyed = 0;
 
   for (const [, group] of groups) {
-    // Prefer newest upload, then newest id (already sorted DESC).
     const keeper = group[0];
     const drop = group.slice(1);
 
@@ -170,15 +168,12 @@ async function main() {
       occIndex,
     );
 
-    // If another row already owns the target fingerprint id, delete this keeper too
-    // after moving nothing (rare during migration).
     const conflict = await client.execute({
-      sql: `SELECT id FROM transactions WHERE plaid_transaction_id = ? AND id != ?`,
+      sql: `SELECT id FROM transactions WHERE transaction_id = ? AND id != ?`,
       args: [newExternalId, keeper.id],
     });
 
     if (conflict.rows.length > 0) {
-      // Target fingerprint already present: drop entire group including keeper.
       for (const row of group) {
         await client.execute({
           sql: `DELETE FROM transactions WHERE id = ?`,
@@ -190,12 +185,12 @@ async function main() {
     }
 
     if (
-      keeper.plaid_transaction_id !== newExternalId ||
+      keeper.transaction_id !== newExternalId ||
       keeper.account_id !== keeper.stableAccountId
     ) {
       await client.execute({
         sql: `UPDATE transactions
-              SET plaid_transaction_id = ?, account_id = ?, updated_at = ?
+              SET transaction_id = ?, account_id = ?, updated_at = ?
               WHERE id = ?`,
         args: [
           newExternalId,
@@ -217,23 +212,22 @@ async function main() {
     }
   }
 
-  // Drop legacy per-upload accounts that have no transactions left.
   const leftoverAccounts = (
     await client.execute(
-      `SELECT a.plaid_account_id,
-              (SELECT count(1) FROM transactions t WHERE t.account_id = a.plaid_account_id) AS txn_count
+      `SELECT a.account_id,
+              (SELECT count(1) FROM transactions t WHERE t.account_id = a.account_id) AS txn_count
        FROM accounts a
-       WHERE a.item_id = 'manual-statements'`,
+       WHERE a.institution_id = 'manual-statements'`,
     )
   ).rows;
 
   let accountsDeleted = 0;
   for (const a of leftoverAccounts) {
-    const isLegacy = String(a.plaid_account_id).startsWith("manual-stmt-");
+    const isLegacy = String(a.account_id).startsWith("manual-stmt-");
     if (isLegacy && Number(a.txn_count) === 0) {
       await client.execute({
-        sql: `DELETE FROM accounts WHERE plaid_account_id = ?`,
-        args: [a.plaid_account_id],
+        sql: `DELETE FROM accounts WHERE account_id = ?`,
+        args: [a.account_id],
       });
       accountsDeleted += 1;
     }
@@ -247,7 +241,7 @@ async function main() {
 
   const afterAccounts = (
     await client.execute(
-      `SELECT plaid_account_id, name, mask FROM accounts WHERE item_id = 'manual-statements'`,
+      `SELECT account_id, name, mask FROM accounts WHERE institution_id = 'manual-statements'`,
     )
   ).rows;
 

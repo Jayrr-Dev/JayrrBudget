@@ -59,7 +59,7 @@ export function normalizeStatementAccountType(
   return "other";
 }
 
-/** Map statement account type → Plaid-like type/subtype stored on accounts. */
+/** Map statement account type → type/subtype stored on accounts. */
 export function statementTypeToLedgerFields(accountType: string): {
   type: string;
   subtype: string | null;

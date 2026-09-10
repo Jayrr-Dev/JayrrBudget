@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "JayrrBudget",
-  description: "Personal budgeting with Plaid and SQLite",
+  description: "Personal budgeting with statement imports and SQLite",
   icons: {
     icon: [{ url: "/icon.svg", type: "image/svg+xml" }],
     apple: [{ url: "/apple-touch-icon.svg", type: "image/svg+xml" }],

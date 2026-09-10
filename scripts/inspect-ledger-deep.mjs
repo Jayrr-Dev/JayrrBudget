@@ -51,7 +51,7 @@ const masks = await q(`
     sum(case when t.amount < 0 then 1 else 0 end) as neg,
     round(avg(t.amount), 2) as avg_amt
   from accounts a
-  left join transactions t on t.account_id = a.plaid_account_id
+  left join transactions t on t.account_id = a.account_id
   group by a.id
 `);
 
@@ -83,7 +83,7 @@ const missingMerchant = await q(`
 const twins = await q(`
   select t.date, t.amount, t.name, group_concat(distinct a.mask) as masks, count(*) as n
   from transactions t
-  join accounts a on a.plaid_account_id = t.account_id
+  join accounts a on a.account_id = t.account_id
   group by t.date, t.amount, lower(trim(t.name))
   having n > 1
 `);
@@ -91,7 +91,7 @@ const twins = await q(`
 const monthCov = await q(`
   select a.mask, substr(t.date,1,7) as ym, count(*) as n
   from transactions t
-  join accounts a on a.plaid_account_id = t.account_id
+  join accounts a on a.account_id = t.account_id
   group by a.mask, ym
   order by a.mask, ym
 `);
@@ -99,7 +99,7 @@ const monthCov = await q(`
 const visaSample = await q(`
   select t.date, t.merchant_name, t.name, t.amount, t.category_detailed, t.payment_channel
   from transactions t
-  join accounts a on a.plaid_account_id = t.account_id
+  join accounts a on a.account_id = t.account_id
   where a.mask in ('3945','1654')
   order by random() limit 8
 `);
@@ -107,7 +107,7 @@ const visaSample = await q(`
 const cheqSample = await q(`
   select t.date, t.merchant_name, t.name, t.amount, t.category_detailed, t.transaction_code
   from transactions t
-  join accounts a on a.plaid_account_id = t.account_id
+  join accounts a on a.account_id = t.account_id
   where a.mask='5192' and t.amount < 0 and category_detailed not in ('Transfer','Income')
   order by random() limit 8
 `);
@@ -132,7 +132,7 @@ async function matchRate(mask, csvRows, through) {
   const dbRows = await q(
     `select t.date, round(abs(t.amount),2) as amt, lower(t.name) as name
      from transactions t
-     join accounts a on a.plaid_account_id = t.account_id
+     join accounts a on a.account_id = t.account_id
      where a.mask = ? and t.date <= ?`,
     [mask, through],
   );

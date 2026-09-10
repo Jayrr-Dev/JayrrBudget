@@ -10,8 +10,8 @@ export function formatMoney(
   }).format(amount);
 }
 
-/** Plaid amounts: positive = money out, negative = money in. */
-export function formatPlaidSpend(amount: number, currency = "USD") {
+/** Ledger amounts: positive = money out, negative = money in. */
+export function formatLedgerSpend(amount: number, currency = "USD") {
   const signed = amount > 0 ? -amount : Math.abs(amount);
   return formatMoney(signed, currency);
 }

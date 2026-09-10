@@ -24,7 +24,7 @@ const accounts = await q(`
     min(t.date) as first_date, max(t.date) as last_date,
     round(sum(t.amount), 2) as amount_sum
   from accounts a
-  left join transactions t on t.account_id = a.plaid_account_id
+  left join transactions t on t.account_id = a.account_id
   group by a.id
   order by txns desc
 `);
@@ -110,7 +110,7 @@ const samples = await q(`
     t.amount, t.category_detailed, t.category_primary, t.payment_channel,
     t.transaction_code, t.location_city, t.location_region
   from transactions t
-  join accounts a on a.plaid_account_id = t.account_id
+  join accounts a on a.account_id = t.account_id
   order by random()
   limit 16
 `);

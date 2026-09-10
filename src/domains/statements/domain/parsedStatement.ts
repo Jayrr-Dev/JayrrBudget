@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
 
-export const MANUAL_ITEM_ID = "manual-statements";
+export const MANUAL_INSTITUTION_ID = "manual-statements";
 
 export const parsedStatementSchema = z.object({
   institutionName: z.string().nullable(),

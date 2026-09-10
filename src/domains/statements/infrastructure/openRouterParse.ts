@@ -36,7 +36,7 @@ function categoryPromptBlock(vocabulary?: CategoryVocabulary) {
 }
 
 const SIGN_AND_BALANCE_RULES = [
-  "LEDGER SIGNS (Plaid, same for every account type):",
+  "LEDGER SIGNS (same for every account type):",
   "Positive = money leaving the customer (purchase, fee, PAD, ATM, transfer out, interest charged).",
   "Negative = money arriving (payroll, deposit, refund, credit, card payment, e-Transfer in).",
   "Chequing/savings: a withdrawal that LOWERS cash is still POSITIVE. Do not copy the running-balance column sign.",
@@ -200,7 +200,7 @@ export async function rebalanceParsedStatement(
       `accountType=${parsed.accountType}`,
       `openingBalance=${balance.openingBalance}`,
       `closingBalance=${balance.closingBalance}`,
-      `transactionSum=${balance.transactionSum} (Plaid: positive = money out)`,
+      `transactionSum=${balance.transactionSum} (positive = money out)`,
       `computedClosing=${balance.computedClosing}`,
       `delta=${balance.delta} (computedClosing - closingBalance).`,
       "Likely cause: duplicate Trans/Post rows, missing/extra lines, or chequing amounts copied from the running-balance column.",
