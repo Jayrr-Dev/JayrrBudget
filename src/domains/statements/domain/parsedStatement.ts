@@ -1,0 +1,174 @@
+import { createHash } from "node:crypto";
+import { z } from "zod";
+
+export const MANUAL_ITEM_ID = "manual-statements";
+
+export const parsedStatementSchema = z.object({
+  institutionName: z.string().nullable(),
+  accountName: z.string().nullable(),
+  accountMask: z
+    .string()
+    .nullable()
+    .describe(
+      "Last 4 of the product: card PAN for Visa/MC, account number for chequing/LOC. Never a customer number.",
+    ),
+  accountType: z
+    .enum([
+      "chequing",
+      "checking",
+      "savings",
+      "credit",
+      "credit_card",
+      "lending",
+      "line_of_credit",
+      "other",
+    ])
+    .default("other")
+    .describe(
+      "Dashboard category: chequing/checking, savings, credit/credit_card, lending/line_of_credit, or other (TFSA/business/etc).",
+    ),
+  currency: z.string().default("CAD"),
+  statementPeriodStart: z
+    .string()
+    .nullable()
+    .describe("YYYY-MM-DD statement period start"),
+  statementPeriodEnd: z
+    .string()
+    .nullable()
+    .describe("YYYY-MM-DD statement period end"),
+  openingBalance: z.number().nullable(),
+  closingBalance: z.number().nullable(),
+  totalDebits: z.number().nullable(),
+  totalCredits: z.number().nullable(),
+  transactions: z.array(
+    z.object({
+      date: z.string().describe("Posted/transaction date YYYY-MM-DD"),
+      authorizedDate: z
+        .string()
+        .nullable()
+        .describe("Purchase/authorization date YYYY-MM-DD if different"),
+      description: z
+        .string()
+        .describe("Full original statement line description"),
+      merchantName: z
+        .string()
+        .nullable()
+        .describe("Clean merchant/payee name without city/noise"),
+      amount: z
+        .number()
+        .describe(
+          "Positive = money out (purchase/debit/fee/PAD), including chequing withdrawals. Negative = money in (payment/credit/refund/deposit).",
+        ),
+      categoryPrimary: z
+        .string()
+        .nullable()
+        .describe(
+          "Broad bucket. Prefer an EXISTING categoryPrimary from the prompt list. Else FOOD_AND_DRINK, TRANSPORTATION, TRAVEL, GENERAL_MERCHANDISE, RENT_AND_UTILITIES, TRANSFER, LOAN_PAYMENTS, BANK_FEES, INCOME, ENTERTAINMENT, MEDICAL, GOVERNMENT_AND_NON_PROFIT.",
+        ),
+      categoryDetailed: z
+        .string()
+        .nullable()
+        .describe(
+          "Fine spend label. MUST reuse an EXISTING categoryDetailed from the prompt list when it matches (e.g. Gas Stations, not Gas). Avoid plural/singular twins and paraphrases.",
+        ),
+      categoryConfidence: z
+        .enum(["VERY_HIGH", "HIGH", "MEDIUM", "LOW", "UNKNOWN"])
+        .default("MEDIUM"),
+      paymentChannel: z
+        .enum(["online", "in store", "other"])
+        .nullable()
+        .default("other"),
+      transactionCode: z
+        .enum([
+          "purchase",
+          "payment",
+          "refund",
+          "fee",
+          "interest",
+          "cash_advance",
+          "transfer",
+          "other",
+        ])
+        .default("other"),
+      pending: z.boolean().default(false),
+      runningBalance: z.number().nullable(),
+      locationCity: z.string().nullable(),
+      locationRegion: z.string().nullable(),
+      locationCountry: z.string().nullable(),
+      checkNumber: z.string().nullable(),
+      referenceNumber: z.string().nullable(),
+      foreignAmount: z.number().nullable(),
+      foreignCurrency: z.string().nullable(),
+    }),
+  ),
+});
+
+export type ParsedStatement = z.infer<typeof parsedStatementSchema>;
+
+/** Collapse OCR noise so re-uploads of the same charge match. */
+export function normalizeStatementText(text: string) {
+  return text
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[®™©]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
+export function statementFileHash(bytes: Buffer) {
+  return createHash("sha256").update(bytes).digest("hex");
+}
+
+/** Stable ledger account for a card/bank product (not per upload). */
+export function manualAccountId(params: {
+  institutionName: string | null;
+  accountMask: string | null;
+  accountType: string;
+}) {
+  const institution =
+    normalizeStatementText(params.institutionName || "unknown")
+      .replace(/\s+/g, "-")
+      .slice(0, 40) || "unknown";
+  const mask =
+    String(params.accountMask || "")
+      .replace(/\D/g, "")
+      .slice(-4) || "xxxx";
+  const type = params.accountType || "other";
+  return `manual-${institution}-${type}-${mask}`;
+}
+
+/**
+ * Content fingerprint for a posted line.
+ * occurrenceIndex separates same-day same-amount same-merchant charges.
+ */
+export function statementTransactionId(
+  accountId: string,
+  date: string,
+  description: string,
+  amount: number,
+  occurrenceIndex: number,
+) {
+  const digest = createHash("sha256")
+    .update(
+      `${accountId}|${date}|${normalizeStatementText(description)}|${amount}|${occurrenceIndex}`,
+    )
+    .digest("hex")
+    .slice(0, 24);
+
+  return `stmt_${digest}`;
+}
+
+export function statementOccurrenceKey(
+  date: string,
+  description: string,
+  amount: number,
+) {
+  return `${date}|${amount}|${normalizeStatementText(description)}`;
+}
+
+/** Soft match key ignoring post vs trans date (amount + description only). */
+export function statementSoftMatchKey(description: string, amount: number) {
+  return `${amount}|${normalizeStatementText(description)}`;
+}

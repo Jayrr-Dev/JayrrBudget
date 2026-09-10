@@ -1,0 +1,65 @@
+"use client";
+
+import {
+  BankAccountsDashboard,
+  BankAccountsLoadingSkeleton,
+} from "@/domains/dashboard/ui/BankAccountsDashboard";
+import {
+  LoadingSkeleton,
+  useDashboard,
+} from "@/domains/dashboard/ui/DashboardPanels";
+import { TransactionsDataTable } from "@/domains/transactions/ui/TransactionsDataTable";
+
+export default function OverviewPage() {
+  const dashboard = useDashboard();
+  const data = dashboard.data;
+  const isInitialLoading = dashboard.isPending && !data;
+
+  return (
+    <div className="space-y-8">
+      <header className="space-y-1 border-b border-[var(--border)] pb-6">
+        <p className="text-sm tracking-[0.18em] text-[var(--muted-foreground)] uppercase">
+          Accounts
+        </p>
+        <h1 className="text-3xl font-semibold tracking-tight">Dashboard</h1>
+        <p className="max-w-xl text-[var(--muted-foreground)]">
+          Balances by deposit, credit, and lending accounts.
+        </p>
+      </header>
+
+      {dashboard.isError ? (
+        <div className="rounded-xl border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-800">
+          {dashboard.error.message}
+        </div>
+      ) : null}
+
+      {isInitialLoading ? (
+        <div className="space-y-10">
+          <BankAccountsLoadingSkeleton />
+          <LoadingSkeleton />
+        </div>
+      ) : data ? (
+        <div className="space-y-10">
+          <BankAccountsDashboard
+            accounts={data.accounts}
+            transactions={data.transactions}
+          />
+          <section className="space-y-4">
+            <div>
+              <h2 className="text-xl font-semibold tracking-tight">
+                Transaction history
+              </h2>
+              <p className="text-sm text-[var(--muted-foreground)]">
+                Search, sort, and filter ledger rows.
+                {data.transactionCount
+                  ? ` ${data.transactionCount} stored.`
+                  : ""}
+              </p>
+            </div>
+            <TransactionsDataTable transactions={data.transactions} />
+          </section>
+        </div>
+      ) : null}
+    </div>
+  );
+}
