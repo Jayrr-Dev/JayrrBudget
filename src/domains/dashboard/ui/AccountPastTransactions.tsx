@@ -7,6 +7,7 @@ import { ButtonGroup } from "@/components/ui/button-group";
 import { Input } from "@/components/ui/input";
 import { formatMoney } from "@/domains/dashboard/domain/money";
 import type { DashboardTransaction } from "@/domains/dashboard/domain/types";
+import { ledgerDebitCredit } from "@/domains/transactions/domain/debitCredit";
 
 type RangeKey = "4w" | "3m" | "6m" | "12m";
 type StatusKey = "all" | "pending" | "posted";
@@ -97,8 +98,8 @@ function compareRows(a: Row, b: Row, sortKey: SortKey, sortDir: SortDir) {
       });
       break;
     case "debit": {
-      const av = a.amount > 0 ? a.amount : null;
-      const bv = b.amount > 0 ? b.amount : null;
+      const av = ledgerDebitCredit(a).debit;
+      const bv = ledgerDebitCredit(b).debit;
       if (av == null && bv == null) cmp = 0;
       else if (av == null) cmp = 1;
       else if (bv == null) cmp = -1;
@@ -106,8 +107,8 @@ function compareRows(a: Row, b: Row, sortKey: SortKey, sortDir: SortDir) {
       break;
     }
     case "credit": {
-      const av = a.amount < 0 ? Math.abs(a.amount) : null;
-      const bv = b.amount < 0 ? Math.abs(b.amount) : null;
+      const av = ledgerDebitCredit(a).credit;
+      const bv = ledgerDebitCredit(b).credit;
       if (av == null && bv == null) cmp = 0;
       else if (av == null) cmp = 1;
       else if (bv == null) cmp = -1;
@@ -382,8 +383,7 @@ export function AccountPastTransactions({
               </tr>
             ) : (
               rows.map((txn) => {
-                const isDebit = txn.amount > 0;
-                const isCredit = txn.amount < 0;
+                const { debit, credit } = ledgerDebitCredit(txn);
                 return (
                   <tr
                     key={txn.transactionId}
@@ -398,12 +398,10 @@ export function AccountPastTransactions({
                       </span>
                     </td>
                     <td className="whitespace-nowrap py-3.5 pr-3 text-right font-mono text-[#1a2330]">
-                      {isDebit ? formatMoney(txn.amount, currency) : ""}
+                      {debit != null ? formatMoney(debit, currency) : ""}
                     </td>
                     <td className="whitespace-nowrap py-3.5 pr-3 text-right font-mono text-[#1a2330]">
-                      {isCredit
-                        ? formatMoney(Math.abs(txn.amount), currency)
-                        : ""}
+                      {credit != null ? formatMoney(credit, currency) : ""}
                     </td>
                     <td className="whitespace-nowrap py-3.5 text-right font-mono text-[#1a2330]">
                       {formatMoney(txn.runningBalance, currency)}

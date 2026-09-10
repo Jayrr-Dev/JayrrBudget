@@ -2,7 +2,10 @@ import { sql } from "drizzle-orm";
 import { SEED_TAXONOMY } from "@/domains/enrichment/domain/seedTaxonomy";
 import { toSlug } from "@/domains/enrichment/domain/slug";
 import { getDb } from "@/shared/db";
-import { transactions } from "@/shared/db/schema";
+import {
+  transactionBankCategories,
+  transactionPaymentRefs,
+} from "@/shared/db/schema";
 
 export type CategoryVocabulary = {
   categoryPrimary: string[];
@@ -73,28 +76,33 @@ function seedDetailedLabels() {
 
 export async function loadCategoryVocabulary(): Promise<CategoryVocabulary> {
   const db = getDb();
-  const rows = await db
+  const categoryRows = await db
     .select({
-      categoryPrimary: transactions.categoryPrimary,
-      categoryDetailed: transactions.categoryDetailed,
-      paymentChannel: transactions.paymentChannel,
-      transactionCode: transactions.transactionCode,
+      categoryPrimary: transactionBankCategories.categoryPrimary,
+      categoryDetailed: transactionBankCategories.categoryDetailed,
     })
-    .from(transactions);
+    .from(transactionBankCategories);
+
+  const paymentRows = await db
+    .select({
+      paymentChannel: transactionPaymentRefs.paymentChannel,
+      transactionCode: transactionPaymentRefs.transactionCode,
+    })
+    .from(transactionPaymentRefs);
 
   return {
     categoryPrimary: uniquePreferExisting(
-      rows.map((row) => row.categoryPrimary),
+      categoryRows.map((row) => row.categoryPrimary),
     ),
     categoryDetailed: uniquePreferExisting([
       ...seedDetailedLabels(),
-      ...rows.map((row) => row.categoryDetailed),
+      ...categoryRows.map((row) => row.categoryDetailed),
     ]),
     paymentChannels: uniquePreferExisting(
-      rows.map((row) => row.paymentChannel),
+      paymentRows.map((row) => row.paymentChannel),
     ),
     transactionCodes: uniquePreferExisting(
-      rows.map((row) => row.transactionCode),
+      paymentRows.map((row) => row.transactionCode),
     ),
   };
 }
@@ -159,11 +167,11 @@ export async function countCategoryDetailedUsage() {
   const db = getDb();
   const rows = await db
     .select({
-      label: transactions.categoryDetailed,
+      label: transactionBankCategories.categoryDetailed,
       count: sql<number>`count(*)`.mapWith(Number),
     })
-    .from(transactions)
-    .groupBy(transactions.categoryDetailed);
+    .from(transactionBankCategories)
+    .groupBy(transactionBankCategories.categoryDetailed);
 
   return rows
     .filter((row) => row.label)

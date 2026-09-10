@@ -79,6 +79,34 @@ const CATEGORY_FIXES: CategoryFix[] = [
     categoryDetailed: "Gas Stations",
   },
   {
+    test: (text) =>
+      /studnt\s*loa/i.test(text) ||
+      /student\s*ln/i.test(text) ||
+      /abdl\s*student/i.test(text) ||
+      /buy\s*now\s*pay\s*later/i.test(text) ||
+      /\bbnpl\b/i.test(text),
+    categoryPrimary: "LOAN_PAYMENTS",
+    categoryDetailed: "Loans",
+  },
+  {
+    test: (text) =>
+      /global\s+money\s+transfer/i.test(text) ||
+      /internet\s+global\s+money/i.test(text),
+    categoryPrimary: "TRANSFER",
+    categoryDetailed: "Money Transfers",
+  },
+  {
+    test: (text) => /e-?transfer/i.test(text),
+    categoryPrimary: "TRANSFER",
+    categoryDetailed: "Money Transfers",
+  },
+  {
+    test: (text) => /^internet\s+transfer\b/i.test(text),
+    categoryPrimary: "TRANSFER",
+    categoryDetailed: "Account Transfers",
+    transactionCode: "transfer",
+  },
+  {
     test: (text) => /uber\s*eats|ubereats/i.test(text),
     categoryPrimary: "FOOD_AND_DRINK",
     categoryDetailed: "Restaurants",

@@ -5,7 +5,16 @@ import { eq } from "drizzle-orm";
 import { cleanStatementLine } from "../src/domains/statements/application/polishParsedStatement";
 import { manualAccountId } from "../src/domains/statements/domain/parsedStatement";
 import { getDb } from "../src/shared/db";
-import { accounts, statementUploads, transactions } from "../src/shared/db/schema";
+import {
+  accounts,
+  statementUploads,
+  transactionAmounts,
+  transactionBankCategories,
+  transactionDates,
+  transactionEnrichment,
+  transactionPaymentRefs,
+  transactions,
+} from "../src/shared/db/schema";
 
 function round2(n: number) {
   return Math.round(n * 100) / 100;
@@ -21,19 +30,26 @@ async function flipDepositorySigns() {
   let flipped = 0;
   for (const account of depositAccounts) {
     const rows = await db
-      .select({ id: transactions.id, amount: transactions.amount })
+      .select({
+        id: transactions.id,
+        amountMinor: transactionAmounts.amountMinor,
+      })
       .from(transactions)
+      .innerJoin(
+        transactionAmounts,
+        eq(transactionAmounts.transactionId, transactions.id),
+      )
       .where(eq(transactions.accountId, account.accountId));
     if (rows.length === 0) continue;
 
-    const negative = rows.filter((row) => row.amount < 0).length;
+    const negative = rows.filter((row) => row.amountMinor < 0).length;
     if (negative / rows.length < 0.55) continue;
 
     for (const row of rows) {
       await db
-        .update(transactions)
-        .set({ amount: round2(-row.amount), updatedAt: new Date() })
-        .where(eq(transactions.id, row.id));
+        .update(transactionAmounts)
+        .set({ amountMinor: -row.amountMinor })
+        .where(eq(transactionAmounts.transactionId, row.id));
       flipped += 1;
     }
 
@@ -119,90 +135,133 @@ async function cleanNamesAndCategories() {
   const rows = await db
     .select({
       id: transactions.id,
-      name: transactions.name,
-      merchantName: transactions.merchantName,
-      originalDescription: transactions.originalDescription,
-      categoryDetailed: transactions.categoryDetailed,
-      categoryPrimary: transactions.categoryPrimary,
-      transactionCode: transactions.transactionCode,
+      description: transactions.description,
+      merchantRaw: transactionEnrichment.merchantRaw,
+      merchantClean: transactionEnrichment.merchantClean,
+      categoryDetailed: transactionBankCategories.categoryDetailed,
+      categoryPrimary: transactionBankCategories.categoryPrimary,
+      transactionCode: transactionPaymentRefs.transactionCode,
     })
-    .from(transactions);
+    .from(transactions)
+    .leftJoin(
+      transactionEnrichment,
+      eq(transactionEnrichment.transactionId, transactions.id),
+    )
+    .leftJoin(
+      transactionBankCategories,
+      eq(transactionBankCategories.transactionId, transactions.id),
+    )
+    .leftJoin(
+      transactionPaymentRefs,
+      eq(transactionPaymentRefs.transactionId, transactions.id),
+    );
 
   let cleaned = 0;
   let recategorized = 0;
   for (const row of rows) {
-    const name = cleanStatementLine(row.name);
-    const merchantName = row.merchantName
-      ? cleanStatementLine(row.merchantName)
-      : row.merchantName;
-    const originalDescription = row.originalDescription
-      ? cleanStatementLine(row.originalDescription)
-      : row.originalDescription;
-    const blob = `${merchantName ?? ""} ${name} ${originalDescription ?? ""}`;
+    const description = cleanStatementLine(row.description);
+    const merchantRaw = row.merchantRaw
+      ? cleanStatementLine(row.merchantRaw)
+      : row.merchantRaw;
+    const merchantClean = row.merchantClean
+      ? cleanStatementLine(row.merchantClean)
+      : row.merchantClean;
+    const blob = `${merchantClean ?? ""} ${merchantRaw ?? ""} ${description}`;
 
-    const patch: Partial<typeof row> & {
+    const categoryPatch: {
       categoryDetailed?: string;
       categoryPrimary?: string;
       transactionCode?: string;
-      updatedAt: Date;
-      name: string;
-      merchantName: string | null;
-      originalDescription: string | null;
-    } = {
-      name,
-      merchantName,
-      originalDescription,
-      updatedAt: new Date(),
-    };
+    } = {};
 
     if (
       /payment\s*thank\s*you/i.test(blob) ||
       /paiement\s*merci/i.test(blob) ||
       /pad\s+payment.{0,40}card/i.test(blob)
     ) {
-      patch.categoryDetailed = "Credit Card Payment";
-      patch.categoryPrimary = "TRANSFER";
-      patch.transactionCode = "payment";
+      categoryPatch.categoryDetailed = "Credit Card Payment";
+      categoryPatch.categoryPrimary = "TRANSFER";
+      categoryPatch.transactionCode = "payment";
     } else if (/movati|goodlife|anytime\s*fitness/i.test(blob)) {
-      patch.categoryDetailed = "Gyms";
-      patch.categoryPrimary = "ENTERTAINMENT";
+      categoryPatch.categoryDetailed = "Gyms";
+      categoryPatch.categoryPrimary = "ENTERTAINMENT";
     } else if (
       /openai|chatgpt|\bt3\s*chat\b|wealthsimple\s*tax/i.test(blob)
     ) {
-      patch.categoryDetailed = "SaaS";
-      patch.categoryPrimary = "GENERAL_SERVICES";
+      categoryPatch.categoryDetailed = "SaaS";
+      categoryPatch.categoryPrimary = "GENERAL_SERVICES";
     }
 
     const changed =
-      patch.name !== row.name ||
-      patch.merchantName !== row.merchantName ||
-      patch.originalDescription !== row.originalDescription ||
-      patch.categoryDetailed !== undefined;
+      description !== row.description ||
+      merchantRaw !== row.merchantRaw ||
+      merchantClean !== row.merchantClean ||
+      categoryPatch.categoryDetailed !== undefined;
 
     if (!changed) continue;
-    if (patch.categoryDetailed && patch.categoryDetailed !== row.categoryDetailed) {
+    if (
+      categoryPatch.categoryDetailed &&
+      categoryPatch.categoryDetailed !== row.categoryDetailed
+    ) {
       recategorized += 1;
     }
-    if (patch.name !== row.name || patch.merchantName !== row.merchantName) {
+    if (
+      description !== row.description ||
+      merchantRaw !== row.merchantRaw ||
+      merchantClean !== row.merchantClean
+    ) {
       cleaned += 1;
     }
 
     await db
       .update(transactions)
-      .set({
-        name: patch.name,
-        merchantName: patch.merchantName,
-        originalDescription: patch.originalDescription,
-        ...(patch.categoryDetailed
-          ? {
-              categoryDetailed: patch.categoryDetailed,
-              categoryPrimary: patch.categoryPrimary,
-              transactionCode: patch.transactionCode,
-            }
-          : {}),
-        updatedAt: patch.updatedAt,
-      })
+      .set({ description, updatedAt: new Date() })
       .where(eq(transactions.id, row.id));
+
+    if (merchantRaw !== row.merchantRaw || merchantClean !== row.merchantClean) {
+      if (row.merchantRaw != null || row.merchantClean != null) {
+        await db
+          .update(transactionEnrichment)
+          .set({
+            merchantRaw: merchantRaw ?? row.merchantRaw,
+            merchantClean: merchantClean ?? row.merchantClean,
+            updatedAt: new Date(),
+          })
+          .where(eq(transactionEnrichment.transactionId, row.id));
+      }
+    }
+
+    if (categoryPatch.categoryDetailed) {
+      if (row.categoryPrimary != null || row.categoryDetailed != null) {
+        await db
+          .update(transactionBankCategories)
+          .set({
+            categoryDetailed: categoryPatch.categoryDetailed,
+            categoryPrimary: categoryPatch.categoryPrimary,
+          })
+          .where(eq(transactionBankCategories.transactionId, row.id));
+      } else {
+        await db.insert(transactionBankCategories).values({
+          transactionId: row.id,
+          categoryDetailed: categoryPatch.categoryDetailed,
+          categoryPrimary: categoryPatch.categoryPrimary,
+        });
+      }
+
+      if (categoryPatch.transactionCode) {
+        if (row.transactionCode != null) {
+          await db
+            .update(transactionPaymentRefs)
+            .set({ transactionCode: categoryPatch.transactionCode })
+            .where(eq(transactionPaymentRefs.transactionId, row.id));
+        } else {
+          await db.insert(transactionPaymentRefs).values({
+            transactionId: row.id,
+            transactionCode: categoryPatch.transactionCode,
+          });
+        }
+      }
+    }
   }
 
   return { cleaned, recategorized };
@@ -214,17 +273,25 @@ async function dropSameDayTwins() {
     .select({
       id: transactions.id,
       accountId: transactions.accountId,
-      date: transactions.date,
-      amount: transactions.amount,
-      name: transactions.name,
+      date: transactionDates.postedDate,
+      amountMinor: transactionAmounts.amountMinor,
+      description: transactions.description,
     })
     .from(transactions)
+    .innerJoin(
+      transactionAmounts,
+      eq(transactionAmounts.transactionId, transactions.id),
+    )
+    .innerJoin(
+      transactionDates,
+      eq(transactionDates.transactionId, transactions.id),
+    )
     .orderBy(transactions.id);
 
   const seen = new Map<string, number>();
   let removed = 0;
   for (const row of rows) {
-    const key = `${row.accountId}|${row.date}|${row.amount}|${row.name.toLowerCase()}`;
+    const key = `${row.accountId}|${row.date}|${row.amountMinor}|${row.description.toLowerCase()}`;
     const keeper = seen.get(key);
     if (keeper == null) {
       seen.set(key, row.id);

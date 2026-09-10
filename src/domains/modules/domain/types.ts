@@ -58,6 +58,17 @@ export const SEED_MODULES: SeedModule[] = [
     isCore: false,
   },
   {
+    slug: "analysis",
+    name: "Analysis",
+    description: "Spending and cost trends over time.",
+    href: "/analysis",
+    icon: "IconChartAreaLine",
+    category: "finance",
+    enabled: true,
+    sortOrder: 35,
+    isCore: false,
+  },
+  {
     slug: "statements",
     name: "Statements",
     description: "Import PDFs, overview stats, and parse logs.",

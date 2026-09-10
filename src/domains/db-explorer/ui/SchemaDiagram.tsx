@@ -46,12 +46,17 @@ import {
 const NODE_W = 230;
 const NODE_H_BASE = 48;
 const ROW_H = 18;
-const COL_GAP = 96;
+const COL_GAP = NODE_W;
 const ROW_GAP = 36;
 const PAD = 48;
+const LAYOUT_ID = "ltr-hierarchy-v3";
 const MAX_VISIBLE_COLS = 8;
 const MIN_ZOOM = 0.35;
 const MAX_ZOOM = 2.5;
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value));
+}
 
 type Point = { x: number; y: number };
 
@@ -61,12 +66,28 @@ type LayoutSeed = {
   y: number;
 };
 
+function fkIsRequired(fk: DbForeignKey, tablesByName: Map<string, DbTableInfo>) {
+  const from = tablesByName.get(fk.fromTable);
+  if (!from) return true;
+  return fk.fromColumns.every((colName) => {
+    const col = from.columns.find((c) => c.name === colName);
+    return Boolean(col?.notNull);
+  });
+}
+
+function requiredForeignKeys(tables: DbTableInfo[], fks: DbForeignKey[]) {
+  const tablesByName = new Map(tables.map((table) => [table.name, table]));
+  return fks.filter(
+    (fk) => fk.fromTable !== fk.toTable && fkIsRequired(fk, tablesByName),
+  );
+}
+
 function layerForTables(tables: DbTableInfo[], fks: DbForeignKey[]) {
   const names = tables.map((t) => t.name);
+  const required = requiredForeignKeys(tables, fks);
   const depth = new Map<string, number>(names.map((n) => [n, 0]));
   for (let pass = 0; pass < names.length; pass += 1) {
-    for (const fk of fks) {
-      if (fk.fromTable === fk.toTable) continue;
+    for (const fk of required) {
       const parent = depth.get(fk.toTable) ?? 0;
       const child = depth.get(fk.fromTable) ?? 0;
       if (child <= parent) depth.set(fk.fromTable, parent + 1);
@@ -79,7 +100,41 @@ function layerForTables(tables: DbTableInfo[], fks: DbForeignKey[]) {
     list.push(name);
     layers.set(d, list);
   }
-  return layers;
+  return { layers, required };
+}
+
+function orderLayerNames(
+  layers: Map<number, string[]>,
+  required: DbForeignKey[],
+  nameOrder: Map<string, number>,
+) {
+  const depths = [...layers.keys()].sort((a, b) => a - b);
+  const ordered = new Map<number, string[]>();
+  const indexOf = new Map<string, number>();
+
+  for (const depth of depths) {
+    const names = [...(layers.get(depth) ?? [])];
+    names.sort((a, b) => {
+      if (depth === 0) {
+        return (nameOrder.get(a) ?? 0) - (nameOrder.get(b) ?? 0);
+      }
+      const score = (name: string) => {
+        const parentIdx = required
+          .filter((fk) => fk.fromTable === name)
+          .map((fk) => indexOf.get(fk.toTable))
+          .filter((value): value is number => value !== undefined);
+        if (parentIdx.length === 0) return Number.POSITIVE_INFINITY;
+        return parentIdx.reduce((sum, value) => sum + value, 0) / parentIdx.length;
+      };
+      const sa = score(a);
+      const sb = score(b);
+      if (sa !== sb) return sa - sb;
+      return (nameOrder.get(a) ?? 0) - (nameOrder.get(b) ?? 0);
+    });
+    names.forEach((name, index) => indexOf.set(name, index));
+    ordered.set(depth, names);
+  }
+  return ordered;
 }
 
 const SEP_H = 8;
@@ -148,27 +203,83 @@ function nodeHeight(
   );
 }
 
-/** Parents on the right, dependents flow left. */
+/** Sources left, dependents right. One card between layers. */
 function seedLayout(
   tables: DbTableInfo[],
   fks: DbForeignKey[],
 ): LayoutSeed[] {
   const byName = new Map(tables.map((t) => [t.name, t]));
-  const layers = layerForTables(tables, fks);
-  const sortedLayers = [...layers.entries()].sort((a, b) => a[0] - b[0]);
-  const maxLayer = sortedLayers.reduce((m, [d]) => Math.max(m, d), 0);
-  const seeds: LayoutSeed[] = [];
+  const { layers, required } = layerForTables(tables, fks);
+  const nameOrder = new Map(tables.map((table, index) => [table.name, index]));
+  const ordered = orderLayerNames(layers, required, nameOrder);
+  const colPitch = NODE_W + COL_GAP;
+  const rowPitch = NODE_H_BASE + ROW_GAP;
+  const placed = new Map<string, Point>();
 
-  for (const [layerIndex, names] of sortedLayers) {
-    let y = PAD;
+  for (const [depth, names] of [...ordered.entries()].sort((a, b) => a[0] - b[0])) {
+    const x = PAD + depth * colPitch;
+    const usedY: number[] = [];
     for (const name of names) {
       if (!byName.has(name)) continue;
-      const x = PAD + (maxLayer - layerIndex) * (NODE_W + COL_GAP);
-      seeds.push({ name, x, y });
-      y += headerHeightFor(name) + ROW_GAP + 80;
+      const parentYs = required
+        .filter((fk) => fk.fromTable === name)
+        .map((fk) => placed.get(fk.toTable)?.y)
+        .filter((value): value is number => value !== undefined);
+      let y =
+        parentYs.length > 0
+          ? parentYs.reduce((sum, value) => sum + value, 0) / parentYs.length
+          : PAD + names.indexOf(name) * rowPitch;
+      while (usedY.some((taken) => Math.abs(taken - y) < rowPitch)) {
+        y += rowPitch;
+      }
+      usedY.push(y);
+      placed.set(name, { x, y });
     }
   }
-  return seeds;
+
+  return [...placed.entries()].map(([name, point]) => ({ name, ...point }));
+}
+
+/**
+ * Same-column cards only. Push lower cards down when one above grows.
+ * Never pull up — keeps manual spacing on collapse.
+ */
+function pushDownColumnOverlaps(
+  positions: Record<string, Point>,
+  heights: Record<string, number>,
+  gap: number,
+): Record<string, Point> | null {
+  const byCol = new Map<number, string[]>();
+  for (const name of Object.keys(positions)) {
+    const col = Math.round(positions[name].x);
+    const list = byCol.get(col) ?? [];
+    list.push(name);
+    byCol.set(col, list);
+  }
+
+  let changed = false;
+  const next: Record<string, Point> = { ...positions };
+
+  for (const names of byCol.values()) {
+    names.sort((a, b) => {
+      const dy = next[a].y - next[b].y;
+      if (dy !== 0) return dy;
+      return a.localeCompare(b);
+    });
+    let floor = Number.NEGATIVE_INFINITY;
+    for (const name of names) {
+      const h = heights[name] ?? NODE_H_BASE;
+      let y = next[name].y;
+      if (floor !== Number.NEGATIVE_INFINITY && y < floor + gap) {
+        y = floor + gap;
+        next[name] = { x: next[name].x, y };
+        changed = true;
+      }
+      floor = y + h;
+    }
+  }
+
+  return changed ? next : null;
 }
 
 /** `transaction_enrichment` → `Transaction Enrichment` */
@@ -705,13 +816,25 @@ function ColumnRows({
   );
 }
 
-function neighborsOf(name: string, fks: DbForeignKey[]) {
+function undirectedNeighbors(name: string, fks: DbForeignKey[]) {
   const names = new Set<string>([name]);
   for (const fk of fks) {
     if (fk.fromTable === name) names.add(fk.toTable);
     if (fk.toTable === name) names.add(fk.fromTable);
   }
   return names;
+}
+
+/** Direct links plus tables that point at those. Parent-of-parent cards stay hidden. */
+function focusNeighborhood(name: string, fks: DbForeignKey[]) {
+  const direct = undirectedNeighbors(name, fks);
+  const visible = new Set(direct);
+  for (const table of direct) {
+    for (const fk of fks) {
+      if (fk.toTable === table) visible.add(fk.fromTable);
+    }
+  }
+  return visible;
 }
 
 type CardinalityEnd =
@@ -1027,16 +1150,29 @@ export function SchemaDiagram({
   const [colSort, setColSort] = useState<Record<string, ColSort>>({});
   const browseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const nodeMovedRef = useRef(false);
+  const layoutIdRef = useRef<string | null>(null);
 
   cameraRef.current = camera;
 
   const tableKey = tables.map((t) => t.name).join("|");
 
   useEffect(() => {
+    if (drag?.kind === "node") return;
     const seeds = seedLayout(tables, foreignKeys);
+    const relayout = layoutIdRef.current !== LAYOUT_ID;
+    layoutIdRef.current = LAYOUT_ID;
+    const heights: Record<string, number> = {};
+    for (const table of tables) {
+      heights[table.name] = nodeHeight(
+        table,
+        expanded.has(table.name),
+        openPrefixesFor(table.name, openColGroups),
+        colSort[table.name] ?? GROUPED_SORT,
+      );
+    }
     setPositions((prev) => {
-      const next = { ...prev };
-      let changed = false;
+      const next = relayout ? {} : { ...prev };
+      let changed = relayout;
       for (const seed of seeds) {
         if (!next[seed.name]) {
           next[seed.name] = { x: seed.x, y: seed.y };
@@ -1049,9 +1185,20 @@ export function SchemaDiagram({
           changed = true;
         }
       }
+      const packed = pushDownColumnOverlaps(next, heights, ROW_GAP);
+      if (packed) return packed;
       return changed ? next : prev;
     });
-  }, [tableKey, tables, foreignKeys]);
+  }, [
+    tableKey,
+    tables,
+    foreignKeys,
+    LAYOUT_ID,
+    expanded,
+    openColGroups,
+    colSort,
+    drag,
+  ]);
 
   useEffect(() => {
     if (!selected) return;
@@ -1159,7 +1306,7 @@ export function SchemaDiagram({
     [tables],
   );
   const visibleNames = useMemo(
-    () => (focused ? neighborsOf(focused, foreignKeys) : null),
+    () => (focused ? focusNeighborhood(focused, foreignKeys) : null),
     [focused, foreignKeys],
   );
 
@@ -1319,7 +1466,16 @@ export function SchemaDiagram({
     const seeds = seedLayout(tables, foreignKeys);
     const next: Record<string, Point> = {};
     for (const seed of seeds) next[seed.name] = { x: seed.x, y: seed.y };
-    setPositions(next);
+    const heights: Record<string, number> = {};
+    for (const table of tables) {
+      heights[table.name] = nodeHeight(
+        table,
+        expanded.has(table.name),
+        openPrefixesFor(table.name, openColGroups),
+        colSort[table.name] ?? GROUPED_SORT,
+      );
+    }
+    setPositions(pushDownColumnOverlaps(next, heights, ROW_GAP) ?? next);
     setCamera({ x: 0, y: 0, zoom: 1 });
     setFocused(null);
   }
@@ -1586,6 +1742,11 @@ export function SchemaDiagram({
                     onClick={(event) => {
                       event.stopPropagation();
                       queueBrowse(node.table.name);
+                    }}
+                    onDoubleClick={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      toggleFocus(node.table.name);
                     }}
                   >
                     {formatTableLabel(node.table.name)}

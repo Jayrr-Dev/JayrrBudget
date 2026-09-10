@@ -2,14 +2,23 @@ import { alias } from "drizzle-orm/sqlite-core";
 import { and, count, desc, eq, inArray, max, min } from "drizzle-orm";
 import type { DashboardData } from "@/domains/dashboard/domain/types";
 import { isChannelMirrorTag } from "@/domains/enrichment/domain/channelTags";
+import { toMajor } from "@/shared/db/money";
 import { getDb } from "@/shared/db";
 import {
   accounts,
+  bankHistoryRows,
   entities,
   institutions,
+  statementUploads,
   taxonomyNodes,
+  transactionAmounts,
+  transactionBankCategories,
+  transactionDates,
+  transactionEntities,
   transactionEnrichment,
   transactionLabels,
+  transactionLocations,
+  transactionPaymentRefs,
   transactions,
 } from "@/shared/db/schema";
 
@@ -20,134 +29,196 @@ export type GetDashboardResult =
 export async function getDashboard(): Promise<GetDashboardResult> {
   try {
     const db = getDb();
+    const companyLink = alias(transactionEntities, "company_link");
+    const brandLink = alias(transactionEntities, "brand_link");
     const company = alias(entities, "company_entity");
     const brand = alias(entities, "brand_entity");
-    const section = alias(taxonomyNodes, "section_node");
-    const category = alias(taxonomyNodes, "category_node");
-    const typeNode = alias(taxonomyNodes, "type_node");
 
-    const [institutionRows, accountRows, txnRows, stats] = await Promise.all([
-      db
-        .select({
-          institutionId: institutions.institutionId,
-          name: institutions.name,
-        })
-        .from(institutions),
-      db
-        .select({
-          accountId: accounts.accountId,
-          name: accounts.name,
-          officialName: accounts.officialName,
-          mask: accounts.mask,
-          type: accounts.type,
-          subtype: accounts.subtype,
-          currentBalance: accounts.currentBalance,
-          availableBalance: accounts.availableBalance,
-          isoCurrencyCode: accounts.isoCurrencyCode,
-        })
-        .from(accounts),
-      db
-        .select({
-          id: transactions.id,
-          transactionId: transactions.transactionId,
-          accountId: transactions.accountId,
-          name: transactions.name,
-          merchantName: transactions.merchantName,
-          merchantClean: transactionEnrichment.merchantClean,
-          companyName: company.displayName,
-          brandName: brand.displayName,
-          sectionName: section.name,
-          categoryName: category.name,
-          typeName: typeNode.name,
-          enrichmentStatus: transactionEnrichment.enrichmentStatus,
-          amount: transactions.amount,
-          isoCurrencyCode: transactions.isoCurrencyCode,
-          date: transactions.date,
-          authorizedDate: transactions.authorizedDate,
-          pending: transactions.pending,
-          categoryPrimary: transactions.categoryPrimary,
-          categoryDetailed: transactions.categoryDetailed,
-          categoryConfidence: transactions.categoryConfidence,
-          paymentChannel: transactions.paymentChannel,
-          transactionCode: transactions.transactionCode,
-          website: transactions.website,
-          logoUrl: transactions.logoUrl,
-          locationCity: transactions.locationCity,
-          locationRegion: transactions.locationRegion,
-          locationCountry: transactions.locationCountry,
-          originalDescription: transactions.originalDescription,
-          source: transactions.source,
-          bankDirection: transactions.bankDirection,
-          historyMatch: transactions.historyMatch,
-        })
-        .from(transactions)
-        .leftJoin(
-          transactionEnrichment,
-          eq(transactionEnrichment.transactionId, transactions.id),
-        )
-        .leftJoin(
-          company,
-          eq(company.id, transactionEnrichment.companyEntityId),
-        )
-        .leftJoin(brand, eq(brand.id, transactionEnrichment.brandEntityId))
-        .leftJoin(
-          section,
-          eq(section.id, transactionEnrichment.sectionNodeId),
-        )
-        .leftJoin(
-          category,
-          eq(category.id, transactionEnrichment.categoryNodeId),
-        )
-        .leftJoin(typeNode, eq(typeNode.id, transactionEnrichment.typeNodeId))
-        .orderBy(desc(transactions.date), desc(transactions.id))
-        .limit(250),
-      db
-        .select({
-          transactionCount: count(),
-          earliestDate: min(transactions.date),
-          latestDate: max(transactions.date),
-        })
-        .from(transactions),
-    ]);
+    const [institutionRows, accountRows, txnRows, stats, statementStats] =
+      await Promise.all([
+        db
+          .select({
+            institutionId: institutions.institutionId,
+            name: institutions.name,
+          })
+          .from(institutions),
+        db
+          .select({
+            accountId: accounts.accountId,
+            name: accounts.name,
+            officialName: accounts.officialName,
+            mask: accounts.mask,
+            type: accounts.type,
+            subtype: accounts.subtype,
+            currentBalance: accounts.currentBalance,
+            availableBalance: accounts.availableBalance,
+            isoCurrencyCode: accounts.isoCurrencyCode,
+          })
+          .from(accounts),
+        db
+          .select({
+            id: transactions.id,
+            transactionId: transactions.transactionId,
+            accountId: transactions.accountId,
+            name: transactions.description,
+            merchantClean: transactionEnrichment.merchantClean,
+            companyName: company.displayName,
+            brandName: brand.displayName,
+            enrichmentStatus: transactionEnrichment.enrichmentStatus,
+            amountMinor: transactionAmounts.amountMinor,
+            isoCurrencyCode: transactionAmounts.currencyCode,
+            date: transactionDates.postedDate,
+            authorizedDate: transactionDates.authorizedDate,
+            pending: transactions.pending,
+            categoryPrimary: transactionBankCategories.categoryPrimary,
+            categoryDetailed: transactionBankCategories.categoryDetailed,
+            categoryConfidence: transactionBankCategories.categoryConfidence,
+            paymentChannel: transactionPaymentRefs.paymentChannel,
+            transactionCode: transactionPaymentRefs.transactionCode,
+            website: company.website,
+            logoUrl: company.logoUrl,
+            locationCity: transactionLocations.city,
+            locationRegion: transactionLocations.region,
+            locationCountry: transactionLocations.country,
+            originalDescription: transactions.description,
+            source: transactions.source,
+            bankDirection: bankHistoryRows.bankDirection,
+            historyMatch: bankHistoryRows.matchStatus,
+          })
+          .from(transactions)
+          .innerJoin(
+            transactionAmounts,
+            eq(transactionAmounts.transactionId, transactions.id),
+          )
+          .innerJoin(
+            transactionDates,
+            eq(transactionDates.transactionId, transactions.id),
+          )
+          .leftJoin(
+            transactionLocations,
+            eq(transactionLocations.transactionId, transactions.id),
+          )
+          .leftJoin(
+            transactionPaymentRefs,
+            eq(transactionPaymentRefs.transactionId, transactions.id),
+          )
+          .leftJoin(
+            transactionBankCategories,
+            eq(transactionBankCategories.transactionId, transactions.id),
+          )
+          .leftJoin(
+            transactionEnrichment,
+            eq(transactionEnrichment.transactionId, transactions.id),
+          )
+          .leftJoin(
+            companyLink,
+            and(
+              eq(companyLink.transactionId, transactions.id),
+              eq(companyLink.role, "company"),
+            ),
+          )
+          .leftJoin(company, eq(company.id, companyLink.entityId))
+          .leftJoin(
+            brandLink,
+            and(
+              eq(brandLink.transactionId, transactions.id),
+              eq(brandLink.role, "brand"),
+            ),
+          )
+          .leftJoin(brand, eq(brand.id, brandLink.entityId))
+          .leftJoin(
+            bankHistoryRows,
+            and(
+              eq(bankHistoryRows.matchedTransactionId, transactions.id),
+              eq(bankHistoryRows.matchStatus, "matched"),
+            ),
+          )
+          .orderBy(desc(transactionDates.postedDate), desc(transactions.id))
+          .limit(250),
+        db
+          .select({
+            transactionCount: count(),
+            earliestDate: min(transactionDates.postedDate),
+            latestDate: max(transactionDates.postedDate),
+          })
+          .from(transactions)
+          .innerJoin(
+            transactionDates,
+            eq(transactionDates.transactionId, transactions.id),
+          ),
+        db
+          .select({
+            latestStatementDate: max(statementUploads.statementPeriodEnd),
+          })
+          .from(statementUploads)
+          .where(eq(statementUploads.status, "completed")),
+      ]);
 
     const txnIds = txnRows.map((row) => row.id);
-    const tagRows =
+    const labelRows =
       txnIds.length === 0
         ? []
         : await db
             .select({
               transactionId: transactionLabels.transactionId,
-              tagName: taxonomyNodes.name,
+              role: transactionLabels.role,
+              name: taxonomyNodes.name,
             })
             .from(transactionLabels)
             .innerJoin(
               taxonomyNodes,
               eq(taxonomyNodes.id, transactionLabels.nodeId),
             )
-            .where(
-              and(
-                inArray(transactionLabels.transactionId, txnIds),
-                eq(transactionLabels.role, "tag"),
-              ),
-            );
+            .where(inArray(transactionLabels.transactionId, txnIds));
 
     const tagsByTxn = new Map<number, string[]>();
-    for (const row of tagRows) {
-      if (!row.tagName || isChannelMirrorTag(row.tagName)) continue;
-      const list = tagsByTxn.get(row.transactionId) ?? [];
-      if (!list.includes(row.tagName)) list.push(row.tagName);
-      tagsByTxn.set(row.transactionId, list);
+    const treeByTxn = new Map<
+      number,
+      { sectionName: string | null; categoryName: string | null; typeName: string | null }
+    >();
+
+    for (const row of labelRows) {
+      if (row.role === "tag") {
+        if (!row.name || isChannelMirrorTag(row.name)) continue;
+        const list = tagsByTxn.get(row.transactionId) ?? [];
+        if (!list.includes(row.name)) list.push(row.name);
+        tagsByTxn.set(row.transactionId, list);
+        continue;
+      }
+
+      const tree = treeByTxn.get(row.transactionId) ?? {
+        sectionName: null,
+        categoryName: null,
+        typeName: null,
+      };
+      if (row.role === "section") tree.sectionName = row.name;
+      if (row.role === "category") tree.categoryName = row.name;
+      if (row.role === "type") tree.typeName = row.name;
+      treeByTxn.set(row.transactionId, tree);
     }
 
     const data: DashboardData = {
       institutions: institutionRows,
       accounts: accountRows,
-      transactions: txnRows.map(({ id, ...txn }) => ({
-        ...txn,
-        tagNames: (tagsByTxn.get(id) ?? []).sort((a, b) =>
-          a.localeCompare(b),
-        ),
-      })),
+      transactions: txnRows.map(({ id, amountMinor, merchantClean, ...txn }) => {
+        const tree = treeByTxn.get(id) ?? {
+          sectionName: null,
+          categoryName: null,
+          typeName: null,
+        };
+        return {
+          ...txn,
+          merchantName: merchantClean,
+          merchantClean,
+          sectionName: tree.sectionName,
+          categoryName: tree.categoryName,
+          typeName: tree.typeName,
+          amount: toMajor(amountMinor),
+          tagNames: (tagsByTxn.get(id) ?? []).sort((a, b) =>
+            a.localeCompare(b),
+          ),
+        };
+      }),
       totalBalance: accountRows.reduce(
         (sum, account) => sum + (account.currentBalance ?? 0),
         0,
@@ -155,6 +226,7 @@ export async function getDashboard(): Promise<GetDashboardResult> {
       transactionCount: Number(stats[0]?.transactionCount ?? 0),
       earliestDate: stats[0]?.earliestDate ?? null,
       latestDate: stats[0]?.latestDate ?? null,
+      latestStatementDate: statementStats[0]?.latestStatementDate ?? null,
     };
 
     return { ok: true, data };

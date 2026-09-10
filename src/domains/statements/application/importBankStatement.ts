@@ -30,14 +30,24 @@ import {
   parseStatementWithOpenRouter,
   rebalanceParsedStatement,
 } from "@/domains/statements/infrastructure/openRouterParse";
+import {
+  insertLedgerLine,
+  updateLedgerLine,
+} from "@/domains/statements/application/persistLedgerLine";
 import { runStage } from "@/shared/ai/runStage";
 import { errorMessage } from "@/shared/lib/error-message";
-import { createClient } from "@libsql/client";
 import { getDb } from "@/shared/db";
+import { toMajor } from "@/shared/db/money";
 import {
   accounts,
   institutions,
   statementUploads,
+  transactionAmounts,
+  transactionBankCategories,
+  transactionDates,
+  transactionEnrichment,
+  transactionLocations,
+  transactionPaymentRefs,
   transactions,
 } from "@/shared/db/schema";
 import type {
@@ -46,13 +56,10 @@ import type {
   ImportHygieneSummary,
 } from "@/domains/statements/domain/importResult";
 
-function rawSqlClient() {
-  return createClient({
-    url: process.env.DATABASE_URL ?? "file:./data/jayrr-budget.db",
-    ...(process.env.DATABASE_AUTH_TOKEN
-      ? { authToken: process.env.DATABASE_AUTH_TOKEN }
-      : {}),
-  });
+async function pragmaBusyTimeout(
+  client: { execute: (sql: string) => Promise<unknown> },
+) {
+  await client.execute("PRAGMA busy_timeout = 60000");
 }
 
 export type {
@@ -79,42 +86,6 @@ async function ensureManualLedger() {
   }
 }
 
-async function ensureStatementUploadColumns() {
-  const client = rawSqlClient();
-  const alters = [
-    "ALTER TABLE statement_uploads ADD COLUMN file_hash TEXT",
-    "ALTER TABLE statement_uploads ADD COLUMN inserted_count INTEGER DEFAULT 0",
-    "ALTER TABLE statement_uploads ADD COLUMN updated_count INTEGER DEFAULT 0",
-    "ALTER TABLE statement_uploads ADD COLUMN skipped_count INTEGER DEFAULT 0",
-    "ALTER TABLE statement_uploads ADD COLUMN statement_period_start TEXT",
-    "ALTER TABLE statement_uploads ADD COLUMN statement_period_end TEXT",
-    "ALTER TABLE statement_uploads ADD COLUMN opening_balance REAL",
-    "ALTER TABLE statement_uploads ADD COLUMN closing_balance REAL",
-    "ALTER TABLE statement_uploads ADD COLUMN total_debits REAL",
-    "ALTER TABLE statement_uploads ADD COLUMN total_credits REAL",
-    "ALTER TABLE statement_uploads ADD COLUMN transaction_sum REAL",
-    "ALTER TABLE statement_uploads ADD COLUMN computed_closing REAL",
-    "ALTER TABLE statement_uploads ADD COLUMN balance_delta REAL",
-    "ALTER TABLE statement_uploads ADD COLUMN balance_ok INTEGER",
-  ];
-
-  for (const sqlText of alters) {
-    try {
-      await client.execute(sqlText);
-    } catch {
-      // Column already exists.
-    }
-  }
-
-  try {
-    await client.execute(
-      "CREATE UNIQUE INDEX IF NOT EXISTS statement_uploads_file_hash_uidx ON statement_uploads(file_hash)",
-    );
-  } catch {
-    // Index may already exist.
-  }
-}
-
 function parseIsoDays(value: string | null | undefined): number | null {
   if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
   const ms = Date.parse(`${value}T00:00:00Z`);
@@ -135,9 +106,9 @@ function datesNear(
 type SoftMatchRow = {
   id: number;
   transactionId: string;
-  name: string;
-  merchantName: string | null;
-  amount: number;
+  description: string;
+  merchantClean: string | null;
+  amountMajor: number;
   date: string;
   authorizedDate: string | null;
   statementUploadId: number | null;
@@ -154,15 +125,15 @@ function findSoftTwin(
 ) {
   const wantKey = statementSoftMatchKey(params.description, params.amount);
   return candidates.find((row) => {
-    if (row.amount !== params.amount) return false;
-    const rowKey = statementSoftMatchKey(row.name, row.amount);
-    const merchantKey = row.merchantName
-      ? statementSoftMatchKey(row.merchantName, row.amount)
+    if (row.amountMajor !== params.amount) return false;
+    const rowKey = statementSoftMatchKey(row.description, row.amountMajor);
+    const merchantKey = row.merchantClean
+      ? statementSoftMatchKey(row.merchantClean, row.amountMajor)
       : null;
     if (rowKey !== wantKey && merchantKey !== wantKey) {
       // Allow loose merchant overlap when descriptions share a long stem.
       const a = normalizeStatementText(params.description);
-      const b = normalizeStatementText(row.name);
+      const b = normalizeStatementText(row.description);
       if (!a || !b || (a.length > 12 && !b.includes(a.slice(0, 12)) && !a.includes(b.slice(0, 12)))) {
         return false;
       }
@@ -232,8 +203,8 @@ export async function importBankStatement(params: {
   }
 
   const db = getDb();
+  await pragmaBusyTimeout(db.$client);
   await ensureManualLedger();
-  await ensureStatementUploadColumns();
 
   const fileHash = statementFileHash(params.bytes);
 
@@ -388,27 +359,60 @@ export async function importBankStatement(params: {
       updatedAt: new Date(),
     };
 
-    if (existingAccount[0]) {
-      await db
-        .update(accounts)
-        .set(accountValues)
-        .where(eq(accounts.accountId, accountId));
-    } else {
-      await db.insert(accounts).values(accountValues);
+    try {
+      if (existingAccount[0]) {
+        await db
+          .update(accounts)
+          .set(accountValues)
+          .where(eq(accounts.accountId, accountId));
+      } else {
+        await db.insert(accounts).values(accountValues);
+      }
+    } catch (error) {
+      const msg = errorMessage(error);
+      if (!/SQLITE_BUSY|database is locked|SQLITE_LOCKED/i.test(msg)) {
+        throw error;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+      const again = await db
+        .select()
+        .from(accounts)
+        .where(eq(accounts.accountId, accountId))
+        .limit(1);
+      if (again[0]) {
+        await db
+          .update(accounts)
+          .set(accountValues)
+          .where(eq(accounts.accountId, accountId));
+      } else {
+        await db.insert(accounts).values(accountValues);
+      }
     }
 
     const existingOnAccount = await db
       .select({
         id: transactions.id,
         transactionId: transactions.transactionId,
-        name: transactions.name,
-        merchantName: transactions.merchantName,
-        amount: transactions.amount,
-        date: transactions.date,
-        authorizedDate: transactions.authorizedDate,
+        description: transactions.description,
+        merchantClean: transactionEnrichment.merchantClean,
+        amountMinor: transactionAmounts.amountMinor,
+        postedDate: transactionDates.postedDate,
+        authorizedDate: transactionDates.authorizedDate,
         statementUploadId: transactions.statementUploadId,
       })
       .from(transactions)
+      .innerJoin(
+        transactionAmounts,
+        eq(transactionAmounts.transactionId, transactions.id),
+      )
+      .innerJoin(
+        transactionDates,
+        eq(transactionDates.transactionId, transactions.id),
+      )
+      .leftJoin(
+        transactionEnrichment,
+        eq(transactionEnrichment.transactionId, transactions.id),
+      )
       .where(
         and(
           eq(transactions.accountId, accountId),
@@ -419,10 +423,10 @@ export async function importBankStatement(params: {
     const softPool: SoftMatchRow[] = existingOnAccount.map((row) => ({
       id: row.id,
       transactionId: row.transactionId,
-      name: row.name,
-      merchantName: row.merchantName,
-      amount: row.amount,
-      date: row.date,
+      description: row.description,
+      merchantClean: row.merchantClean,
+      amountMajor: toMajor(row.amountMinor),
+      date: row.postedDate,
       authorizedDate: row.authorizedDate,
       statementUploadId: row.statementUploadId,
     }));
@@ -451,36 +455,51 @@ export async function importBankStatement(params: {
         occurrenceIndex,
       );
 
-      const paymentMetaJson = JSON.stringify({
-        reference_number: txn.referenceNumber,
-        foreign_amount: txn.foreignAmount,
-        foreign_currency: txn.foreignCurrency,
-        statement_period_start: parsed.statementPeriodStart,
-        statement_period_end: parsed.statementPeriodEnd,
-        opening_balance: parsed.openingBalance,
-        closing_balance: parsed.closingBalance,
-      });
-
       const existingTxn = await db
         .select({
           id: transactions.id,
-          name: transactions.name,
-          merchantName: transactions.merchantName,
-          categoryPrimary: transactions.categoryPrimary,
-          categoryDetailed: transactions.categoryDetailed,
-          categoryConfidence: transactions.categoryConfidence,
-          paymentChannel: transactions.paymentChannel,
-          transactionCode: transactions.transactionCode,
-          locationCity: transactions.locationCity,
-          locationRegion: transactions.locationRegion,
-          locationCountry: transactions.locationCountry,
-          authorizedDate: transactions.authorizedDate,
-          runningBalance: transactions.runningBalance,
-          checkNumber: transactions.checkNumber,
-          paymentMetaJson: transactions.paymentMetaJson,
+          authorizedDate: transactionDates.authorizedDate,
+          runningBalanceMinor: transactionAmounts.runningBalanceMinor,
+          merchantClean: transactionEnrichment.merchantClean,
+          categoryPrimary: transactionBankCategories.categoryPrimary,
+          categoryDetailed: transactionBankCategories.categoryDetailed,
+          categoryConfidence: transactionBankCategories.categoryConfidence,
+          paymentChannel: transactionPaymentRefs.paymentChannel,
+          transactionCode: transactionPaymentRefs.transactionCode,
+          locationCity: transactionLocations.city,
+          locationRegion: transactionLocations.region,
+          locationCountry: transactionLocations.country,
+          checkNumber: transactionPaymentRefs.checkNumber,
+          referenceNumber: transactionPaymentRefs.referenceNumber,
+          foreignAmountMinor: transactionPaymentRefs.foreignAmountMinor,
+          foreignCurrency: transactionPaymentRefs.foreignCurrency,
           statementUploadId: transactions.statementUploadId,
         })
         .from(transactions)
+        .leftJoin(
+          transactionAmounts,
+          eq(transactionAmounts.transactionId, transactions.id),
+        )
+        .leftJoin(
+          transactionDates,
+          eq(transactionDates.transactionId, transactions.id),
+        )
+        .leftJoin(
+          transactionEnrichment,
+          eq(transactionEnrichment.transactionId, transactions.id),
+        )
+        .leftJoin(
+          transactionBankCategories,
+          eq(transactionBankCategories.transactionId, transactions.id),
+        )
+        .leftJoin(
+          transactionLocations,
+          eq(transactionLocations.transactionId, transactions.id),
+        )
+        .leftJoin(
+          transactionPaymentRefs,
+          eq(transactionPaymentRefs.transactionId, transactions.id),
+        )
         .where(eq(transactions.transactionId, externalId))
         .limit(1);
 
@@ -499,95 +518,86 @@ export async function importBankStatement(params: {
 
       const targetId = existingTxn[0]?.id ?? softTwin?.id ?? null;
 
+      const existing = existingTxn[0];
+
       if (targetId != null) {
         if (softTwin) claimedSoftIds.add(softTwin.id);
 
-        await db
-          .update(transactions)
-          .set({
-            transactionId: externalId,
-            accountId,
-            name: txn.description,
-            merchantName:
-              txn.merchantName ??
-              existingTxn[0]?.merchantName ??
-              softTwin?.merchantName ??
-              null,
-            amount: txn.amount,
-            isoCurrencyCode: currency,
-            date: txn.date,
-            authorizedDate:
-              txn.authorizedDate ??
-              existingTxn[0]?.authorizedDate ??
-              softTwin?.authorizedDate ??
-              null,
-            pending: txn.pending,
-            categoryPrimary:
-              txn.categoryPrimary ?? existingTxn[0]?.categoryPrimary ?? null,
-            categoryDetailed:
-              txn.categoryDetailed ?? existingTxn[0]?.categoryDetailed ?? null,
-            categoryConfidence:
-              txn.categoryConfidence ??
-              existingTxn[0]?.categoryConfidence ??
-              null,
-            paymentChannel:
-              txn.paymentChannel ?? existingTxn[0]?.paymentChannel ?? null,
-            transactionCode:
-              txn.transactionCode ?? existingTxn[0]?.transactionCode ?? null,
-            checkNumber: txn.checkNumber ?? existingTxn[0]?.checkNumber ?? null,
-            locationCity:
-              txn.locationCity ?? existingTxn[0]?.locationCity ?? null,
-            locationRegion:
-              txn.locationRegion ?? existingTxn[0]?.locationRegion ?? null,
-            locationCountry:
-              txn.locationCountry ?? existingTxn[0]?.locationCountry ?? null,
-            runningBalance:
-              txn.runningBalance ?? existingTxn[0]?.runningBalance ?? null,
-            originalDescription: txn.description,
-            paymentMetaJson,
-            source: "statement",
-            statementUploadId: upload.id,
-            updatedAt: new Date(),
-          })
-          .where(eq(transactions.id, targetId));
+        await updateLedgerLine(targetId, {
+          externalId,
+          accountId,
+          description: txn.description,
+          pending: txn.pending,
+          statementUploadId: upload.id,
+          amount: txn.amount,
+          currencyCode: currency,
+          runningBalance:
+            txn.runningBalance ??
+            (existing?.runningBalanceMinor != null
+              ? toMajor(existing.runningBalanceMinor)
+              : null),
+          postedDate: txn.date,
+          authorizedDate:
+            txn.authorizedDate ??
+            existing?.authorizedDate ??
+            softTwin?.authorizedDate ??
+            null,
+          locationCity: txn.locationCity ?? existing?.locationCity ?? null,
+          locationRegion: txn.locationRegion ?? existing?.locationRegion ?? null,
+          locationCountry: txn.locationCountry ?? existing?.locationCountry ?? null,
+          checkNumber: txn.checkNumber ?? existing?.checkNumber ?? null,
+          referenceNumber: txn.referenceNumber ?? existing?.referenceNumber ?? null,
+          transactionCode: txn.transactionCode ?? existing?.transactionCode ?? null,
+          paymentChannel: txn.paymentChannel ?? existing?.paymentChannel ?? null,
+          foreignAmount:
+            txn.foreignAmount ??
+            (existing?.foreignAmountMinor != null
+              ? toMajor(existing.foreignAmountMinor)
+              : null),
+          foreignCurrency: txn.foreignCurrency ?? existing?.foreignCurrency ?? null,
+          categoryPrimary: txn.categoryPrimary ?? existing?.categoryPrimary ?? null,
+          categoryDetailed: txn.categoryDetailed ?? existing?.categoryDetailed ?? null,
+          categoryConfidence:
+            txn.categoryConfidence ?? existing?.categoryConfidence ?? null,
+          merchantClean:
+            txn.merchantName ??
+            existing?.merchantClean ??
+            softTwin?.merchantClean ??
+            null,
+        });
 
         keptIds.add(targetId);
         updatedCount += 1;
         continue;
       }
 
-      const [inserted] = await db
-        .insert(transactions)
-        .values({
-          transactionId: externalId,
-          accountId,
-          institutionId: MANUAL_INSTITUTION_ID,
-          name: txn.description,
-          merchantName: txn.merchantName,
-          amount: txn.amount,
-          isoCurrencyCode: currency,
-          date: txn.date,
-          authorizedDate: txn.authorizedDate,
-          pending: txn.pending,
-          categoryPrimary: txn.categoryPrimary,
-          categoryDetailed: txn.categoryDetailed,
-          categoryConfidence: txn.categoryConfidence,
-          paymentChannel: txn.paymentChannel,
-          transactionCode: txn.transactionCode,
-          checkNumber: txn.checkNumber,
-          locationCity: txn.locationCity,
-          locationRegion: txn.locationRegion,
-          locationCountry: txn.locationCountry,
-          runningBalance: txn.runningBalance,
-          originalDescription: txn.description,
-          paymentMetaJson,
-          source: "statement",
-          statementUploadId: upload.id,
-          updatedAt: new Date(),
-        })
-        .returning({ id: transactions.id });
+      const newId = await insertLedgerLine({
+        externalId,
+        accountId,
+        description: txn.description,
+        pending: txn.pending,
+        statementUploadId: upload.id,
+        amount: txn.amount,
+        currencyCode: currency,
+        runningBalance: txn.runningBalance,
+        postedDate: txn.date,
+        authorizedDate: txn.authorizedDate,
+        locationCity: txn.locationCity,
+        locationRegion: txn.locationRegion,
+        locationCountry: txn.locationCountry,
+        checkNumber: txn.checkNumber,
+        referenceNumber: txn.referenceNumber,
+        transactionCode: txn.transactionCode,
+        paymentChannel: txn.paymentChannel,
+        foreignAmount: txn.foreignAmount,
+        foreignCurrency: txn.foreignCurrency,
+        categoryPrimary: txn.categoryPrimary,
+        categoryDetailed: txn.categoryDetailed,
+        categoryConfidence: txn.categoryConfidence,
+        merchantClean: txn.merchantName,
+      });
 
-      keptIds.add(inserted.id);
+      keptIds.add(newId);
       insertedCount += 1;
     }
 
@@ -603,7 +613,7 @@ export async function importBankStatement(params: {
           (!periodEnd || row.date <= periodEnd || (row.authorizedDate ?? "") <= periodEnd);
 
         const matchesParsed = parsed.transactions.some((txn) => {
-          if (txn.amount !== row.amount) return false;
+          if (txn.amount !== row.amountMajor) return false;
           return Boolean(
             findSoftTwin([row], {
               description: txn.description,
@@ -630,6 +640,7 @@ export async function importBankStatement(params: {
       .update(statementUploads)
       .set({
         status: "completed",
+        accountId,
         institutionName: parsed.institutionName,
         accountName: parsed.accountName,
         accountMask: parsed.accountMask,

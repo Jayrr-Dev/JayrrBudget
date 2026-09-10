@@ -12,6 +12,7 @@ import { toSlug } from "@/domains/enrichment/domain/slug";
 import { getDb } from "@/shared/db";
 import {
   taxonomyNodes,
+  transactionBankCategories,
   transactionEnrichment,
   transactionLabels,
   transactions,
@@ -28,6 +29,7 @@ type CategoryRule = {
   categoryPrimary?: string;
   tags?: string[];
   tree?: TreeRef;
+  merchantClean?: string;
   patterns: RegExp[];
 };
 
@@ -40,17 +42,31 @@ const CATEGORY_RULES: CategoryRule[] = [
   {
     categoryDetailed: "Credit Card Payment",
     categoryPrimary: "TRANSFER",
+    merchantClean: "Card Payment",
     tree: {
       section: "Transfers",
-      category: "Bank Fees",
+      category: "Account Transfers",
       type: "Credit Card Payment",
     },
     patterns: [
       /payment\s*thank\s*you/i,
       /paiement\s*merci/i,
+    ],
+  },
+  {
+    categoryDetailed: "Credit Card Payment",
+    categoryPrimary: "TRANSFER",
+    tree: {
+      section: "Transfers",
+      category: "Account Transfers",
+      type: "Credit Card Payment",
+    },
+    patterns: [
       /pad\s+payment.{0,40}card/i,
       /internet\s+bill\s*pay.{0,40}card/i,
+      /internet\s+transfer.{0,80}to\s+card/i,
       /cibc\s+card\s+payment/i,
+      /preauthorized\s+debit\s+mbna/i,
     ],
   },
 
@@ -359,13 +375,10 @@ const CATEGORY_RULES: CategoryRule[] = [
 ];
 
 function merchantBlob(txn: {
-  name: string;
-  merchantName: string | null;
-  originalDescription: string | null;
+  description: string;
+  merchantClean: string | null;
 }) {
-  return [txn.merchantName, txn.name, txn.originalDescription]
-    .filter(Boolean)
-    .join(" ");
+  return [txn.merchantClean, txn.description].filter(Boolean).join(" ");
 }
 
 function matchRule(blob: string) {
@@ -467,7 +480,7 @@ export async function applySpendDimensions(): Promise<ApplySpendDimensionsResult
   await ensureNamedNode({
     facet: "type",
     name: "Credit Card Payment",
-    parentSlug: "bank-fees",
+    parentSlug: "account-transfers",
   });
   await ensureNamedNode({
     facet: "type",
@@ -493,13 +506,20 @@ export async function applySpendDimensions(): Promise<ApplySpendDimensionsResult
   const rows = await db
     .select({
       id: transactions.id,
-      name: transactions.name,
-      merchantName: transactions.merchantName,
-      originalDescription: transactions.originalDescription,
-      categoryDetailed: transactions.categoryDetailed,
-      categoryPrimary: transactions.categoryPrimary,
+      description: transactions.description,
+      categoryDetailed: transactionBankCategories.categoryDetailed,
+      categoryPrimary: transactionBankCategories.categoryPrimary,
+      merchantClean: transactionEnrichment.merchantClean,
     })
-    .from(transactions);
+    .from(transactions)
+    .leftJoin(
+      transactionBankCategories,
+      eq(transactionBankCategories.transactionId, transactions.id),
+    )
+    .leftJoin(
+      transactionEnrichment,
+      eq(transactionEnrichment.transactionId, transactions.id),
+    );
 
   let categoryUpdated = 0;
   let tagsApplied = 0;
@@ -520,13 +540,19 @@ export async function applySpendDimensions(): Promise<ApplySpendDimensionsResult
       (nextPrimary && row.categoryPrimary !== nextPrimary)
     ) {
       await db
-        .update(transactions)
-        .set({
+        .insert(transactionBankCategories)
+        .values({
+          transactionId: row.id,
           categoryDetailed: nextDetailed,
           categoryPrimary: nextPrimary,
-          updatedAt: new Date(),
         })
-        .where(eq(transactions.id, row.id));
+        .onConflictDoUpdate({
+          target: transactionBankCategories.transactionId,
+          set: {
+            categoryDetailed: nextDetailed,
+            categoryPrimary: nextPrimary,
+          },
+        });
       categoryUpdated += 1;
     }
 
@@ -559,9 +585,6 @@ export async function applySpendDimensions(): Promise<ApplySpendDimensionsResult
 
     if (sectionNodeId && categoryNodeId && typeNodeId) {
       const enrichmentPatch = {
-        sectionNodeId,
-        categoryNodeId,
-        typeNodeId,
         channel: channelFromMirrorTags(rule.tags ?? []),
         txnKind: rule.tags?.includes("Subscription")
           ? ("subscription" as const)
@@ -572,8 +595,11 @@ export async function applySpendDimensions(): Promise<ApplySpendDimensionsResult
         enrichedAt: new Date(),
         updatedAt: new Date(),
         error: null,
-        merchantRaw: row.merchantName || row.name,
-        merchantClean: row.merchantName || row.name,
+        merchantRaw: row.description,
+        merchantClean:
+          rule.merchantClean ??
+          row.merchantClean ??
+          row.description,
       };
 
       if (existingEnrichment[0]) {
@@ -655,6 +681,5 @@ export async function applySpendDimensions(): Promise<ApplySpendDimensionsResult
     }
   }
 
-  // Quiet unused — soft remaps reserved for later passes
   return { matched, categoryUpdated, tagsApplied, enrichmentUpdated };
 }

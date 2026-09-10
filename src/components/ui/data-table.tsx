@@ -22,6 +22,12 @@ import {
   NativeSelectOption,
 } from "@/components/ui/native-select";
 import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
   Table,
   TableBody,
   TableCell,
@@ -54,6 +60,7 @@ interface DataTableProps<TData extends RowData> {
   initialColumnVisibility?: ColumnVisibilityState;
   pageSize?: number;
   toolbar?: ReactNode;
+  enableColumnToggle?: boolean;
 }
 
 export function DataTable<TData extends RowData>({
@@ -68,6 +75,7 @@ export function DataTable<TData extends RowData>({
   initialColumnVisibility = {},
   pageSize = 10,
   toolbar,
+  enableColumnToggle = false,
 }: DataTableProps<TData>) {
   const [sorting, setSorting] = useState<SortingState>(initialSorting);
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
@@ -129,7 +137,8 @@ export function DataTable<TData extends RowData>({
     setPagination((prev) => ({ ...prev, pageIndex: 0 }));
   };
 
-  const showToolbar = showSearch || filters.length > 0 || Boolean(toolbar);
+  const showToolbar =
+    showSearch || filters.length > 0 || Boolean(toolbar) || enableColumnToggle;
 
   return (
     <div className="space-y-4">
@@ -188,6 +197,43 @@ export function DataTable<TData extends RowData>({
               );
             })}
             {toolbar}
+            {enableColumnToggle ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  className="inline-flex h-8 cursor-pointer items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--background)] px-2.5 text-sm font-medium hover:bg-[var(--muted)]"
+                  aria-label="Toggle columns"
+                >
+                  Columns
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-auto min-w-40">
+                  {table
+                    .getAllColumns()
+                    .filter((column) => column.getCanHide())
+                    .map((column) => {
+                      const meta = column.columnDef.meta as
+                        | { label?: string }
+                        | undefined;
+                      const header = column.columnDef.header;
+                      const label =
+                        meta?.label ??
+                        (typeof header === "string" && header
+                          ? header
+                          : column.id);
+                      return (
+                        <DropdownMenuCheckboxItem
+                          key={column.id}
+                          checked={column.getIsVisible()}
+                          onCheckedChange={(checked) =>
+                            column.toggleVisibility(Boolean(checked))
+                          }
+                        >
+                          {label}
+                        </DropdownMenuCheckboxItem>
+                      );
+                    })}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : null}
             {activeFilterCount > 0 ? (
               <Button
                 type="button"

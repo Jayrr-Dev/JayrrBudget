@@ -84,7 +84,6 @@ export async function importBankHistoryFile(params: {
         direction: row.direction,
         amount: row.amount,
         cardNumber: row.cardNumber,
-        sourceFilename: params.filename,
         matchStatus: "unmatched",
         createdAt: new Date(),
       })),

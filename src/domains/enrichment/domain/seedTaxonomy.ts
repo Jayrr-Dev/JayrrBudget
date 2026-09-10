@@ -73,8 +73,38 @@ export const SEED_TAXONOMY: SeedTaxonomyNode[] = [
   },
   {
     facet: "category",
-    name: "Medical",
-    parentSlug: "health",
+    name: "Loans",
+    parentSlug: "finance",
+  },
+  {
+    facet: "category",
+    name: "Money Transfers",
+    parentSlug: "transfers",
+  },
+  {
+    facet: "category",
+    name: "Account Transfers",
+    parentSlug: "transfers",
+  },
+  {
+    facet: "category",
+    name: "Travel",
+    parentSlug: "transport",
+  },
+  {
+    facet: "category",
+    name: "Auto",
+    parentSlug: "transport",
+  },
+  {
+    facet: "category",
+    name: "Employment Income",
+    parentSlug: "income",
+  },
+  {
+    facet: "category",
+    name: "Rewards",
+    parentSlug: "income",
   },
 
   {
@@ -120,7 +150,12 @@ export const SEED_TAXONOMY: SeedTaxonomyNode[] = [
   {
     facet: "type",
     name: "Credit Card Payment",
-    parentSlug: "bank-fees",
+    parentSlug: "account-transfers",
+  },
+  {
+    facet: "type",
+    name: "Loan Payment",
+    parentSlug: "loans",
   },
   {
     facet: "type",

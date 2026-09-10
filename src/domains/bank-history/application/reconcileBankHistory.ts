@@ -1,9 +1,15 @@
 import { eq } from "drizzle-orm";
+import { inferredBankDirection } from "@/domains/transactions/domain/debitCredit";
 import { normalizeStatementText } from "@/domains/statements/domain/parsedStatement";
+import { toMajor, toMinor } from "@/shared/db/money";
 import { getDb } from "@/shared/db";
 import {
   accounts,
   bankHistoryRows,
+  transactionAmounts,
+  transactionDates,
+  transactionEnrichment,
+  transactionPaymentRefs,
   transactions,
 } from "@/shared/db/schema";
 
@@ -65,7 +71,7 @@ type StatementRow = {
   date: string;
   authorizedDate: string | null;
   name: string;
-  merchantName: string | null;
+  merchantClean: string | null;
   amount: number;
   transactionCode: string | null;
 };
@@ -96,16 +102,39 @@ export async function reconcileBankHistory(): Promise<ReconcileBankHistoryResult
       .select({
         id: transactions.id,
         accountId: transactions.accountId,
-        date: transactions.date,
-        authorizedDate: transactions.authorizedDate,
-        name: transactions.name,
-        merchantName: transactions.merchantName,
-        amount: transactions.amount,
-        transactionCode: transactions.transactionCode,
+        date: transactionDates.postedDate,
+        authorizedDate: transactionDates.authorizedDate,
+        name: transactions.description,
+        merchantClean: transactionEnrichment.merchantClean,
+        amountMinor: transactionAmounts.amountMinor,
+        transactionCode: transactionPaymentRefs.transactionCode,
       })
       .from(transactions)
+      .innerJoin(
+        transactionAmounts,
+        eq(transactionAmounts.transactionId, transactions.id),
+      )
+      .innerJoin(
+        transactionDates,
+        eq(transactionDates.transactionId, transactions.id),
+      )
+      .leftJoin(
+        transactionPaymentRefs,
+        eq(transactionPaymentRefs.transactionId, transactions.id),
+      )
+      .leftJoin(
+        transactionEnrichment,
+        eq(transactionEnrichment.transactionId, transactions.id),
+      )
   ).map((row) => ({
-    ...row,
+    id: row.id,
+    accountId: row.accountId,
+    date: row.date,
+    authorizedDate: row.authorizedDate,
+    name: row.name,
+    merchantClean: row.merchantClean,
+    amount: toMajor(row.amountMinor),
+    transactionCode: row.transactionCode,
     mask: maskByAccountId.get(row.accountId) ?? "",
   })) as StatementRow[];
 
@@ -123,6 +152,7 @@ export async function reconcileBankHistory(): Promise<ReconcileBankHistoryResult
     number,
     { historyId: number; direction: string; amount: number; description: string }
   >();
+  const matchedHistoryIds = new Set<number>();
 
   const sortedHistory = [...history].sort((a, b) => a.date.localeCompare(b.date));
 
@@ -144,11 +174,11 @@ export async function reconcileBankHistory(): Promise<ReconcileBankHistoryResult
             ? Math.abs(histDays - authDays)
             : 99;
         const dayDelta = Math.min(dateDelta, authDelta);
-        const blob = `${txn.merchantName ?? ""} ${txn.name}`;
+        const blob = `${txn.merchantClean ?? ""} ${txn.name}`;
         const score = nameScore(blob, row.description);
         return { txn, dayDelta, score };
       })
-      .filter((item) => item.dayDelta <= 3 && item.score >= 0.25)
+      .filter((item) => item.dayDelta <= 5 && item.score >= 0.15)
       .sort((a, b) => {
         if (a.dayDelta !== b.dayDelta) return a.dayDelta - b.dayDelta;
         return b.score - a.score;
@@ -157,7 +187,44 @@ export async function reconcileBankHistory(): Promise<ReconcileBankHistoryResult
     const best = candidates[0];
     if (!best) continue;
     claimed.add(best.txn.id);
+    matchedHistoryIds.add(row.id);
     matches.set(best.txn.id, {
+      historyId: row.id,
+      direction: row.direction,
+      amount: row.amount,
+      description: row.description,
+    });
+  }
+
+  for (const row of sortedHistory) {
+    if (matchedHistoryIds.has(row.id)) continue;
+    const leftovers = (byAmount.get(groupKey(row.accountMask, absAmount(row.amount))) ?? [])
+      .filter((txn) => !claimed.has(txn.id))
+      .map((txn) => {
+        const histDays = parseIsoDays(row.date);
+        const dateDays = parseIsoDays(txn.date);
+        const authDays = txn.authorizedDate
+          ? parseIsoDays(txn.authorizedDate)
+          : null;
+        const dateDelta =
+          histDays != null && dateDays != null
+            ? Math.abs(histDays - dateDays)
+            : 99;
+        const authDelta =
+          histDays != null && authDays != null
+            ? Math.abs(histDays - authDays)
+            : 99;
+        const dayDelta = Math.min(dateDelta, authDelta);
+        const blob = `${txn.merchantClean ?? ""} ${txn.name}`;
+        const score = nameScore(blob, row.description);
+        return { txn, dayDelta, score };
+      })
+      .filter((item) => item.dayDelta <= 1);
+    if (leftovers.length !== 1) continue;
+    const only = leftovers[0];
+    claimed.add(only.txn.id);
+    matchedHistoryIds.add(row.id);
+    matches.set(only.txn.id, {
       historyId: row.id,
       direction: row.direction,
       amount: row.amount,
@@ -168,6 +235,7 @@ export async function reconcileBankHistory(): Promise<ReconcileBankHistoryResult
   await db.update(bankHistoryRows).set({
     matchedTransactionId: null,
     matchStatus: "unmatched",
+    bankDirection: null,
   });
 
   let signsFlipped = 0;
@@ -189,13 +257,9 @@ export async function reconcileBankHistory(): Promise<ReconcileBankHistoryResult
       Boolean(span) && txn.date >= span!.from && txn.date <= span!.to;
 
     if (!match) {
-      await db
-        .update(transactions)
-        .set({
-          historyMatch: inWindow ? "unmatched" : null,
-          updatedAt: new Date(),
-        })
-        .where(eq(transactions.id, txn.id));
+      // Unmatched statement lines: no bank_history_rows link. Direction inferred only.
+      void inWindow;
+      void inferredBankDirection(txn.amount);
       continue;
     }
 
@@ -209,22 +273,32 @@ export async function reconcileBankHistory(): Promise<ReconcileBankHistoryResult
 
     const nextCode = historyCode(match.description, match.direction);
 
-    await db
-      .update(transactions)
-      .set({
-        amount: nextAmount,
-        bankDirection: match.direction,
-        historyMatch: "matched",
-        ...(nextCode ? { transactionCode: nextCode } : {}),
-        updatedAt: new Date(),
-      })
-      .where(eq(transactions.id, txn.id));
+    if (nextAmount !== txn.amount) {
+      await db
+        .update(transactionAmounts)
+        .set({ amountMinor: toMinor(nextAmount) })
+        .where(eq(transactionAmounts.transactionId, txn.id));
+    }
+
+    if (nextCode) {
+      await db
+        .insert(transactionPaymentRefs)
+        .values({
+          transactionId: txn.id,
+          transactionCode: nextCode,
+        })
+        .onConflictDoUpdate({
+          target: transactionPaymentRefs.transactionId,
+          set: { transactionCode: nextCode },
+        });
+    }
 
     await db
       .update(bankHistoryRows)
       .set({
         matchedTransactionId: txn.id,
         matchStatus: "matched",
+        bankDirection: match.direction,
       })
       .where(eq(bankHistoryRows.id, match.historyId));
   }

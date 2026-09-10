@@ -57,4 +57,5 @@ export type DashboardData = {
   transactionCount: number;
   earliestDate: string | null;
   latestDate: string | null;
+  latestStatementDate: string | null;
 };

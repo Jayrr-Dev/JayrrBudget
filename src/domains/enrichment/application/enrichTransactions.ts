@@ -8,11 +8,105 @@ import type { EnrichmentTxnInput } from "@/domains/enrichment/domain/enrichmentS
 import { enrichMerchantsWithOpenRouter } from "@/domains/enrichment/infrastructure/openRouterEnrich";
 import { isOpenRouterConfigured } from "@/shared/ai/openRouter";
 import { getDb } from "@/shared/db";
-import { transactions } from "@/shared/db/schema";
+import { toMajor } from "@/shared/db/money";
+import {
+  transactionAmounts,
+  transactionBankCategories,
+  transactionDates,
+  transactionEnrichment,
+  transactionLocations,
+  transactionPaymentRefs,
+  transactions,
+} from "@/shared/db/schema";
 
 export type EnrichTransactionsResult =
   | { ok: true; enriched: number; failed: number }
   | { ok: false; error: string };
+
+function mapRowToEnrichmentInput(row: {
+  id: number;
+  description: string;
+  amountMinor: number;
+  postedDate: string;
+  authorizedDate: string | null;
+  categoryPrimary: string | null;
+  categoryDetailed: string | null;
+  paymentChannel: string | null;
+  transactionCode: string | null;
+  locationCity: string | null;
+  locationRegion: string | null;
+  locationCountry: string | null;
+  merchantRaw: string | null;
+  merchantClean: string | null;
+}): EnrichmentTxnInput {
+  return {
+    id: row.id,
+    name: row.description,
+    merchantName: row.merchantClean ?? row.merchantRaw,
+    originalDescription: row.description,
+    amount: toMajor(row.amountMinor),
+    date: row.postedDate,
+    authorizedDate: row.authorizedDate,
+    categoryPrimary: row.categoryPrimary,
+    categoryDetailed: row.categoryDetailed,
+    paymentChannel: row.paymentChannel,
+    transactionCode: row.transactionCode,
+    locationCity: row.locationCity,
+    locationRegion: row.locationRegion,
+    locationCountry: row.locationCountry,
+  };
+}
+
+async function loadEnrichmentTxnInputs(
+  transactionIds: number[],
+): Promise<EnrichmentTxnInput[]> {
+  const db = getDb();
+  const rows = await db
+    .select({
+      id: transactions.id,
+      description: transactions.description,
+      amountMinor: transactionAmounts.amountMinor,
+      postedDate: transactionDates.postedDate,
+      authorizedDate: transactionDates.authorizedDate,
+      categoryPrimary: transactionBankCategories.categoryPrimary,
+      categoryDetailed: transactionBankCategories.categoryDetailed,
+      paymentChannel: transactionPaymentRefs.paymentChannel,
+      transactionCode: transactionPaymentRefs.transactionCode,
+      locationCity: transactionLocations.city,
+      locationRegion: transactionLocations.region,
+      locationCountry: transactionLocations.country,
+      merchantRaw: transactionEnrichment.merchantRaw,
+      merchantClean: transactionEnrichment.merchantClean,
+    })
+    .from(transactions)
+    .innerJoin(
+      transactionAmounts,
+      eq(transactionAmounts.transactionId, transactions.id),
+    )
+    .innerJoin(
+      transactionDates,
+      eq(transactionDates.transactionId, transactions.id),
+    )
+    .leftJoin(
+      transactionLocations,
+      eq(transactionLocations.transactionId, transactions.id),
+    )
+    .leftJoin(
+      transactionPaymentRefs,
+      eq(transactionPaymentRefs.transactionId, transactions.id),
+    )
+    .leftJoin(
+      transactionBankCategories,
+      eq(transactionBankCategories.transactionId, transactions.id),
+    )
+    .leftJoin(
+      transactionEnrichment,
+      eq(transactionEnrichment.transactionId, transactions.id),
+    )
+    .where(inArray(transactions.id, transactionIds));
+
+  return rows.map(mapRowToEnrichmentInput);
+}
 
 export async function enrichTransactionsByIds(
   transactionIds: number[],
@@ -30,28 +124,7 @@ export async function enrichTransactionsByIds(
 
   await ensureSeedTaxonomy();
 
-  const db = getDb();
-  const rows = await db
-    .select({
-      id: transactions.id,
-      name: transactions.name,
-      merchantName: transactions.merchantName,
-      originalDescription: transactions.originalDescription,
-      amount: transactions.amount,
-      date: transactions.date,
-      authorizedDate: transactions.authorizedDate,
-      categoryPrimary: transactions.categoryPrimary,
-      categoryDetailed: transactions.categoryDetailed,
-      paymentChannel: transactions.paymentChannel,
-      transactionCode: transactions.transactionCode,
-      locationCity: transactions.locationCity,
-      locationRegion: transactions.locationRegion,
-      locationCountry: transactions.locationCountry,
-    })
-    .from(transactions)
-    .where(inArray(transactions.id, transactionIds));
-
-  const txns: EnrichmentTxnInput[] = rows;
+  const txns = await loadEnrichmentTxnInputs(transactionIds);
   const txnsById = new Map(txns.map((txn) => [txn.id, txn]));
 
   let enriched = 0;

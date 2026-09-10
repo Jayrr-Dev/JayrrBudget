@@ -15,18 +15,11 @@ import type {
 import { toSlug } from "@/domains/enrichment/domain/slug";
 import { getDb } from "@/shared/db";
 import {
+  enrichmentTokens,
   transactionEnrichment,
+  transactionEntities,
   transactionLabels,
 } from "@/shared/db/schema";
-
-function signedAmount(amount: number) {
-  // Statement fact: positive = money out. Analytics signed: spend negative.
-  return -amount;
-}
-
-function directionFromAmount(amount: number) {
-  return amount > 0 ? "outflow" : amount < 0 ? "inflow" : "outflow";
-}
 
 async function resolveEntityId(
   ref:
@@ -71,6 +64,54 @@ async function resolveNodeId(
   });
 }
 
+async function writeTransactionEntities(
+  transactionId: number,
+  roles: Array<{ role: string; entityId: number | null; confidence: string }>,
+) {
+  const db = getDb();
+  const now = new Date();
+
+  await db
+    .delete(transactionEntities)
+    .where(eq(transactionEntities.transactionId, transactionId));
+
+  const toInsert = roles.filter(
+    (entry): entry is { role: string; entityId: number; confidence: string } =>
+      entry.entityId != null,
+  );
+
+  if (toInsert.length > 0) {
+    await db.insert(transactionEntities).values(
+      toInsert.map((entry) => ({
+        transactionId,
+        entityId: entry.entityId,
+        role: entry.role,
+        confidence: entry.confidence,
+        source: "ai",
+        createdAt: now,
+      })),
+    );
+  }
+}
+
+async function writeEnrichmentTokens(transactionId: number, tokens: string[]) {
+  const db = getDb();
+
+  await db
+    .delete(enrichmentTokens)
+    .where(eq(enrichmentTokens.transactionId, transactionId));
+
+  if (tokens.length > 0) {
+    await db.insert(enrichmentTokens).values(
+      tokens.map((token, index) => ({
+        transactionId,
+        token,
+        sortOrder: index,
+      })),
+    );
+  }
+}
+
 export async function applyEnrichmentItem(params: {
   txn: EnrichmentTxnInput;
   item: MerchantEnrichmentItem;
@@ -79,6 +120,7 @@ export async function applyEnrichmentItem(params: {
   const db = getDb();
   const { txn, item, modelId } = params;
   const now = new Date();
+  const confidence = item.confidence ?? "MEDIUM";
 
   const companyEntityId = await resolveEntityId(item.company);
   const brandEntityId = await resolveEntityId(
@@ -152,39 +194,20 @@ export async function applyEnrichmentItem(params: {
     ...tagNodeIds,
   ].filter(Boolean) as { nodeId: number; role: string }[];
 
-  const amount = txn.amount;
   const enrichmentValues = {
     transactionId: txn.id,
     merchantRaw: item.merchantRaw || txn.merchantName || txn.name,
     merchantClean: item.merchantClean,
-    companyEntityId,
-    brandEntityId,
-    subsidiaryEntityId,
-    productEntityId,
-    storeTypeNodeId,
-    foodTypeNodeId,
-    sectionNodeId,
-    categoryNodeId,
-    typeNodeId,
     channel:
       item.channel ??
       channelFromMirrorTags(item.tags.map((tag) => tag.name)) ??
       txn.paymentChannel ??
       "other",
     txnKind: item.txnKind ?? txn.transactionCode ?? "other",
-    amountSigned: signedAmount(amount),
-    amountAbs: Math.abs(amount),
-    direction: directionFromAmount(amount),
-    datePosted: txn.date,
-    dateAuthorized: txn.authorizedDate,
-    locationCity: item.locationCity ?? txn.locationCity,
-    locationRegion: item.locationRegion ?? txn.locationRegion,
-    locationCountry: item.locationCountry ?? txn.locationCountry,
     storeNumber: item.storeNumber,
     legalSuffix: item.legalSuffix,
-    parseTokensJson: JSON.stringify(item.tokens ?? []),
     enrichmentStatus: "done" as const,
-    enrichmentConfidence: item.confidence ?? "MEDIUM",
+    enrichmentConfidence: confidence,
     enrichmentModel: modelId,
     enrichedAt: now,
     error: null,
@@ -199,6 +222,15 @@ export async function applyEnrichmentItem(params: {
       set: enrichmentValues,
     });
 
+  await writeTransactionEntities(txn.id, [
+    { role: "company", entityId: companyEntityId, confidence },
+    { role: "brand", entityId: brandEntityId, confidence },
+    { role: "subsidiary", entityId: subsidiaryEntityId, confidence },
+    { role: "product", entityId: productEntityId, confidence },
+  ]);
+
+  await writeEnrichmentTokens(txn.id, item.tokens ?? []);
+
   await db
     .delete(transactionLabels)
     .where(eq(transactionLabels.transactionId, txn.id));
@@ -209,7 +241,7 @@ export async function applyEnrichmentItem(params: {
         transactionId: txn.id,
         nodeId: pair.nodeId,
         role: pair.role,
-        confidence: item.confidence ?? "MEDIUM",
+        confidence,
         source: "ai",
         createdAt: now,
       })),

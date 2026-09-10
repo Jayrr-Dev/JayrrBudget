@@ -7,6 +7,7 @@ import path from "node:path";
 import { importBankStatement } from "../src/domains/statements/application/importBankStatement";
 import { enrichTransactionsByIds } from "../src/domains/enrichment/application/enrichTransactions";
 import { runCategoryHygienePipeline } from "../src/domains/statements/application/runCategoryHygienePipeline";
+import { reconcileBankHistory } from "../src/domains/bank-history/application/reconcileBankHistory";
 import { getDb } from "../src/shared/db";
 import { transactions } from "../src/shared/db/schema";
 import { errorMessage } from "../src/shared/lib/error-message";
@@ -39,7 +40,7 @@ type PdfJob = {
 function dbClient() {
   return createClient({
     url: process.env.DATABASE_URL ?? "file:./data/jayrr-budget.db",
-    timeout: 15_000,
+    timeout: 60_000,
     ...(process.env.DATABASE_AUTH_TOKEN
       ? { authToken: process.env.DATABASE_AUTH_TOKEN }
       : {}),
@@ -150,6 +151,10 @@ async function main() {
   });
 
   const resume = process.argv.includes("--resume");
+  const skipPost = process.argv.includes("--skip-post");
+  const onlyIndex = process.argv.indexOf("--only");
+  const onlyFilename =
+    onlyIndex >= 0 ? process.argv[onlyIndex + 1]?.toLowerCase() : null;
   if (!resume) {
     await writeFile(LOG_FILE, "");
     await log("wipe ledger (keep app_modules)");
@@ -158,14 +163,19 @@ async function main() {
   } else {
     await log("resume: keep completed uploads, retry the rest");
     const client = dbClient();
+    await client.execute("PRAGMA busy_timeout = 60000");
     await client.execute(
       "DELETE FROM statement_uploads WHERE status != 'completed'",
     );
   }
 
-  const jobs = (await listPdfs(ROOT)).sort((a, b) =>
+  let jobs = (await listPdfs(ROOT)).sort((a, b) =>
     a.sortKey.localeCompare(b.sortKey),
   );
+  if (onlyFilename) {
+    jobs = jobs.filter((job) => job.filename.toLowerCase() === onlyFilename);
+    await log(`--only ${onlyFilename} matched=${jobs.length}`);
+  }
   await log(`pdfs queued=${jobs.length} root=${ROOT}`);
 
   const results: Array<{
@@ -234,7 +244,32 @@ async function main() {
     `import done ok=${results.length - failed.length} fail=${failed.length} elapsed=${Math.round((Date.now() - started) / 1000)}s`,
   );
 
+  try {
+    await log("history cross-check start");
+    const rec = await reconcileBankHistory();
+    await log(
+      `history matched=${rec.matched} csvOnly=${rec.historyUnmatched} pdfOnly=${rec.statementExtra} flipped=${rec.signsFlipped}`,
+    );
+  } catch (error) {
+    await log(
+      `history FAIL ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+
+  if (skipPost) {
+    await log("skip post-process");
+    if (failed.length) {
+      await log("failures:");
+      for (const row of failed) {
+        await log(`  ${row.filename} ${row.detail}`);
+      }
+    }
+    await log(`all done elapsed=${Math.round((Date.now() - started) / 1000)}s`);
+    return;
+  }
+
   const db = getDb();
+  await db.$client.execute("PRAGMA busy_timeout = 60000");
   const ids = (await db.select({ id: transactions.id }).from(transactions)).map(
     (row) => row.id,
   );

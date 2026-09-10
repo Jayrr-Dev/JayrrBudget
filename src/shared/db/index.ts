@@ -16,7 +16,7 @@ function createDbClient() {
 
   return createClient({
     url,
-    timeout: 15_000,
+    timeout: 60_000,
     ...(authToken ? { authToken } : {}),
   });
 }

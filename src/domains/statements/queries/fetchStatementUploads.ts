@@ -13,3 +13,13 @@ export async function fetchStatementUpload(id: number) {
   const response = await fetch(`/api/statements/${id}`, { cache: "no-store" });
   return parseJson<{ ok: true; upload: StatementUploadDetail }>(response);
 }
+
+/** Remove a parse log row and every transaction spawned from that PDF. */
+export async function deleteStatementUploadRequest(id: number) {
+  const response = await fetch(`/api/statements/${id}`, { method: "DELETE" });
+  return parseJson<{
+    ok: true;
+    filename: string;
+    deletedTransactions: number;
+  }>(response);
+}

@@ -9,6 +9,7 @@ import {
   useDashboard,
 } from "@/domains/dashboard/ui/DashboardPanels";
 import { TransactionsDataTable } from "@/domains/transactions/ui/TransactionsDataTable";
+import { formatDisplayDate } from "@/shared/lib/format-date";
 
 export default function OverviewPage() {
   const dashboard = useDashboard();
@@ -17,14 +18,24 @@ export default function OverviewPage() {
 
   return (
     <div className="space-y-8">
-      <header className="space-y-1 border-b border-[var(--border)] pb-6">
-        <p className="text-sm tracking-[0.18em] text-[var(--muted-foreground)] uppercase">
-          Accounts
-        </p>
-        <h1 className="text-3xl font-semibold tracking-tight">Dashboard</h1>
-        <p className="max-w-xl text-[var(--muted-foreground)]">
-          Balances by deposit, credit, and lending accounts.
-        </p>
+      <header className="flex items-start justify-between gap-6 border-b border-[var(--border)] pb-6">
+        <div className="space-y-1">
+          <p className="text-sm tracking-[0.18em] text-[var(--muted-foreground)] uppercase">
+            Accounts
+          </p>
+          <h1 className="text-3xl font-semibold tracking-tight">Dashboard</h1>
+          <p className="max-w-xl text-[var(--muted-foreground)]">
+            Balances by deposit, credit, and lending accounts.
+          </p>
+        </div>
+        <div className="shrink-0 text-right">
+          <p className="text-sm tracking-[0.18em] text-[var(--muted-foreground)] uppercase">
+            Latest statement
+          </p>
+          <p className="mt-1 text-lg font-medium tracking-tight">
+            {formatDisplayDate(data?.latestStatementDate)}
+          </p>
+        </div>
       </header>
 
       {dashboard.isError ? (

@@ -4,8 +4,12 @@ import { createColumnHelper } from "@tanstack/react-table";
 import { useMemo } from "react";
 import { DataTable } from "@/components/ui/data-table";
 import type { DataTableFeatures } from "@/components/ui/data-table-features";
-import { formatLedgerSpend } from "@/domains/dashboard/domain/money";
+import { formatMoney } from "@/domains/dashboard/domain/money";
 import type { DashboardTransaction } from "@/domains/dashboard/domain/types";
+import {
+  historyMatchLabel,
+  ledgerDebitCredit,
+} from "@/domains/transactions/domain/debitCredit";
 
 const columnHelper =
   createColumnHelper<DataTableFeatures, DashboardTransaction>();
@@ -142,16 +146,20 @@ export const transactionColumns = columnHelper.columns([
       filterFn: "fuzzy",
     },
   ),
-  columnHelper.accessor("bankDirection", {
-    header: "DR/CR",
-    meta: { width: "8%" },
+  columnHelper.accessor("historyMatch", {
+    header: "Cross-check",
+    meta: { width: "10%" },
     cell: ({ getValue }) => {
-      const value = String(getValue() ?? "").toLowerCase();
-      if (value === "debit") {
-        return <span className="block font-mono">DR</span>;
+      const label = historyMatchLabel(String(getValue() ?? ""));
+      if (label === "matched") {
+        return <span className="block text-sm">Matched</span>;
       }
-      if (value === "credit") {
-        return <span className="block font-mono">CR</span>;
+      if (label === "unmatched") {
+        return (
+          <span className="block text-sm text-[var(--muted-foreground)]">
+            Unmatched
+          </span>
+        );
       }
       return (
         <span className="text-sm text-[var(--muted-foreground)]">—</span>
@@ -160,22 +168,52 @@ export const transactionColumns = columnHelper.columns([
     filterFn: "equalsString",
     sortFn: "text",
   }),
-  columnHelper.accessor("amount", {
-    header: "Amount",
-    meta: { width: "14%" },
+  columnHelper.accessor((row) => ledgerDebitCredit(row).debit, {
+    id: "debit",
+    header: "Debit",
+    meta: { width: "11%" },
     cell: ({ row }) => {
-      const amount = row.original.amount;
-      const isSpend = amount > 0;
+      const debit = ledgerDebitCredit(row.original).debit;
+      if (debit == null) {
+        return (
+          <span className="block text-right text-sm text-[var(--muted-foreground)]">
+            —
+          </span>
+        );
+      }
       return (
-        <div
-          className={`truncate text-right font-mono ${
-            isSpend ? "text-[var(--spend)]" : "text-[var(--income)]"
-          }`}
-        >
-          {formatLedgerSpend(amount, row.original.isoCurrencyCode ?? "CAD")}
+        <div className="truncate text-right font-mono text-[var(--spend)]">
+          {formatMoney(debit, row.original.isoCurrencyCode ?? "CAD")}
         </div>
       );
     },
+    sortFn: "basic",
+  }),
+  columnHelper.accessor((row) => ledgerDebitCredit(row).credit, {
+    id: "credit",
+    header: "Credit",
+    meta: { width: "11%" },
+    cell: ({ row }) => {
+      const credit = ledgerDebitCredit(row.original).credit;
+      if (credit == null) {
+        return (
+          <span className="block text-right text-sm text-[var(--muted-foreground)]">
+            —
+          </span>
+        );
+      }
+      return (
+        <div className="truncate text-right font-mono text-[var(--income)]">
+          {formatMoney(credit, row.original.isoCurrencyCode ?? "CAD")}
+        </div>
+      );
+    },
+    sortFn: "basic",
+  }),
+  columnHelper.accessor("amount", {
+    header: () => null,
+    cell: () => null,
+    enableHiding: true,
     filterFn: "amountDirection",
     sortFn: "basic",
   }),
@@ -209,20 +247,12 @@ export function TransactionsDataTable({
     [transactions],
   );
 
-  const directionOptions = useMemo(
-    () =>
-      uniqueSorted(transactions.map((txn) => txn.bankDirection)).map(
-        (option) => ({
-          ...option,
-          label:
-            option.value === "debit"
-              ? "DR"
-              : option.value === "credit"
-                ? "CR"
-                : option.value,
-        }),
-      ),
-    [transactions],
+  const matchOptions = useMemo(
+    () => [
+      { value: "matched", label: "Matched" },
+      { value: "unmatched", label: "Unmatched" },
+    ],
+    [],
   );
 
   const tagOptions = useMemo(
@@ -244,7 +274,7 @@ export function TransactionsDataTable({
       globalFilterFn="fuzzy"
       searchPlaceholder="Fuzzy search merchants, categories, tags…"
       initialSorting={[{ id: "date", desc: true }]}
-      initialColumnVisibility={{ details: false }}
+      initialColumnVisibility={{ details: false, amount: false }}
       pageSize={15}
       filters={[
         {
@@ -264,18 +294,18 @@ export function TransactionsDataTable({
           options: channelOptions,
         },
         {
-          columnId: "bankDirection",
-          label: "DR/CR",
+          columnId: "historyMatch",
+          label: "Cross-check",
           allLabel: "All",
-          options: directionOptions,
+          options: matchOptions,
         },
         {
           columnId: "amount",
           label: "Type",
           allLabel: "All types",
           options: [
-            { value: "spend", label: "Spend" },
-            { value: "income", label: "Income" },
+            { value: "spend", label: "Debit" },
+            { value: "income", label: "Credit" },
           ],
         },
       ]}

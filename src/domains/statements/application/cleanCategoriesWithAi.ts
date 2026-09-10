@@ -5,7 +5,7 @@ import {
   ensureSeedTaxonomy,
   upsertTaxonomyNode,
 } from "@/domains/enrichment/application/catalog";
-import { withoutChannelMirrorTags } from "@/domains/enrichment/domain/channelTags";
+import { canonicalCategoryAiRules } from "@/domains/enrichment/domain/canonicalCategories";
 import { SEED_TAXONOMY } from "@/domains/enrichment/domain/seedTaxonomy";
 import { toSlug } from "@/domains/enrichment/domain/slug";
 import {
@@ -14,9 +14,15 @@ import {
   type CategoryVocabulary,
 } from "@/domains/statements/application/categoryVocabulary";
 import { getDb } from "@/shared/db";
+import { toMajor } from "@/shared/db/money";
 import {
   taxonomyNodes,
+  transactionAmounts,
+  transactionBankCategories,
+  transactionDates,
+  transactionEnrichment,
   transactionLabels,
+  transactionPaymentRefs,
   transactions,
 } from "@/shared/db/schema";
 
@@ -117,6 +123,7 @@ function buildCleanPrompt(params: {
     "Set fix=true only when you change something.",
     "",
     "HARD RULES:",
+    canonicalCategoryAiRules(),
     '- Uber Eats / UBEREATS => Restaurants (food delivery). Channel online — do not tag Online',
     '- Uber Holdings / Uber trip (no Eats) => Rideshare. Channel online — do not tag Online',
     '- ESSO / Shell / Petro-Canada (+ optional 7-Eleven) => Gas Stations',
@@ -128,12 +135,15 @@ function buildCleanPrompt(params: {
     '- FIZZ / mobile carriers => Mobile Phone',
     '- PocketPills / pharmacy => Pharmacies',
     '- Barber / salon => Hair Salons and Barbers',
-    '- Payment Thank You / Paiement Merci / PAD to a CIBC card => Credit Card Payment',
+    '- Payment Thank You / Paiement Merci / PAD to a CIBC card => Credit Card Payment (Account Transfers). Not spend.',
+    '- INTERNET TRANSFER (no GLOBAL, no person) => Account Transfers',
+    '- INTERNET GLOBAL MONEY TRANSFER / e-Transfer to a person => Money Transfers',
+    '- Student loan PAD / ABDL / BNPL => Loans. Merge Loan Payments into Loans.',
     '- Movati / GoodLife / gym membership => Gyms (not Personal Care)',
     '- T3 Chat / Wealthsimple Tax => SaaS',
-    '- Amazon marketplace => Online Retail — NOT SaaS',
+    '- Amazon marketplace => Online Retail — NOT SaaS. Refunds stay Shopping.',
     '- Never tag Online or In Store — paymentChannel already carries that',
-    '- Never use junk buckets: Transportation, Retail and Grocery, Foreign Currency Transactions, Personal and Household Expenses, Professional and Financial Services, Digital Content, Software and Subscriptions (use SaaS instead), Health and Education',
+    '- Never use junk buckets: Transportation, Retail and Grocery, Foreign Currency Transactions, Personal and Household Expenses, Professional and Financial Services, Digital Content, Health and Education',
     "- Prefer an EXISTING preferred label over inventing a near-duplicate.",
     "- Amount convention: positive = money out (purchase/fee).",
     "",
@@ -241,6 +251,61 @@ async function replaceTxnTags(transactionId: number, tags: string[]) {
   return applied;
 }
 
+async function selectTxnRowsForClean(transactionIds?: number[]) {
+  const db = getDb();
+  const baseQuery = db
+    .select({
+      id: transactions.id,
+      description: transactions.description,
+      amountMinor: transactionAmounts.amountMinor,
+      postedDate: transactionDates.postedDate,
+      paymentChannel: transactionPaymentRefs.paymentChannel,
+      transactionCode: transactionPaymentRefs.transactionCode,
+      categoryPrimary: transactionBankCategories.categoryPrimary,
+      categoryDetailed: transactionBankCategories.categoryDetailed,
+      merchantRaw: transactionEnrichment.merchantRaw,
+      merchantClean: transactionEnrichment.merchantClean,
+    })
+    .from(transactions)
+    .innerJoin(
+      transactionAmounts,
+      eq(transactionAmounts.transactionId, transactions.id),
+    )
+    .innerJoin(
+      transactionDates,
+      eq(transactionDates.transactionId, transactions.id),
+    )
+    .leftJoin(
+      transactionPaymentRefs,
+      eq(transactionPaymentRefs.transactionId, transactions.id),
+    )
+    .leftJoin(
+      transactionBankCategories,
+      eq(transactionBankCategories.transactionId, transactions.id),
+    )
+    .leftJoin(
+      transactionEnrichment,
+      eq(transactionEnrichment.transactionId, transactions.id),
+    );
+
+  const rows = transactionIds?.length
+    ? await baseQuery.where(inArray(transactions.id, transactionIds))
+    : await baseQuery;
+
+  return rows.map((row) => ({
+    id: row.id,
+    name: row.description,
+    merchantName: row.merchantClean ?? row.merchantRaw,
+    originalDescription: row.description,
+    amount: toMajor(row.amountMinor),
+    date: row.postedDate,
+    paymentChannel: row.paymentChannel,
+    transactionCode: row.transactionCode,
+    categoryPrimary: row.categoryPrimary,
+    categoryDetailed: row.categoryDetailed,
+  }));
+}
+
 /**
  * Always-on AI cleaning pass: re-check categories/tags with full vocabulary context.
  */
@@ -252,36 +317,7 @@ export async function cleanCategoriesWithAi(options?: {
   const vocabulary = await loadCategoryVocabulary();
   const preferredDetailed = preferredDetailedLabels(vocabulary);
 
-  const rows = options?.transactionIds?.length
-    ? await db
-        .select({
-          id: transactions.id,
-          name: transactions.name,
-          merchantName: transactions.merchantName,
-          originalDescription: transactions.originalDescription,
-          amount: transactions.amount,
-          date: transactions.date,
-          paymentChannel: transactions.paymentChannel,
-          transactionCode: transactions.transactionCode,
-          categoryPrimary: transactions.categoryPrimary,
-          categoryDetailed: transactions.categoryDetailed,
-        })
-        .from(transactions)
-        .where(inArray(transactions.id, options.transactionIds))
-    : await db
-        .select({
-          id: transactions.id,
-          name: transactions.name,
-          merchantName: transactions.merchantName,
-          originalDescription: transactions.originalDescription,
-          amount: transactions.amount,
-          date: transactions.date,
-          paymentChannel: transactions.paymentChannel,
-          transactionCode: transactions.transactionCode,
-          categoryPrimary: transactions.categoryPrimary,
-          categoryDetailed: transactions.categoryDetailed,
-        })
-        .from(transactions);
+  const rows = await selectTxnRowsForClean(options?.transactionIds);
 
   if (rows.length === 0) {
     return { batches: 0, reviewed: 0, updated: 0, tagsApplied: 0 };
@@ -336,13 +372,19 @@ export async function cleanCategoriesWithAi(options?: {
 
       if (detailedChanged || primaryChanged) {
         await db
-          .update(transactions)
-          .set({
+          .insert(transactionBankCategories)
+          .values({
+            transactionId: row.id,
             categoryDetailed: detailed,
             categoryPrimary: primary,
-            updatedAt: new Date(),
           })
-          .where(eq(transactions.id, row.id));
+          .onConflictDoUpdate({
+            target: transactionBankCategories.transactionId,
+            set: {
+              categoryDetailed: detailed,
+              categoryPrimary: primary,
+            },
+          });
         updated += 1;
       }
 

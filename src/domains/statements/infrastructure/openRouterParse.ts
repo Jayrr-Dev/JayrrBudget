@@ -1,4 +1,5 @@
 import { generateObjectWithFallback, mapPool } from "@/shared/ai/openRouter";
+import { canonicalCategoryAiRules } from "@/domains/enrichment/domain/canonicalCategories";
 import {
   formatCategoryVocabularyForPrompt,
   type CategoryVocabulary,
@@ -67,12 +68,18 @@ const MASK_RULES = [
 ].join("\n");
 
 const CATEGORY_HARD_RULES = [
-  "PAYMENT THANK YOU / PAIEMENT MERCI / PAD to a CIBC card → categoryDetailed Credit Card Payment, transactionCode payment. Never Transfer, never Payment Protection.",
-  "OpenAI, ChatGPT, T3 Chat, Cursor, Anthropic, Wealthsimple Tax → SaaS (not Software and Subscriptions).",
-  "Movati, GoodLife, gym memberships → Gyms / ENTERTAINMENT (not Personal Care).",
+  canonicalCategoryAiRules(),
+  "PAYMENT THANK YOU / PAIEMENT MERCI / PAD to a CIBC card → categoryDetailed Credit Card Payment, categoryPrimary TRANSFER, transactionCode payment.",
+  "INTERNET TRANSFER (plain, no GLOBAL, no person name) → Account Transfers / Internal Transfers. Not spending.",
+  "INTERNET GLOBAL MONEY TRANSFER / remittance / PHP → Money Transfers. Real money out.",
+  "E-TRANSFER + a person's name → Money Transfers. Out is spend; in is income.",
+  "PREAUTHORIZED DEBIT student loan / ABDL / BNPL → Loans. Never a second Loan Payments bucket.",
+  "OpenAI, ChatGPT, T3 Chat, Cursor, Anthropic, Wealthsimple Tax → SaaS (type), category Software and Subscriptions.",
+  "Movati, GoodLife, gym memberships → Gyms / Entertainment (not Personal Care).",
   "Uber Eats → Restaurants. Uber Holdings / Uber trip (no Eats) → Rideshare.",
   "Esso / Shell / Petro-Canada, even with 7-Eleven on the same line → Gas Stations.",
-  "Plain 7-Eleven with no fuel brand → Convenience Store (or Groceries only if the line is clearly food-only).",
+  "Plain 7-Eleven with no fuel brand → Convenience Store.",
+  "Purchase refunds (Amazon CREDIT, return) stay Shopping (or original category), transactionCode refund. Never Income.",
 ].join("\n");
 
 const BALANCE_AND_DEDUP_RULES = [

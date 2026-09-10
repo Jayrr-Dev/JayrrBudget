@@ -3,6 +3,7 @@
 import { createColumnHelper } from "@tanstack/react-table";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
+import { Icon } from "@iconify/react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
@@ -20,6 +21,7 @@ import {
   fetchStatementUploads,
 } from "@/domains/statements/queries/fetchStatementUploads";
 import { statementQueryKeys } from "@/domains/statements/queries/query-keys";
+import { StatementUploadRowActions } from "@/domains/statements/ui/StatementUploadRowActions";
 
 const columnHelper = createColumnHelper<DataTableFeatures, StatementUploadLog>();
 
@@ -84,8 +86,26 @@ function OcrLogButton({ upload }: { upload: StatementUploadLog }) {
 }
 
 const columns = columnHelper.columns([
+  columnHelper.display({
+    id: "actions",
+    header: () => (
+      <span className="inline-flex items-center justify-center">
+        <Icon
+          icon="mynaui:mouse-pointer-click-solid"
+          className="size-4 text-[var(--muted-foreground)]"
+          aria-hidden
+        />
+        <span className="sr-only">Actions</span>
+      </span>
+    ),
+    cell: ({ row }) => <StatementUploadRowActions upload={row.original} />,
+    enableSorting: false,
+    enableHiding: true,
+    meta: { label: "Actions", width: "3.25rem" },
+  }),
   columnHelper.accessor("createdAt", {
     header: "When",
+    enableHiding: false,
     cell: ({ getValue }) => (
       <span className="whitespace-nowrap text-sm">
         {formatWhen(String(getValue()))}
@@ -94,6 +114,7 @@ const columns = columnHelper.columns([
   }),
   columnHelper.accessor("filename", {
     header: "File",
+    enableHiding: false,
     cell: ({ row }) => (
       <div className="min-w-0">
         <p className="truncate font-medium">{row.original.filename}</p>
@@ -108,6 +129,7 @@ const columns = columnHelper.columns([
   }),
   columnHelper.accessor("status", {
     header: "Status",
+    enableHiding: false,
     cell: ({ row }) => (
       <div className="space-y-1">
         <Badge variant={statusVariant(row.original.status)}>
@@ -123,11 +145,13 @@ const columns = columnHelper.columns([
   }),
   columnHelper.accessor("pageCount", {
     header: "Pages",
+    enableHiding: false,
     cell: ({ getValue }) => String(getValue() ?? "—"),
   }),
   columnHelper.display({
     id: "counts",
     header: "Txns",
+    enableHiding: false,
     cell: ({ row }) => {
       const { transactionCount, insertedCount, updatedCount } = row.original;
       return (
@@ -143,6 +167,7 @@ const columns = columnHelper.columns([
   columnHelper.display({
     id: "balance",
     header: "Statement",
+    enableHiding: false,
     cell: ({ row }) => {
       const {
         openingBalance,
@@ -181,6 +206,7 @@ const columns = columnHelper.columns([
   columnHelper.display({
     id: "ocr",
     header: "Parse log",
+    enableHiding: false,
     cell: ({ row }) => <OcrLogButton upload={row.original} />,
   }),
 ]);
@@ -222,6 +248,7 @@ export function StatementUploadLogs() {
       searchKey="filename"
       searchPlaceholder="Filter files…"
       pageSize={10}
+      enableColumnToggle
     />
   );
 }
