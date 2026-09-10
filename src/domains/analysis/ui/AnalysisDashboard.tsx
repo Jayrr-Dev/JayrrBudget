@@ -329,7 +329,19 @@ function StackedMixChart({
           <ChartTooltip
             content={(props) => (
               <MixTooltip
-                {...props}
+                active={props.active}
+                payload={(props.payload ?? []).map((item) => ({
+                  value: Number(item.value),
+                  dataKey:
+                    typeof item.dataKey === "string" ||
+                    typeof item.dataKey === "number"
+                      ? item.dataKey
+                      : undefined,
+                  name: item.name == null ? undefined : String(item.name),
+                }))}
+                label={
+                  props.label == null ? undefined : String(props.label)
+                }
                 config={config}
                 currency={currency}
               />
@@ -390,10 +402,6 @@ function RankedBarChart({
           margin={{ left: 8, right: 16, top: 8, bottom: 0 }}
           accessibilityLayer
           style={onSelect ? { cursor: "pointer" } : undefined}
-          onClick={(state) => {
-            const name = state?.activePayload?.[0]?.payload?.name;
-            if (onSelect && typeof name === "string") onSelect(name);
-          }}
         >
           <CartesianGrid horizontal={false} />
           <YAxis
@@ -423,6 +431,11 @@ function RankedBarChart({
             fill="var(--color-spend)"
             radius={[0, 4, 4, 0]}
             name="spend"
+            onClick={(data) => {
+              const row = data as { name?: string; payload?: { name?: string } };
+              const name = row.payload?.name ?? row.name;
+              if (onSelect && typeof name === "string") onSelect(name);
+            }}
           />
         </BarChart>
       </ChartContainer>

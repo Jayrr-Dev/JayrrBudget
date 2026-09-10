@@ -6,6 +6,7 @@ import {
   upsertTaxonomyNode,
 } from "@/domains/enrichment/application/catalog";
 import { canonicalCategoryAiRules } from "@/domains/enrichment/domain/canonicalCategories";
+import { withoutChannelMirrorTags } from "@/domains/enrichment/domain/channelTags";
 import { SEED_TAXONOMY } from "@/domains/enrichment/domain/seedTaxonomy";
 import { toSlug } from "@/domains/enrichment/domain/slug";
 import {
