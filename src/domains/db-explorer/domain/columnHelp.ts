@@ -8,35 +8,17 @@ export const TABLE_HELP: Record<string, string> = {
   statement_uploads:
     "One PDF statement you uploaded. Totals live here, not on each line.",
   transactions:
-    "Thin ledger line. Description and account only; money and dates live in atom tables.",
-  transaction_amounts:
-    "Money for one ledger row. Amount in cents, currency, optional running balance.",
-  transaction_dates:
-    "When one ledger row posted or was authorized.",
-  transaction_locations:
-    "Where one swipe happened, if the bank sent location.",
-  transaction_payment_refs:
-    "Check numbers, payment channel, bank codes, foreign amounts.",
-  transaction_bank_categories:
-    "Parser bank labels on a line. Not the spend taxonomy.",
-  entities:
-    "Who you paid: company, brand, or product. Used to group merchants.",
-  entity_aliases:
-    "Other spellings that mean the same merchant entity.",
-  taxonomy_nodes:
-    "The spend tree: section → category → type, plus tags.",
-  transaction_enrichment:
-    "Our cleaned read of one ledger row. Merchant parse and job status only.",
-  transaction_entities:
-    "Which merchant entity played which role on a spend (company, brand, etc.).",
-  enrichment_tokens:
-    "Words split out of the bank memo during enrichment. Debug the cleaner here.",
-  transaction_labels:
-    "Spend taxonomy tags on a ledger row. Many labels can stick to one spend.",
-  bank_history_files:
-    "One CIBC CSV export. Bank's own debit/credit list.",
-  bank_history_rows:
-    "One CSV line. Gold standard for 'money in vs money out'.",
+    "One flat ledger row matching the transactions CSV. Money, dates, categories on the same row.",
+  transaction_sections:
+    "Filter lookup for Section (Lifestyle, Transport, Travel, …).",
+  transaction_categories:
+    "Filter lookup for Category (Fuel, Flights, Shopping, …).",
+  transaction_subcategories:
+    "Filter lookup for Subcategory.",
+  transaction_types:
+    "Filter lookup for cash-flow Transaction type (income / transfers / expenses).",
+  transaction_kinds:
+    "Filter lookup for Type (Fee, Subscription, …).",
   app_modules:
     "Which app pages show in the sidebar.",
 };
@@ -157,7 +139,7 @@ export const COLUMN_HELP: Record<string, Record<string, string>> = {
   },
   taxonomy_nodes: {
     id: "This category node's number.",
-    facet: "Which list: section, category, type, tag, store_type, food_type.",
+    facet: "Which list: section, category, subcategory, type, transaction_type, tag, store_type, food_type.",
     slug: "Stable key (food).",
     name: "Label you read (Food, Drink).",
     parent_id: "Parent in the spend tree. Empty on top sections.",
@@ -202,7 +184,7 @@ export const COLUMN_HELP: Record<string, Record<string, string>> = {
     id: "This tag row's number.",
     transaction_id: "Which spend got the tag.",
     node_id: "Which taxonomy node was applied.",
-    role: "Why it is stuck on: section, tag, store_type, etc.",
+    role: "Why it is stuck on: section, category, subcategory, type, tag, store_type, etc.",
     confidence: "How sure we were about this tag.",
     source: "Who applied it: ai, rules, seed, user.",
     created_at: "When the tag was added.",

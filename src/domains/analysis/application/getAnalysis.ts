@@ -1,32 +1,31 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { classifyCashFlow, spendCategoryLabel } from "@/domains/analysis/domain/cashFlow";
+import {
+  addDays,
+  addMonths,
+  monthKey,
+  periodKey,
+  periodLabel,
+  periodsBetween,
+} from "@/domains/analysis/domain/periods";
 import type {
   AnalysisData,
+  AnalysisPeriod,
+  AnalysisRankedItem,
   AnalysisRange,
 } from "@/domains/analysis/domain/types";
 import { singularCategoryKey } from "@/domains/statements/application/categoryVocabulary";
-import { toMajor } from "@/shared/db/money";
+import { splitTags } from "@/domains/transactions/domain/tags";
 import { getDb } from "@/shared/db";
-import {
-  accounts,
-  entities,
-  taxonomyNodes,
-  transactionAmounts,
-  transactionBankCategories,
-  transactionDates,
-  transactionEnrichment,
-  transactionEntities,
-  transactionLabels,
-  transactionLocations,
-  transactionPaymentRefs,
-  transactions,
-} from "@/shared/db/schema";
+import { accounts, transactions } from "@/shared/db/schema";
 
 export type GetAnalysisResult =
   | { ok: true; data: AnalysisData }
   | { ok: false; status: number; error: string };
 
-const TOP_STACK_CATEGORIES = 6;
+const TOP_STACKED_CATEGORY_ROWS = 15;
+const TOP_STACKED_SECTION_ROWS = 12;
+const NAMED_SHARE = 0.85;
 const UNCATEGORIZED = "Uncategorized";
 const OTHER = "Other";
 const OTHER_KEY = "other";
@@ -37,48 +36,6 @@ function chartKey(label: string) {
     .replace(/[^a-z0-9]+/g, "_")
     .replace(/^_+|_+$/g, "");
   return slug || "category";
-}
-
-function monthKey(isoDate: string) {
-  return isoDate.slice(0, 7);
-}
-
-function monthLabel(key: string) {
-  const [year, month] = key.split("-").map(Number);
-  if (!year || !month) return key;
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    year: "numeric",
-    timeZone: "UTC",
-  }).format(new Date(Date.UTC(year, month - 1, 1)));
-}
-
-function addMonths(key: string, delta: number) {
-  const [year, month] = key.split("-").map(Number);
-  const date = new Date(Date.UTC(year, month - 1 + delta, 1));
-  const y = date.getUTCFullYear();
-  const m = String(date.getUTCMonth() + 1).padStart(2, "0");
-  return `${y}-${m}`;
-}
-
-function monthsBetween(start: string, end: string) {
-  const out: string[] = [];
-  let cursor = start;
-  while (cursor <= end) {
-    out.push(cursor);
-    cursor = addMonths(cursor, 1);
-    if (out.length > 240) break;
-  }
-  return out;
-}
-
-function addDays(isoDate: string, delta: number) {
-  const [year, month, day] = isoDate.split("-").map(Number);
-  const date = new Date(Date.UTC(year, month - 1, day + delta));
-  const y = date.getUTCFullYear();
-  const m = String(date.getUTCMonth() + 1).padStart(2, "0");
-  const d = String(date.getUTCDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
 }
 
 function rangeStartDate(latestDate: string, range: AnalysisRange) {
@@ -189,41 +146,101 @@ function merchantLabel(input: {
   return description.replace(/\s+/g, " ").slice(0, 42);
 }
 
+/** Prefer merchant_clean for subcategory drilldowns. */
+function merchantCleanLabel(input: {
+  merchantClean: string | null;
+  description: string | null;
+}) {
+  const clean = input.merchantClean?.trim();
+  if (clean) return clean;
+  const description = input.description?.trim();
+  if (!description) return "Unknown";
+  return description.replace(/\s+/g, " ").slice(0, 42);
+}
+
 function addRank(map: Map<string, number>, name: string, delta: number) {
   map.set(name, (map.get(name) ?? 0) + delta);
 }
 
 function rankMap(map: Map<string, number>, limit = 10) {
+  return rankAll(map).slice(0, limit);
+}
+
+function rankAll(map: Map<string, number>): AnalysisRankedItem[] {
   return [...map.entries()]
     .map(([name, spend]) => ({ name, spend: roundMoney(spend) }))
     .filter((item) => item.spend > 0)
-    .sort((a, b) => b.spend - a.spend)
-    .slice(0, limit);
+    .sort((a, b) => b.spend - a.spend);
+}
+
+function splitNamedAndOther(ranked: AnalysisRankedItem[]) {
+  const total = ranked.reduce((sum, item) => sum + item.spend, 0);
+  if (ranked.length === 0 || total <= 0) {
+    return { named: [] as AnalysisRankedItem[], other: [] as AnalysisRankedItem[] };
+  }
+  if (ranked.length === 1) {
+    return { named: ranked, other: [] as AnalysisRankedItem[] };
+  }
+
+  const named: AnalysisRankedItem[] = [];
+  let cumulative = 0;
+  for (const item of ranked) {
+    if (named.length > 0 && cumulative / total >= NAMED_SHARE) break;
+    named.push(item);
+    cumulative += item.spend;
+  }
+  const namedNames = new Set(named.map((item) => item.name));
+  return {
+    named,
+    other: ranked.filter((item) => !namedNames.has(item.name)),
+  };
+}
+
+function namedUntilShare(
+  ranked: Array<[string, number]>,
+  total: number,
+) {
+  const named = new Set<string>();
+  if (total <= 0 || ranked.length === 0) return named;
+  if (ranked.length === 1) {
+    named.add(ranked[0][0]);
+    return named;
+  }
+  let cumulative = 0;
+  for (const [name, amount] of ranked) {
+    if (named.size > 0 && cumulative / total >= NAMED_SHARE) break;
+    named.add(name);
+    cumulative += amount;
+  }
+  return named;
 }
 
 const TYPE_ALIASES: Record<string, string> = {
-  "loan payments": "Loan Payment",
-  "loan payment": "Loan Payment",
-  "student loans": "Student Loan",
-  "student loan": "Student Loan",
+  "loan payments": "Personal Financing",
+  "loan payment": "Personal Financing",
+  "student loans": "Student Loans",
+  "student loan": "Student Loans",
   "buy now pay later": "BNPL",
-  "online retail": "Online Marketplaces",
-  "online marketplaces": "Online Marketplaces",
-  restaurants: "Restaurants",
-  groceries: "Groceries",
-  delivery: "Delivery",
+  "online retail": "Department & Online Stores",
+  "online marketplaces": "Department & Online Stores",
+  restaurants: "Dine-In",
+  groceries: "Supermarkets",
+  delivery: "Food Delivery",
   "gas stations": "Gas Stations",
-  "e-transfer": "E-Transfer",
-  remittance: "Remittance",
-  "international remittance": "Remittance",
-  "interest charges": "Interest",
-  interest: "Interest",
-  saas: "SaaS",
-  "hair salons and barbers": "Hair Salons",
-  "hair salon": "Hair Salons",
-  "hair salons": "Hair Salons",
-  barber: "Barbers",
-  barbers: "Barbers",
+  "e-transfer": "Interac e-Transfer",
+  remittance: "Remittances",
+  "international remittance": "Remittances",
+  "interest charges": "Overdraft & Interest",
+  interest: "Overdraft & Interest",
+  saas: "Productivity & Creative",
+  "hair salons and barbers": "Barbers & Salons",
+  "hair salon": "Barbers & Salons",
+  "hair salons": "Barbers & Salons",
+  barber: "Barbers & Salons",
+  barbers: "Barbers & Salons",
+  gyms: "Gym Memberships",
+  paycheck: "Salary & Wages",
+  payroll: "Salary & Wages",
 };
 
 function typeKey(value: string) {
@@ -246,16 +263,25 @@ function spendTypeLabel(
   categoryDetailed: string | null,
   category: string,
 ) {
-  const raw = (typeName ?? categoryDetailed ?? "").trim();
+  if (typeName?.trim()) {
+    const trimmed = typeName.trim();
+    if (
+      typeKey(trimmed) !== typeKey(category) &&
+      singularCategoryKey(trimmed) !== singularCategoryKey(category)
+    ) {
+      return trimmed;
+    }
+  }
+  const raw = categoryDetailed?.trim();
   if (!raw) return "Unspecified";
   const mapped = aliasTypeLabel(raw);
   if (
-    typeKey(mapped) === typeKey(category) ||
-    singularCategoryKey(mapped) === singularCategoryKey(category)
+    typeKey(mapped) !== typeKey(category) &&
+    singularCategoryKey(mapped) !== singularCategoryKey(category)
   ) {
-    return "Unspecified";
+    return mapped;
   }
-  return mapped;
+  return titleCase(raw);
 }
 
 function nestedAdd(
@@ -297,10 +323,201 @@ function uniqueSeriesKeys(labels: string[]) {
   });
 }
 
-function emptyAnalysis(range: AnalysisRange): AnalysisData {
+function addMonthSpend(
+  spendByLabel: Map<string, Map<string, number>>,
+  label: string,
+  month: string,
+  delta: number,
+) {
+  const byMonth = spendByLabel.get(label) ?? new Map<string, number>();
+  byMonth.set(month, (byMonth.get(month) ?? 0) + delta);
+  spendByLabel.set(label, byMonth);
+}
+
+function buildStackedSeries(
+  periodKeys: string[],
+  spendByLabel: Map<string, Map<string, number>>,
+  ranked: AnalysisRankedItem[],
+  period: AnalysisPeriod,
+) {
+  const { named, other } = splitNamedAndOther(ranked);
+  const usedKeys = new Set<string>();
+  const topSeries = named.map((item) => {
+    let key = chartKey(item.name);
+    let n = 2;
+    while (usedKeys.has(key)) {
+      key = `${chartKey(item.name)}_${n}`;
+      n += 1;
+    }
+    usedKeys.add(key);
+    return { key, label: item.name };
+  });
+  const topByLabel = new Map(topSeries.map((item) => [item.label, item.key]));
+  const series =
+    other.length > 0
+      ? [...topSeries, { key: OTHER_KEY, label: OTHER }]
+      : topSeries;
+
+  const monthly = periodKeys.map((month) => {
+    const row: Record<string, string | number> = {
+      month,
+      label: periodLabel(month, period),
+    };
+    for (const entry of series) row[entry.key] = 0;
+    for (const [name, byMonth] of spendByLabel) {
+      const amount = byMonth.get(month) ?? 0;
+      if (amount === 0) continue;
+      const key = topByLabel.get(name) ?? OTHER_KEY;
+      if (!(key in row)) continue;
+      row[key] = roundMoney(Math.max(0, Number(row[key] ?? 0) + amount));
+    }
+    return row;
+  });
+
+  const otherByPeriod: Record<string, AnalysisRankedItem[]> = {};
+  for (const month of periodKeys) {
+    const items = other
+      .map((item) => ({
+        name: item.name,
+        spend: roundMoney(spendByLabel.get(item.name)?.get(month) ?? 0),
+      }))
+      .filter((item) => item.spend > 0);
+    if (items.length > 0) otherByPeriod[month] = items;
+  }
+
+  return { series, monthly, other, otherByPeriod };
+}
+
+function nestedItemsByPeriod(
+  periodKeys: string[],
+  nestedMonth: Map<string, Map<string, Map<string, number>>>,
+  outerToKey: Map<string, string>,
+) {
+  const result: Record<string, Record<string, AnalysisRankedItem[]>> = {};
+  for (const month of periodKeys) {
+    const byKey = new Map<string, Map<string, number>>();
+    for (const [outer, inners] of nestedMonth) {
+      const key = outerToKey.get(outer);
+      if (!key) continue;
+      const bucket = byKey.get(key) ?? new Map<string, number>();
+      for (const [inner, byMonth] of inners) {
+        const amount = byMonth.get(month) ?? 0;
+        if (amount === 0) continue;
+        bucket.set(inner, (bucket.get(inner) ?? 0) + amount);
+      }
+      if (bucket.size > 0) byKey.set(key, bucket);
+    }
+    const named: Record<string, AnalysisRankedItem[]> = {};
+    for (const [key, bucket] of byKey) {
+      const items = [...bucket.entries()]
+        .filter(([, amount]) => amount > 0)
+        .sort((a, b) => b[1] - a[1])
+        .map(([name, spend]) => ({ name, spend: roundMoney(spend) }));
+      if (items.length > 0) named[key] = items;
+    }
+    if (Object.keys(named).length > 0) result[month] = named;
+  }
+  return result;
+}
+
+function buildNestedStackedBars(
+  outers: AnalysisRankedItem[],
+  nested: Map<string, Map<string, number>>,
+  outerLimit: number,
+) {
+  const limited = outers.slice(0, outerLimit).filter((item) => item.spend > 0);
+  if (limited.length === 0) {
+    return { rows: [], series: [], otherByRow: {} };
+  }
+
+  const globalSegmentSpend = new Map<string, number>();
+  const topSegmentsByOuter = new Map<string, Set<string>>();
+
+  for (const outer of limited) {
+    const inner = nested.get(outer.name) ?? new Map();
+    const rankedInner = [...inner.entries()]
+      .filter(([, amount]) => amount > 0)
+      .sort((a, b) => b[1] - a[1]);
+
+    for (const [segment, amount] of rankedInner) {
+      globalSegmentSpend.set(
+        segment,
+        (globalSegmentSpend.get(segment) ?? 0) + amount,
+      );
+    }
+
+    const rowTotal = rankedInner.reduce((sum, [, amount]) => sum + amount, 0);
+    topSegmentsByOuter.set(outer.name, namedUntilShare(rankedInner, rowTotal));
+  }
+
+  let hasOther = false;
+  for (const outer of limited) {
+    const inner = nested.get(outer.name) ?? new Map();
+    const topSet = topSegmentsByOuter.get(outer.name) ?? new Set<string>();
+    for (const [segment, amount] of inner) {
+      if (amount > 0 && !topSet.has(segment)) {
+        hasOther = true;
+        break;
+      }
+    }
+    if (hasOther) break;
+  }
+
+  const segmentUnion = new Set<string>();
+  for (const topSet of topSegmentsByOuter.values()) {
+    for (const segment of topSet) segmentUnion.add(segment);
+  }
+
+  let seriesLabels = [...segmentUnion].sort(
+    (a, b) => (globalSegmentSpend.get(b) ?? 0) - (globalSegmentSpend.get(a) ?? 0),
+  );
+  if (hasOther) seriesLabels.push(OTHER);
+
+  const series = uniqueSeriesKeys(seriesLabels);
+  const keyByLabel = new Map(series.map((item) => [item.label, item.key]));
+
+  const rows = limited.map((outer) => {
+    const row: Record<string, string | number> = {
+      name: outer.name,
+      spend: outer.spend,
+    };
+    for (const entry of series) row[entry.key] = 0;
+
+    const inner = nested.get(outer.name) ?? new Map();
+    const topSet = topSegmentsByOuter.get(outer.name) ?? new Set<string>();
+
+    for (const [segment, amount] of inner) {
+      if (amount <= 0) continue;
+      const label = topSet.has(segment) ? segment : OTHER;
+      const key = keyByLabel.get(label);
+      if (!key) continue;
+      row[key] = roundMoney(Number(row[key] ?? 0) + amount);
+    }
+    return row;
+  });
+
+  const otherByRow: Record<string, AnalysisRankedItem[]> = {};
+  for (const outer of limited) {
+    const inner = nested.get(outer.name) ?? new Map();
+    const topSet = topSegmentsByOuter.get(outer.name) ?? new Set<string>();
+    const leftovers = [...inner.entries()]
+      .filter(([segment, amount]) => amount > 0 && !topSet.has(segment))
+      .sort((a, b) => b[1] - a[1])
+      .map(([name, spend]) => ({ name, spend: roundMoney(spend) }));
+    if (leftovers.length > 0) otherByRow[outer.name] = leftovers;
+  }
+
+  return { rows, series, otherByRow };
+}
+
+function emptyAnalysis(
+  range: AnalysisRange,
+  period: AnalysisPeriod,
+): AnalysisData {
   return {
     currency: "CAD",
     range,
+    period,
     earliestDate: null,
     latestDate: null,
     transactionCount: 0,
@@ -308,8 +525,8 @@ function emptyAnalysis(range: AnalysisRange): AnalysisData {
       totalSpend: 0,
       totalIncome: 0,
       net: 0,
-      avgMonthlySpend: 0,
-      peakSpendMonth: null,
+      avgPeriodSpend: 0,
+      peakSpendPeriod: null,
       peakSpendAmount: 0,
       internalTransfers: 0,
       transferCount: 0,
@@ -318,11 +535,41 @@ function emptyAnalysis(range: AnalysisRange): AnalysisData {
       inboundTransfersIgnored: 0,
     },
     monthly: [],
+    sections: [],
+    sectionMonthly: [],
+    sectionSeries: [],
+    sectionOther: [],
+    sectionOtherByPeriod: {},
+    sectionStacked: { rows: [], series: [] },
+    subcategories: [],
+    subcategoryMonthly: [],
+    subcategorySeries: [],
+    subcategoryOther: [],
+    subcategoryOtherByPeriod: {},
+    subcategoryStacked: { rows: [], series: [] },
+    subcategoryBreakdowns: [],
+    tags: [],
+    tagMonthly: [],
+    tagSeries: [],
+    tagOther: [],
+    tagOtherByPeriod: {},
+    tagCategoryByPeriod: {},
+    tagStacked: { rows: [], series: [] },
+    tagBreakdowns: [],
     categories: [],
     categoryMonthly: [],
     categorySeries: [],
+    categoryOther: [],
+    categoryOtherByPeriod: {},
+    categoryStacked: { rows: [], series: [] },
     breakdowns: [],
     merchants: [],
+    merchantMonthly: [],
+    merchantSeries: [],
+    merchantOther: [],
+    merchantOtherByPeriod: {},
+    merchantStacked: { rows: [], series: [] },
+    merchantBreakdowns: [],
     places: [],
     channels: [],
     weekdays: [],
@@ -332,6 +579,7 @@ function emptyAnalysis(range: AnalysisRange): AnalysisData {
 
 export async function getAnalysis(
   range: AnalysisRange = "12m",
+  period: AnalysisPeriod = "monthly",
 ): Promise<GetAnalysisResult> {
   try {
     const db = getDb();
@@ -342,109 +590,29 @@ export async function getAnalysis(
         description: transactions.description,
         accountName: accounts.name,
         accountType: accounts.type,
-        amountMinor: transactionAmounts.amountMinor,
-        currencyCode: transactionAmounts.currencyCode,
-        postedDate: transactionDates.postedDate,
-        categoryPrimary: transactionBankCategories.categoryPrimary,
-        categoryDetailed: transactionBankCategories.categoryDetailed,
-        transactionCode: transactionPaymentRefs.transactionCode,
-        paymentChannel: transactionPaymentRefs.paymentChannel,
-        city: transactionLocations.city,
-        region: transactionLocations.region,
-        merchantClean: transactionEnrichment.merchantClean,
-        enrichmentChannel: transactionEnrichment.channel,
+        amount: transactions.amount,
+        currencyCode: transactions.currency,
+        postedDate: transactions.posted,
+        categoryPrimary: transactions.categoryPrimary,
+        categoryDetailed: transactions.categoryDetailed,
+        transactionCode: transactions.txnCode,
+        paymentChannel: transactions.channel,
+        city: transactions.city,
+        region: transactions.region,
+        merchantClean: transactions.merchantClean,
+        enrichmentChannel: transactions.channel,
+        sectionName: transactions.section,
+        categoryName: transactions.category,
+        typeName: transactions.subcategory,
+        companyName: transactions.company,
+        brandName: transactions.brand,
+        tags: transactions.tags,
       })
       .from(transactions)
-      .innerJoin(
-        transactionAmounts,
-        eq(transactionAmounts.transactionId, transactions.id),
-      )
-      .innerJoin(accounts, eq(accounts.accountId, transactions.accountId))
-      .innerJoin(
-        transactionDates,
-        eq(transactionDates.transactionId, transactions.id),
-      )
-      .leftJoin(
-        transactionBankCategories,
-        eq(transactionBankCategories.transactionId, transactions.id),
-      )
-      .leftJoin(
-        transactionPaymentRefs,
-        eq(transactionPaymentRefs.transactionId, transactions.id),
-      )
-      .leftJoin(
-        transactionLocations,
-        eq(transactionLocations.transactionId, transactions.id),
-      )
-      .leftJoin(
-        transactionEnrichment,
-        eq(transactionEnrichment.transactionId, transactions.id),
-      );
+      .innerJoin(accounts, eq(accounts.accountId, transactions.accountId));
 
     if (rows.length === 0) {
-      return { ok: true, data: emptyAnalysis(range) };
-    }
-
-    const ids = rows.map((row) => row.id);
-    const labelRows = await db
-      .select({
-        transactionId: transactionLabels.transactionId,
-        role: transactionLabels.role,
-        name: taxonomyNodes.name,
-      })
-      .from(transactionLabels)
-      .innerJoin(
-        taxonomyNodes,
-        eq(taxonomyNodes.id, transactionLabels.nodeId),
-      )
-      .where(
-        and(
-          inArray(transactionLabels.transactionId, ids),
-          inArray(transactionLabels.role, ["section", "category", "type"]),
-        ),
-      );
-
-    const treeByTxn = new Map<
-      number,
-      {
-        sectionName: string | null;
-        categoryName: string | null;
-        typeName: string | null;
-      }
-    >();
-    for (const label of labelRows) {
-      const tree = treeByTxn.get(label.transactionId) ?? {
-        sectionName: null,
-        categoryName: null,
-        typeName: null,
-      };
-      if (label.role === "section") tree.sectionName = label.name;
-      if (label.role === "category") tree.categoryName = label.name;
-      if (label.role === "type") tree.typeName = label.name;
-      treeByTxn.set(label.transactionId, tree);
-    }
-
-    const entityRows = await db
-      .select({
-        transactionId: transactionEntities.transactionId,
-        displayName: entities.displayName,
-        role: transactionEntities.role,
-      })
-      .from(transactionEntities)
-      .innerJoin(entities, eq(entities.id, transactionEntities.entityId))
-      .where(
-        and(
-          inArray(transactionEntities.transactionId, ids),
-          inArray(transactionEntities.role, ["company", "brand"]),
-        ),
-      );
-
-    const companyByTxn = new Map<number, string>();
-    const brandByTxn = new Map<number, string>();
-    for (const row of entityRows) {
-      if (!row.displayName) continue;
-      if (row.role === "company") companyByTxn.set(row.transactionId, row.displayName);
-      if (row.role === "brand") brandByTxn.set(row.transactionId, row.displayName);
+      return { ok: true, data: emptyAnalysis(range, period) };
     }
 
     const sortedDates = rows
@@ -479,14 +647,42 @@ export async function getAnalysis(
     >();
     const categorySpend = new Map<string, number>();
     const categoryMonthSpend = new Map<string, Map<string, number>>();
+    const sectionSpend = new Map<string, number>();
+    const sectionMonthSpend = new Map<string, Map<string, number>>();
+    const subcategorySpend = new Map<string, number>();
+    const subcategoryMonthSpend = new Map<string, Map<string, number>>();
     const merchantSpend = new Map<string, number>();
     const placeSpend = new Map<string, number>();
     const channelSpend = new Map<string, number>();
     const weekdaySpend = new Map<string, number>();
     const accountSpend = new Map<string, number>();
     const typeByCategory = new Map<string, Map<string, number>>();
+    const categoryBySection = new Map<string, Map<string, number>>();
     const merchantByCategory = new Map<string, Map<string, number>>();
+    const merchantBySubcategory = new Map<string, Map<string, number>>();
     const typeMonthByCategory = new Map<
+      string,
+      Map<string, Map<string, number>>
+    >();
+    const merchantMonthBySubcategory = new Map<
+      string,
+      Map<string, Map<string, number>>
+    >();
+    const tagSpend = new Map<string, number>();
+    const tagMonthSpend = new Map<string, Map<string, number>>();
+    const merchantByTag = new Map<string, Map<string, number>>();
+    const merchantMonthByTag = new Map<
+      string,
+      Map<string, Map<string, number>>
+    >();
+    const categoryByTag = new Map<string, Map<string, number>>();
+    const categoryMonthByTag = new Map<
+      string,
+      Map<string, Map<string, number>>
+    >();
+    const merchantMonthSpend = new Map<string, Map<string, number>>();
+    const subcategoryByMerchant = new Map<string, Map<string, number>>();
+    const subcategoryMonthByMerchant = new Map<
       string,
       Map<string, Map<string, number>>
     >();
@@ -507,37 +703,33 @@ export async function getAnalysis(
     }
 
     for (const row of filtered) {
-      const major = toMajor(row.amountMinor);
+      const major = row.amount;
+      const amountMinor = Math.round(major * 100);
       const abs = Math.abs(major);
       if (abs === 0) continue;
 
-      const month = monthKey(row.postedDate);
+      const month = periodKey(row.postedDate, period);
       const bucket = monthlyMap.get(month) ?? {
         spend: 0,
         income: 0,
         transfers: 0,
       };
-      const tree = treeByTxn.get(row.id) ?? {
-        sectionName: null,
-        categoryName: null,
-        typeName: null,
-      };
       const signals = {
-        amountMinor: row.amountMinor,
+        amountMinor,
         description: row.description,
         accountType: row.accountType,
         categoryPrimary: row.categoryPrimary,
         categoryDetailed: row.categoryDetailed,
-        sectionName: tree.sectionName,
-        categoryName: tree.categoryName,
-        typeName: tree.typeName,
+        sectionName: row.sectionName,
+        categoryName: row.categoryName,
+        typeName: row.typeName,
         transactionCode: row.transactionCode,
       };
       const kind = classifyCashFlow(signals);
       const category = spendCategoryLabel(
         signals,
         resolveCategory({
-          taxonomyCategory: tree.categoryName,
+          taxonomyCategory: row.categoryName,
           categoryDetailed: row.categoryDetailed,
           categoryPrimary: row.categoryPrimary,
         }),
@@ -554,16 +746,6 @@ export async function getAnalysis(
         totalSpend += abs;
         spendCount += 1;
         addCategory(category, month, abs);
-        addRank(
-          merchantSpend,
-          merchantLabel({
-            companyName:
-              companyByTxn.get(row.id) ?? brandByTxn.get(row.id) ?? null,
-            merchantClean: row.merchantClean,
-            description: row.description,
-          }),
-          abs,
-        );
         const place = placeLabel(row.city, row.region);
         if (place) addRank(placeSpend, place, abs);
         addRank(
@@ -574,24 +756,101 @@ export async function getAnalysis(
         addRank(weekdaySpend, weekdayLabel(row.postedDate), abs);
         addRank(accountSpend, row.accountName?.trim() || "Unknown account", abs);
         const type = spendTypeLabel(
-          tree.typeName,
+          row.typeName,
           row.categoryDetailed,
           category,
         );
+        const section = row.sectionName?.trim() || "Uncategorized";
+        addRank(sectionSpend, section, abs);
+        addMonthSpend(sectionMonthSpend, section, month, abs);
+        addRank(subcategorySpend, type, abs);
+        addMonthSpend(subcategoryMonthSpend, type, month, abs);
         const merchant = merchantLabel({
-          companyName:
-            companyByTxn.get(row.id) ?? brandByTxn.get(row.id) ?? null,
+          companyName: row.companyName ?? row.brandName ?? null,
           merchantClean: row.merchantClean,
           description: row.description,
         });
+        const cleanMerchant = merchantCleanLabel({
+          merchantClean: row.merchantClean,
+          description: row.description,
+        });
+        addRank(merchantSpend, cleanMerchant, abs);
+        addMonthSpend(merchantMonthSpend, cleanMerchant, month, abs);
+        nestedAdd(subcategoryByMerchant, cleanMerchant, type, abs);
+        nestedMonthAdd(
+          subcategoryMonthByMerchant,
+          cleanMerchant,
+          type,
+          month,
+          abs,
+        );
         nestedAdd(typeByCategory, category, type, abs);
+        nestedAdd(categoryBySection, section, category, abs);
         nestedAdd(merchantByCategory, category, merchant, abs);
+        nestedAdd(merchantBySubcategory, type, cleanMerchant, abs);
         nestedMonthAdd(typeMonthByCategory, category, type, month, abs);
+        nestedMonthAdd(
+          merchantMonthBySubcategory,
+          type,
+          cleanMerchant,
+          month,
+          abs,
+        );
+        for (const tag of splitTags(row.tags)) {
+          addRank(tagSpend, tag, abs);
+          addMonthSpend(tagMonthSpend, tag, month, abs);
+          nestedAdd(merchantByTag, tag, cleanMerchant, abs);
+          nestedMonthAdd(merchantMonthByTag, tag, cleanMerchant, month, abs);
+          nestedAdd(categoryByTag, tag, category, abs);
+          nestedMonthAdd(categoryMonthByTag, tag, category, month, abs);
+        }
       } else if (kind === "refund") {
         bucket.spend -= abs;
         totalSpend -= abs;
         refunds += abs;
         addCategory(category, month, -abs);
+        const type = spendTypeLabel(
+          row.typeName,
+          row.categoryDetailed,
+          category,
+        );
+        const section = row.sectionName?.trim() || "Uncategorized";
+        const cleanMerchant = merchantCleanLabel({
+          merchantClean: row.merchantClean,
+          description: row.description,
+        });
+        addRank(merchantSpend, cleanMerchant, -abs);
+        addMonthSpend(merchantMonthSpend, cleanMerchant, month, -abs);
+        nestedAdd(subcategoryByMerchant, cleanMerchant, type, -abs);
+        nestedMonthAdd(
+          subcategoryMonthByMerchant,
+          cleanMerchant,
+          type,
+          month,
+          -abs,
+        );
+        addRank(sectionSpend, section, -abs);
+        addMonthSpend(sectionMonthSpend, section, month, -abs);
+        addRank(subcategorySpend, type, -abs);
+        addMonthSpend(subcategoryMonthSpend, type, month, -abs);
+        nestedAdd(typeByCategory, category, type, -abs);
+        nestedAdd(categoryBySection, section, category, -abs);
+        nestedAdd(merchantBySubcategory, type, cleanMerchant, -abs);
+        nestedMonthAdd(
+          merchantMonthBySubcategory,
+          type,
+          cleanMerchant,
+          month,
+          -abs,
+        );
+        for (const tag of splitTags(row.tags)) {
+          addRank(tagSpend, tag, -abs);
+          addMonthSpend(tagMonthSpend, tag, month, -abs);
+          nestedAdd(merchantByTag, tag, cleanMerchant, -abs);
+          nestedMonthAdd(merchantMonthByTag, tag, cleanMerchant, month, -abs);
+          nestedAdd(categoryByTag, tag, category, -abs);
+          nestedMonthAdd(categoryMonthByTag, tag, category, month, -abs);
+        }
       } else {
         bucket.income += abs;
         totalIncome += abs;
@@ -600,11 +859,9 @@ export async function getAnalysis(
       monthlyMap.set(month, bucket);
     }
 
-    const latestMonth = latestDate ? monthKey(latestDate) : null;
-    const startMonth = startDate ? monthKey(startDate) : null;
     const monthKeys =
-      startMonth && latestMonth
-        ? monthsBetween(startMonth, latestMonth)
+      startDate && latestDate
+        ? periodsBetween(startDate, latestDate, period)
         : [...monthlyMap.keys()].sort();
 
     const monthly = monthKeys.map((month) => {
@@ -615,63 +872,145 @@ export async function getAnalysis(
       };
       return {
         month,
-        label: monthLabel(month),
+        label: periodLabel(month, period),
         spend: roundMoney(bucket.spend),
         income: roundMoney(bucket.income),
         transfers: roundMoney(bucket.transfers),
       };
     });
 
-    let peakSpendMonth: string | null = null;
+    let peakSpendPeriod: string | null = null;
     let peakSpendAmount = 0;
     for (const point of monthly) {
       if (point.spend > peakSpendAmount) {
         peakSpendAmount = point.spend;
-        peakSpendMonth = point.label;
+        peakSpendPeriod = point.label;
       }
     }
 
-    const monthsWithSpend = monthly.filter((point) => point.spend > 0).length;
-    const avgMonthlySpend =
-      monthsWithSpend > 0 ? totalSpend / monthsWithSpend : 0;
+    const periodsWithSpend = monthly.filter((point) => point.spend > 0).length;
+    const avgPeriodSpend =
+      periodsWithSpend > 0 ? totalSpend / periodsWithSpend : 0;
 
     const categories = [...categorySpend.entries()]
       .map(([name, spend]) => ({ name, spend: roundMoney(spend) }))
       .filter((item) => item.spend > 0)
       .sort((a, b) => b.spend - a.spend);
 
-    const usedKeys = new Set<string>();
-    const topSeries = categories.slice(0, TOP_STACK_CATEGORIES).map((item) => {
-      let key = chartKey(item.name);
-      let n = 2;
-      while (usedKeys.has(key)) {
-        key = `${chartKey(item.name)}_${n}`;
-        n += 1;
-      }
-      usedKeys.add(key);
-      return { key, label: item.name };
-    });
-    const topByLabel = new Map(topSeries.map((item) => [item.label, item.key]));
-    const hasOther = categories.some((item) => !topByLabel.has(item.name));
-    const categorySeries = hasOther
-      ? [...topSeries, { key: OTHER_KEY, label: OTHER }]
-      : topSeries;
+    const sections = [...sectionSpend.entries()]
+      .map(([name, spend]) => ({ name, spend: roundMoney(spend) }))
+      .filter((item) => item.spend > 0)
+      .sort((a, b) => b.spend - a.spend);
 
-    const categoryMonthly = monthKeys.map((month) => {
-      const row: Record<string, string | number> = {
-        month,
-        label: monthLabel(month),
-      };
-      for (const series of categorySeries) row[series.key] = 0;
-      for (const [name, byMonth] of categoryMonthSpend) {
-        const amount = byMonth.get(month) ?? 0;
-        if (amount === 0) continue;
-        const key = topByLabel.get(name) ?? OTHER_KEY;
-        if (!(key in row)) continue;
-        row[key] = roundMoney(Math.max(0, Number(row[key] ?? 0) + amount));
-      }
-      return row;
-    });
+    const subcategories = [...subcategorySpend.entries()]
+      .map(([name, spend]) => ({ name, spend: roundMoney(spend) }))
+      .filter((item) => item.spend > 0)
+      .sort((a, b) => b.spend - a.spend);
+
+    const {
+      series: sectionSeries,
+      monthly: sectionMonthly,
+      other: sectionOther,
+      otherByPeriod: sectionOtherByPeriod,
+    } = buildStackedSeries(
+      monthKeys,
+      sectionMonthSpend,
+      sections,
+      period,
+    );
+    const {
+      series: subcategorySeries,
+      monthly: subcategoryMonthly,
+      other: subcategoryOther,
+      otherByPeriod: subcategoryOtherByPeriod,
+    } = buildStackedSeries(
+      monthKeys,
+      subcategoryMonthSpend,
+      subcategories,
+      period,
+    );
+
+    const tags = [...tagSpend.entries()]
+      .map(([name, spend]) => ({ name, spend: roundMoney(spend) }))
+      .filter((item) => item.spend > 0)
+      .sort((a, b) => b.spend - a.spend);
+
+    const {
+      series: tagSeries,
+      monthly: tagMonthly,
+      other: tagOther,
+      otherByPeriod: tagOtherByPeriod,
+    } = buildStackedSeries(
+      monthKeys,
+      tagMonthSpend,
+      tags,
+      period,
+    );
+
+    const merchants = [...merchantSpend.entries()]
+      .map(([name, spend]) => ({ name, spend: roundMoney(spend) }))
+      .filter((item) => item.spend > 0)
+      .sort((a, b) => b.spend - a.spend);
+
+    const {
+      series: merchantSeries,
+      monthly: merchantMonthly,
+      other: merchantOther,
+      otherByPeriod: merchantOtherByPeriod,
+    } = buildStackedSeries(
+      monthKeys,
+      merchantMonthSpend,
+      merchants,
+      period,
+    );
+
+    const categoryStacked = buildNestedStackedBars(
+      categories,
+      typeByCategory,
+      TOP_STACKED_CATEGORY_ROWS,
+    );
+    const sectionStacked = buildNestedStackedBars(
+      sections,
+      categoryBySection,
+      TOP_STACKED_SECTION_ROWS,
+    );
+    const subcategoryStacked = buildNestedStackedBars(
+      subcategories,
+      merchantBySubcategory,
+      subcategories.length,
+    );
+    const tagStacked = buildNestedStackedBars(
+      tags,
+      categoryByTag,
+      tags.length,
+    );
+    const tagKeyByName = new Map(
+      tagSeries
+        .filter((item) => item.key !== OTHER_KEY)
+        .map((item) => [item.label, item.key]),
+    );
+    const tagCategoryByPeriod = nestedItemsByPeriod(
+      monthKeys,
+      categoryMonthByTag,
+      tagKeyByName,
+    );
+    const merchantStacked = buildNestedStackedBars(
+      merchants,
+      subcategoryByMerchant,
+      merchants.length,
+    );
+
+    const {
+      series: categorySeries,
+      monthly: categoryMonthly,
+      other: categoryOther,
+      otherByPeriod: categoryOtherByPeriod,
+    } = buildStackedSeries(
+      monthKeys,
+      categoryMonthSpend,
+      categories,
+      period,
+    );
 
     const weekdays = WEEKDAYS.map((name) => ({
       name,
@@ -679,37 +1018,101 @@ export async function getAnalysis(
     })).filter((item) => item.spend > 0);
 
     const breakdowns = categories.slice(0, 12).map((item) => {
-      const types = rankMap(typeByCategory.get(item.name) ?? new Map(), 8);
-      const typeSeries = uniqueSeriesKeys(types.slice(0, 6).map((row) => row.name));
-      const topTypeSet = new Set(typeSeries.map((row) => row.label));
-      const hasOtherType = types.some((row) => !topTypeSet.has(row.name));
-      const series = hasOtherType
-        ? [...typeSeries, { key: OTHER_KEY, label: OTHER }]
-        : typeSeries;
-      const byLabel = new Map(typeSeries.map((row) => [row.label, row.key]));
-      const monthMap = typeMonthByCategory.get(item.name) ?? new Map();
-      const typeMonthly = monthKeys.map((month) => {
-        const row: Record<string, string | number> = {
-          month,
-          label: monthLabel(month),
-        };
-        for (const entry of series) row[entry.key] = 0;
-        for (const [typeName, byMonth] of monthMap) {
-          const amount = byMonth.get(month) ?? 0;
-          if (amount === 0) continue;
-          const key = byLabel.get(typeName) ?? OTHER_KEY;
-          if (!(key in row)) continue;
-          row[key] = roundMoney(Math.max(0, Number(row[key] ?? 0) + amount));
-        }
-        return row;
-      });
+      const types = rankAll(typeByCategory.get(item.name) ?? new Map());
+      const {
+        series: typeSeries,
+        monthly: typeMonthly,
+        other,
+        otherByPeriod,
+      } = buildStackedSeries(
+        monthKeys,
+        typeMonthByCategory.get(item.name) ?? new Map(),
+        types,
+        period,
+      );
       return {
         category: item.name,
         spend: item.spend,
         types,
-        merchants: rankMap(merchantByCategory.get(item.name) ?? new Map(), 8),
-        typeSeries: series,
+        merchants: rankAll(merchantByCategory.get(item.name) ?? new Map()),
+        typeSeries,
         typeMonthly,
+        other,
+        otherByPeriod,
+      };
+    });
+
+    const subcategoryBreakdowns = subcategories.map((item) => {
+      const merchants = rankAll(
+        merchantBySubcategory.get(item.name) ?? new Map(),
+      );
+      const {
+        series: merchantSeries,
+        monthly: merchantMonthly,
+        other,
+        otherByPeriod,
+      } = buildStackedSeries(
+        monthKeys,
+        merchantMonthBySubcategory.get(item.name) ?? new Map(),
+        merchants,
+        period,
+      );
+      return {
+        subcategory: item.name,
+        spend: item.spend,
+        merchants,
+        merchantSeries,
+        merchantMonthly,
+        other,
+        otherByPeriod,
+      };
+    });
+
+    const tagBreakdowns = tags.map((item) => {
+      const merchants = rankAll(merchantByTag.get(item.name) ?? new Map());
+      const {
+        series: merchantSeries,
+        monthly: merchantMonthly,
+        other,
+        otherByPeriod,
+      } = buildStackedSeries(
+        monthKeys,
+        merchantMonthByTag.get(item.name) ?? new Map(),
+        merchants,
+        period,
+      );
+      return {
+        tag: item.name,
+        spend: item.spend,
+        merchants,
+        merchantSeries,
+        merchantMonthly,
+        other,
+        otherByPeriod,
+      };
+    });
+
+    const merchantBreakdowns = merchants.map((item) => {
+      const types = rankAll(subcategoryByMerchant.get(item.name) ?? new Map());
+      const {
+        series: typeSeries,
+        monthly: typeMonthly,
+        other,
+        otherByPeriod,
+      } = buildStackedSeries(
+        monthKeys,
+        subcategoryMonthByMerchant.get(item.name) ?? new Map(),
+        types,
+        period,
+      );
+      return {
+        merchant: item.name,
+        spend: item.spend,
+        types,
+        typeSeries,
+        typeMonthly,
+        other,
+        otherByPeriod,
       };
     });
 
@@ -718,6 +1121,7 @@ export async function getAnalysis(
       data: {
         currency,
         range,
+        period,
         earliestDate: rangeEarliest,
         latestDate: rangeLatest,
         transactionCount: filtered.length,
@@ -725,8 +1129,8 @@ export async function getAnalysis(
           totalSpend: roundMoney(totalSpend),
           totalIncome: roundMoney(totalIncome),
           net: roundMoney(totalIncome - totalSpend),
-          avgMonthlySpend: roundMoney(avgMonthlySpend),
-          peakSpendMonth,
+          avgPeriodSpend: roundMoney(avgPeriodSpend),
+          peakSpendPeriod,
           peakSpendAmount: roundMoney(peakSpendAmount),
           internalTransfers: roundMoney(internalTransfers),
           transferCount,
@@ -735,11 +1139,41 @@ export async function getAnalysis(
           inboundTransfersIgnored: roundMoney(inboundTransfersIgnored),
         },
         monthly,
+        sections,
+        sectionMonthly,
+        sectionSeries,
+        sectionOther,
+        sectionOtherByPeriod,
+        sectionStacked,
+        subcategories,
+        subcategoryMonthly,
+        subcategorySeries,
+        subcategoryOther,
+        subcategoryOtherByPeriod,
+        subcategoryStacked,
+        subcategoryBreakdowns,
+        tags,
+        tagMonthly,
+        tagSeries,
+        tagOther,
+        tagOtherByPeriod,
+        tagCategoryByPeriod,
+        tagStacked,
+        tagBreakdowns,
         categories,
         categoryMonthly,
         categorySeries,
+        categoryOther,
+        categoryOtherByPeriod,
+        categoryStacked,
         breakdowns,
-        merchants: rankMap(merchantSpend, 8),
+        merchants,
+        merchantMonthly,
+        merchantSeries,
+        merchantOther,
+        merchantOtherByPeriod,
+        merchantStacked,
+        merchantBreakdowns,
         places: rankMap(placeSpend, 8),
         channels: rankMap(channelSpend, 6),
         weekdays,

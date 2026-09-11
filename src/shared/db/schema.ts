@@ -1,8 +1,12 @@
 import { integer, real, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
+/**
+ * Flat ledger (CSV-shaped) + small lookup tables for filterable dims.
+ * One row = one transaction. No atom/enrichment side tables.
+ */
+
 export const institutions = sqliteTable("institutions", {
   id: integer("id").primaryKey({ autoIncrement: true }),
-  /** Stable external code. Prefer integer `id` for new FKs. */
   institutionId: text("institution_id").notNull().unique(),
   name: text("name"),
   createdAt: integer("created_at", { mode: "timestamp_ms" })
@@ -26,7 +30,7 @@ export const accounts = sqliteTable("accounts", {
   subtype: text("subtype"),
   currentBalance: real("current_balance"),
   availableBalance: real("available_balance"),
-  isoCurrencyCode: text("iso_currency_code").default("USD"),
+  isoCurrencyCode: text("iso_currency_code").default("CAD"),
   updatedAt: integer("updated_at", { mode: "timestamp_ms" })
     .notNull()
     .$defaultFn(() => new Date()),
@@ -37,11 +41,9 @@ export const statementUploads = sqliteTable("statement_uploads", {
   filename: text("filename").notNull(),
   fileHash: text("file_hash").unique(),
   status: text("status").notNull().default("pending"),
-  /** Resolved ledger account when known. */
   accountId: text("account_id").references(() => accounts.accountId, {
     onDelete: "set null",
   }),
-  /** Printed OCR/parse text — identity is `account_id`. */
   institutionName: text("institution_name"),
   accountName: text("account_name"),
   accountMask: text("account_mask"),
@@ -69,254 +71,124 @@ export const statementUploads = sqliteTable("statement_uploads", {
   completedAt: integer("completed_at", { mode: "timestamp_ms" }),
 });
 
-/** Thin ledger line. Money/dates/location/payment live in atom tables. */
-export const transactions = sqliteTable("transactions", {
+/** Filter lookup: Section */
+export const transactionSections = sqliteTable("transaction_sections", {
   id: integer("id").primaryKey({ autoIncrement: true }),
-  /** Stable external fingerprint (`stmt_…`). */
-  transactionId: text("transaction_id").notNull().unique(),
-  accountId: text("account_id")
-    .notNull()
-    .references(() => accounts.accountId, { onDelete: "cascade" }),
-  description: text("description").notNull(),
-  pending: integer("pending", { mode: "boolean" }).notNull().default(false),
-  source: text("source").notNull().default("statement"),
-  statementUploadId: integer("statement_upload_id").references(
-    () => statementUploads.id,
-    { onDelete: "set null" },
-  ),
-  updatedAt: integer("updated_at", { mode: "timestamp_ms" })
-    .notNull()
-    .$defaultFn(() => new Date()),
+  name: text("name").notNull().unique(),
 });
 
-export const transactionAmounts = sqliteTable("transaction_amounts", {
-  transactionId: integer("transaction_id")
-    .primaryKey()
-    .references(() => transactions.id, { onDelete: "cascade" }),
-  /** Integer cents. Statement sign: positive = money out. */
-  amountMinor: integer("amount_minor").notNull(),
-  currencyCode: text("currency_code").notNull().default("CAD"),
-  runningBalanceMinor: integer("running_balance_minor"),
+/** Filter lookup: Category */
+export const transactionCategories = sqliteTable("transaction_categories", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  name: text("name").notNull().unique(),
+  sectionId: integer("section_id").references(() => transactionSections.id, {
+    onDelete: "set null",
+  }),
 });
 
-export const transactionDates = sqliteTable("transaction_dates", {
-  transactionId: integer("transaction_id")
-    .primaryKey()
-    .references(() => transactions.id, { onDelete: "cascade" }),
-  postedDate: text("posted_date").notNull(),
-  authorizedDate: text("authorized_date"),
-});
-
-export const transactionLocations = sqliteTable("transaction_locations", {
-  transactionId: integer("transaction_id")
-    .primaryKey()
-    .references(() => transactions.id, { onDelete: "cascade" }),
-  city: text("city"),
-  region: text("region"),
-  country: text("country"),
-  postalCode: text("postal_code"),
-});
-
-export const transactionPaymentRefs = sqliteTable("transaction_payment_refs", {
-  transactionId: integer("transaction_id")
-    .primaryKey()
-    .references(() => transactions.id, { onDelete: "cascade" }),
-  checkNumber: text("check_number"),
-  referenceNumber: text("reference_number"),
-  transactionCode: text("transaction_code"),
-  paymentChannel: text("payment_channel"),
-  foreignAmountMinor: integer("foreign_amount_minor"),
-  foreignCurrency: text("foreign_currency"),
-});
-
-/** Parser / hygiene bank labels — not the spend taxonomy. */
-export const transactionBankCategories = sqliteTable(
-  "transaction_bank_categories",
+/** Filter lookup: Subcategory */
+export const transactionSubcategories = sqliteTable(
+  "transaction_subcategories",
   {
-    transactionId: integer("transaction_id")
-      .primaryKey()
-      .references(() => transactions.id, { onDelete: "cascade" }),
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    name: text("name").notNull().unique(),
+    categoryId: integer("category_id").references(
+      () => transactionCategories.id,
+      { onDelete: "set null" },
+    ),
+  },
+);
+
+/** Filter lookup: Transaction type (income / transfers / expenses) */
+export const transactionTypes = sqliteTable("transaction_types", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  name: text("name").notNull().unique(),
+});
+
+/** Filter lookup: Type (Fee, Subscription, …) */
+export const transactionKinds = sqliteTable("transaction_kinds", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  name: text("name").notNull().unique(),
+});
+
+/**
+ * One flat ledger row — columns match the transactions CSV export.
+ * Filter dims also store FK ids when present.
+ */
+export const transactions = sqliteTable(
+  "transactions",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    /** Stable fingerprint (`stmt_…`) — CSV `transactionId` */
+    transactionId: text("transaction_id").notNull().unique(),
+
+    posted: text("posted").notNull(),
+    authorized: text("authorized"),
+    account: text("account"),
+    accountId: text("account_id").notNull(),
+    description: text("description").notNull(),
+    originalDescription: text("original_description"),
+    merchantClean: text("merchant_clean"),
+    merchantName: text("merchant_name"),
+    company: text("company"),
+    brand: text("brand"),
+
+    section: text("section"),
+    category: text("category"),
+    subcategory: text("subcategory"),
+    transactionType: text("transaction_type"),
+    /** CSV `Type` column */
+    kind: text("kind"),
+
+    sectionId: integer("section_id").references(() => transactionSections.id, {
+      onDelete: "set null",
+    }),
+    categoryId: integer("category_id").references(
+      () => transactionCategories.id,
+      { onDelete: "set null" },
+    ),
+    subcategoryId: integer("subcategory_id").references(
+      () => transactionSubcategories.id,
+      { onDelete: "set null" },
+    ),
+    transactionTypeId: integer("transaction_type_id").references(
+      () => transactionTypes.id,
+      { onDelete: "set null" },
+    ),
+    kindId: integer("kind_id").references(() => transactionKinds.id, {
+      onDelete: "set null",
+    }),
+
     categoryPrimary: text("category_primary"),
     categoryDetailed: text("category_detailed"),
     categoryConfidence: text("category_confidence"),
-  },
-);
+    tags: text("tags"),
+    channel: text("channel"),
+    txnCode: text("txn_code"),
+    bankDirection: text("bank_direction"),
+    crossCheck: text("cross_check"),
+    enrichment: text("enrichment"),
+    source: text("source"),
+    pending: integer("pending", { mode: "boolean" }).notNull().default(false),
+    city: text("city"),
+    region: text("region"),
+    country: text("country"),
+    website: text("website"),
+    logoUrl: text("logo_url"),
+    currency: text("currency").notNull().default("CAD"),
+    debit: real("debit"),
+    credit: real("credit"),
+    /** Signed amount as in CSV (positive = money out). */
+    amount: real("amount").notNull(),
 
-export const entities = sqliteTable("entities", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
-  slug: text("slug").notNull().unique(),
-  displayName: text("display_name").notNull(),
-  kind: text("kind").notNull(),
-  parentEntityId: integer("parent_entity_id"),
-  website: text("website"),
-  logoUrl: text("logo_url"),
-  source: text("source").notNull().default("ai"),
-  createdAt: integer("created_at", { mode: "timestamp_ms" })
-    .notNull()
-    .$defaultFn(() => new Date()),
-  updatedAt: integer("updated_at", { mode: "timestamp_ms" })
-    .notNull()
-    .$defaultFn(() => new Date()),
-});
-
-export const entityAliases = sqliteTable(
-  "entity_aliases",
-  {
-    id: integer("id").primaryKey({ autoIncrement: true }),
-    entityId: integer("entity_id")
-      .notNull()
-      .references(() => entities.id, { onDelete: "cascade" }),
-    alias: text("alias").notNull(),
-    source: text("source").notNull().default("ai"),
-    createdAt: integer("created_at", { mode: "timestamp_ms" })
-      .notNull()
-      .$defaultFn(() => new Date()),
-  },
-  (table) => [uniqueIndex("entity_aliases_entity_alias_uidx").on(table.entityId, table.alias)],
-);
-
-export const taxonomyNodes = sqliteTable("taxonomy_nodes", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
-  facet: text("facet").notNull(),
-  slug: text("slug").notNull().unique(),
-  name: text("name").notNull(),
-  parentId: integer("parent_id"),
-  path: text("path").notNull(),
-  depth: integer("depth").notNull().default(0),
-  source: text("source").notNull().default("ai"),
-  createdAt: integer("created_at", { mode: "timestamp_ms" })
-    .notNull()
-    .$defaultFn(() => new Date()),
-  updatedAt: integer("updated_at", { mode: "timestamp_ms" })
-    .notNull()
-    .$defaultFn(() => new Date()),
-});
-
-/** Job + merchant parse only. No copied ledger amount/date/location. */
-export const transactionEnrichment = sqliteTable("transaction_enrichment", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
-  transactionId: integer("transaction_id")
-    .notNull()
-    .unique()
-    .references(() => transactions.id, { onDelete: "cascade" }),
-  merchantRaw: text("merchant_raw"),
-  merchantClean: text("merchant_clean"),
-  channel: text("channel"),
-  txnKind: text("txn_kind"),
-  storeNumber: text("store_number"),
-  legalSuffix: text("legal_suffix"),
-  enrichmentStatus: text("enrichment_status").notNull().default("pending"),
-  enrichmentConfidence: text("enrichment_confidence"),
-  enrichmentModel: text("enrichment_model"),
-  enrichedAt: integer("enriched_at", { mode: "timestamp_ms" }),
-  error: text("error"),
-  updatedAt: integer("updated_at", { mode: "timestamp_ms" })
-    .notNull()
-    .$defaultFn(() => new Date()),
-});
-
-export const transactionEntities = sqliteTable(
-  "transaction_entities",
-  {
-    id: integer("id").primaryKey({ autoIncrement: true }),
-    transactionId: integer("transaction_id")
-      .notNull()
-      .references(() => transactions.id, { onDelete: "cascade" }),
-    entityId: integer("entity_id")
-      .notNull()
-      .references(() => entities.id, { onDelete: "cascade" }),
-    role: text("role").notNull(),
-    confidence: text("confidence"),
-    source: text("source").notNull().default("ai"),
-    createdAt: integer("created_at", { mode: "timestamp_ms" })
+    updatedAt: integer("updated_at", { mode: "timestamp_ms" })
       .notNull()
       .$defaultFn(() => new Date()),
   },
   (table) => [
-    uniqueIndex("transaction_entities_txn_role_uidx").on(
-      table.transactionId,
-      table.role,
-    ),
+    uniqueIndex("transactions_transaction_id_uidx").on(table.transactionId),
   ],
 );
-
-export const enrichmentTokens = sqliteTable("enrichment_tokens", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
-  transactionId: integer("transaction_id")
-    .notNull()
-    .references(() => transactions.id, { onDelete: "cascade" }),
-  token: text("token").notNull(),
-  sortOrder: integer("sort_order").notNull().default(0),
-});
-
-export const transactionLabels = sqliteTable(
-  "transaction_labels",
-  {
-    id: integer("id").primaryKey({ autoIncrement: true }),
-    transactionId: integer("transaction_id")
-      .notNull()
-      .references(() => transactions.id, { onDelete: "cascade" }),
-    nodeId: integer("node_id")
-      .notNull()
-      .references(() => taxonomyNodes.id, { onDelete: "cascade" }),
-    role: text("role").notNull(),
-    confidence: text("confidence"),
-    source: text("source").notNull().default("ai"),
-    createdAt: integer("created_at", { mode: "timestamp_ms" })
-      .notNull()
-      .$defaultFn(() => new Date()),
-  },
-  (table) => [
-    uniqueIndex("transaction_labels_txn_node_role_uidx").on(
-      table.transactionId,
-      table.nodeId,
-      table.role,
-    ),
-  ],
-);
-
-export const bankHistoryFiles = sqliteTable("bank_history_files", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
-  filename: text("filename").notNull(),
-  fileHash: text("file_hash").notNull().unique(),
-  accountId: text("account_id").references(() => accounts.accountId, {
-    onDelete: "set null",
-  }),
-  accountMask: text("account_mask"),
-  accountType: text("account_type"),
-  productName: text("product_name"),
-  rowCount: integer("row_count").notNull().default(0),
-  importedAt: integer("imported_at", { mode: "timestamp_ms" })
-    .notNull()
-    .$defaultFn(() => new Date()),
-});
-
-export const bankHistoryRows = sqliteTable("bank_history_rows", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
-  fileId: integer("file_id")
-    .notNull()
-    .references(() => bankHistoryFiles.id, { onDelete: "cascade" }),
-  fingerprint: text("fingerprint").notNull().unique(),
-  accountMask: text("account_mask").notNull(),
-  accountType: text("account_type").notNull(),
-  date: text("date").notNull(),
-  description: text("description").notNull(),
-  debit: real("debit"),
-  credit: real("credit"),
-  direction: text("direction").notNull(),
-  amount: real("amount").notNull(),
-  cardNumber: text("card_number"),
-  matchedTransactionId: integer("matched_transaction_id").references(
-    () => transactions.id,
-    { onDelete: "set null" },
-  ),
-  matchStatus: text("match_status").notNull().default("unmatched"),
-  /** Gold-standard direction after match, when applied to ledger. */
-  bankDirection: text("bank_direction"),
-  createdAt: integer("created_at", { mode: "timestamp_ms" })
-    .notNull()
-    .$defaultFn(() => new Date()),
-});
 
 export const appModules = sqliteTable("app_modules", {
   id: integer("id").primaryKey({ autoIncrement: true }),

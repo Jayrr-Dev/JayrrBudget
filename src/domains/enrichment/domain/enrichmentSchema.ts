@@ -10,7 +10,9 @@ export const entityKindSchema = z.enum([
 export const taxonomyFacetSchema = z.enum([
   "section",
   "category",
+  "subcategory",
   "type",
+  "transaction_type",
   "tag",
   "store_type",
   "food_type",

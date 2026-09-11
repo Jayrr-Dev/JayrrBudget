@@ -2,10 +2,7 @@ import { sql } from "drizzle-orm";
 import { SEED_TAXONOMY } from "@/domains/enrichment/domain/seedTaxonomy";
 import { toSlug } from "@/domains/enrichment/domain/slug";
 import { getDb } from "@/shared/db";
-import {
-  transactionBankCategories,
-  transactionPaymentRefs,
-} from "@/shared/db/schema";
+import { transactions } from "@/shared/db/schema";
 
 export type CategoryVocabulary = {
   categoryPrimary: string[];
@@ -70,7 +67,7 @@ function uniquePreferExisting(values: Array<string | null | undefined>) {
 /** Seed type/category names act as preferred detailed labels. */
 function seedDetailedLabels() {
   return SEED_TAXONOMY.filter(
-    (node) => node.facet === "type" || node.facet === "category",
+    (node) => node.facet === "subcategory" || node.facet === "category",
   ).map((node) => node.name);
 }
 
@@ -78,17 +75,17 @@ export async function loadCategoryVocabulary(): Promise<CategoryVocabulary> {
   const db = getDb();
   const categoryRows = await db
     .select({
-      categoryPrimary: transactionBankCategories.categoryPrimary,
-      categoryDetailed: transactionBankCategories.categoryDetailed,
+      categoryPrimary: transactions.categoryPrimary,
+      categoryDetailed: transactions.categoryDetailed,
     })
-    .from(transactionBankCategories);
+    .from(transactions);
 
   const paymentRows = await db
     .select({
-      paymentChannel: transactionPaymentRefs.paymentChannel,
-      transactionCode: transactionPaymentRefs.transactionCode,
+      paymentChannel: transactions.channel,
+      transactionCode: transactions.txnCode,
     })
-    .from(transactionPaymentRefs);
+    .from(transactions);
 
   return {
     categoryPrimary: uniquePreferExisting(
@@ -167,11 +164,11 @@ export async function countCategoryDetailedUsage() {
   const db = getDb();
   const rows = await db
     .select({
-      label: transactionBankCategories.categoryDetailed,
+      label: transactions.categoryDetailed,
       count: sql<number>`count(*)`.mapWith(Number),
     })
-    .from(transactionBankCategories)
-    .groupBy(transactionBankCategories.categoryDetailed);
+    .from(transactions)
+    .groupBy(transactions.categoryDetailed);
 
   return rows
     .filter((row) => row.label)

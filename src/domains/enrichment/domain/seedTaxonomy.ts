@@ -1,7 +1,20 @@
 import { toSlug } from "@/domains/enrichment/domain/slug";
+import {
+  TRANSACTION_TYPE_NAMES,
+  transactionTypeSlug,
+  type TransactionTypeName,
+} from "@/domains/enrichment/domain/transactionTypes";
 
 export type SeedTaxonomyNode = {
-  facet: "section" | "category" | "type" | "tag" | "store_type" | "food_type";
+  facet:
+    | "section"
+    | "category"
+    | "subcategory"
+    | "type"
+    | "transaction_type"
+    | "tag"
+    | "store_type"
+    | "food_type";
   name: string;
   parentSlug?: string | null;
 };
@@ -15,6 +28,7 @@ export const SEED_TAXONOMY: SeedTaxonomyNode[] = [
   { facet: "section", name: "Health" },
   { facet: "section", name: "Income" },
   { facet: "section", name: "Transfers" },
+  { facet: "section", name: "Travel" },
 
   {
     facet: "category",
@@ -123,107 +137,215 @@ export const SEED_TAXONOMY: SeedTaxonomyNode[] = [
   },
   {
     facet: "category",
+    name: "Government Benefits",
+    parentSlug: "income",
+  },
+  {
+    facet: "category",
     name: "Rewards",
     parentSlug: "income",
   },
+  {
+    facet: "category",
+    name: "Medical",
+    parentSlug: "health",
+  },
+  {
+    facet: "category",
+    name: "Investments",
+    parentSlug: "finance",
+  },
+  {
+    facet: "category",
+    name: "Cash & ATM",
+    parentSlug: "transfers",
+  },
 
   {
-    facet: "type",
+    facet: "subcategory",
     name: "Restaurants",
     parentSlug: "food",
   },
   {
-    facet: "type",
+    facet: "subcategory",
     name: "Delivery",
     parentSlug: "food",
   },
   {
-    facet: "type",
+    facet: "subcategory",
     name: "Groceries",
     parentSlug: "food",
   },
   {
-    facet: "type",
+    facet: "subcategory",
     name: "Coffee",
     parentSlug: "drink",
   },
   {
-    facet: "type",
+    facet: "subcategory",
     name: "Online Marketplaces",
     parentSlug: "shopping",
   },
   {
-    facet: "type",
+    facet: "subcategory",
     name: "Cloud Software",
     parentSlug: "software",
   },
   {
-    facet: "type",
+    facet: "subcategory",
     name: "SaaS",
     parentSlug: "software",
   },
   {
-    facet: "type",
+    facet: "subcategory",
     name: "Developer Tools",
     parentSlug: "software",
   },
   {
-    facet: "type",
+    facet: "subcategory",
     name: "Streaming Services",
     parentSlug: "subscriptions",
   },
   {
-    facet: "type",
+    facet: "subcategory",
     name: "Gyms",
+    parentSlug: "personal-care",
+  },
+  {
+    facet: "subcategory",
+    name: "Video Games",
     parentSlug: "entertainment",
   },
   {
-    facet: "type",
+    facet: "subcategory",
+    name: "Entertainment Venues",
+    parentSlug: "entertainment",
+  },
+  {
+    facet: "subcategory",
+    name: "Sports",
+    parentSlug: "entertainment",
+  },
+  {
+    facet: "subcategory",
+    name: "Pharmacies",
+    parentSlug: "medical",
+  },
+  {
+    facet: "subcategory",
+    name: "Medical Services",
+    parentSlug: "medical",
+  },
+  {
+    facet: "subcategory",
     name: "Credit Card Payment",
     parentSlug: "account-transfers",
   },
   {
-    facet: "type",
+    facet: "subcategory",
     name: "Loan Payment",
     parentSlug: "loans",
   },
   {
-    facet: "type",
+    facet: "subcategory",
+    name: "Student Loans",
+    parentSlug: "loans",
+  },
+  {
+    facet: "subcategory",
+    name: "Buy Now Pay Later",
+    parentSlug: "loans",
+  },
+  {
+    facet: "subcategory",
     name: "Hair Salons",
     parentSlug: "personal-care",
   },
   {
-    facet: "type",
+    facet: "subcategory",
     name: "Barbers",
     parentSlug: "personal-care",
   },
   {
-    facet: "type",
+    facet: "subcategory",
     name: "Gas Stations",
     parentSlug: "fuel",
   },
   {
-    facet: "type",
+    facet: "subcategory",
     name: "Rideshare",
     parentSlug: "rideshare",
   },
   {
-    facet: "type",
+    facet: "subcategory",
     name: "Transit",
     parentSlug: "transit",
   },
   {
-    facet: "type",
+    facet: "subcategory",
     name: "Payment Protection",
     parentSlug: "insurance",
   },
+  {
+    facet: "subcategory",
+    name: "Cashback",
+    parentSlug: "rewards",
+  },
+  {
+    facet: "subcategory",
+    name: "Paycheck",
+    parentSlug: "employment-income",
+  },
+  {
+    facet: "subcategory",
+    name: "Tax Credits",
+    parentSlug: "government-benefits",
+  },
+  {
+    facet: "subcategory",
+    name: "Internal Transfers",
+    parentSlug: "account-transfers",
+  },
+  {
+    facet: "subcategory",
+    name: "International Remittance",
+    parentSlug: "money-transfers",
+  },
+  {
+    facet: "subcategory",
+    name: "E-Transfer",
+    parentSlug: "money-transfers",
+  },
+  {
+    facet: "subcategory",
+    name: "Movie Theatres",
+    parentSlug: "entertainment",
+  },
+  {
+    facet: "subcategory",
+    name: "Auto Repair and Maintenance",
+    parentSlug: "auto",
+  },
+  {
+    facet: "subcategory",
+    name: "Car Dealerships",
+    parentSlug: "auto",
+  },
+  {
+    facet: "subcategory",
+    name: "Car Wash",
+    parentSlug: "auto",
+  },
 
-  { facet: "tag", name: "Subscription" },
-  { facet: "tag", name: "Statement" },
-  { facet: "tag", name: "Fee" },
-  { facet: "tag", name: "AI" },
-  { facet: "tag", name: "Web Development" },
-  { facet: "tag", name: "Developer Tools" },
+  { facet: "transaction_type", name: "income" },
+  { facet: "transaction_type", name: "transfers" },
+  { facet: "transaction_type", name: "expenses" },
+  { facet: "type", name: "Subscription" },
+  { facet: "type", name: "Statement" },
+  { facet: "type", name: "Fee" },
+  { facet: "type", name: "AI" },
+  { facet: "type", name: "Web Development" },
+  { facet: "type", name: "Developer Tools" },
 
   { facet: "store_type", name: "Cafe" },
   { facet: "store_type", name: "Restaurant" },
@@ -237,5 +359,11 @@ export const SEED_TAXONOMY: SeedTaxonomyNode[] = [
 ];
 
 export function seedNodeSlug(node: SeedTaxonomyNode) {
+  if (node.facet === "transaction_type") {
+    const name = node.name.trim().toLowerCase();
+    if ((TRANSACTION_TYPE_NAMES as readonly string[]).includes(name)) {
+      return transactionTypeSlug(name as TransactionTypeName);
+    }
+  }
   return toSlug(node.name);
 }

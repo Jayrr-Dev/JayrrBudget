@@ -47,6 +47,7 @@ export async function getBudgetContextForCanvas() {
       merchant: txn.merchantClean ?? txn.merchantName ?? txn.name,
       amount: txn.amount,
       category:
+        txn.subcategoryName ||
         txn.typeName ||
         txn.categoryName ||
         txn.sectionName ||

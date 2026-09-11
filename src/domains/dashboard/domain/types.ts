@@ -20,7 +20,10 @@ export type DashboardTransaction = {
   brandName: string | null;
   sectionName: string | null;
   categoryName: string | null;
+  transactionTypeName: string | null;
   typeName: string | null;
+  typeNames: string[];
+  subcategoryName: string | null;
   tagNames: string[];
   enrichmentStatus: string | null;
   amount: number;

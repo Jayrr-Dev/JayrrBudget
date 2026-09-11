@@ -22,7 +22,7 @@ export default function TransactionsPage() {
         <div className="space-y-1">
           <h1 className="text-3xl font-semibold tracking-tight">Transactions</h1>
           <p className="text-[var(--muted-foreground)]">
-            Raw ledger fields. No display remaps.
+            Flat ledger from CSV. Section / Category / Type are real columns.
             {data
               ? ` Showing ${data.transactions.length} of ${data.transactionCount} stored.`
               : ""}

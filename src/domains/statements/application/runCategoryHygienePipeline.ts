@@ -1,12 +1,16 @@
 import { applyCompanyEntities } from "@/domains/enrichment/application/applyCompanyEntities";
 import { applyMerchantCleanCanonicalize } from "@/domains/enrichment/application/applyMerchantCleanCanonicalize";
 import { applySpendDimensions } from "@/domains/enrichment/application/applySpendDimensions";
+import { backfillTransactionTypes } from "@/domains/enrichment/application/backfillTransactionTypes";
 import { cleanCategoriesWithAi } from "@/domains/statements/application/cleanCategoriesWithAi";
+import { rewriteStoredCategoryLabels } from "@/domains/statements/application/rewriteStoredCategoryLabels";
 import { consolidateCategoryLabels } from "@/domains/statements/application/consolidateCategories";
 import { runStage } from "@/shared/ai/runStage";
 
 export type CategoryHygieneResult = {
+  rewrite: Awaited<ReturnType<typeof rewriteStoredCategoryLabels>>;
   consolidate: Awaited<ReturnType<typeof consolidateCategoryLabels>>;
+  transactionTypes: Awaited<ReturnType<typeof backfillTransactionTypes>>;
   rules: Awaited<ReturnType<typeof applySpendDimensions>>;
   merchantClean: Awaited<ReturnType<typeof applyMerchantCleanCanonicalize>>;
   companies: Awaited<ReturnType<typeof applyCompanyEntities>>;
@@ -47,6 +51,24 @@ export async function runCategoryHygienePipeline(options?: {
 }): Promise<CategoryHygieneResult> {
   const warnings: string[] = [];
 
+  const rewriteStage = await runStage("category-hygiene:rewrite", () =>
+    rewriteStoredCategoryLabels(),
+  );
+  const rewrite = rewriteStage.ok
+    ? rewriteStage.value
+    : {
+        detailedUpdated: 0,
+        taxonomyLabelsUpdated: 0,
+        nodesRenamed: 0,
+        merges: [],
+      };
+  if (!rewriteStage.ok) warnings.push(rewriteStage.error);
+  else {
+    console.info(
+      `[category-hygiene] rewrite detailed=${rewrite.detailedUpdated} taxonomy=${rewrite.taxonomyLabelsUpdated} nodes=${rewrite.nodesRenamed} merges=${rewrite.merges.length}`,
+    );
+  }
+
   const consolidateStage = await runStage("category-hygiene:consolidate", () =>
     consolidateCategoryLabels(),
   );
@@ -70,6 +92,20 @@ export async function runCategoryHygienePipeline(options?: {
   else {
     console.info(
       `[category-hygiene] rules matched=${rules.matched} categories=${rules.categoryUpdated} tags=${rules.tagsApplied}`,
+    );
+  }
+
+  const transactionTypesStage = await runStage(
+    "category-hygiene:transaction-types",
+    () => backfillTransactionTypes(),
+  );
+  const transactionTypes = transactionTypesStage.ok
+    ? transactionTypesStage.value
+    : { scanned: 0, updated: 0, unchanged: 0, legacyTypeRemoved: 0 };
+  if (!transactionTypesStage.ok) warnings.push(transactionTypesStage.error);
+  else {
+    console.info(
+      `[category-hygiene] transactionTypes scanned=${transactionTypes.scanned} updated=${transactionTypes.updated} legacyRemoved=${transactionTypes.legacyTypeRemoved}`,
     );
   }
 
@@ -102,7 +138,9 @@ export async function runCategoryHygienePipeline(options?: {
 
   if (options?.skipAi) {
     return {
+      rewrite,
       consolidate,
+      transactionTypes,
       rules,
       merchantClean,
       companies,
@@ -135,5 +173,14 @@ export async function runCategoryHygienePipeline(options?: {
     throw new Error(warnings[0] ?? "Category hygiene failed");
   }
 
-  return { consolidate, rules, merchantClean, companies, aiClean, warnings };
+  return {
+    rewrite,
+    consolidate,
+    transactionTypes,
+    rules,
+    merchantClean,
+    companies,
+    aiClean,
+    warnings,
+  };
 }

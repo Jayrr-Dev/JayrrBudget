@@ -177,8 +177,8 @@ export function TransactionsList({
                     {txn.brandName && txn.brandName !== txn.companyName
                       ? ` · ${txn.brandName}`
                       : ""}
-                    {txn.sectionName || txn.categoryName || txn.typeName
-                      ? ` · ${[txn.sectionName, txn.categoryName, txn.typeName]
+                    {txn.sectionName || txn.categoryName || txn.subcategoryName
+                      ? ` · ${[txn.sectionName, txn.categoryName, txn.subcategoryName]
                           .filter(Boolean)
                           .join(" · ")}`
                       : txn.categoryDetailed

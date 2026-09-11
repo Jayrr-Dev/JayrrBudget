@@ -75,7 +75,7 @@ const CATEGORY_HARD_RULES = [
   "E-TRANSFER + a person's name → Money Transfers. Out is spend; in is income.",
   "PREAUTHORIZED DEBIT student loan / ABDL / BNPL → Loans. Never a second Loan Payments bucket.",
   "OpenAI, ChatGPT, T3 Chat, Cursor, Anthropic, Wealthsimple Tax → SaaS (type), category Software.",
-  "Movati, GoodLife, gym memberships → Gyms / Entertainment (not Personal Care).",
+  "Movati, GoodLife, gym memberships → Gyms under Personal Care.",
   "Uber Eats → Restaurants. Uber Holdings / Uber trip (no Eats) → Rideshare.",
   "Esso / Shell / Petro-Canada, even with 7-Eleven on the same line → Gas Stations.",
   "Plain 7-Eleven with no fuel brand → Convenience Store.",

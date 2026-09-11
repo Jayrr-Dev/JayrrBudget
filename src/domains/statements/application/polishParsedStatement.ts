@@ -52,7 +52,7 @@ const CATEGORY_FIXES: CategoryFix[] = [
       /goodlife/i.test(text) ||
       /anytime\s*fitness/i.test(text) ||
       /\bgym\b/i.test(text),
-    categoryPrimary: "ENTERTAINMENT",
+    categoryPrimary: "PERSONAL_CARE",
     categoryDetailed: "Gyms",
   },
   {

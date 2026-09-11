@@ -4,7 +4,14 @@
  * books (chequing out + visa in). Only the paying side is volume.
  */
 
-export type CashFlowKind = "spend" | "income" | "transfer_out" | "transfer_in" | "refund";
+import { canonicalCategoryName } from "@/domains/enrichment/domain/canonicalCategories";
+
+export type CashFlowKind =
+  | "spend"
+  | "income"
+  | "transfer_out"
+  | "transfer_in"
+  | "refund";
 
 export type CashFlowSignals = {
   amountMinor: number;
@@ -34,7 +41,7 @@ function looksLikeCardPayment(description: string) {
 }
 
 function looksLikeNamedEtransfer(description: string) {
-  return /e-?transfer/i.test(description);
+  return /e-?transfer/i.test(description) && !/^internet\s+transfer\b/i.test(description);
 }
 
 function looksLikeRemittance(signals: CashFlowSignals) {
@@ -43,10 +50,12 @@ function looksLikeRemittance(signals: CashFlowSignals) {
   const category = norm(signals.categoryName);
   return (
     /global\s+money\s+transfer/i.test(description) ||
-    /international\s+remittance/i.test(type) ||
-    /international\s+transfers/i.test(type) ||
+    type === "remittances" ||
+    type === "international remittance" ||
+    type === "international transfers" ||
+    type === "wire transfer" ||
     category === "remittance" ||
-    type === "p2p transfers"
+    category === "external transfers"
   );
 }
 
@@ -59,6 +68,24 @@ function isCreditAccount(accountType: string | null) {
   return type === "credit" || type === "loan";
 }
 
+const INTERNAL_TRANSFER_TYPES = new Set([
+  "credit card payment",
+  "credit card payoffs",
+  "self transfers",
+  "internal transfers",
+  "internal transfer",
+  "investment transfer",
+]);
+
+const INTERNAL_TRANSFER_DETAILED = new Set([
+  "credit card payment",
+  "credit card payoffs",
+  "self transfers",
+  "internal transfers",
+  "internal transfer",
+  "investment transfer",
+]);
+
 function isIncomeBucket(signals: CashFlowSignals) {
   const section = norm(signals.sectionName);
   const primary = norm(signals.categoryPrimary);
@@ -66,7 +93,7 @@ function isIncomeBucket(signals: CashFlowSignals) {
   return (
     section === "income" ||
     primary === "income" ||
-    /salary|wage|employment|payroll|cashback|reward|rebate|tax refund|tax benefit/i.test(
+    /employment|government.*tax|cashback|rebate|salary|wage|payroll|paycheck|tax refund|tax credit|gst|hst/i.test(
       category,
     )
   );
@@ -91,26 +118,34 @@ function isInternalMove(signals: CashFlowSignals) {
   if (looksLikeNamedEtransfer(description) && !looksLikeCardPayment(description)) {
     return false;
   }
-  if (looksLikeRemittance(signals)) return false;
+  if (looksLikeRemittance(signals) && category !== "account transfers") {
+    return false;
+  }
+  if (category === "external transfers" || category === "money transfers") {
+    return false;
+  }
 
   if (
     isCreditAccount(signals.accountType) &&
     signals.amountMinor < 0 &&
     (looksLikeCardPayment(description) ||
       norm(signals.transactionCode) === "payment" ||
-      detailed === "credit card payment")
+      INTERNAL_TRANSFER_DETAILED.has(detailed))
   ) {
     return true;
   }
 
   if (looksLikeCardPayment(description)) return true;
-  if (detailed === "credit card payment") return true;
-  if (type === "credit card payment") return true;
+  if (INTERNAL_TRANSFER_DETAILED.has(detailed)) return true;
+  if (INTERNAL_TRANSFER_TYPES.has(type)) return true;
   if (looksLikePlainInternetTransfer(description)) return true;
-  if (type === "internal transfers") return true;
-  if (category === "investments") return true;
+  if (category === "investments" && type === "investment transfer") return true;
   if (category === "account transfers") return true;
-  if (primary === "transfer" && detailed === "transfer" && !looksLikeRemittance(signals)) {
+  if (
+    primary === "transfer" &&
+    detailed === "transfer" &&
+    category !== "external transfers"
+  ) {
     return true;
   }
   return false;
@@ -134,19 +169,16 @@ export function classifyCashFlow(signals: CashFlowSignals): CashFlowKind {
   return "spend";
 }
 
-import { canonicalCategoryName } from "@/domains/enrichment/domain/canonicalCategories";
-
-/** Chart label for real spend. Keep remittances out of "Account Transfers". */
+/** Chart label for real spend. Prefer live taxonomy category labels. */
 export function spendCategoryLabel(
   signals: CashFlowSignals,
   fallback: string,
 ) {
-  const hint = signals.typeName ?? signals.categoryDetailed;
-  if (looksLikeRemittance(signals)) {
-    return canonicalCategoryName("Remittance", hint);
+  if (signals.categoryName?.trim()) {
+    return signals.categoryName.trim();
   }
-  if (looksLikeNamedEtransfer(signals.description ?? "")) {
-    return canonicalCategoryName("Money Transfers", hint);
-  }
-  return canonicalCategoryName(fallback, hint);
+  return canonicalCategoryName(
+    fallback,
+    signals.typeName ?? signals.categoryDetailed,
+  );
 }

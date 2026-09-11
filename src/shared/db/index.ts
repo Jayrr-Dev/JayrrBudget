@@ -7,12 +7,10 @@ function getDatabaseUrl() {
   const onVercel = Boolean(process.env.VERCEL);
 
   if (!url) {
-    if (onVercel) {
-      throw new Error(
-        "DATABASE_URL is missing on Vercel. Set it to your Turso libsql:// URL.",
-      );
-    }
-    return "file:./data/jayrr-budget.db";
+    throw new Error(
+      "DATABASE_URL is not set. Add Turso credentials to .env.local (see .env.example). " +
+        "Do not use archived SQLite under archive/db/ — see archive/db/README.md.",
+    );
   }
 
   if (onVercel && (url.startsWith("file:") || url.includes("./data/"))) {
@@ -50,7 +48,7 @@ function createDbClient() {
   });
 }
 
-export function getDb() {
+export function getLibsqlClient() {
   const url = getDatabaseUrl();
 
   if (!globalForDb.libsql || globalForDb.libsqlUrl !== url) {
@@ -58,7 +56,11 @@ export function getDb() {
     globalForDb.libsqlUrl = url;
   }
 
-  return drizzle(globalForDb.libsql, { schema });
+  return globalForDb.libsql;
+}
+
+export function getDb() {
+  return drizzle(getLibsqlClient(), { schema });
 }
 
 export type Database = ReturnType<typeof getDb>;

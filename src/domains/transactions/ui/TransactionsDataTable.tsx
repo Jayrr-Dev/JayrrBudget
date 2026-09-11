@@ -1,5 +1,6 @@
 "use client";
 
+import { useIsFetching, useQueryClient } from "@tanstack/react-query";
 import { createColumnHelper } from "@tanstack/react-table";
 import { useMemo } from "react";
 import { DataTable } from "@/components/ui/data-table";
@@ -9,10 +10,13 @@ import type {
   DashboardAccount,
   DashboardTransaction,
 } from "@/domains/dashboard/domain/types";
+import { queryKeys } from "@/domains/dashboard/queries/query-keys";
 import {
   historyMatchLabel,
   ledgerDebitCredit,
 } from "@/domains/transactions/domain/debitCredit";
+import { TagsCell } from "@/domains/transactions/ui/TagsCell";
+import { TagsColumnHeader } from "@/domains/transactions/ui/TagsColumnHeader";
 
 const columnHelper =
   createColumnHelper<DataTableFeatures, DashboardTransaction>();
@@ -116,27 +120,6 @@ function buildColumns(accountNameById: Map<string, string>) {
       filterFn: "fuzzy",
       sortFn: "text",
     }),
-    columnHelper.accessor("merchantName", {
-      header: "Merchant name",
-      meta: { width: "18rem" },
-      cell: ({ getValue }) => textOrDash(getValue()),
-      filterFn: "fuzzy",
-      sortFn: "text",
-    }),
-    columnHelper.accessor("companyName", {
-      header: "Company",
-      meta: { width: "18rem" },
-      cell: ({ getValue }) => textOrDash(getValue()),
-      filterFn: "fuzzy",
-      sortFn: "text",
-    }),
-    columnHelper.accessor("brandName", {
-      header: "Brand",
-      meta: { width: "14rem" },
-      cell: ({ getValue }) => textOrDash(getValue()),
-      filterFn: "fuzzy",
-      sortFn: "text",
-    }),
     columnHelper.accessor("sectionName", {
       header: "Section",
       meta: { width: "14rem" },
@@ -151,12 +134,61 @@ function buildColumns(accountNameById: Map<string, string>) {
       filterFn: "equalsString",
       sortFn: "text",
     }),
-    columnHelper.accessor("typeName", {
-      header: "Type",
+    columnHelper.accessor("subcategoryName", {
+      header: "Subcategories",
       meta: { width: "20rem" },
       cell: ({ getValue }) => textOrDash(getValue()),
       filterFn: "equalsString",
       sortFn: "text",
+    }),
+    columnHelper.accessor((row) => row.tagNames ?? [], {
+      id: "tags",
+      header: () => <TagsColumnHeader />,
+      meta: { width: "18rem", label: "Tags" },
+      cell: ({ row, getValue }) => (
+        <TagsCell
+          transactionId={row.original.transactionId}
+          tags={[...(getValue() as string[])]}
+        />
+      ),
+      filterFn: "includesTag",
+      sortFn: "textList",
+    }),
+    columnHelper.accessor("merchantName", {
+      header: "Merchant name",
+      meta: { width: "18rem" },
+      cell: ({ getValue }) => textOrDash(getValue()),
+      filterFn: "fuzzy",
+      sortFn: "text",
+    }),
+    columnHelper.accessor("companyName", {
+      header: "Company",
+      meta: { width: "18rem" },
+      cell: ({ getValue }) => textOrDash(getValue()),
+      filterFn: "equalsString",
+      sortFn: "text",
+    }),
+    columnHelper.accessor("brandName", {
+      header: "Brand",
+      meta: { width: "14rem" },
+      cell: ({ getValue }) => textOrDash(getValue()),
+      filterFn: "fuzzy",
+      sortFn: "text",
+    }),
+    columnHelper.accessor("transactionTypeName", {
+      header: "Transaction type",
+      meta: { width: "10rem" },
+      cell: ({ getValue }) => textOrDash(getValue()),
+      filterFn: "equalsString",
+      sortFn: "text",
+    }),
+    columnHelper.accessor((row) => row.typeNames ?? [], {
+      id: "typeNames",
+      header: "Type",
+      meta: { width: "18rem" },
+      cell: ({ getValue }) => chipList([...(getValue() as string[])]),
+      filterFn: "includesTag",
+      sortFn: "textList",
     }),
     columnHelper.accessor("categoryPrimary", {
       header: "categoryPrimary",
@@ -177,15 +209,6 @@ function buildColumns(accountNameById: Map<string, string>) {
       meta: { width: "14rem" },
       cell: ({ getValue }) => textOrDash(getValue()),
       sortFn: "text",
-    }),
-    columnHelper.accessor((row) => row.tagNames ?? [], {
-      id: "tags",
-      header: "Tags",
-      meta: { width: "18rem" },
-      cell: ({ getValue }) => chipList([...(getValue() as string[])]),
-      filterFn: "includesTag",
-      sortFn: "textList",
-      enableGlobalFilter: true,
     }),
     columnHelper.accessor("paymentChannel", {
       header: "Channel",
@@ -357,48 +380,8 @@ function buildColumns(accountNameById: Map<string, string>) {
       filterFn: "amountDirection",
       sortFn: "basic",
     }),
-    columnHelper.accessor(
-      (row) =>
-        [
-          row.transactionId,
-          row.accountId,
-          row.name,
-          row.originalDescription,
-          row.merchantClean,
-          row.merchantName,
-          row.companyName,
-          row.brandName,
-          row.sectionName,
-          row.categoryName,
-          row.typeName,
-          row.categoryPrimary,
-          row.categoryDetailed,
-          row.paymentChannel,
-          row.transactionCode,
-          row.locationCity,
-          row.locationRegion,
-          row.locationCountry,
-          row.source,
-          row.website,
-          ...(row.tagNames ?? []),
-        ]
-          .filter(Boolean)
-          .join(" "),
-      {
-        id: "search",
-        header: () => null,
-        cell: () => null,
-        enableSorting: false,
-        enableHiding: true,
-        filterFn: "fuzzy",
-      },
-    ),
   ]);
 }
-
-const HIDDEN_HELPER_COLS = {
-  search: false,
-} as const;
 
 export function TransactionsDataTable({
   transactions,
@@ -407,6 +390,9 @@ export function TransactionsDataTable({
   transactions: DashboardTransaction[];
   accounts?: DashboardAccount[];
 }) {
+  const queryClient = useQueryClient();
+  const dashboardFetches = useIsFetching({ queryKey: queryKeys.dashboard });
+
   const accountNameById = useMemo(() => {
     const map = new Map<string, string>();
     for (const account of accounts) {
@@ -424,12 +410,24 @@ export function TransactionsDataTable({
     () => uniqueSorted(transactions.map((txn) => txn.categoryName)),
     [transactions],
   );
+  const companyOptions = useMemo(
+    () => uniqueSorted(transactions.map((txn) => txn.companyName)),
+    [transactions],
+  );
   const sectionOptions = useMemo(
     () => uniqueSorted(transactions.map((txn) => txn.sectionName)),
     [transactions],
   );
+  const subcategoryOptions = useMemo(
+    () => uniqueSorted(transactions.map((txn) => txn.subcategoryName)),
+    [transactions],
+  );
+  const transactionTypeOptions = useMemo(
+    () => uniqueSorted(transactions.map((txn) => txn.transactionTypeName)),
+    [transactions],
+  );
   const typeOptions = useMemo(
-    () => uniqueSorted(transactions.map((txn) => txn.typeName)),
+    () => uniqueSorted(transactions.flatMap((txn) => txn.typeNames ?? [])),
     [transactions],
   );
   const detailedOptions = useMemo(
@@ -456,12 +454,13 @@ export function TransactionsDataTable({
     <DataTable
       columns={columns}
       data={transactions}
-      enableGlobalFilter
-      globalFilterFn="fuzzy"
-      searchPlaceholder="Search raw ledger fields…"
       initialSorting={[{ id: "date", desc: true }]}
-      initialColumnVisibility={HIDDEN_HELPER_COLS}
       enableColumnToggle
+      csvFilename="transactions.csv"
+      isRefreshing={dashboardFetches > 0}
+      onRefresh={() =>
+        queryClient.refetchQueries({ queryKey: queryKeys.dashboard })
+      }
       pageSize={25}
       filters={[
         {
@@ -473,10 +472,28 @@ export function TransactionsDataTable({
           columnId: "categoryName",
           label: "Category",
           options: categoryOptions,
+          cascadeFrom: ["sectionName"],
         },
         {
-          columnId: "typeName",
+          columnId: "subcategoryName",
+          label: "Subcategories",
+          options: subcategoryOptions,
+          cascadeFrom: ["sectionName", "categoryName"],
+        },
+        {
+          columnId: "companyName",
+          label: "Company",
+          options: companyOptions,
+        },
+        {
+          columnId: "transactionTypeName",
+          label: "Transaction type",
+          options: transactionTypeOptions,
+        },
+        {
+          columnId: "typeNames",
           label: "Type",
+          allLabel: "All types",
           options: typeOptions,
         },
         {

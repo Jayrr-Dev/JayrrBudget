@@ -4,7 +4,7 @@
  * Requires in .env.local:
  *   DATABASE_URL=libsql://….turso.io
  *   DATABASE_AUTH_TOKEN=…
- *   LOCAL_DATABASE_URL=file:./data/jayrr-budget.db   (optional)
+ *   LOCAL_DATABASE_URL=file:./archive/db/jayrr-budget.db   (optional; archived snapshot only)
  *
  * Push schema first: npm run db:push
  * Then: node scripts/push-local-to-turso.mjs
@@ -16,7 +16,8 @@ import { createClient } from "@libsql/client";
 
 const remoteUrl = process.env.DATABASE_URL;
 const authToken = process.env.DATABASE_AUTH_TOKEN;
-const localUrl = process.env.LOCAL_DATABASE_URL ?? "file:./data/jayrr-budget.db";
+const localUrl =
+  process.env.LOCAL_DATABASE_URL ?? "file:./archive/db/jayrr-budget.db";
 
 if (!remoteUrl?.startsWith("libsql://") && !remoteUrl?.startsWith("https://")) {
   console.error("Set DATABASE_URL to your Turso libsql:// URL in .env.local");

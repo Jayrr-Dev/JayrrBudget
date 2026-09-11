@@ -1,0 +1,32 @@
+---
+description: JayrrBudget flat Turso schema — one transactions table + filter lookups
+globs: src/shared/db/**,scripts/**,src/domains/db-explorer/**,src/app/api/db/**,drizzle.config.ts,AGENTS.md
+alwaysApply: false
+---
+
+# Database schema map
+
+Source of truth: Turso via `getDb()` (`src/shared/db/index.ts`). Schema: `src/shared/db/schema.ts`.
+
+## Mental model
+
+One `transactions` row = one CSV line. Filter dims also live in small lookup tables.
+
+## Tables
+
+1. `institutions` → `accounts` (account list / balances)
+2. `statement_uploads` (upload job metadata; optional)
+3. `transactions` — flat ledger matching the transactions CSV
+4. Filter lookups:
+   - `transaction_sections`
+   - `transaction_categories` (optional `section_id`)
+   - `transaction_subcategories` (optional `category_id`)
+   - `transaction_types` (income / transfers / expenses)
+   - `transaction_kinds` (CSV `Type`: Fee, Subscription, …)
+5. `app_modules` — UI module registry
+
+## Agent rules
+
+- Do **not** reintroduce atom tables (`transaction_amounts`, `transaction_labels`, `taxonomy_nodes`, …)
+- Rebuild/import: `npx tsx scripts/rebuild-flat-transactions.ts --run`
+- Live DB is Turso only (`.env.local`)

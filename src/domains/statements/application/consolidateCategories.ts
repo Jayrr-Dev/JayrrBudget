@@ -7,7 +7,7 @@ import {
 } from "@/domains/statements/application/categoryVocabulary";
 import { generateObjectWithFallback } from "@/shared/ai/openRouter";
 import { getDb } from "@/shared/db";
-import { transactionBankCategories } from "@/shared/db/schema";
+import { transactions } from "@/shared/db/schema";
 import { eq, sql } from "drizzle-orm";
 
 const consolidateSchema = z.object({
@@ -135,22 +135,20 @@ async function applyDetailedMerges(
   for (const merge of resolved) {
     const matched = await db
       .select({
-        transactionId: transactionBankCategories.transactionId,
-        label: transactionBankCategories.categoryDetailed,
+        id: transactions.id,
+        label: transactions.categoryDetailed,
       })
-      .from(transactionBankCategories)
+      .from(transactions)
       .where(
-        sql`lower(trim(coalesce(${transactionBankCategories.categoryDetailed}, ''))) = ${normalizeCategoryLabel(merge.from)}`,
+        sql`lower(trim(coalesce(${transactions.categoryDetailed}, ''))) = ${normalizeCategoryLabel(merge.from)}`,
       );
 
     for (const row of matched) {
       if (!row.label || row.label === merge.to) continue;
       await db
-        .update(transactionBankCategories)
+        .update(transactions)
         .set({ categoryDetailed: merge.to })
-        .where(
-          eq(transactionBankCategories.transactionId, row.transactionId),
-        );
+        .where(eq(transactions.id, row.id));
       rowsUpdated += 1;
     }
   }

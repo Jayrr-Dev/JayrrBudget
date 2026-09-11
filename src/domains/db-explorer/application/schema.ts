@@ -4,22 +4,13 @@ import type { SQLiteTable } from "drizzle-orm/sqlite-core";
 import {
   accounts,
   appModules,
-  bankHistoryFiles,
-  bankHistoryRows,
-  enrichmentTokens,
-  entities,
-  entityAliases,
   institutions,
   statementUploads,
-  taxonomyNodes,
-  transactionAmounts,
-  transactionBankCategories,
-  transactionDates,
-  transactionEntities,
-  transactionEnrichment,
-  transactionLabels,
-  transactionLocations,
-  transactionPaymentRefs,
+  transactionCategories,
+  transactionKinds,
+  transactionSections,
+  transactionSubcategories,
+  transactionTypes,
   transactions,
 } from "@/shared/db/schema";
 import { getDb } from "@/shared/db";
@@ -37,20 +28,11 @@ const TABLE_MAP = {
   accounts,
   statement_uploads: statementUploads,
   transactions,
-  transaction_amounts: transactionAmounts,
-  transaction_dates: transactionDates,
-  transaction_locations: transactionLocations,
-  transaction_payment_refs: transactionPaymentRefs,
-  transaction_bank_categories: transactionBankCategories,
-  entities,
-  entity_aliases: entityAliases,
-  taxonomy_nodes: taxonomyNodes,
-  transaction_enrichment: transactionEnrichment,
-  transaction_entities: transactionEntities,
-  enrichment_tokens: enrichmentTokens,
-  transaction_labels: transactionLabels,
-  bank_history_files: bankHistoryFiles,
-  bank_history_rows: bankHistoryRows,
+  transaction_sections: transactionSections,
+  transaction_categories: transactionCategories,
+  transaction_subcategories: transactionSubcategories,
+  transaction_types: transactionTypes,
+  transaction_kinds: transactionKinds,
   app_modules: appModules,
 } as const satisfies Record<string, SQLiteTable>;
 
@@ -75,7 +57,7 @@ function columnInfo(table: SQLiteTable, tableName: string): DbColumnInfo[] {
   }));
 }
 
-/** Drizzle rows use JS keys (`cardNumber`); the browser looks up SQL names (`card_number`). */
+/** Drizzle rows use JS keys; browser looks up SQL names. */
 export function rowsWithSqlColumnNames(
   table: SQLiteTable,
   rows: Record<string, unknown>[],
@@ -111,9 +93,7 @@ export async function getSchemaGraph(): Promise<DbSchemaGraph> {
 
   for (const name of TABLE_NAMES) {
     const table = TABLE_MAP[name];
-    const [{ value: rowCount }] = await db
-      .select({ value: count() })
-      .from(table);
+    const [{ value: rowCount }] = await db.select({ value: count() }).from(table);
 
     tables.push({
       name,
@@ -142,10 +122,7 @@ export async function browseTable(
   return {
     table: tableName,
     columns,
-    rows: rowsWithSqlColumnNames(
-      table,
-      rows as Record<string, unknown>[],
-    ),
+    rows: rowsWithSqlColumnNames(table, rows as Record<string, unknown>[]),
     total: Number(total),
     limit,
     offset,

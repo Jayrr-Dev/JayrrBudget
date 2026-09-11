@@ -9,7 +9,12 @@ import {
   type RowData,
   type SortingState,
 } from "@tanstack/react-table";
-import { ArrowDownIcon, ArrowUpIcon, ArrowUpDownIcon } from "lucide-react";
+import {
+  ArrowDownIcon,
+  ArrowUpIcon,
+  ArrowUpDownIcon,
+  ListFilterIcon,
+} from "lucide-react";
 import { useMemo, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -18,13 +23,13 @@ import {
 } from "@/components/ui/data-table-features";
 import { Input } from "@/components/ui/input";
 import {
-  NativeSelect,
-  NativeSelectOption,
-} from "@/components/ui/native-select";
-import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
@@ -35,6 +40,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { downloadCsv, toCsv } from "@/shared/lib/csv";
 
 export type DataTableFilterOption = {
   label: string;
@@ -46,6 +52,11 @@ export type DataTableFilterConfig = {
   label: string;
   options: DataTableFilterOption[];
   allLabel?: string;
+  /**
+   * When set, option list only includes values present on rows that match
+   * these parent column filters (e.g. Category thins when Section is set).
+   */
+  cascadeFrom?: string[];
 };
 
 interface DataTableProps<TData extends RowData> {
@@ -55,12 +66,32 @@ interface DataTableProps<TData extends RowData> {
   searchPlaceholder?: string;
   enableGlobalFilter?: boolean;
   globalFilterFn?: "fuzzy" | "includesString";
+  /** Column header filter menus (not toolbar dropdowns). */
   filters?: DataTableFilterConfig[];
   initialSorting?: SortingState;
   initialColumnVisibility?: ColumnVisibilityState;
   pageSize?: number;
   toolbar?: ReactNode;
   enableColumnToggle?: boolean;
+  /** When set, toolbar shows Export CSV for filtered rows. */
+  csvFilename?: string;
+  /** When set, toolbar shows Refresh to reload table data. */
+  onRefresh?: () => void | Promise<void>;
+  isRefreshing?: boolean;
+}
+
+function csvColumnLabel(column: {
+  id: string;
+  columnDef: {
+    header?: unknown;
+    meta?: unknown;
+  };
+}): string | null {
+  const meta = column.columnDef.meta as { label?: string } | undefined;
+  if (meta?.label) return meta.label;
+  const header = column.columnDef.header;
+  if (typeof header === "string" && header) return header;
+  return null;
 }
 
 export function DataTable<TData extends RowData>({
@@ -76,6 +107,9 @@ export function DataTable<TData extends RowData>({
   pageSize = 10,
   toolbar,
   enableColumnToggle = false,
+  csvFilename,
+  onRefresh,
+  isRefreshing = false,
 }: DataTableProps<TData>) {
   const [sorting, setSorting] = useState<SortingState>(initialSorting);
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
@@ -138,7 +172,94 @@ export function DataTable<TData extends RowData>({
   };
 
   const showToolbar =
-    showSearch || filters.length > 0 || Boolean(toolbar) || enableColumnToggle;
+    showSearch ||
+    filters.length > 0 ||
+    Boolean(toolbar) ||
+    enableColumnToggle ||
+    Boolean(csvFilename) ||
+    Boolean(onRefresh);
+
+  const exportFilteredCsv = () => {
+    if (!csvFilename) return;
+    const exportColumns = table
+      .getAllLeafColumns()
+      .filter((column) => column.getIsVisible() && csvColumnLabel(column));
+    const headers = exportColumns.map(
+      (column) => csvColumnLabel(column) ?? column.id,
+    );
+    const rows = table
+      .getFilteredRowModel()
+      .rows.map((row) =>
+        exportColumns.map((column) => row.getValue(column.id)),
+      );
+    downloadCsv(csvFilename, toCsv(headers, rows));
+  };
+
+  const filtersByColumnId = useMemo(() => {
+    const map = new Map<string, DataTableFilterConfig>();
+    for (const filter of filters) {
+      map.set(filter.columnId, filter);
+    }
+    return map;
+  }, [filters]);
+
+  const activeFilterValue = (columnId: string) => {
+    const hit = columnFilters.find((filter) => filter.id === columnId);
+    const value = hit?.value;
+    if (value == null || value === "" || value === "all") return null;
+    return String(value);
+  };
+
+  const rowMatchesParents = (
+    row: TData,
+    parentIds: string[],
+  ): boolean => {
+    for (const parentId of parentIds) {
+      const parentValue = activeFilterValue(parentId);
+      if (!parentValue) continue;
+      const raw = (row as Record<string, unknown>)[parentId];
+      if (Array.isArray(raw)) {
+        if (!raw.map(String).includes(parentValue)) return false;
+        continue;
+      }
+      if (String(raw ?? "") !== parentValue) return false;
+    }
+    return true;
+  };
+
+  const optionsForFilter = (filter: DataTableFilterConfig) => {
+    const parents = filter.cascadeFrom ?? [];
+    if (parents.length === 0) return filter.options;
+    if (!parents.some((id) => activeFilterValue(id))) return filter.options;
+
+    const present = new Set<string>();
+    for (const row of data) {
+      if (!rowMatchesParents(row, parents)) continue;
+      const raw = (row as Record<string, unknown>)[filter.columnId];
+      if (Array.isArray(raw)) {
+        for (const item of raw) {
+          if (item != null && String(item).trim()) present.add(String(item));
+        }
+        continue;
+      }
+      if (raw != null && String(raw).trim()) present.add(String(raw));
+    }
+
+    return filter.options.filter((option) => present.has(option.value));
+  };
+
+  const setColumnFilterValue = (columnId: string, value: string) => {
+    const next = value === "all" ? undefined : value;
+    table.getColumn(columnId)?.setFilterValue(next);
+
+    // Parent change clears dependent child filters.
+    for (const filter of filters) {
+      if (!filter.cascadeFrom?.includes(columnId)) continue;
+      table.getColumn(filter.columnId)?.setFilterValue(undefined);
+    }
+
+    setPagination((prev) => ({ ...prev, pageIndex: 0 }));
+  };
 
   return (
     <div className="space-y-4">
@@ -163,40 +284,31 @@ export function DataTable<TData extends RowData>({
                 aria-label={searchPlaceholder}
               />
             ) : null}
-            {filters.map((filter) => {
-              const current =
-                (table.getColumn(filter.columnId)?.getFilterValue() as
-                  | string
-                  | undefined) ?? "all";
-              return (
-                <NativeSelect
-                  key={filter.columnId}
-                  aria-label={filter.label}
-                  value={current}
-                  onChange={(event) => {
-                    const value = event.target.value;
-                    table
-                      .getColumn(filter.columnId)
-                      ?.setFilterValue(value === "all" ? undefined : value);
-                    setPagination((prev) => ({ ...prev, pageIndex: 0 }));
-                  }}
-                  className="min-w-[9.5rem]"
-                >
-                  <NativeSelectOption value="all">
-                    {filter.allLabel ?? `All ${filter.label.toLowerCase()}`}
-                  </NativeSelectOption>
-                  {filter.options.map((option) => (
-                    <NativeSelectOption
-                      key={option.value}
-                      value={option.value}
-                    >
-                      {option.label}
-                    </NativeSelectOption>
-                  ))}
-                </NativeSelect>
-              );
-            })}
             {toolbar}
+            {onRefresh ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  void onRefresh();
+                }}
+                disabled={isRefreshing}
+              >
+                {isRefreshing ? "Refreshing…" : "Refresh"}
+              </Button>
+            ) : null}
+            {csvFilename ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={exportFilteredCsv}
+                disabled={filteredCount === 0}
+              >
+                Export CSV
+              </Button>
+            ) : null}
             {enableColumnToggle ? (
               <DropdownMenu>
                 <DropdownMenuTrigger
@@ -259,11 +371,23 @@ export function DataTable<TData extends RowData>({
                 {headerGroup.headers.map((header) => {
                   const canSort = header.column.getCanSort();
                   const sorted = header.column.getIsSorted();
+                  const columnFilter = filtersByColumnId.get(header.column.id);
+                  const filterValue =
+                    (header.column.getFilterValue() as string | undefined) ??
+                    "all";
+                  const filterActive = Boolean(
+                    columnFilter && filterValue !== "all",
+                  );
                   const width = (
                     header.column.columnDef.meta as
                       | { width?: string }
                       | undefined
                   )?.width;
+                  const isAmount = header.column.id === "amount";
+                  const headerDef = header.column.columnDef.header;
+                  const customHeader = typeof headerDef === "function";
+                  const sortLabel =
+                    csvColumnLabel(header.column) ?? header.column.id;
                   return (
                     <TableHead
                       key={header.id}
@@ -278,27 +402,94 @@ export function DataTable<TData extends RowData>({
                           : "h-auto min-h-10 whitespace-normal"
                       }
                     >
-                      {header.isPlaceholder ? null : canSort ? (
-                        <button
-                          type="button"
-                          className={`-ml-2 inline-flex max-w-full items-center gap-1.5 rounded-md px-2 py-1 font-medium transition-colors hover:bg-[var(--muted)] ${
-                            header.column.id === "amount"
-                              ? "w-full justify-end"
-                              : ""
+                      {header.isPlaceholder ? null : canSort || columnFilter ? (
+                        <div
+                          className={`-ml-2 inline-flex max-w-full items-center gap-0.5 ${
+                            isAmount ? "w-full justify-end" : ""
                           }`}
-                          onClick={header.column.getToggleSortingHandler()}
                         >
-                          <span className="line-clamp-2 text-left leading-snug">
-                            <table.FlexRender header={header} />
-                          </span>
-                          {sorted === "asc" ? (
-                            <ArrowUpIcon className="size-3.5 shrink-0 opacity-70" />
-                          ) : sorted === "desc" ? (
-                            <ArrowDownIcon className="size-3.5 shrink-0 opacity-70" />
+                          {canSort ? (
+                            <button
+                              type="button"
+                              className="inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-md px-2 py-1 font-medium transition-colors hover:bg-[var(--muted)]"
+                              onClick={header.column.getToggleSortingHandler()}
+                            >
+                              <span className="line-clamp-2 text-left leading-snug">
+                                {customHeader ? (
+                                  sortLabel
+                                ) : (
+                                  <table.FlexRender header={header} />
+                                )}
+                              </span>
+                              {sorted === "asc" ? (
+                                <ArrowUpIcon className="size-3.5 shrink-0 opacity-70" />
+                              ) : sorted === "desc" ? (
+                                <ArrowDownIcon className="size-3.5 shrink-0 opacity-70" />
+                              ) : (
+                                <ArrowUpDownIcon className="size-3.5 shrink-0 opacity-40" />
+                              )}
+                            </button>
                           ) : (
-                            <ArrowUpDownIcon className="size-3.5 shrink-0 opacity-40" />
+                            <span className="px-2 py-1 font-medium">
+                              <span className="line-clamp-2 text-left leading-snug">
+                                {customHeader ? (
+                                  sortLabel
+                                ) : (
+                                  <table.FlexRender header={header} />
+                                )}
+                              </span>
+                            </span>
                           )}
-                        </button>
+                          {customHeader ? (
+                            <table.FlexRender header={header} />
+                          ) : null}
+                          {columnFilter ? (
+                            <DropdownMenu>
+                              <DropdownMenuTrigger
+                                className={`inline-flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-md transition-colors ${
+                                  filterActive
+                                    ? "bg-[var(--accent)] text-[var(--accent-foreground)] hover:bg-[var(--accent)]/90"
+                                    : "text-[var(--muted-foreground)] opacity-50 hover:bg-[var(--muted)] hover:opacity-80"
+                                }`}
+                                aria-label={`Filter ${columnFilter.label}`}
+                                aria-pressed={filterActive}
+                              >
+                                <ListFilterIcon className="size-3.5" />
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent
+                                align="start"
+                                className="max-h-72 min-w-44"
+                              >
+                                <DropdownMenuRadioGroup
+                                  value={filterValue}
+                                  onValueChange={(value) =>
+                                    setColumnFilterValue(
+                                      columnFilter.columnId,
+                                      value,
+                                    )
+                                  }
+                                >
+                                  <DropdownMenuLabel>
+                                    Filter {columnFilter.label}
+                                  </DropdownMenuLabel>
+                                  <DropdownMenuSeparator />
+                                  <DropdownMenuRadioItem value="all">
+                                    {columnFilter.allLabel ??
+                                      `All ${columnFilter.label.toLowerCase()}`}
+                                  </DropdownMenuRadioItem>
+                                  {optionsForFilter(columnFilter).map((option) => (
+                                    <DropdownMenuRadioItem
+                                      key={option.value}
+                                      value={option.value}
+                                    >
+                                      {option.label}
+                                    </DropdownMenuRadioItem>
+                                  ))}
+                                </DropdownMenuRadioGroup>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          ) : null}
+                        </div>
                       ) : (
                         <table.FlexRender header={header} />
                       )}
