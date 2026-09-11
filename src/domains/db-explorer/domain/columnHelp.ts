@@ -158,8 +158,8 @@ export const COLUMN_HELP: Record<string, Record<string, string>> = {
   taxonomy_nodes: {
     id: "This category node's number.",
     facet: "Which list: section, category, type, tag, store_type, food_type.",
-    slug: "Stable key (food-and-drink).",
-    name: "Label you read (Food and Drink).",
+    slug: "Stable key (food).",
+    name: "Label you read (Food, Drink).",
     parent_id: "Parent in the spend tree. Empty on top sections.",
     path: "Full trail, for sorting and breadcrumbs.",
     depth: "How far down the tree. 0 is a top section.",

@@ -50,7 +50,7 @@ function buildPrompt(
     "- Strip noise: asterisks, store numbers into storeNumber, glued cities (city goes in location fields)",
     "- Section > Category > Type is spend tree. Company/brand is separate entity graph.",
     "- Amount convention: positive = money out (purchase/fee).",
-    "- Software subscriptions are SaaS under Software and Subscriptions — never Online Retail / Shopping.",
+    "- Software subscriptions are SaaS under Software — never Online Retail / Shopping.",
     canonicalCategoryAiRules(),
     "- Reuse EXISTING taxonomy names/slugs for near-duplicates: Gas→Gas Stations, Restaurant→Restaurants, Convenience Store↔Convenience Stores.",
     "- Dimension tags: attach AI for model/LLM tools, Web Development for hosting/domains/CI, Developer Tools for IDEs/git, Subscription when recurring.",

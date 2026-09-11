@@ -4,6 +4,7 @@ import type {
   AnalysisData,
   AnalysisRange,
 } from "@/domains/analysis/domain/types";
+import { singularCategoryKey } from "@/domains/statements/application/categoryVocabulary";
 import { toMajor } from "@/shared/db/money";
 import { getDb } from "@/shared/db";
 import {
@@ -71,10 +72,23 @@ function monthsBetween(start: string, end: string) {
   return out;
 }
 
-function rangeStartKey(latest: string, range: AnalysisRange) {
+function addDays(isoDate: string, delta: number) {
+  const [year, month, day] = isoDate.split("-").map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day + delta));
+  const y = date.getUTCFullYear();
+  const m = String(date.getUTCMonth() + 1).padStart(2, "0");
+  const d = String(date.getUTCDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+function rangeStartDate(latestDate: string, range: AnalysisRange) {
   if (range === "all") return null;
-  const months = range === "6m" ? 5 : 11;
-  return addMonths(latest, -months);
+  if (range === "1w") return addDays(latestDate, -6);
+  if (range === "1m") return addDays(latestDate, -29);
+
+  const monthsBack =
+    range === "3m" ? 2 : range === "6m" ? 5 : 11;
+  return `${addMonths(monthKey(latestDate), -monthsBack)}-01`;
 }
 
 function resolveCategory(input: {
@@ -205,10 +219,26 @@ const TYPE_ALIASES: Record<string, string> = {
   "interest charges": "Interest",
   interest: "Interest",
   saas: "SaaS",
+  "hair salons and barbers": "Hair Salons",
+  "hair salon": "Hair Salons",
+  "hair salons": "Hair Salons",
+  barber: "Barbers",
+  barbers: "Barbers",
 };
 
 function typeKey(value: string) {
   return value.trim().toLowerCase().replace(/[_-]+/g, " ").replace(/\s+/g, " ");
+}
+
+function aliasTypeLabel(raw: string) {
+  const keyed = typeKey(raw);
+  const singular = singularCategoryKey(raw);
+  const direct = TYPE_ALIASES[keyed] ?? TYPE_ALIASES[singular];
+  if (direct) return direct;
+  for (const [from, to] of Object.entries(TYPE_ALIASES)) {
+    if (singularCategoryKey(from) === singular) return to;
+  }
+  return titleCase(singular || keyed);
 }
 
 function spendTypeLabel(
@@ -218,8 +248,13 @@ function spendTypeLabel(
 ) {
   const raw = (typeName ?? categoryDetailed ?? "").trim();
   if (!raw) return "Unspecified";
-  const mapped = TYPE_ALIASES[typeKey(raw)] ?? raw;
-  if (typeKey(mapped) === typeKey(category)) return "Unspecified";
+  const mapped = aliasTypeLabel(raw);
+  if (
+    typeKey(mapped) === typeKey(category) ||
+    singularCategoryKey(mapped) === singularCategoryKey(category)
+  ) {
+    return "Unspecified";
+  }
   return mapped;
 }
 
@@ -418,17 +453,14 @@ export async function getAnalysis(
       .sort();
     const earliestDate = sortedDates[0] ?? null;
     const latestDate = sortedDates[sortedDates.length - 1] ?? null;
-    const latestMonth = latestDate ? monthKey(latestDate) : null;
-    const startKey =
-      latestMonth && range !== "all"
-        ? rangeStartKey(latestMonth, range)
-        : earliestDate
-          ? monthKey(earliestDate)
-          : null;
+    const startDate =
+      latestDate && range !== "all"
+        ? rangeStartDate(latestDate, range)
+        : earliestDate;
 
     const filtered = rows.filter((row) => {
-      if (!startKey || range === "all") return true;
-      return monthKey(row.postedDate) >= startKey;
+      if (!startDate || range === "all") return true;
+      return row.postedDate >= startDate;
     });
 
     const currency =
@@ -568,9 +600,11 @@ export async function getAnalysis(
       monthlyMap.set(month, bucket);
     }
 
+    const latestMonth = latestDate ? monthKey(latestDate) : null;
+    const startMonth = startDate ? monthKey(startDate) : null;
     const monthKeys =
-      startKey && latestMonth
-        ? monthsBetween(startKey, latestMonth)
+      startMonth && latestMonth
+        ? monthsBetween(startMonth, latestMonth)
         : [...monthlyMap.keys()].sort();
 
     const monthly = monthKeys.map((month) => {
@@ -725,6 +759,15 @@ export async function getAnalysis(
 }
 
 export function parseAnalysisRange(value: string | null): AnalysisRange {
-  if (value === "6m" || value === "12m" || value === "all") return value;
+  if (
+    value === "1w" ||
+    value === "1m" ||
+    value === "3m" ||
+    value === "6m" ||
+    value === "12m" ||
+    value === "all"
+  ) {
+    return value;
+  }
   return "12m";
 }

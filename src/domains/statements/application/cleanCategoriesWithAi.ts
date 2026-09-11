@@ -135,7 +135,7 @@ function buildCleanPrompt(params: {
     '- Netflix / Spotify => Streaming Services + Subscription',
     '- FIZZ / mobile carriers => Mobile Phone',
     '- PocketPills / pharmacy => Pharmacies',
-    '- Barber / salon => Hair Salons and Barbers',
+    '- Barber => Barbers; salon => Hair Salons (both under Personal Care)',
     '- Payment Thank You / Paiement Merci / PAD to a CIBC card => Credit Card Payment (Account Transfers). Not spend.',
     '- INTERNET TRANSFER (no GLOBAL, no person) => Account Transfers',
     '- INTERNET GLOBAL MONEY TRANSFER / e-Transfer to a person => Money Transfers',

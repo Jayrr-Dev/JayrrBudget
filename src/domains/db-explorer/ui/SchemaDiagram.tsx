@@ -39,6 +39,7 @@ import {
 } from "@/components/ui/tooltip";
 import {
   Popover,
+  PopoverAnchor,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
@@ -1142,7 +1143,7 @@ export function SchemaDiagram({
   const [camera, setCamera] = useState({ x: 0, y: 0, zoom: 1 });
   const [drag, setDrag] = useState<DragMode | null>(null);
   const [spaceDown, setSpaceDown] = useState(false);
-  const [hoveredFk, setHoveredFk] = useState<string | null>(null);
+  const [openFk, setOpenFk] = useState<string | null>(null);
   const [focused, setFocused] = useState<string | null>(null);
   const [openColGroups, setOpenColGroups] = useState<Set<string>>(
     () => new Set(),
@@ -1377,7 +1378,7 @@ export function SchemaDiagram({
   useEffect(() => () => clearBrowseTimer(), [clearBrowseTimer]);
 
   useEffect(() => {
-    setHoveredFk(null);
+    setOpenFk(null);
   }, [focused]);
 
   useEffect(() => {
@@ -1582,7 +1583,7 @@ export function SchemaDiagram({
               }
               const relation = describeFk(fk, tablesByName, index);
               const { d } = edgeGeometry(child, parent);
-              const active = hoveredFk === relation.key;
+              const active = openFk === relation.key;
               return (
                 <g
                   key={relation.key}
@@ -1597,13 +1598,14 @@ export function SchemaDiagram({
                     fill="none"
                     stroke="transparent"
                     strokeWidth={14}
-                    className="pointer-events-auto cursor-help"
-                    onPointerEnter={() => setHoveredFk(relation.key)}
-                    onPointerLeave={() =>
-                      setHoveredFk((current) =>
-                        current === relation.key ? null : current,
-                      )
-                    }
+                    data-fk-edge={relation.key}
+                    className="pointer-events-auto cursor-pointer"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setOpenFk((current) =>
+                        current === relation.key ? null : relation.key,
+                      );
+                    }}
                     onPointerDown={(event) => event.stopPropagation()}
                   />
                   <path
@@ -1635,17 +1637,36 @@ export function SchemaDiagram({
               const relation = describeFk(fk, tablesByName, index);
               const { midX, midY } = edgeGeometry(child, parent);
               return (
-                <Tooltip
+                <Popover
                   key={`fk-tip-${relation.key}`}
-                  open={hoveredFk === relation.key}
+                  open={openFk === relation.key}
+                  onOpenChange={(open) => {
+                    setOpenFk((current) => {
+                      if (open) return relation.key;
+                      return current === relation.key ? null : current;
+                    });
+                  }}
                 >
-                  <TooltipTrigger asChild>
+                  <PopoverAnchor asChild>
                     <span
                       className="pointer-events-none absolute z-20 size-0"
                       style={{ left: midX, top: midY }}
                     />
-                  </TooltipTrigger>
-                  <TooltipContent side="top" sideOffset={10} className="max-w-xs">
+                  </PopoverAnchor>
+                  <PopoverContent
+                    side="top"
+                    sideOffset={10}
+                    className="w-fit max-w-xs bg-[var(--foreground)] p-2 font-sans text-xs leading-snug text-[var(--background)] shadow-md ring-0"
+                    onPointerDownOutside={(event) => {
+                      const target = event.target;
+                      if (
+                        target instanceof Element &&
+                        target.closest(`[data-fk-edge="${relation.key}"]`)
+                      ) {
+                        event.preventDefault();
+                      }
+                    }}
+                  >
                     <div className="flex flex-col gap-0.5">
                       <span className="font-medium">{relation.label}</span>
                       <span className="text-[10px] opacity-80">
@@ -1656,8 +1677,8 @@ export function SchemaDiagram({
                         {relation.columnLabel}
                       </span>
                     </div>
-                  </TooltipContent>
-                </Tooltip>
+                  </PopoverContent>
+                </Popover>
               );
             })}
 

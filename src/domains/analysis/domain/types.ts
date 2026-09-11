@@ -1,4 +1,4 @@
-export type AnalysisRange = "6m" | "12m" | "all";
+export type AnalysisRange = "1w" | "1m" | "3m" | "6m" | "12m" | "all";
 
 export type AnalysisMonthlyPoint = {
   month: string;

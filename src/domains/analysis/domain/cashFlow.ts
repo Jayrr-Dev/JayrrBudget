@@ -141,9 +141,12 @@ export function spendCategoryLabel(
   signals: CashFlowSignals,
   fallback: string,
 ) {
-  if (looksLikeRemittance(signals)) return canonicalCategoryName("Remittance");
-  if (looksLikeNamedEtransfer(signals.description ?? "")) {
-    return canonicalCategoryName("Money Transfers");
+  const hint = signals.typeName ?? signals.categoryDetailed;
+  if (looksLikeRemittance(signals)) {
+    return canonicalCategoryName("Remittance", hint);
   }
-  return canonicalCategoryName(fallback);
+  if (looksLikeNamedEtransfer(signals.description ?? "")) {
+    return canonicalCategoryName("Money Transfers", hint);
+  }
+  return canonicalCategoryName(fallback, hint);
 }

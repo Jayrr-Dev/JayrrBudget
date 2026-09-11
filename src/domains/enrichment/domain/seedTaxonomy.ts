@@ -18,7 +18,12 @@ export const SEED_TAXONOMY: SeedTaxonomyNode[] = [
 
   {
     facet: "category",
-    name: "Food and Drink",
+    name: "Food",
+    parentSlug: "lifestyle",
+  },
+  {
+    facet: "category",
+    name: "Drink",
     parentSlug: "lifestyle",
   },
   {
@@ -33,7 +38,12 @@ export const SEED_TAXONOMY: SeedTaxonomyNode[] = [
   },
   {
     facet: "category",
-    name: "Software and Subscriptions",
+    name: "Software",
+    parentSlug: "lifestyle",
+  },
+  {
+    facet: "category",
+    name: "Subscriptions",
     parentSlug: "lifestyle",
   },
   {
@@ -48,7 +58,12 @@ export const SEED_TAXONOMY: SeedTaxonomyNode[] = [
   },
   {
     facet: "category",
-    name: "Rent and Housing",
+    name: "Rent",
+    parentSlug: "home",
+  },
+  {
+    facet: "category",
+    name: "Housing",
     parentSlug: "home",
   },
   {
@@ -58,7 +73,12 @@ export const SEED_TAXONOMY: SeedTaxonomyNode[] = [
   },
   {
     facet: "category",
-    name: "Rideshare and Transit",
+    name: "Rideshare",
+    parentSlug: "transport",
+  },
+  {
+    facet: "category",
+    name: "Transit",
     parentSlug: "transport",
   },
   {
@@ -110,17 +130,22 @@ export const SEED_TAXONOMY: SeedTaxonomyNode[] = [
   {
     facet: "type",
     name: "Restaurants",
-    parentSlug: "food-and-drink",
+    parentSlug: "food",
   },
   {
     facet: "type",
     name: "Delivery",
-    parentSlug: "food-and-drink",
+    parentSlug: "food",
   },
   {
     facet: "type",
     name: "Groceries",
-    parentSlug: "food-and-drink",
+    parentSlug: "food",
+  },
+  {
+    facet: "type",
+    name: "Coffee",
+    parentSlug: "drink",
   },
   {
     facet: "type",
@@ -130,17 +155,22 @@ export const SEED_TAXONOMY: SeedTaxonomyNode[] = [
   {
     facet: "type",
     name: "Cloud Software",
-    parentSlug: "software-and-subscriptions",
+    parentSlug: "software",
   },
   {
     facet: "type",
     name: "SaaS",
-    parentSlug: "software-and-subscriptions",
+    parentSlug: "software",
   },
   {
     facet: "type",
     name: "Developer Tools",
-    parentSlug: "software-and-subscriptions",
+    parentSlug: "software",
+  },
+  {
+    facet: "type",
+    name: "Streaming Services",
+    parentSlug: "subscriptions",
   },
   {
     facet: "type",
@@ -159,13 +189,28 @@ export const SEED_TAXONOMY: SeedTaxonomyNode[] = [
   },
   {
     facet: "type",
-    name: "Hair Salons and Barbers",
+    name: "Hair Salons",
+    parentSlug: "personal-care",
+  },
+  {
+    facet: "type",
+    name: "Barbers",
     parentSlug: "personal-care",
   },
   {
     facet: "type",
     name: "Gas Stations",
     parentSlug: "fuel",
+  },
+  {
+    facet: "type",
+    name: "Rideshare",
+    parentSlug: "rideshare",
+  },
+  {
+    facet: "type",
+    name: "Transit",
+    parentSlug: "transit",
   },
   {
     facet: "type",

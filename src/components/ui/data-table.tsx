@@ -252,7 +252,7 @@ export function DataTable<TData extends RowData>({
         </div>
       ) : null}
       <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)]">
-        <Table className="table-fixed">
+        <Table className="min-w-max table-fixed">
           <TableHeader>
             {table.getHeaderGroups().map((headerGroup) => (
               <TableRow key={headerGroup.id}>
@@ -267,8 +267,16 @@ export function DataTable<TData extends RowData>({
                   return (
                     <TableHead
                       key={header.id}
-                      style={width ? { width } : undefined}
-                      className={width ? "overflow-hidden" : undefined}
+                      style={
+                        width
+                          ? { width, minWidth: width, maxWidth: width }
+                          : undefined
+                      }
+                      className={
+                        width
+                          ? "h-auto min-h-10 overflow-hidden whitespace-normal"
+                          : "h-auto min-h-10 whitespace-normal"
+                      }
                     >
                       {header.isPlaceholder ? null : canSort ? (
                         <button
@@ -280,7 +288,7 @@ export function DataTable<TData extends RowData>({
                           }`}
                           onClick={header.column.getToggleSortingHandler()}
                         >
-                          <span className="truncate">
+                          <span className="line-clamp-2 text-left leading-snug">
                             <table.FlexRender header={header} />
                           </span>
                           {sorted === "asc" ? (
@@ -316,8 +324,16 @@ export function DataTable<TData extends RowData>({
                     return (
                       <TableCell
                         key={cell.id}
-                        style={width ? { width } : undefined}
-                        className={width ? "max-w-0 overflow-hidden" : undefined}
+                        style={
+                          width
+                            ? { width, minWidth: width, maxWidth: width }
+                            : undefined
+                        }
+                        className={
+                          width
+                            ? "overflow-hidden whitespace-normal align-top"
+                            : "whitespace-normal align-top"
+                        }
                       >
                         <table.FlexRender cell={cell} />
                       </TableCell>

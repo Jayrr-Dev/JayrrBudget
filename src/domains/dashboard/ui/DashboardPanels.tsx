@@ -35,6 +35,9 @@ export function DashboardToolbar({
           await queryClient.invalidateQueries({
             queryKey: queryKeys.dashboard,
           });
+          await queryClient.invalidateQueries({
+            queryKey: queryKeys.dashboardAll,
+          });
           await onImported?.();
         }}
       />

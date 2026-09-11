@@ -26,13 +26,17 @@ export type GetDashboardResult =
   | { ok: true; data: DashboardData }
   | { ok: false; status: number; error: string };
 
-export async function getDashboard(): Promise<GetDashboardResult> {
+export async function getDashboard(options?: {
+  /** Cap ledger rows. Omit or pass null for every row. */
+  transactionLimit?: number | null;
+}): Promise<GetDashboardResult> {
   try {
     const db = getDb();
     const companyLink = alias(transactionEntities, "company_link");
     const brandLink = alias(transactionEntities, "brand_link");
     const company = alias(entities, "company_entity");
     const brand = alias(entities, "brand_entity");
+    const transactionLimit = options?.transactionLimit;
 
     const [institutionRows, accountRows, txnRows, stats, statementStats] =
       await Promise.all([
@@ -55,86 +59,99 @@ export async function getDashboard(): Promise<GetDashboardResult> {
             isoCurrencyCode: accounts.isoCurrencyCode,
           })
           .from(accounts),
-        db
-          .select({
-            id: transactions.id,
-            transactionId: transactions.transactionId,
-            accountId: transactions.accountId,
-            name: transactions.description,
-            merchantClean: transactionEnrichment.merchantClean,
-            companyName: company.displayName,
-            brandName: brand.displayName,
-            enrichmentStatus: transactionEnrichment.enrichmentStatus,
-            amountMinor: transactionAmounts.amountMinor,
-            isoCurrencyCode: transactionAmounts.currencyCode,
-            date: transactionDates.postedDate,
-            authorizedDate: transactionDates.authorizedDate,
-            pending: transactions.pending,
-            categoryPrimary: transactionBankCategories.categoryPrimary,
-            categoryDetailed: transactionBankCategories.categoryDetailed,
-            categoryConfidence: transactionBankCategories.categoryConfidence,
-            paymentChannel: transactionPaymentRefs.paymentChannel,
-            transactionCode: transactionPaymentRefs.transactionCode,
-            website: company.website,
-            logoUrl: company.logoUrl,
-            locationCity: transactionLocations.city,
-            locationRegion: transactionLocations.region,
-            locationCountry: transactionLocations.country,
-            originalDescription: transactions.description,
-            source: transactions.source,
-            bankDirection: bankHistoryRows.bankDirection,
-            historyMatch: bankHistoryRows.matchStatus,
-          })
-          .from(transactions)
-          .innerJoin(
-            transactionAmounts,
-            eq(transactionAmounts.transactionId, transactions.id),
-          )
-          .innerJoin(
-            transactionDates,
-            eq(transactionDates.transactionId, transactions.id),
-          )
-          .leftJoin(
-            transactionLocations,
-            eq(transactionLocations.transactionId, transactions.id),
-          )
-          .leftJoin(
-            transactionPaymentRefs,
-            eq(transactionPaymentRefs.transactionId, transactions.id),
-          )
-          .leftJoin(
-            transactionBankCategories,
-            eq(transactionBankCategories.transactionId, transactions.id),
-          )
-          .leftJoin(
-            transactionEnrichment,
-            eq(transactionEnrichment.transactionId, transactions.id),
-          )
-          .leftJoin(
-            companyLink,
-            and(
-              eq(companyLink.transactionId, transactions.id),
-              eq(companyLink.role, "company"),
-            ),
-          )
-          .leftJoin(company, eq(company.id, companyLink.entityId))
-          .leftJoin(
-            brandLink,
-            and(
-              eq(brandLink.transactionId, transactions.id),
-              eq(brandLink.role, "brand"),
-            ),
-          )
-          .leftJoin(brand, eq(brand.id, brandLink.entityId))
-          .leftJoin(
-            bankHistoryRows,
-            and(
-              eq(bankHistoryRows.matchedTransactionId, transactions.id),
-              eq(bankHistoryRows.matchStatus, "matched"),
-            ),
-          )
-          .orderBy(desc(transactionDates.postedDate), desc(transactions.id))
-          .limit(250),
+        (() => {
+          const query = db
+            .select({
+              id: transactions.id,
+              transactionId: transactions.transactionId,
+              accountId: transactions.accountId,
+              name: transactions.description,
+              merchantClean: transactionEnrichment.merchantClean,
+              companyName: company.displayName,
+              brandName: brand.displayName,
+              enrichmentStatus: transactionEnrichment.enrichmentStatus,
+              amountMinor: transactionAmounts.amountMinor,
+              isoCurrencyCode: transactionAmounts.currencyCode,
+              date: transactionDates.postedDate,
+              authorizedDate: transactionDates.authorizedDate,
+              pending: transactions.pending,
+              categoryPrimary: transactionBankCategories.categoryPrimary,
+              categoryDetailed: transactionBankCategories.categoryDetailed,
+              categoryConfidence: transactionBankCategories.categoryConfidence,
+              paymentChannel: transactionPaymentRefs.paymentChannel,
+              transactionCode: transactionPaymentRefs.transactionCode,
+              website: company.website,
+              logoUrl: company.logoUrl,
+              locationCity: transactionLocations.city,
+              locationRegion: transactionLocations.region,
+              locationCountry: transactionLocations.country,
+              originalDescription: transactions.description,
+              source: transactions.source,
+              bankDirection: bankHistoryRows.bankDirection,
+              historyMatch: bankHistoryRows.matchStatus,
+            })
+            .from(transactions)
+            .innerJoin(
+              transactionAmounts,
+              eq(transactionAmounts.transactionId, transactions.id),
+            )
+            .innerJoin(
+              transactionDates,
+              eq(transactionDates.transactionId, transactions.id),
+            )
+            .leftJoin(
+              transactionLocations,
+              eq(transactionLocations.transactionId, transactions.id),
+            )
+            .leftJoin(
+              transactionPaymentRefs,
+              eq(transactionPaymentRefs.transactionId, transactions.id),
+            )
+            .leftJoin(
+              transactionBankCategories,
+              eq(transactionBankCategories.transactionId, transactions.id),
+            )
+            .leftJoin(
+              transactionEnrichment,
+              eq(transactionEnrichment.transactionId, transactions.id),
+            )
+            .leftJoin(
+              companyLink,
+              and(
+                eq(companyLink.transactionId, transactions.id),
+                eq(companyLink.role, "company"),
+              ),
+            )
+            .leftJoin(company, eq(company.id, companyLink.entityId))
+            .leftJoin(
+              brandLink,
+              and(
+                eq(brandLink.transactionId, transactions.id),
+                eq(brandLink.role, "brand"),
+              ),
+            )
+            .leftJoin(brand, eq(brand.id, brandLink.entityId))
+            .leftJoin(
+              bankHistoryRows,
+              and(
+                eq(bankHistoryRows.matchedTransactionId, transactions.id),
+                eq(bankHistoryRows.matchStatus, "matched"),
+              ),
+            )
+            .orderBy(
+              desc(transactionDates.postedDate),
+              desc(transactions.id),
+            );
+
+          if (
+            typeof transactionLimit === "number" &&
+            Number.isFinite(transactionLimit) &&
+            transactionLimit > 0
+          ) {
+            return query.limit(transactionLimit);
+          }
+          return query;
+        })(),
         db
           .select({
             transactionCount: count(),
@@ -208,7 +225,7 @@ export async function getDashboard(): Promise<GetDashboardResult> {
         };
         return {
           ...txn,
-          merchantName: merchantClean,
+          merchantName: null,
           merchantClean,
           sectionName: tree.sectionName,
           categoryName: tree.categoryName,

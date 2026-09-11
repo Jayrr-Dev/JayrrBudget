@@ -77,7 +77,7 @@ const CATEGORY_RULES: CategoryRule[] = [
     tags: ["Online"],
     tree: {
       section: "Lifestyle",
-      category: "Food and Drink",
+      category: "Food",
       type: "Delivery",
     },
     patterns: [/uber\s*eats/i, /ubereats/i, /uber\s*canada\s*\/\s*ubereats/i],
@@ -88,7 +88,7 @@ const CATEGORY_RULES: CategoryRule[] = [
     tags: ["In Store"],
     tree: {
       section: "Lifestyle",
-      category: "Food and Drink",
+      category: "Food",
       type: "Restaurants",
     },
     patterns: [
@@ -104,7 +104,7 @@ const CATEGORY_RULES: CategoryRule[] = [
     tags: ["In Store"],
     tree: {
       section: "Lifestyle",
-      category: "Food and Drink",
+      category: "Food",
       type: "Restaurants",
     },
     patterns: [/mcdonald/i, /wendy/i, /burger\s*king/i, /a&w/i, /tim\s*horton/i],
@@ -117,7 +117,7 @@ const CATEGORY_RULES: CategoryRule[] = [
     tags: ["Online"],
     tree: {
       section: "Transport",
-      category: "Rideshare and Transit",
+      category: "Rideshare",
       type: "Rideshare",
     },
     patterns: [
@@ -166,7 +166,7 @@ const CATEGORY_RULES: CategoryRule[] = [
     tags: ["AI", "Subscription", "Online"],
     tree: {
       section: "Lifestyle",
-      category: "Software and Subscriptions",
+      category: "Software",
       type: "SaaS",
     },
     patterns: [
@@ -193,7 +193,7 @@ const CATEGORY_RULES: CategoryRule[] = [
     tags: ["Web Development", "Developer Tools", "Online"],
     tree: {
       section: "Lifestyle",
-      category: "Software and Subscriptions",
+      category: "Software",
       type: "Developer Tools",
     },
     patterns: [
@@ -222,7 +222,7 @@ const CATEGORY_RULES: CategoryRule[] = [
     tags: ["Subscription", "Online"],
     tree: {
       section: "Lifestyle",
-      category: "Software and Subscriptions",
+      category: "Software",
       type: "SaaS",
     },
     patterns: [
@@ -268,7 +268,7 @@ const CATEGORY_RULES: CategoryRule[] = [
     tags: ["Subscription", "Online"],
     tree: {
       section: "Lifestyle",
-      category: "Entertainment",
+      category: "Subscriptions",
       type: "Streaming Services",
     },
     patterns: [
@@ -307,15 +307,26 @@ const CATEGORY_RULES: CategoryRule[] = [
     patterns: [/pocket\s*pills/i, /pharmacy/i, /shoppers\s*drug/i, /rexall/i],
   },
   {
-    categoryDetailed: "Hair Salons and Barbers",
+    categoryDetailed: "Barbers",
     categoryPrimary: "PERSONAL_CARE",
     tags: ["In Store"],
     tree: {
       section: "Lifestyle",
       category: "Personal Care",
-      type: "Hair Salons and Barbers",
+      type: "Barbers",
     },
-    patterns: [/barber/i, /salon/i, /natan\s*barber/i],
+    patterns: [/barber/i, /natan\s*barber/i],
+  },
+  {
+    categoryDetailed: "Hair Salons",
+    categoryPrimary: "PERSONAL_CARE",
+    tags: ["In Store"],
+    tree: {
+      section: "Lifestyle",
+      category: "Personal Care",
+      type: "Hair Salons",
+    },
+    patterns: [/salon/i],
   },
   {
     categoryDetailed: "Gyms",
@@ -445,7 +456,7 @@ export async function applySpendDimensions(): Promise<ApplySpendDimensionsResult
   await ensureNamedNode({
     facet: "type",
     name: "Rideshare",
-    parentSlug: "rideshare-and-transit",
+    parentSlug: "rideshare",
   });
   await ensureNamedNode({
     facet: "type",
@@ -455,7 +466,7 @@ export async function applySpendDimensions(): Promise<ApplySpendDimensionsResult
   await ensureNamedNode({
     facet: "type",
     name: "Streaming Services",
-    parentSlug: "entertainment",
+    parentSlug: "subscriptions",
   });
   await ensureNamedNode({
     facet: "type",
@@ -485,7 +496,7 @@ export async function applySpendDimensions(): Promise<ApplySpendDimensionsResult
   await ensureNamedNode({
     facet: "type",
     name: "Delivery",
-    parentSlug: "food-and-drink",
+    parentSlug: "food",
   });
 
   const tagIds = new Map<string, number>();

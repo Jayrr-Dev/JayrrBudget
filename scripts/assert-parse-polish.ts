@@ -139,7 +139,7 @@ const card: ParsedStatement = {
       description: "OPENAI CHATGPT",
       merchantName: "OpenAI",
       amount: 21.0,
-      categoryDetailed: "Software and Subscriptions",
+      categoryDetailed: "Software",
     }),
   ],
 };

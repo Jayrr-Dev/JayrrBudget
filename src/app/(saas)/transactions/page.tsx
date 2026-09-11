@@ -1,14 +1,19 @@
 "use client";
 
+import { useQuery } from "@tanstack/react-query";
 import {
   DashboardToolbar,
   LoadingSkeleton,
-  useDashboard,
 } from "@/domains/dashboard/ui/DashboardPanels";
+import { fetchDashboard } from "@/domains/dashboard/queries/fetchDashboard";
+import { queryKeys } from "@/domains/dashboard/queries/query-keys";
 import { TransactionsDataTable } from "@/domains/transactions/ui/TransactionsDataTable";
 
 export default function TransactionsPage() {
-  const dashboard = useDashboard();
+  const dashboard = useQuery({
+    queryKey: queryKeys.dashboardAll,
+    queryFn: () => fetchDashboard({ limit: "all" }),
+  });
   const data = dashboard.data;
 
   return (
@@ -17,8 +22,10 @@ export default function TransactionsPage() {
         <div className="space-y-1">
           <h1 className="text-3xl font-semibold tracking-tight">Transactions</h1>
           <p className="text-[var(--muted-foreground)]">
-            Search, sort, and page enriched ledger rows.
-            {data ? ` ${data.transactionCount} stored.` : ""}
+            Raw ledger fields. No display remaps.
+            {data
+              ? ` Showing ${data.transactions.length} of ${data.transactionCount} stored.`
+              : ""}
           </p>
         </div>
         <DashboardToolbar />
@@ -26,7 +33,10 @@ export default function TransactionsPage() {
       {dashboard.isPending && !data ? (
         <LoadingSkeleton />
       ) : data ? (
-        <TransactionsDataTable transactions={data.transactions} />
+        <TransactionsDataTable
+          transactions={data.transactions}
+          accounts={data.accounts}
+        />
       ) : null}
     </div>
   );

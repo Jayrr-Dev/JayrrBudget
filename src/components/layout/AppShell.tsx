@@ -10,6 +10,7 @@ import {
   SidebarLink,
   useSidebar,
 } from "@/components/ui/sidebar";
+import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
 import { motion } from "motion/react";
 import type { AppModuleRecord } from "@/domains/modules/domain/types";
@@ -87,6 +88,28 @@ function ModuleNav({ modules }: { modules: AppModuleRecord[] }) {
   );
 }
 
+function ModulesLoading() {
+  const { open, animate } = useSidebar();
+  const showLabel = !animate || open;
+
+  return (
+    <div
+      className={cn(
+        "flex w-full flex-1 items-center gap-2 px-2.5 py-2 text-[var(--muted-foreground)]",
+        showLabel ? "justify-start" : "justify-center px-0",
+      )}
+      role="status"
+      aria-live="polite"
+      aria-label="Loading modules"
+    >
+      <Spinner className="size-5 text-[var(--sidebar-foreground)] opacity-80" />
+      {showLabel ? (
+        <span className="text-xs whitespace-nowrap">Loading modules…</span>
+      ) : null}
+    </div>
+  );
+}
+
 function SidebarFooterLink() {
   const pathname = usePathname();
   const { open, animate } = useSidebar();
@@ -148,9 +171,7 @@ export function AppShell({
           <div className="flex min-h-0 w-full flex-1 flex-col gap-4 overflow-hidden">
             <Brand />
             {modulesQuery.isPending ? (
-              <p className="px-2.5 text-xs text-[var(--muted-foreground)]">
-                Loading modules…
-              </p>
+              <ModulesLoading />
             ) : (
               <ModuleNav modules={navModules} />
             )}

@@ -43,9 +43,21 @@ import { cn } from "@/lib/utils";
 import { formatDisplayDate } from "@/shared/lib/format-date";
 
 const RANGE_OPTIONS: { value: AnalysisRange; label: string }[] = [
+  { value: "1w", label: "1 week" },
+  { value: "1m", label: "1 month" },
+  { value: "3m", label: "3 months" },
   { value: "6m", label: "6 months" },
   { value: "12m", label: "12 months" },
   { value: "all", label: "All time" },
+];
+
+type AnalysisTab = "main" | "categories" | "merchants" | "patterns";
+
+const TAB_OPTIONS: { value: AnalysisTab; label: string }[] = [
+  { value: "main", label: "Main" },
+  { value: "categories", label: "Categories" },
+  { value: "merchants", label: "Merchants" },
+  { value: "patterns", label: "Patterns" },
 ];
 
 const TREND_CONFIG = {
@@ -621,8 +633,176 @@ function CategoryDrilldown({
   );
 }
 
+function SegmentedControl<T extends string>({
+  options,
+  value,
+  onChange,
+  ariaLabel,
+}: {
+  options: { value: T; label: string }[];
+  value: T;
+  onChange: (value: T) => void;
+  ariaLabel: string;
+}) {
+  return (
+    <div
+      role="group"
+      aria-label={ariaLabel}
+      className="flex flex-wrap gap-1 rounded-lg border border-[var(--border)] p-1"
+    >
+      {options.map((option) => (
+        <Button
+          key={option.value}
+          type="button"
+          size="sm"
+          variant={value === option.value ? "default" : "ghost"}
+          className={cn(value === option.value && "pointer-events-none")}
+          onClick={() => onChange(option.value)}
+        >
+          {option.label}
+        </Button>
+      ))}
+    </div>
+  );
+}
+
+function MainTab({
+  data,
+  onSelectCategory,
+}: {
+  data: AnalysisData;
+  onSelectCategory: (name: string) => void;
+}) {
+  return (
+    <div className="space-y-6">
+      <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+        <Stat
+          label="Lifestyle spending"
+          value={formatMoney(data.summary.totalSpend, data.currency)}
+          info={`${data.summary.spendCount} purchase rows, net of ${formatMoney(data.summary.refunds, data.currency)} refunds.`}
+        />
+        <Stat
+          label="Income"
+          value={formatMoney(data.summary.totalIncome, data.currency)}
+          info="Payroll, cashback, and e-transfers in. Card payment credits on the visa are not income."
+        />
+        <Stat
+          label="Avg monthly spend"
+          value={formatMoney(data.summary.avgMonthlySpend, data.currency)}
+          info="Lifestyle spend divided by months that had spend."
+        />
+        <Stat
+          label="Peak month"
+          value={
+            data.summary.peakSpendMonth
+              ? formatMoney(data.summary.peakSpendAmount, data.currency)
+              : "—"
+          }
+          info={
+            data.summary.peakSpendMonth
+              ? `Highest lifestyle spend: ${data.summary.peakSpendMonth}.`
+              : "No spend in this range."
+          }
+        />
+        <Stat
+          label="Internal transfers"
+          value={formatMoney(data.summary.internalTransfers, data.currency)}
+          info={`${data.summary.transferCount} paying-side moves. ${formatMoney(data.summary.inboundTransfersIgnored, data.currency)} in matching credits on cards/LOC left out so the same payoff is not counted twice.`}
+        />
+      </section>
+
+      <TrendChart data={data} />
+      <div className="grid gap-6 lg:grid-cols-2">
+        <RankedBarChart
+          title="Top spending categories"
+          info="Net spend after refunds. Card payoffs stay out. Remittances and e-transfers to people stay in. Click a bar to open that category on the Categories tab."
+          rows={data.categories.slice(0, 10)}
+          currency={data.currency}
+          onSelect={onSelectCategory}
+        />
+        <NetLineChart data={data} />
+      </div>
+    </div>
+  );
+}
+
+function CategoriesTab({
+  data,
+  category,
+  onSelectCategory,
+}: {
+  data: AnalysisData;
+  category: string;
+  onSelectCategory: (name: string) => void;
+}) {
+  return (
+    <div className="space-y-6">
+      <StackedMixChart
+        title="Cost mix over time"
+        info="Stacked monthly lifestyle spend. Top categories stay named; the rest roll into Other."
+        series={data.categorySeries}
+        monthly={data.categoryMonthly}
+        currency={data.currency}
+      />
+      <CategoryDrilldown
+        data={data}
+        selected={category}
+        onSelect={onSelectCategory}
+      />
+    </div>
+  );
+}
+
+function MerchantsTab({ data }: { data: AnalysisData }) {
+  return (
+    <div className="grid gap-6 lg:grid-cols-2">
+      <RankedBarChart
+        title="Top merchants"
+        info="From Transaction Enrichment and Transaction Entities (company, then brand, then cleaned merchant)."
+        rows={data.merchants}
+        currency={data.currency}
+        color="oklch(0.55 0.12 35)"
+        labelWidth={140}
+      />
+      <RankedBarChart
+        title="Places"
+        info="From Transaction Locations. City when present, else region. Online-only rows with no city are skipped."
+        rows={data.places}
+        currency={data.currency}
+        color="oklch(0.48 0.09 300)"
+      />
+    </div>
+  );
+}
+
+function PatternsTab({ data }: { data: AnalysisData }) {
+  return (
+    <div className="space-y-6">
+      <div className="grid gap-6 lg:grid-cols-2">
+        <RankedBarChart
+          title="How you pay"
+          info="From Transaction Payment Refs channel, falling back to enrichment channel."
+          rows={data.channels}
+          currency={data.currency}
+          color="oklch(0.45 0.08 20)"
+        />
+        <RankedBarChart
+          title="By account"
+          info="Lifestyle spend on each linked account. Card purchases sit on the card; chequing shows PAD, e-transfer, and cash."
+          rows={data.accounts}
+          currency={data.currency}
+          color="oklch(0.5 0.1 220)"
+          labelWidth={150}
+        />
+      </div>
+      <WeekdayChart data={data} />
+    </div>
+  );
+}
+
 export function AnalysisDashboard() {
   const [range, setRange] = useState<AnalysisRange>("12m");
+  const [tab, setTab] = useState<AnalysisTab>("main");
   const [category, setCategory] = useState("");
   const query = useAnalysis(range);
   const data = query.data;
@@ -635,160 +815,80 @@ export function AnalysisDashboard() {
 
   return (
     <TooltipProvider delayDuration={200}>
-    <div className="space-y-8">
-      <header className="flex flex-col gap-4 border-b border-[var(--border)] pb-6 sm:flex-row sm:items-end sm:justify-between">
-        <div className="space-y-1">
-          <p className="text-sm tracking-[0.18em] text-[var(--muted-foreground)] uppercase">
-            Finance
-          </p>
-          <div className="flex items-center gap-1">
-            <h1 className="text-3xl font-semibold tracking-tight">Analysis</h1>
-            <InfoTip label="Analysis info">
-              {data
-                ? `Range ${formatDisplayDate(data.earliestDate)} – ${formatDisplayDate(data.latestDate)}. Spend is purchases plus remittances, net of refunds. Paying a card from chequing counts once as an internal transfer.`
-                : "Spending over time after internal transfers are pulled out."}
-            </InfoTip>
+      <div className="space-y-8">
+        <header className="flex flex-col gap-4 border-b border-[var(--border)] pb-6 sm:flex-row sm:items-end sm:justify-between">
+          <div className="space-y-1">
+            <p className="text-sm tracking-[0.18em] text-[var(--muted-foreground)] uppercase">
+              Finance
+            </p>
+            <div className="flex items-center gap-1">
+              <h1 className="text-3xl font-semibold tracking-tight">Analysis</h1>
+              <InfoTip label="Analysis info">
+                {data
+                  ? `Range ${formatDisplayDate(data.earliestDate)} – ${formatDisplayDate(data.latestDate)}. Spend is purchases plus remittances, net of refunds. Paying a card from chequing counts once as an internal transfer.`
+                  : "Spending over time after internal transfers are pulled out."}
+              </InfoTip>
+            </div>
           </div>
-        </div>
-        <div className="flex flex-wrap gap-1 rounded-lg border border-[var(--border)] p-1">
-          {RANGE_OPTIONS.map((option) => (
-            <Button
-              key={option.value}
-              type="button"
-              size="sm"
-              variant={range === option.value ? "default" : "ghost"}
-              className={cn(range === option.value && "pointer-events-none")}
-              onClick={() => setRange(option.value)}
-            >
-              {option.label}
-            </Button>
-          ))}
-        </div>
-      </header>
-
-      {query.isError ? (
-        <div className="rounded-xl border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-800">
-          {query.error.message}
-        </div>
-      ) : null}
-
-      {query.isPending && !data ? (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {Array.from({ length: 4 }).map((_, index) => (
-            <div
-              key={index}
-              className="h-24 animate-pulse rounded-xl border border-[var(--border)] bg-[var(--muted)]/40"
-            />
-          ))}
-        </div>
-      ) : null}
-
-      {data && data.transactionCount === 0 ? <EmptyState /> : null}
-
-      {data && data.transactionCount > 0 ? (
-        <div className="space-y-6">
-          <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-            <Stat
-              label="Lifestyle spending"
-              value={formatMoney(data.summary.totalSpend, data.currency)}
-              info={`${data.summary.spendCount} purchase rows, net of ${formatMoney(data.summary.refunds, data.currency)} refunds.`}
-            />
-            <Stat
-              label="Income"
-              value={formatMoney(data.summary.totalIncome, data.currency)}
-              info="Payroll, cashback, and e-transfers in. Card payment credits on the visa are not income."
-            />
-            <Stat
-              label="Avg monthly spend"
-              value={formatMoney(data.summary.avgMonthlySpend, data.currency)}
-              info="Lifestyle spend divided by months that had spend."
-            />
-            <Stat
-              label="Peak month"
-              value={
-                data.summary.peakSpendMonth
-                  ? formatMoney(data.summary.peakSpendAmount, data.currency)
-                  : "—"
-              }
-              info={
-                data.summary.peakSpendMonth
-                  ? `Highest lifestyle spend: ${data.summary.peakSpendMonth}.`
-                  : "No spend in this range."
-              }
-            />
-            <Stat
-              label="Internal transfers"
-              value={formatMoney(
-                data.summary.internalTransfers,
-                data.currency,
-              )}
-              info={`${data.summary.transferCount} paying-side moves. ${formatMoney(data.summary.inboundTransfersIgnored, data.currency)} in matching credits on cards/LOC left out so the same payoff is not counted twice.`}
-            />
-          </section>
-
-          <TrendChart data={data} />
-          <div className="grid gap-6 lg:grid-cols-2">
-            <RankedBarChart
-              title="Top spending categories"
-              info="Net spend after refunds. Card payoffs stay out. Remittances and e-transfers to people stay in. Click a bar to open that category below."
-              rows={data.categories.slice(0, 10)}
-              currency={data.currency}
-              onSelect={(name) => {
-                if (data.breakdowns.some((item) => item.category === name)) {
-                  setCategory(name);
-                }
-              }}
-            />
-            <NetLineChart data={data} />
-          </div>
-          <StackedMixChart
-            title="Cost mix over time"
-            info="Stacked monthly lifestyle spend. Top categories stay named; the rest roll into Other."
-            series={data.categorySeries}
-            monthly={data.categoryMonthly}
-            currency={data.currency}
+          <SegmentedControl
+            ariaLabel="Time range"
+            options={RANGE_OPTIONS}
+            value={range}
+            onChange={setRange}
           />
-          <CategoryDrilldown
-            data={data}
-            selected={category}
-            onSelect={setCategory}
-          />
-          <div className="grid gap-6 lg:grid-cols-2">
-            <RankedBarChart
-              title="Top merchants"
-              info="From Transaction Enrichment and Transaction Entities (company, then brand, then cleaned merchant)."
-              rows={data.merchants}
-              currency={data.currency}
-              color="oklch(0.55 0.12 35)"
-              labelWidth={140}
-            />
-            <RankedBarChart
-              title="Places"
-              info="From Transaction Locations. City when present, else region. Online-only rows with no city are skipped."
-              rows={data.places}
-              currency={data.currency}
-              color="oklch(0.48 0.09 300)"
-            />
-            <RankedBarChart
-              title="How you pay"
-              info="From Transaction Payment Refs channel, falling back to enrichment channel."
-              rows={data.channels}
-              currency={data.currency}
-              color="oklch(0.45 0.08 20)"
-            />
-            <RankedBarChart
-              title="By account"
-              info="Lifestyle spend on each linked account. Card purchases sit on the card; chequing shows PAD, e-transfer, and cash."
-              rows={data.accounts}
-              currency={data.currency}
-              color="oklch(0.5 0.1 220)"
-              labelWidth={150}
-            />
+        </header>
+
+        <SegmentedControl
+          ariaLabel="Analysis view"
+          options={TAB_OPTIONS}
+          value={tab}
+          onChange={setTab}
+        />
+
+        {query.isError ? (
+          <div className="rounded-xl border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-800">
+            {query.error.message}
           </div>
-          <WeekdayChart data={data} />
-        </div>
-      ) : null}
-    </div>
+        ) : null}
+
+        {query.isPending && !data ? (
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {Array.from({ length: 4 }).map((_, index) => (
+              <div
+                key={index}
+                className="h-24 animate-pulse rounded-xl border border-[var(--border)] bg-[var(--muted)]/40"
+              />
+            ))}
+          </div>
+        ) : null}
+
+        {data && data.transactionCount === 0 ? <EmptyState /> : null}
+
+        {data && data.transactionCount > 0 ? (
+          <>
+            {tab === "main" ? (
+              <MainTab
+                data={data}
+                onSelectCategory={(name) => {
+                  if (data.breakdowns.some((item) => item.category === name)) {
+                    setCategory(name);
+                    setTab("categories");
+                  }
+                }}
+              />
+            ) : null}
+            {tab === "categories" ? (
+              <CategoriesTab
+                data={data}
+                category={category}
+                onSelectCategory={setCategory}
+              />
+            ) : null}
+            {tab === "merchants" ? <MerchantsTab data={data} /> : null}
+            {tab === "patterns" ? <PatternsTab data={data} /> : null}
+          </>
+        ) : null}
+      </div>
     </TooltipProvider>
   );
 }
