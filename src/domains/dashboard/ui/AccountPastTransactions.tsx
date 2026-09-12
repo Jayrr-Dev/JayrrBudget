@@ -1,13 +1,14 @@
 "use client";
 
-import { format, isValid, parseISO, subMonths, subWeeks } from "date-fns";
-import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
 import { Input } from "@/components/ui/input";
+import { ScrollTopX } from "@/components/ui/table";
 import { formatMoney } from "@/domains/dashboard/domain/money";
 import type { DashboardTransaction } from "@/domains/dashboard/domain/types";
 import { ledgerDebitCredit } from "@/domains/transactions/domain/debitCredit";
+import { format, isValid, parseISO, subMonths, subWeeks } from "date-fns";
+import { useMemo, useState } from "react";
 
 type RangeKey = "4w" | "3m" | "6m" | "12m";
 type StatusKey = "all" | "pending" | "posted";
@@ -323,7 +324,7 @@ export function AccountPastTransactions({
         </div>
       </div>
 
-      <div className="overflow-x-auto">
+      <ScrollTopX>
         <table className="w-full table-fixed border-collapse text-sm">
           <colgroup>
             <col className="w-[7.5rem]" />
@@ -412,7 +413,7 @@ export function AccountPastTransactions({
             )}
           </tbody>
         </table>
-      </div>
+      </ScrollTopX>
     </section>
   );
 }

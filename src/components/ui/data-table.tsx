@@ -1,5 +1,38 @@
 "use client";
 
+import { Button } from "@/components/ui/button";
+import { Calendar } from "@/components/ui/calendar";
+import {
+  dataTableFeatures,
+  isDateWindowActive,
+  type DataTableFeatures,
+  type DateWindowFilter,
+} from "@/components/ui/data-table-features";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { downloadCsv, toCsv } from "@/shared/lib/csv";
 import {
   useTable,
   type ColumnDef,
@@ -11,36 +44,13 @@ import {
 } from "@tanstack/react-table";
 import {
   ArrowDownIcon,
-  ArrowUpIcon,
   ArrowUpDownIcon,
+  ArrowUpIcon,
+  CalendarIcon,
   ListFilterIcon,
 } from "lucide-react";
 import { useMemo, useState, type ReactNode } from "react";
-import { Button } from "@/components/ui/button";
-import {
-  dataTableFeatures,
-  type DataTableFeatures,
-} from "@/components/ui/data-table-features";
-import { Input } from "@/components/ui/input";
-import {
-  DropdownMenu,
-  DropdownMenuCheckboxItem,
-  DropdownMenuContent,
-  DropdownMenuLabel,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { downloadCsv, toCsv } from "@/shared/lib/csv";
+import type { DateRange } from "react-day-picker";
 
 export type DataTableFilterOption = {
   label: string;
@@ -68,6 +78,11 @@ interface DataTableProps<TData extends RowData> {
   globalFilterFn?: "fuzzy" | "includesString";
   /** Column header filter menus (not toolbar dropdowns). */
   filters?: DataTableFilterConfig[];
+  /**
+   * When set, toolbar shows Month + date-range controls after Columns,
+   * filtering this column via the `dateWindow` filterFn.
+   */
+  dateColumnId?: string;
   initialSorting?: SortingState;
   initialColumnVisibility?: ColumnVisibilityState;
   pageSize?: number;
@@ -94,6 +109,45 @@ function csvColumnLabel(column: {
   return null;
 }
 
+function parseYmd(ymd: string): Date {
+  const [year, month, day] = ymd.split("-").map(Number);
+  return new Date(year, month - 1, day);
+}
+
+function formatYmd(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function formatMonthLabel(yyyyMm: string): string {
+  const [year, month] = yyyyMm.split("-").map(Number);
+  if (!year || !month) return yyyyMm;
+  return new Date(year, month - 1, 1).toLocaleString(undefined, {
+    month: "short",
+    year: "numeric",
+  });
+}
+
+function formatRangeLabel(from?: string, to?: string): string {
+  if (from && to) {
+    return from === to ? from : `${from} → ${to}`;
+  }
+  if (from) return `From ${from}`;
+  if (to) return `Until ${to}`;
+  return "Date range";
+}
+
+function readDateWindow(value: unknown): DateWindowFilter {
+  if (!isDateWindowActive(value)) return {};
+  return {
+    ...(value.month ? { month: value.month } : {}),
+    ...(value.from ? { from: value.from } : {}),
+    ...(value.to ? { to: value.to } : {}),
+  };
+}
+
 export function DataTable<TData extends RowData>({
   columns,
   data,
@@ -102,6 +156,7 @@ export function DataTable<TData extends RowData>({
   enableGlobalFilter = false,
   globalFilterFn = "fuzzy",
   filters = [],
+  dateColumnId,
   initialSorting = [],
   initialColumnVisibility = {},
   pageSize = 10,
@@ -156,6 +211,9 @@ export function DataTable<TData extends RowData>({
       (searchActive ? 1 : 0) +
       columnFilters.filter((filter) => {
         const value = filter.value;
+        if (value != null && typeof value === "object") {
+          return isDateWindowActive(value);
+        }
         return value != null && value !== "" && value !== "all";
       }).length
     );
@@ -176,8 +234,57 @@ export function DataTable<TData extends RowData>({
     filters.length > 0 ||
     Boolean(toolbar) ||
     enableColumnToggle ||
+    Boolean(dateColumnId) ||
     Boolean(csvFilename) ||
     Boolean(onRefresh);
+
+  const monthOptions = useMemo(() => {
+    if (!dateColumnId) return [];
+    const months = new Set<string>();
+    for (const row of data) {
+      const raw = (row as Record<string, unknown>)[dateColumnId];
+      const ymd = String(raw ?? "")
+        .trim()
+        .slice(0, 10);
+      if (/^\d{4}-\d{2}-\d{2}$/.test(ymd)) {
+        months.add(ymd.slice(0, 7));
+      }
+    }
+    return [...months].sort((a, b) => b.localeCompare(a));
+  }, [data, dateColumnId]);
+
+  const dateWindow = dateColumnId
+    ? readDateWindow(table.getColumn(dateColumnId)?.getFilterValue())
+    : {};
+
+  const dateRangeSelected: DateRange | undefined =
+    dateWindow.from || dateWindow.to
+      ? {
+          from: dateWindow.from ? parseYmd(dateWindow.from) : undefined,
+          to: dateWindow.to ? parseYmd(dateWindow.to) : undefined,
+        }
+      : undefined;
+
+  const patchDateWindow = (patch: Partial<DateWindowFilter>) => {
+    if (!dateColumnId) return;
+    const next: DateWindowFilter = { ...dateWindow };
+    if ("month" in patch) {
+      if (patch.month) next.month = patch.month;
+      else delete next.month;
+    }
+    if ("from" in patch) {
+      if (patch.from) next.from = patch.from;
+      else delete next.from;
+    }
+    if ("to" in patch) {
+      if (patch.to) next.to = patch.to;
+      else delete next.to;
+    }
+    table
+      .getColumn(dateColumnId)
+      ?.setFilterValue(isDateWindowActive(next) ? next : undefined);
+    setPagination((prev) => ({ ...prev, pageIndex: 0 }));
+  };
 
   const exportFilteredCsv = () => {
     if (!csvFilename) return;
@@ -206,14 +313,12 @@ export function DataTable<TData extends RowData>({
   const activeFilterValue = (columnId: string) => {
     const hit = columnFilters.find((filter) => filter.id === columnId);
     const value = hit?.value;
+    if (value != null && typeof value === "object") return null;
     if (value == null || value === "" || value === "all") return null;
     return String(value);
   };
 
-  const rowMatchesParents = (
-    row: TData,
-    parentIds: string[],
-  ): boolean => {
+  const rowMatchesParents = (row: TData, parentIds: string[]): boolean => {
     for (const parentId of parentIds) {
       const parentValue = activeFilterValue(parentId);
       if (!parentValue) continue;
@@ -260,6 +365,49 @@ export function DataTable<TData extends RowData>({
 
     setPagination((prev) => ({ ...prev, pageIndex: 0 }));
   };
+
+  const hideableColumns = table
+    .getAllColumns()
+    .filter((column) => column.getCanHide());
+
+  /**
+   * Columns menu: first pick from "all visible" solos that column;
+   * further checks add columns; unchecking the last restores all.
+   */
+  const handleColumnVisibilityToggle = (columnId: string, checked: boolean) => {
+    const visibleHideable = hideableColumns.filter((column) =>
+      column.getIsVisible(),
+    );
+    const allVisible = visibleHideable.length === hideableColumns.length;
+
+    if (allVisible) {
+      const next: ColumnVisibilityState = {};
+      for (const column of hideableColumns) {
+        next[column.id] = column.id === columnId;
+      }
+      setColumnVisibility(next);
+      return;
+    }
+
+    if (checked) {
+      table.getColumn(columnId)?.toggleVisibility(true);
+      return;
+    }
+
+    if (visibleHideable.length <= 1) {
+      const next: ColumnVisibilityState = {};
+      for (const column of hideableColumns) {
+        next[column.id] = true;
+      }
+      setColumnVisibility(next);
+      return;
+    }
+
+    table.getColumn(columnId)?.toggleVisibility(false);
+  };
+
+  const toolbarTriggerClass =
+    "inline-flex h-8 cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--background)] px-2.5 text-sm font-medium hover:bg-[var(--muted)]";
 
   return (
     <div className="space-y-4">
@@ -312,44 +460,123 @@ export function DataTable<TData extends RowData>({
             {enableColumnToggle ? (
               <DropdownMenu>
                 <DropdownMenuTrigger
-                  className="inline-flex h-8 cursor-pointer items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--background)] px-2.5 text-sm font-medium hover:bg-[var(--muted)]"
+                  className={toolbarTriggerClass}
                   aria-label="Toggle columns"
                 >
                   Columns
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-auto min-w-40">
-                  {table
-                    .getAllColumns()
-                    .filter((column) => column.getCanHide())
-                    .map((column) => {
-                      const meta = column.columnDef.meta as
-                        | { label?: string }
-                        | undefined;
-                      const header = column.columnDef.header;
-                      const label =
-                        meta?.label ??
-                        (typeof header === "string" && header
-                          ? header
-                          : column.id);
-                      return (
-                        <DropdownMenuCheckboxItem
-                          key={column.id}
-                          checked={column.getIsVisible()}
-                          onCheckedChange={(checked) =>
-                            column.toggleVisibility(Boolean(checked))
-                          }
-                        >
-                          {label}
-                        </DropdownMenuCheckboxItem>
-                      );
-                    })}
+                  {hideableColumns.map((column) => {
+                    const meta = column.columnDef.meta as
+                      | { label?: string }
+                      | undefined;
+                    const header = column.columnDef.header;
+                    const label =
+                      meta?.label ??
+                      (typeof header === "string" && header
+                        ? header
+                        : column.id);
+                    return (
+                      <DropdownMenuCheckboxItem
+                        key={column.id}
+                        checked={column.getIsVisible()}
+                        onCheckedChange={(checked) =>
+                          handleColumnVisibilityToggle(
+                            column.id,
+                            Boolean(checked),
+                          )
+                        }
+                      >
+                        {label}
+                      </DropdownMenuCheckboxItem>
+                    );
+                  })}
                 </DropdownMenuContent>
               </DropdownMenu>
+            ) : null}
+            {dateColumnId ? (
+              <>
+                <DropdownMenu>
+                  <DropdownMenuTrigger
+                    className={toolbarTriggerClass}
+                    aria-label="Filter by month"
+                  >
+                    {dateWindow.month
+                      ? formatMonthLabel(dateWindow.month)
+                      : "Month"}
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent
+                    align="start"
+                    className="w-auto min-w-40"
+                  >
+                    <DropdownMenuRadioGroup
+                      value={dateWindow.month ?? "all"}
+                      onValueChange={(value) => {
+                        patchDateWindow({
+                          month: value === "all" ? undefined : value,
+                        });
+                      }}
+                    >
+                      <DropdownMenuLabel>Posted month</DropdownMenuLabel>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuRadioItem value="all">
+                        All months
+                      </DropdownMenuRadioItem>
+                      {monthOptions.map((month) => (
+                        <DropdownMenuRadioItem key={month} value={month}>
+                          {formatMonthLabel(month)}
+                        </DropdownMenuRadioItem>
+                      ))}
+                    </DropdownMenuRadioGroup>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+                <Popover>
+                  <PopoverTrigger
+                    className={toolbarTriggerClass}
+                    aria-label="Filter by date range"
+                  >
+                    <CalendarIcon className="size-3.5 opacity-70" />
+                    {formatRangeLabel(dateWindow.from, dateWindow.to)}
+                  </PopoverTrigger>
+                  <PopoverContent align="start" className="w-auto gap-3 p-3">
+                    <Calendar
+                      mode="range"
+                      numberOfMonths={2}
+                      selected={dateRangeSelected}
+                      onSelect={(range) => {
+                        patchDateWindow({
+                          from: range?.from ? formatYmd(range.from) : undefined,
+                          to: range?.to ? formatYmd(range.to) : undefined,
+                        });
+                      }}
+                      defaultMonth={
+                        dateRangeSelected?.from ??
+                        (monthOptions[0]
+                          ? parseYmd(`${monthOptions[0]}-01`)
+                          : undefined)
+                      }
+                    />
+                    {dateWindow.from || dateWindow.to ? (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="self-start"
+                        onClick={() =>
+                          patchDateWindow({ from: undefined, to: undefined })
+                        }
+                      >
+                        Clear range
+                      </Button>
+                    ) : null}
+                  </PopoverContent>
+                </Popover>
+              </>
             ) : null}
             {activeFilterCount > 0 ? (
               <Button
                 type="button"
-                variant="ghost"
+                variant="outline"
                 size="sm"
                 onClick={clearFilters}
               >
@@ -477,14 +704,16 @@ export function DataTable<TData extends RowData>({
                                     {columnFilter.allLabel ??
                                       `All ${columnFilter.label.toLowerCase()}`}
                                   </DropdownMenuRadioItem>
-                                  {optionsForFilter(columnFilter).map((option) => (
-                                    <DropdownMenuRadioItem
-                                      key={option.value}
-                                      value={option.value}
-                                    >
-                                      {option.label}
-                                    </DropdownMenuRadioItem>
-                                  ))}
+                                  {optionsForFilter(columnFilter).map(
+                                    (option) => (
+                                      <DropdownMenuRadioItem
+                                        key={option.value}
+                                        value={option.value}
+                                      >
+                                        {option.label}
+                                      </DropdownMenuRadioItem>
+                                    ),
+                                  )}
                                 </DropdownMenuRadioGroup>
                               </DropdownMenuContent>
                             </DropdownMenu>

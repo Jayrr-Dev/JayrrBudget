@@ -102,6 +102,8 @@ export function resolveAccountCategory(
       "heloc",
       "home equity",
       "personal loan",
+      "car loan",
+      "auto loan",
       "mortgage",
     ])
   ) {

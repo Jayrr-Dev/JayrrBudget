@@ -1,11 +1,12 @@
-import { eq } from "drizzle-orm";
-import { getDb } from "@/shared/db";
-import { transactions } from "@/shared/db/schema";
 import {
   hasTag,
   joinTags,
   splitTags,
 } from "@/domains/transactions/domain/tags";
+import { getDb } from "@/shared/db";
+import { invalidateTursoReadCache } from "@/shared/db/readCache";
+import { transactions } from "@/shared/db/schema";
+import { eq } from "drizzle-orm";
 
 export type AddTransactionTagInput = {
   transactionId: string;
@@ -52,5 +53,6 @@ export async function addTransactionTag(
     .set({ tags: joinTags(tags), updatedAt: new Date() })
     .where(eq(transactions.id, row.id));
 
+  invalidateTursoReadCache();
   return { transactionId, tag, tags, added: true };
 }

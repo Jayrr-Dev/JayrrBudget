@@ -1,20 +1,23 @@
 "use client";
 
 import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type PointerEvent as ReactPointerEvent,
-  type ReactNode,
-} from "react";
+  Popover,
+  PopoverAnchor,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import type {
   DbColumnInfo,
   DbForeignKey,
   DbTableInfo,
 } from "@/domains/db-explorer/domain/types";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 import { Icon } from "@iconify/react";
 import {
@@ -32,17 +35,14 @@ import {
   Type,
 } from "lucide-react";
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-import {
-  Popover,
-  PopoverAnchor,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
 
 const NODE_W = 230;
 const NODE_H_BASE = 48;
@@ -50,10 +50,44 @@ const ROW_H = 18;
 const COL_GAP = NODE_W;
 const ROW_GAP = 36;
 const PAD = 48;
-const LAYOUT_ID = "ltr-hierarchy-v3";
+const LAYOUT_ID = "domain-columns-v1";
 const MAX_VISIBLE_COLS = 8;
 const MIN_ZOOM = 0.35;
 const MAX_ZOOM = 2.5;
+
+/**
+ * Fixed schema columns (left → right), matching the db-explorer mental model:
+ * hubs/sources, then accounts + lookups, then categories.
+ * Unknown tables fall back to required-FK depth.
+ */
+const PREFERRED_COLUMN: Record<string, number> = {
+  institutions: 0,
+  statement_uploads: 0,
+  transactions: 0,
+  accounts: 1,
+  app_modules: 1,
+  transaction_sections: 1,
+  transaction_spreads: 1,
+  transaction_subcategories: 1,
+  transaction_types: 1,
+  transaction_kinds: 1,
+  transaction_categories: 2,
+};
+
+/** Top → bottom order inside each preferred column. */
+const PREFERRED_ROW: Record<string, number> = {
+  institutions: 0,
+  statement_uploads: 1,
+  transactions: 2,
+  accounts: 0,
+  app_modules: 1,
+  transaction_sections: 2,
+  transaction_spreads: 3,
+  transaction_subcategories: 4,
+  transaction_types: 5,
+  transaction_kinds: 6,
+  transaction_categories: 2,
+};
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
@@ -67,7 +101,10 @@ type LayoutSeed = {
   y: number;
 };
 
-function fkIsRequired(fk: DbForeignKey, tablesByName: Map<string, DbTableInfo>) {
+function fkIsRequired(
+  fk: DbForeignKey,
+  tablesByName: Map<string, DbTableInfo>,
+) {
   const from = tablesByName.get(fk.fromTable);
   if (!from) return true;
   return fk.fromColumns.every((colName) => {
@@ -125,7 +162,9 @@ function orderLayerNames(
           .map((fk) => indexOf.get(fk.toTable))
           .filter((value): value is number => value !== undefined);
         if (parentIdx.length === 0) return Number.POSITIVE_INFINITY;
-        return parentIdx.reduce((sum, value) => sum + value, 0) / parentIdx.length;
+        return (
+          parentIdx.reduce((sum, value) => sum + value, 0) / parentIdx.length
+        );
       };
       const sa = score(a);
       const sb = score(b);
@@ -204,11 +243,8 @@ function nodeHeight(
   );
 }
 
-/** Sources left, dependents right. One card between layers. */
-function seedLayout(
-  tables: DbTableInfo[],
-  fks: DbForeignKey[],
-): LayoutSeed[] {
+/** Hubs left, lookups mid/right. Preferred map first; else required-FK depth. */
+function seedLayout(tables: DbTableInfo[], fks: DbForeignKey[]): LayoutSeed[] {
   const byName = new Map(tables.map((t) => [t.name, t]));
   const { layers, required } = layerForTables(tables, fks);
   const nameOrder = new Map(tables.map((table, index) => [table.name, index]));
@@ -217,19 +253,69 @@ function seedLayout(
   const rowPitch = NODE_H_BASE + ROW_GAP;
   const placed = new Map<string, Point>();
 
-  for (const [depth, names] of [...ordered.entries()].sort((a, b) => a[0] - b[0])) {
-    const x = PAD + depth * colPitch;
+  const columnOf = (name: string) => {
+    if (name in PREFERRED_COLUMN) return PREFERRED_COLUMN[name];
+    for (const [depth, names] of ordered) {
+      if (names.includes(name)) return depth;
+    }
+    return 0;
+  };
+
+  const byColumn = new Map<number, string[]>();
+  for (const table of tables) {
+    if (!byName.has(table.name)) continue;
+    const col = columnOf(table.name);
+    const list = byColumn.get(col) ?? [];
+    list.push(table.name);
+    byColumn.set(col, list);
+  }
+
+  for (const [col, names] of [...byColumn.entries()].sort(
+    (a, b) => a[0] - b[0],
+  )) {
+    names.sort((a, b) => {
+      const ra = PREFERRED_ROW[a];
+      const rb = PREFERRED_ROW[b];
+      if (ra !== undefined && rb !== undefined && ra !== rb) return ra - rb;
+      if (ra !== undefined && rb === undefined) return -1;
+      if (ra === undefined && rb !== undefined) return 1;
+      const parentScore = (name: string) => {
+        const parentIdx = required
+          .filter((fk) => fk.fromTable === name)
+          .map((fk) => {
+            const parent = fk.toTable;
+            const parentCol = columnOf(parent);
+            if (parentCol >= col) return Number.POSITIVE_INFINITY;
+            return PREFERRED_ROW[parent] ?? nameOrder.get(parent) ?? 0;
+          })
+          .filter((value) => Number.isFinite(value));
+        if (parentIdx.length === 0) return Number.POSITIVE_INFINITY;
+        return (
+          parentIdx.reduce((sum, value) => sum + value, 0) / parentIdx.length
+        );
+      };
+      const sa = parentScore(a);
+      const sb = parentScore(b);
+      if (sa !== sb) return sa - sb;
+      return (nameOrder.get(a) ?? 0) - (nameOrder.get(b) ?? 0);
+    });
+
+    const x = PAD + col * colPitch;
     const usedY: number[] = [];
     for (const name of names) {
-      if (!byName.has(name)) continue;
+      const preferredY =
+        PREFERRED_ROW[name] !== undefined
+          ? PAD + PREFERRED_ROW[name] * rowPitch
+          : undefined;
       const parentYs = required
         .filter((fk) => fk.fromTable === name)
         .map((fk) => placed.get(fk.toTable)?.y)
         .filter((value): value is number => value !== undefined);
       let y =
-        parentYs.length > 0
+        preferredY ??
+        (parentYs.length > 0
           ? parentYs.reduce((sum, value) => sum + value, 0) / parentYs.length
-          : PAD + names.indexOf(name) * rowPitch;
+          : PAD + names.indexOf(name) * rowPitch);
       while (usedY.some((taken) => Math.abs(taken - y) < rowPitch)) {
         y += rowPitch;
       }
@@ -378,7 +464,11 @@ function TypeGlyph({ dataType }: { dataType: string }) {
           <Glyph className="size-3.5" strokeWidth={2} aria-hidden />
         </button>
       </TooltipTrigger>
-      <TooltipContent side="left" sideOffset={6} className="font-mono capitalize">
+      <TooltipContent
+        side="left"
+        sideOffset={6}
+        className="font-mono capitalize"
+      >
         {dataType}
       </TooltipContent>
     </Tooltip>
@@ -533,7 +623,10 @@ function groupKey(table: string, prefix: string) {
   return `${table}::${prefix}`;
 }
 
-function openPrefixesFor(table: string, openColGroups: Set<string> | undefined) {
+function openPrefixesFor(
+  table: string,
+  openColGroups: Set<string> | undefined,
+) {
   const lead = `${table}::`;
   const prefixes = new Set<string>();
   if (!openColGroups) return prefixes;
@@ -871,8 +964,7 @@ function describeFk(
   const unique =
     fromCols.length > 0 &&
     fromCols.every((col) => col.unique || col.primaryKey);
-  const mandatory =
-    fromCols.length > 0 && fromCols.every((col) => col.notNull);
+  const mandatory = fromCols.length > 0 && fromCols.every((col) => col.notNull);
   const columnLabel =
     fk.fromColumns.length === 1 && fk.toColumns.length === 1
       ? `${fk.fromColumns[0]} → ${fk.toColumns[0]}`
@@ -996,7 +1088,14 @@ function RelationshipMarkers() {
       >
         <line x1="1" y1="6" x2="6" y2="6" strokeWidth="1.75" {...stroke} />
         <line x1="6" y1="1.5" x2="6" y2="10.5" strokeWidth="1.75" {...stroke} />
-        <line x1="10" y1="1.5" x2="10" y2="10.5" strokeWidth="1.75" {...stroke} />
+        <line
+          x1="10"
+          y1="1.5"
+          x2="10"
+          y2="10.5"
+          strokeWidth="1.75"
+          {...stroke}
+        />
       </marker>
       <marker
         id="schema-fk-zero-or-one-start"
@@ -1009,7 +1108,14 @@ function RelationshipMarkers() {
       >
         <line x1="1" y1="6" x2="6" y2="6" strokeWidth="1.5" {...stroke} />
         <circle cx="9" cy="6" r="3" strokeWidth="1.5" {...stroke} />
-        <line x1="14" y1="1.5" x2="14" y2="10.5" strokeWidth="1.75" {...stroke} />
+        <line
+          x1="14"
+          y1="1.5"
+          x2="14"
+          y2="10.5"
+          strokeWidth="1.75"
+          {...stroke}
+        />
       </marker>
       <marker
         id="schema-fk-one"
@@ -1046,7 +1152,14 @@ function RelationshipMarkers() {
         markerUnits="userSpaceOnUse"
       >
         <circle cx="5" cy="6" r="3" strokeWidth="1.5" {...stroke} />
-        <line x1="10" y1="1.5" x2="10" y2="10.5" strokeWidth="1.75" {...stroke} />
+        <line
+          x1="10"
+          y1="1.5"
+          x2="10"
+          y2="10.5"
+          strokeWidth="1.75"
+          {...stroke}
+        />
         <line x1="10" y1="6" x2="15" y2="6" strokeWidth="1.5" {...stroke} />
       </marker>
       <marker
@@ -1630,7 +1743,8 @@ export function SchemaDiagram({
               if (!child || !parent || fk.fromTable === fk.toTable) return null;
               if (
                 visibleNames &&
-                (!visibleNames.has(fk.fromTable) || !visibleNames.has(fk.toTable))
+                (!visibleNames.has(fk.fromTable) ||
+                  !visibleNames.has(fk.toTable))
               ) {
                 return null;
               }
@@ -1682,146 +1796,147 @@ export function SchemaDiagram({
               );
             })}
 
-          {nodes.map((node) => {
-            if (visibleNames && !visibleNames.has(node.table.name)) return null;
-            const active = focused
-              ? focused === node.table.name
-              : selected === node.table.name;
-            const fieldCount = node.table.columns.length;
-            const openPrefixes = openPrefixesFor(
-              node.table.name,
-              openColGroups,
-            );
-            const sort = colSort[node.table.name] ?? GROUPED_SORT;
-            const visibleRows = node.expanded
-              ? sort.by === "grouped"
-                ? visibleRowCount(
-                    groupColumns(node.table.columns),
-                    openPrefixes,
-                  )
-                : node.table.columns.length
-              : 0;
-            const columnList = (
-              <div className="px-2 pt-1 pb-2">
-                <ColumnListHeader
-                  sort={sort}
-                  onCycleName={() => cycleColSort(node.table.name, "name")}
-                  onCycleType={() => cycleColSort(node.table.name, "type")}
-                  onCycleFlag={() => cycleColSort(node.table.name, "flag")}
-                />
-                <ColumnRows
-                  tableName={node.table.name}
-                  columns={node.table.columns}
-                  openPrefixes={openPrefixes}
-                  onToggleGroup={toggleColGroup}
-                  sort={sort}
-                />
-              </div>
-            );
-            return (
-              <div
-                key={node.table.name}
-                className={cn(
-                  "absolute z-10 flex select-none flex-col overflow-hidden rounded-[10px] border bg-[var(--background)] shadow-sm",
-                  active
-                    ? "border-2 border-[var(--foreground)]"
-                    : "border-[var(--border)]",
-                  drag?.kind === "node" && drag.name === node.table.name
-                    ? "cursor-grabbing"
-                    : "cursor-grab",
-                )}
-                style={{
-                  left: node.x,
-                  top: node.y,
-                  width: NODE_W,
-                  height: node.height,
-                }}
-                onPointerDown={(event) =>
-                  onNodePointerDown(event, node.table.name)
-                }
-                onDoubleClick={(event) => {
-                  event.preventDefault();
-                  event.stopPropagation();
-                  if (nodeMovedRef.current) return;
-                  toggleFocus(node.table.name);
-                }}
-              >
-                <div
-                  className={cn(
-                    "flex min-h-12 items-start gap-2 px-2.5 py-2",
-                    node.expanded ? "rounded-t-[9px]" : "rounded-[9px]",
-                    active
-                      ? "bg-[var(--foreground)] text-[var(--background)]"
-                      : "bg-[var(--muted)] text-[var(--foreground)]",
-                  )}
-                >
-                  <button
-                    type="button"
-                    title={node.table.name}
-                    className="line-clamp-2 max-w-[9.5rem] cursor-pointer whitespace-normal break-words rounded px-0.5 text-left text-sm leading-tight font-semibold underline-offset-2 hover:underline"
-                    onPointerDown={(event) => event.stopPropagation()}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      queueBrowse(node.table.name);
-                    }}
-                    onDoubleClick={(event) => {
-                      event.preventDefault();
-                      event.stopPropagation();
-                      toggleFocus(node.table.name);
-                    }}
-                  >
-                    {formatTableLabel(node.table.name)}
-                  </button>
-                  <button
-                    type="button"
-                    className={cn(
-                      "ml-auto flex h-8 shrink-0 cursor-pointer items-center gap-0.5 rounded-md py-0.5 pr-1 pl-2.5 font-mono text-sm",
-                      active
-                        ? "bg-[var(--background)] text-[var(--foreground)]"
-                        : "bg-[var(--background)] text-[var(--foreground)] ring-1 ring-[var(--border)] ring-inset",
-                    )}
-                    onPointerDown={(event) => event.stopPropagation()}
-                    onDoubleClick={(event) => event.stopPropagation()}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      toggleExpanded(node.table.name);
-                    }}
-                    aria-label={
-                      node.expanded
-                        ? `Collapse ${node.table.name} columns`
-                        : `Expand ${node.table.name} columns`
-                    }
-                    title={`${fieldCount} fields`}
-                  >
-                    <span>{fieldCount}</span>
-                    <Icon
-                      icon="ic:round-arrow-drop-down"
-                      className={cn(
-                        "size-6 shrink-0 transition-transform",
-                        node.expanded && "rotate-180",
-                      )}
-                      aria-hidden
-                    />
-                  </button>
+            {nodes.map((node) => {
+              if (visibleNames && !visibleNames.has(node.table.name))
+                return null;
+              const active = focused
+                ? focused === node.table.name
+                : selected === node.table.name;
+              const fieldCount = node.table.columns.length;
+              const openPrefixes = openPrefixesFor(
+                node.table.name,
+                openColGroups,
+              );
+              const sort = colSort[node.table.name] ?? GROUPED_SORT;
+              const visibleRows = node.expanded
+                ? sort.by === "grouped"
+                  ? visibleRowCount(
+                      groupColumns(node.table.columns),
+                      openPrefixes,
+                    )
+                  : node.table.columns.length
+                : 0;
+              const columnList = (
+                <div className="px-2 pt-1 pb-2">
+                  <ColumnListHeader
+                    sort={sort}
+                    onCycleName={() => cycleColSort(node.table.name, "name")}
+                    onCycleType={() => cycleColSort(node.table.name, "type")}
+                    onCycleFlag={() => cycleColSort(node.table.name, "flag")}
+                  />
+                  <ColumnRows
+                    tableName={node.table.name}
+                    columns={node.table.columns}
+                    openPrefixes={openPrefixes}
+                    onToggleGroup={toggleColGroup}
+                    sort={sort}
+                  />
                 </div>
-
-                {node.expanded ? (
-                  visibleRows > MAX_VISIBLE_COLS ? (
-                    <ScrollArea
-                      type="always"
-                      data-schema-col-scroll=""
-                      className="min-h-0 flex-1 touch-pan-y overscroll-contain"
+              );
+              return (
+                <div
+                  key={node.table.name}
+                  className={cn(
+                    "absolute z-10 flex select-none flex-col overflow-hidden rounded-[10px] border bg-[var(--background)] shadow-sm",
+                    active
+                      ? "border-2 border-[var(--foreground)]"
+                      : "border-[var(--border)]",
+                    drag?.kind === "node" && drag.name === node.table.name
+                      ? "cursor-grabbing"
+                      : "cursor-grab",
+                  )}
+                  style={{
+                    left: node.x,
+                    top: node.y,
+                    width: NODE_W,
+                    height: node.height,
+                  }}
+                  onPointerDown={(event) =>
+                    onNodePointerDown(event, node.table.name)
+                  }
+                  onDoubleClick={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    if (nodeMovedRef.current) return;
+                    toggleFocus(node.table.name);
+                  }}
+                >
+                  <div
+                    className={cn(
+                      "flex min-h-12 items-start gap-2 px-2.5 py-2",
+                      node.expanded ? "rounded-t-[9px]" : "rounded-[9px]",
+                      active
+                        ? "bg-[var(--foreground)] text-[var(--background)]"
+                        : "bg-[var(--muted)] text-[var(--foreground)]",
+                    )}
+                  >
+                    <button
+                      type="button"
+                      title={node.table.name}
+                      className="line-clamp-2 max-w-[9.5rem] cursor-pointer whitespace-normal break-words rounded px-0.5 text-left text-sm leading-tight font-semibold underline-offset-2 hover:underline"
                       onPointerDown={(event) => event.stopPropagation()}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        queueBrowse(node.table.name);
+                      }}
+                      onDoubleClick={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        toggleFocus(node.table.name);
+                      }}
                     >
-                      {columnList}
-                    </ScrollArea>
-                  ) : (
-                    columnList
-                  )
-                ) : null}
-              </div>
-            );
-          })}
+                      {formatTableLabel(node.table.name)}
+                    </button>
+                    <button
+                      type="button"
+                      className={cn(
+                        "ml-auto flex h-8 shrink-0 cursor-pointer items-center gap-0.5 rounded-md py-0.5 pr-1 pl-2.5 font-mono text-sm",
+                        active
+                          ? "bg-[var(--background)] text-[var(--foreground)]"
+                          : "bg-[var(--background)] text-[var(--foreground)] ring-1 ring-[var(--border)] ring-inset",
+                      )}
+                      onPointerDown={(event) => event.stopPropagation()}
+                      onDoubleClick={(event) => event.stopPropagation()}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        toggleExpanded(node.table.name);
+                      }}
+                      aria-label={
+                        node.expanded
+                          ? `Collapse ${node.table.name} columns`
+                          : `Expand ${node.table.name} columns`
+                      }
+                      title={`${fieldCount} fields`}
+                    >
+                      <span>{fieldCount}</span>
+                      <Icon
+                        icon="ic:round-arrow-drop-down"
+                        className={cn(
+                          "size-6 shrink-0 transition-transform",
+                          node.expanded && "rotate-180",
+                        )}
+                        aria-hidden
+                      />
+                    </button>
+                  </div>
+
+                  {node.expanded ? (
+                    visibleRows > MAX_VISIBLE_COLS ? (
+                      <ScrollArea
+                        type="always"
+                        data-schema-col-scroll=""
+                        className="min-h-0 flex-1 touch-pan-y overscroll-contain"
+                        onPointerDown={(event) => event.stopPropagation()}
+                      >
+                        {columnList}
+                      </ScrollArea>
+                    ) : (
+                      columnList
+                    )
+                  ) : null}
+                </div>
+              );
+            })}
           </TooltipProvider>
         </div>
       </div>

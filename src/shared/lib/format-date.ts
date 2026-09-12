@@ -8,7 +8,22 @@ const DISPLAY_PATTERN = "EEE, MMM d, yy";
  * Date-only strings (YYYY-MM-DD) are parsed as local calendar days
  * so UTC midnight does not shift the weekday/day.
  */
-export function formatDisplayDate(
+export function formatDisplayDate(value: string | null | undefined): string {
+  if (!value) return "—";
+
+  const trimmed = value.trim();
+  if (!trimmed) return "—";
+
+  const date = parseISO(trimmed);
+  if (!isValid(date)) return trimmed;
+
+  return format(date, DISPLAY_PATTERN, { locale: enUS });
+}
+
+/**
+ * Compact calendar date for dense tables: "Mar 3, 26".
+ */
+export function formatShortDisplayDate(
   value: string | null | undefined,
 ): string {
   if (!value) return "—";
@@ -19,5 +34,5 @@ export function formatDisplayDate(
   const date = parseISO(trimmed);
   if (!isValid(date)) return trimmed;
 
-  return format(date, DISPLAY_PATTERN, { locale: enUS });
+  return format(date, "MMM d, yy", { locale: enUS });
 }

@@ -11,7 +11,12 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
       category: "Employment",
       type: "Salary & Wages",
     },
-    patterns: [/pay\s*utilitek/i, /utilitek\s*solut/i, /payroll/i, /pay\s*cheque/i],
+    patterns: [
+      /pay\s*utilitek/i,
+      /utilitek\s*solut/i,
+      /payroll/i,
+      /pay\s*cheque/i,
+    ],
   },
   {
     categoryDetailed: "Tax Credits & GST",
@@ -21,7 +26,13 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
       category: "Government & Tax",
       type: "Tax Credits & GST",
     },
-    patterns: [/tps\s*\/\s*gst/i, /gst\s*\/\s*hst/i, /gst\s*credit/i, /hst\s*credit/i, /cra\s*deposit/i],
+    patterns: [
+      /tps\s*\/\s*gst/i,
+      /gst\s*\/\s*hst/i,
+      /gst\s*credit/i,
+      /hst\s*credit/i,
+      /cra\s*deposit/i,
+    ],
   },
   {
     categoryDetailed: "Tax Refunds",
@@ -148,7 +159,7 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
   {
     categoryDetailed: "Infrastructure",
     categoryPrimary: "GENERAL_SERVICES",
-    tags: ["Web Development", "Developer Tools", "Online"],
+    tags: ["Dev Tools", "Online"],
     tree: {
       section: "Technology",
       category: "Cloud & Hosting",
@@ -169,7 +180,7 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
   {
     categoryDetailed: "Domains & Registrars",
     categoryPrimary: "GENERAL_SERVICES",
-    tags: ["Web Development", "Developer Tools", "Online"],
+    tags: ["Dev Tools", "Online"],
     tree: {
       section: "Technology",
       category: "Cloud & Hosting",
@@ -186,7 +197,7 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
   {
     categoryDetailed: "Developer & Payment Platforms",
     categoryPrimary: "GENERAL_SERVICES",
-    tags: ["Web Development", "Developer Tools", "Online"],
+    tags: ["Dev Tools", "Online"],
     tree: {
       section: "Technology",
       category: "Cloud & Hosting",
@@ -203,6 +214,24 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
     ],
   },
 
+  // --- Creative tools with primary AI features ---
+  {
+    categoryDetailed: "Productivity & Creative",
+    categoryPrimary: "GENERAL_SERVICES",
+    tags: ["AI", "Subscription", "Online"],
+    tree: {
+      section: "Technology",
+      category: "Software & Subscriptions",
+      type: "Productivity & Creative",
+    },
+    patterns: [
+      /canva/i,
+      /capcut/i,
+      /sparkrec(?:ei)?pt/i,
+      /paddle\.net\*\s*spark/i,
+    ],
+  },
+
   // --- Software & Subscriptions (non-AI) ---
   {
     categoryDetailed: "Productivity & Creative",
@@ -214,8 +243,6 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
       type: "Productivity & Creative",
     },
     patterns: [
-      /canva/i,
-      /capcut/i,
       /excalidraw/i,
       /zoho/i,
       /figma/i,
@@ -232,7 +259,13 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
       category: "Software & Subscriptions",
       type: "Communication & Social",
     },
-    patterns: [/discord/i, /nitro/i, /x\s*corp/i, /\btwitter\b/i, /\bx\.com\b/i],
+    patterns: [
+      /discord/i,
+      /nitro/i,
+      /x\s*corp/i,
+      /\btwitter\b/i,
+      /\bx\.com\b/i,
+    ],
   },
   {
     categoryDetailed: "Security & Utilities",
@@ -360,7 +393,13 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
       category: "Rideshare",
       type: "Rideshare",
     },
-    patterns: [/uber\s*holdings/i, /\buber\b(?!.*eats)/i, /lyft/i, /grab\b/i, /taxi/i],
+    patterns: [
+      /uber\s*holdings/i,
+      /\buber\b(?!.*eats)/i,
+      /lyft/i,
+      /grab\b/i,
+      /taxi/i,
+    ],
   },
   {
     categoryDetailed: "Public Transit",
@@ -424,33 +463,38 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
     patterns: [/lexus\s*of\s*edmonton/i],
   },
 
-  // --- Travel ---
+  // --- Travel (no Travel section — Lodging/Attractions → Lifestyle, flights → Transport) ---
   {
     categoryDetailed: "Hotels & Vacation Rentals",
     categoryPrimary: "TRAVEL",
     tree: {
-      section: "Travel",
+      section: "Lifestyle",
       category: "Lodging",
       type: "Hotels & Vacation Rentals",
     },
-    patterns: [/airbnb/i, /hilton/i, /agoda/i, /trip\.com/i, /the\s*crestmont/i],
+    patterns: [
+      /airbnb/i,
+      /hilton/i,
+      /agoda/i,
+      /the\s*crestmont/i,
+    ],
   },
   {
     categoryDetailed: "Airline Tickets",
     categoryPrimary: "TRAVEL",
     tree: {
-      section: "Travel",
+      section: "Transport",
       category: "Flights",
       type: "Airline Tickets",
     },
-    patterns: [/cebu\s*pacific/i, /cebu\s*air/i, /cheap\s*tickets/i],
+    patterns: [/cebu\s*pacific/i, /cebu\s*air/i, /cheap\s*tickets/i, /trip\.com/i],
   },
   {
     categoryDetailed: "Car Rental",
     categoryPrimary: "TRAVEL",
     tree: {
-      section: "Travel",
-      category: "Flights",
+      section: "Transport",
+      category: "Vehicle",
       type: "Car Rental",
     },
     patterns: [/\bavis\b/i, /etoll\s*avis/i],
@@ -459,7 +503,7 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
     categoryDetailed: "In-Flight",
     categoryPrimary: "TRAVEL",
     tree: {
-      section: "Travel",
+      section: "Transport",
       category: "Flights",
       type: "In-Flight",
     },
@@ -469,11 +513,16 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
     categoryDetailed: "Attractions & Tours",
     categoryPrimary: "ENTERTAINMENT",
     tree: {
-      section: "Travel",
-      category: "Sightseeing",
-      type: "Attractions & Tours",
+      section: "Lifestyle",
+      category: "Attractions & Tours",
+      type: "Theme Parks",
     },
-    patterns: [/circle\s*line/i, /ocean\s*park/i, /pickleball/i, /driving\s*range/i],
+    patterns: [
+      /circle\s*line/i,
+      /ocean\s*park/i,
+      /pickleball/i,
+      /driving\s*range/i,
+    ],
   },
 
   // --- Health & personal ---
@@ -485,7 +534,15 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
       category: "Medical",
       type: "Clinics & Telehealth",
     },
-    patterns: [/morality\s*med/i, /moralitymed/i, /pocket\s*pills/i, /pocketpills/i, /pharmacy/i, /shoppers\s*drug/i, /rexall/i],
+    patterns: [
+      /morality\s*med/i,
+      /moralitymed/i,
+      /pocket\s*pills/i,
+      /pocketpills/i,
+      /pharmacy/i,
+      /shoppers\s*drug/i,
+      /rexall/i,
+    ],
   },
   {
     categoryDetailed: "Barbers & Salons",
@@ -506,7 +563,12 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
       category: "Personal Care",
       type: "Gym Memberships",
     },
-    patterns: [/movati/i, /goodlife/i, /anytime\s*fitness/i, /planet\s*fitness/i],
+    patterns: [
+      /movati/i,
+      /goodlife/i,
+      /anytime\s*fitness/i,
+      /planet\s*fitness/i,
+    ],
   },
   {
     categoryDetailed: "Cosmetics",
@@ -617,7 +679,13 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
       category: "Shopping",
       type: "Hobbies",
     },
-    patterns: [/michaels/i, /this\s*is\s*blythe/i, /miniso/i, /timezone/i, /river\s*city\s*games/i],
+    patterns: [
+      /michaels/i,
+      /this\s*is\s*blythe/i,
+      /miniso/i,
+      /timezone/i,
+      /river\s*city\s*games/i,
+    ],
   },
 
   // --- Home ---
@@ -630,7 +698,16 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
       category: "Utilities & Telecom",
       type: "Mobile & Wireless",
     },
-    patterns: [/\bfizz\b/i, /freedom\s*mobile/i, /rogers/i, /bell\s*mobility/i, /telus/i, /koodo/i, /\bsaily\b/i, /\bsmart\b/i],
+    patterns: [
+      /\bfizz\b/i,
+      /freedom\s*mobile/i,
+      /rogers/i,
+      /bell\s*mobility/i,
+      /telus/i,
+      /koodo/i,
+      /\bsaily\b/i,
+      /\bsmart\b/i,
+    ],
   },
   {
     categoryDetailed: "Hardware & Tools",
@@ -652,7 +729,12 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
       category: "Debt & Loans",
       type: "Student Loans",
     },
-    patterns: [/nslsc/i, /abdl\s*student/i, /alberta\s*student/i, /national\s*student\s*loans/i],
+    patterns: [
+      /nslsc/i,
+      /abdl\s*student/i,
+      /alberta\s*student/i,
+      /national\s*student\s*loans/i,
+    ],
   },
   {
     categoryDetailed: "BNPL",
@@ -672,7 +754,12 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
       category: "Debt & Loans",
       type: "Personal Financing",
     },
-    patterns: [/cibc\s*loans/i, /loan\s*payment/i],
+    patterns: [
+      /cibc\s*car\s*loan/i,
+      /cibc\s*loans/i,
+      /loan\s*payment/i,
+      /preauthorized\s+debit\s+loan/i,
+    ],
   },
   {
     categoryDetailed: "Monthly Fees",
@@ -713,11 +800,7 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
       category: "Insurance",
       type: "Property & Auto Insurance",
     },
-    patterns: [
-      /security\s*national/i,
-      /meloche\s*monnex/i,
-      /td\s*insurance/i,
-    ],
+    patterns: [/security\s*national/i, /meloche\s*monnex/i, /td\s*insurance/i],
   },
   {
     categoryDetailed: "Payment Protection",

@@ -26,6 +26,8 @@ export const ANALYSIS_PERIOD_META: Record<
     peakLabel: string;
     txnRateLabel: string;
     incomeRateLabel: string;
+    avgCostLabel: string;
+    avgCountLabel: string;
   }
 > = {
   monthly: {
@@ -36,6 +38,8 @@ export const ANALYSIS_PERIOD_META: Record<
     peakLabel: "Peak month",
     txnRateLabel: "Transactions / month",
     incomeRateLabel: "Income / month",
+    avgCostLabel: "Avg cost / month",
+    avgCountLabel: "Avg count / month",
   },
   biweekly: {
     label: "Biweekly",
@@ -45,6 +49,8 @@ export const ANALYSIS_PERIOD_META: Record<
     peakLabel: "Peak 2 weeks",
     txnRateLabel: "Transactions / 2 weeks",
     incomeRateLabel: "Income / 2 weeks",
+    avgCostLabel: "Avg cost / 2 weeks",
+    avgCountLabel: "Avg count / 2 weeks",
   },
   weekly: {
     label: "Weekly",
@@ -54,6 +60,8 @@ export const ANALYSIS_PERIOD_META: Record<
     peakLabel: "Peak week",
     txnRateLabel: "Transactions / week",
     incomeRateLabel: "Income / week",
+    avgCostLabel: "Avg cost / week",
+    avgCountLabel: "Avg count / week",
   },
   daily: {
     label: "Daily",
@@ -63,6 +71,8 @@ export const ANALYSIS_PERIOD_META: Record<
     peakLabel: "Peak day",
     txnRateLabel: "Transactions / day",
     incomeRateLabel: "Income / day",
+    avgCostLabel: "Avg cost / day",
+    avgCountLabel: "Avg count / day",
   },
 };
 
@@ -122,7 +132,9 @@ function startOfUtcBiweek(isoDate: string) {
   const weekStart = startOfUtcWeek(isoDate);
   const utc = parseUtcDate(weekStart).getTime();
   const days = Math.round((utc - BIWEEK_EPOCH_UTC) / DAY_MS);
-  const start = new Date(BIWEEK_EPOCH_UTC + Math.floor(days / 14) * 14 * DAY_MS);
+  const start = new Date(
+    BIWEEK_EPOCH_UTC + Math.floor(days / 14) * 14 * DAY_MS,
+  );
   return formatUtcDate(start);
 }
 
@@ -150,7 +162,8 @@ function rangeLabel(start: string, end: string) {
   const startDate = parseUtcDate(start);
   const endDate = parseUtcDate(end);
   const sameYear = startDate.getUTCFullYear() === endDate.getUTCFullYear();
-  const sameMonth = sameYear && startDate.getUTCMonth() === endDate.getUTCMonth();
+  const sameMonth =
+    sameYear && startDate.getUTCMonth() === endDate.getUTCMonth();
   if (sameMonth) {
     const month = new Intl.DateTimeFormat("en-US", {
       month: "short",

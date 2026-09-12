@@ -1,8 +1,5 @@
 "use client";
 
-import { useIsFetching, useQueryClient } from "@tanstack/react-query";
-import { createColumnHelper } from "@tanstack/react-table";
-import { useMemo } from "react";
 import { DataTable } from "@/components/ui/data-table";
 import type { DataTableFeatures } from "@/components/ui/data-table-features";
 import { formatMoney } from "@/domains/dashboard/domain/money";
@@ -17,15 +14,19 @@ import {
 } from "@/domains/transactions/domain/debitCredit";
 import { TagsCell } from "@/domains/transactions/ui/TagsCell";
 import { TagsColumnHeader } from "@/domains/transactions/ui/TagsColumnHeader";
+import { TaxonomyCell } from "@/domains/transactions/ui/TaxonomyCell";
+import { useIsFetching, useQueryClient } from "@tanstack/react-query";
+import { createColumnHelper } from "@tanstack/react-table";
+import { useMemo } from "react";
 
-const columnHelper =
-  createColumnHelper<DataTableFeatures, DashboardTransaction>();
+const columnHelper = createColumnHelper<
+  DataTableFeatures,
+  DashboardTransaction
+>();
 
 function textOrDash(value: string | number | boolean | null | undefined) {
   if (value == null || value === "") {
-    return (
-      <span className="text-sm text-[var(--muted-foreground)]">—</span>
-    );
+    return <span className="text-sm text-[var(--muted-foreground)]">—</span>;
   }
   return (
     <span className="line-clamp-2 block text-sm leading-snug break-words">
@@ -63,7 +64,7 @@ function buildColumns(accountNameById: Map<string, string>) {
     columnHelper.accessor("date", {
       header: "Posted",
       meta: { width: "7rem" },
-      filterFn: "fuzzy",
+      filterFn: "dateWindow",
       sortFn: "datetime",
     }),
     columnHelper.accessor("authorizedDate", {
@@ -123,21 +124,41 @@ function buildColumns(accountNameById: Map<string, string>) {
     columnHelper.accessor("sectionName", {
       header: "Section",
       meta: { width: "14rem" },
-      cell: ({ getValue }) => textOrDash(getValue()),
+      cell: ({ row, getValue }) => (
+        <TaxonomyCell
+          transactionId={row.original.transactionId}
+          field="section"
+          value={getValue()}
+        />
+      ),
       filterFn: "equalsString",
       sortFn: "text",
     }),
     columnHelper.accessor("categoryName", {
       header: "Category",
       meta: { width: "20rem" },
-      cell: ({ getValue }) => textOrDash(getValue()),
+      cell: ({ row, getValue }) => (
+        <TaxonomyCell
+          transactionId={row.original.transactionId}
+          field="category"
+          value={getValue()}
+          sectionName={row.original.sectionName}
+        />
+      ),
       filterFn: "equalsString",
       sortFn: "text",
     }),
     columnHelper.accessor("subcategoryName", {
       header: "Subcategories",
       meta: { width: "20rem" },
-      cell: ({ getValue }) => textOrDash(getValue()),
+      cell: ({ row, getValue }) => (
+        <TaxonomyCell
+          transactionId={row.original.transactionId}
+          field="subcategory"
+          value={getValue()}
+          categoryName={row.original.categoryName}
+        />
+      ),
       filterFn: "equalsString",
       sortFn: "text",
     }),
@@ -153,6 +174,19 @@ function buildColumns(accountNameById: Map<string, string>) {
       ),
       filterFn: "includesTag",
       sortFn: "textList",
+    }),
+    columnHelper.accessor("spreadName", {
+      header: "Spread",
+      meta: { width: "10rem" },
+      cell: ({ row, getValue }) => (
+        <TaxonomyCell
+          transactionId={row.original.transactionId}
+          field="spread"
+          value={getValue()}
+        />
+      ),
+      filterFn: "equalsString",
+      sortFn: "text",
     }),
     columnHelper.accessor("merchantName", {
       header: "Merchant name",
@@ -238,11 +272,15 @@ function buildColumns(accountNameById: Map<string, string>) {
         const raw = String(getValue() ?? "");
         const label = historyMatchLabel(raw);
         if (!raw) {
-          return <span className="text-sm text-[var(--muted-foreground)]">—</span>;
+          return (
+            <span className="text-sm text-[var(--muted-foreground)]">—</span>
+          );
         }
         return (
           <div className="min-w-0">
-            <p className="line-clamp-2 text-sm leading-snug break-words">{label}</p>
+            <p className="line-clamp-2 text-sm leading-snug break-words">
+              {label}
+            </p>
             <p className="line-clamp-2 text-[11px] leading-snug break-words text-[var(--muted-foreground)]">
               {raw}
             </p>
@@ -418,6 +456,10 @@ export function TransactionsDataTable({
     () => uniqueSorted(transactions.map((txn) => txn.sectionName)),
     [transactions],
   );
+  const spreadOptions = useMemo(
+    () => uniqueSorted(transactions.map((txn) => txn.spreadName)),
+    [transactions],
+  );
   const subcategoryOptions = useMemo(
     () => uniqueSorted(transactions.map((txn) => txn.subcategoryName)),
     [transactions],
@@ -455,7 +497,11 @@ export function TransactionsDataTable({
       columns={columns}
       data={transactions}
       initialSorting={[{ id: "date", desc: true }]}
+      enableGlobalFilter
+      globalFilterFn="fuzzy"
+      searchPlaceholder="Search all columns…"
       enableColumnToggle
+      dateColumnId="date"
       csvFilename="transactions.csv"
       isRefreshing={dashboardFetches > 0}
       onRefresh={() =>
@@ -467,6 +513,11 @@ export function TransactionsDataTable({
           columnId: "sectionName",
           label: "Section",
           options: sectionOptions,
+        },
+        {
+          columnId: "spreadName",
+          label: "Spread",
+          options: spreadOptions,
         },
         {
           columnId: "categoryName",

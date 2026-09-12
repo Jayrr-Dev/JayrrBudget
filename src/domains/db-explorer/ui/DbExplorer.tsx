@@ -1,18 +1,18 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { tableHelp } from "@/domains/db-explorer/domain/columnHelp";
 import {
   fetchDbSchema,
   fetchDbTable,
 } from "@/domains/db-explorer/queries/dbExplorer";
 import { dbExplorerQueryKeys } from "@/domains/db-explorer/queries/query-keys";
-import { tableHelp } from "@/domains/db-explorer/domain/columnHelp";
 import { SchemaDiagram } from "@/domains/db-explorer/ui/SchemaDiagram";
 import { cn } from "@/lib/utils";
+import { useQuery } from "@tanstack/react-query";
+import { useMemo, useState } from "react";
 
 const PAGE_SIZE = 50;
 
@@ -70,9 +70,9 @@ function TableBrowser({ table }: { table: string }) {
         </div>
       ) : null}
 
-      <div className="min-h-0 flex-1 overflow-auto rounded-xl border border-[var(--border)]">
-        <table className="min-w-full border-collapse text-left text-xs">
-          <thead className="sticky top-0 bg-[var(--muted)]">
+      <div className="min-h-0 flex-1 overflow-auto rounded-xl border border-[var(--border)] [transform:rotateX(180deg)]">
+        <table className="min-w-full border-collapse text-left text-xs [transform:rotateX(180deg)]">
+          <thead className="sticky bottom-0 bg-[var(--muted)]">
             <tr>
               {(data?.columns ?? []).map((col) => (
                 <th
@@ -170,7 +170,9 @@ export function DbExplorer() {
         </div>
         {activeMeta ? (
           <div className="flex flex-wrap items-center gap-2">
-            <h2 className="font-mono text-sm font-semibold">{activeMeta.name}</h2>
+            <h2 className="font-mono text-sm font-semibold">
+              {activeMeta.name}
+            </h2>
             <Badge variant="secondary">{activeMeta.rowCount} rows</Badge>
             <Badge variant="outline">{activeMeta.columns.length} columns</Badge>
           </div>
@@ -255,12 +257,14 @@ export function DbExplorer() {
                       {tableHelp(activeMeta.name)}
                     </p>
                   ) : null}
-                  <div className="min-h-0 flex-1 overflow-auto rounded-xl border border-[var(--border)]">
-                    <table className="min-w-full text-left text-sm">
-                      <thead className="sticky top-0 bg-[var(--muted)]">
+                  <div className="min-h-0 flex-1 overflow-auto rounded-xl border border-[var(--border)] [transform:rotateX(180deg)]">
+                    <table className="min-w-full text-left text-sm [transform:rotateX(180deg)]">
+                      <thead className="sticky bottom-0 bg-[var(--muted)]">
                         <tr>
                           <th className="px-3 py-2 font-medium">Column</th>
-                          <th className="px-3 py-2 font-medium">What it is for</th>
+                          <th className="px-3 py-2 font-medium">
+                            What it is for
+                          </th>
                           <th className="px-3 py-2 font-medium">Type</th>
                           <th className="px-3 py-2 font-medium">Flags</th>
                         </tr>

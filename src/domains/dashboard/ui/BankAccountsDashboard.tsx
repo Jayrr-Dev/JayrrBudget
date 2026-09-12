@@ -1,8 +1,5 @@
 "use client";
 
-import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import {
   detectCardNetwork,
@@ -16,9 +13,13 @@ import {
 import { formatMoney } from "@/domains/dashboard/domain/money";
 import type {
   DashboardAccount,
+  DashboardLoanSummary,
   DashboardTransaction,
 } from "@/domains/dashboard/domain/types";
 import { AccountPastTransactions } from "@/domains/dashboard/ui/AccountPastTransactions";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useMemo } from "react";
 
 export function accountDetailHref(accountId: string) {
   return `/accounts?account=${encodeURIComponent(accountId)}`;
@@ -41,12 +42,24 @@ const CATEGORY_LABEL: Record<AccountCategory, string | null> = {
 
 function accountSecondaryLine(account: DashboardAccount) {
   const category = resolveAccountCategory(account);
+  const loan = account.loanSummary;
+  if (loan) {
+    const bits = [
+      loan.vehicleLabel,
+      `${loan.paymentsApplied}/${loan.paymentCount} payments`,
+    ].filter(Boolean);
+    return bits.join(" · ");
+  }
   const number = formatAccountNumber(account, category);
   const extra =
     category === "credit_card"
       ? NETWORK_LABEL[detectCardNetwork(account)]
       : CATEGORY_LABEL[category];
   return [number, extra].filter(Boolean).join(" · ");
+}
+
+function formatPct(rate: number) {
+  return `${(rate * 100).toFixed(2)}%`;
 }
 
 function AccountRow({
@@ -58,6 +71,7 @@ function AccountRow({
 }) {
   const category = resolveAccountCategory(account);
   const amount = displayBalanceAmount(account.currentBalance, category);
+  const loan = account.loanSummary;
 
   return (
     <Link
@@ -72,6 +86,14 @@ function AccountRow({
         <p className="truncate text-sm text-[var(--muted-foreground)]">
           {accountSecondaryLine(account)}
         </p>
+        {loan ? (
+          <p className="mt-0.5 truncate text-xs text-[var(--muted-foreground)]">
+            {loan.progressPct.toFixed(0)}% paid
+            {loan.nextPaymentDate
+              ? ` · next ${loan.nextPaymentDate}`
+              : " · paid off"}
+          </p>
+        ) : null}
       </div>
       <div className="flex shrink-0 items-center gap-2">
         <p className="text-right text-base font-semibold tabular-nums tracking-tight text-[var(--foreground)]">
@@ -83,19 +105,82 @@ function AccountRow({
   );
 }
 
-function DetailRow({
-  label,
-  value,
-}: {
-  label: string;
-  value: string;
-}) {
+function DetailRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-baseline justify-between gap-4 py-2 text-sm">
       <span className="text-[var(--muted-foreground)]">{label}</span>
       <span className="text-right font-medium text-[var(--foreground)]">
         {value}
       </span>
+    </div>
+  );
+}
+
+function LoanPaymentHistory({
+  loan,
+  currency,
+}: {
+  loan: DashboardLoanSummary;
+  currency: string;
+}) {
+  const rows = [...loan.payments].sort(
+    (a, b) => b.paymentNumber - a.paymentNumber,
+  );
+
+  return (
+    <div className="space-y-3">
+      <h2 className="text-lg font-semibold tracking-tight">Payment history</h2>
+      <p className="text-sm text-[var(--muted-foreground)]">
+        Contract schedule from {loan.firstPaymentDate}. Linked PADs show posted
+        date; assumed rows fill gaps before import.
+      </p>
+      <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)]">
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[40rem] text-left text-sm">
+            <thead className="border-b border-[var(--border)] text-xs text-[var(--muted-foreground)]">
+              <tr>
+                <th className="px-3 py-2 font-medium">#</th>
+                <th className="px-3 py-2 font-medium">Scheduled</th>
+                <th className="px-3 py-2 font-medium">Posted</th>
+                <th className="px-3 py-2 font-medium text-right">Payment</th>
+                <th className="px-3 py-2 font-medium text-right">Interest</th>
+                <th className="px-3 py-2 font-medium text-right">Principal</th>
+                <th className="px-3 py-2 font-medium text-right">Balance</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row) => (
+                <tr
+                  key={row.paymentNumber}
+                  className="border-t border-[var(--border)]"
+                >
+                  <td className="px-3 py-2 tabular-nums">
+                    {row.paymentNumber}
+                  </td>
+                  <td className="px-3 py-2 tabular-nums">
+                    {row.scheduledDate}
+                  </td>
+                  <td className="px-3 py-2 tabular-nums text-[var(--muted-foreground)]">
+                    {row.assumed ? "assumed" : (row.postedDate ?? "—")}
+                  </td>
+                  <td className="px-3 py-2 text-right tabular-nums">
+                    {formatMoney(row.paymentAmount, currency)}
+                  </td>
+                  <td className="px-3 py-2 text-right tabular-nums">
+                    {formatMoney(row.interestPortion, currency)}
+                  </td>
+                  <td className="px-3 py-2 text-right tabular-nums">
+                    {formatMoney(row.principalPortion, currency)}
+                  </td>
+                  <td className="px-3 py-2 text-right tabular-nums font-medium">
+                    {formatMoney(row.balanceAfter, currency)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
   );
 }
@@ -117,6 +202,7 @@ function AccountDetailView({
     account.availableBalance != null
       ? displayBalanceAmount(account.availableBalance, category)
       : null;
+  const loan = account.loanSummary;
 
   const pendingTxns = transactions.filter((txn) => txn.pending);
   const pendingTotal = pendingTxns.reduce((sum, txn) => sum + txn.amount, 0);
@@ -147,52 +233,110 @@ function AccountDetailView({
       <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)]">
         <div className="grid gap-2 px-4 py-5 sm:px-5 sm:py-6 lg:grid-cols-2 lg:gap-10">
           <div>
-            <p className="text-sm text-[var(--muted-foreground)]">Balance</p>
+            <p className="text-sm text-[var(--muted-foreground)]">
+              {loan ? "Principal remaining" : "Balance"}
+            </p>
             <p className="mt-1 text-3xl font-semibold tracking-tight tabular-nums">
               {formatMoney(balance, currency)}
             </p>
             <div className="mt-4 divide-y divide-[var(--border)]">
-              <DetailRow
-                label="Pending"
-                value={
-                  pendingTxns.length === 0
-                    ? formatMoney(0, currency)
-                    : `${formatMoney(Math.abs(pendingTotal), currency)} (${pendingTxns.length})`
-                }
-              />
-              <DetailRow
-                label="Available"
-                value={formatMoney(available ?? balance, currency)}
-              />
-              <DetailRow
-                label="Current"
-                value={formatMoney(balance, currency)}
-              />
+              {loan ? (
+                <>
+                  <DetailRow
+                    label="Progress"
+                    value={`${loan.progressPct.toFixed(1)}% · ${loan.paymentsApplied} of ${loan.paymentCount}`}
+                  />
+                  <DetailRow
+                    label="Interest paid"
+                    value={formatMoney(loan.paidInterest, currency)}
+                  />
+                  <DetailRow
+                    label="Principal paid"
+                    value={formatMoney(loan.paidPrincipal, currency)}
+                  />
+                  <DetailRow
+                    label="Next payment"
+                    value={
+                      loan.nextPaymentDate
+                        ? `${formatMoney(loan.paymentAmount, currency)} on ${loan.nextPaymentDate}`
+                        : "Paid off"
+                    }
+                  />
+                </>
+              ) : (
+                <>
+                  <DetailRow
+                    label="Pending"
+                    value={
+                      pendingTxns.length === 0
+                        ? formatMoney(0, currency)
+                        : `${formatMoney(Math.abs(pendingTotal), currency)} (${pendingTxns.length})`
+                    }
+                  />
+                  <DetailRow
+                    label="Available"
+                    value={formatMoney(available ?? balance, currency)}
+                  />
+                  <DetailRow
+                    label="Current"
+                    value={formatMoney(balance, currency)}
+                  />
+                </>
+              )}
             </div>
           </div>
 
           <div className="border-t border-[var(--border)] pt-4 lg:border-t-0 lg:border-l lg:pt-0 lg:pl-8">
             <DetailRow label="Product" value={productName} />
-            <DetailRow
-              label="Account"
-              value={account.mask ? `•••• ${account.mask}` : number || "—"}
-            />
-            <DetailRow
-              label="Type"
-              value={
-                [account.type, account.subtype].filter(Boolean).join(" · ") ||
-                category.replaceAll("_", " ")
-              }
-            />
+            {loan ? (
+              <>
+                <DetailRow
+                  label="Rate"
+                  value={`${formatPct(loan.annualRate)}${
+                    loan.aprDisclosed != null
+                      ? ` (APR ${formatPct(loan.aprDisclosed)})`
+                      : ""
+                  }`}
+                />
+                <DetailRow
+                  label="First payment"
+                  value={loan.firstPaymentDate}
+                />
+                <DetailRow label="Maturity" value={loan.maturityDate} />
+                <DetailRow
+                  label="Remaining"
+                  value={`${loan.remainingPayments} payments`}
+                />
+              </>
+            ) : (
+              <>
+                <DetailRow
+                  label="Account"
+                  value={account.mask ? `•••• ${account.mask}` : number || "—"}
+                />
+                <DetailRow
+                  label="Type"
+                  value={
+                    [account.type, account.subtype]
+                      .filter(Boolean)
+                      .join(" · ") || category.replaceAll("_", " ")
+                  }
+                />
+              </>
+            )}
           </div>
         </div>
       </div>
 
-      <AccountPastTransactions
-        transactions={transactions}
-        currentBalance={account.currentBalance}
-        currency={currency}
-      />
+      {loan ? (
+        <LoanPaymentHistory loan={loan} currency={currency} />
+      ) : (
+        <AccountPastTransactions
+          transactions={transactions}
+          currentBalance={account.currentBalance}
+          currency={currency}
+        />
+      )}
     </div>
   );
 }

@@ -29,6 +29,7 @@ function isRemoteUrl(url: string) {
 const globalForDb = globalThis as unknown as {
   libsql?: ReturnType<typeof createClient>;
   libsqlUrl?: string;
+  libsqlAuthToken?: string;
 };
 
 function createDbClient() {
@@ -50,10 +51,16 @@ function createDbClient() {
 
 export function getLibsqlClient() {
   const url = getDatabaseUrl();
+  const authToken = process.env.DATABASE_AUTH_TOKEN?.trim() ?? "";
 
-  if (!globalForDb.libsql || globalForDb.libsqlUrl !== url) {
+  if (
+    !globalForDb.libsql ||
+    globalForDb.libsqlUrl !== url ||
+    globalForDb.libsqlAuthToken !== authToken
+  ) {
     globalForDb.libsql = createDbClient();
     globalForDb.libsqlUrl = url;
+    globalForDb.libsqlAuthToken = authToken;
   }
 
   return globalForDb.libsql;

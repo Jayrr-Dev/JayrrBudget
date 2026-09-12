@@ -1,4 +1,3 @@
-import { generateObjectWithFallback, mapPool } from "@/shared/ai/openRouter";
 import {
   formatCatalogForPrompt,
   loadEnrichmentCatalog,
@@ -10,11 +9,9 @@ import {
   type EnrichmentTxnInput,
   type MerchantEnrichmentBatch,
 } from "@/domains/enrichment/domain/enrichmentSchema";
+import { generateObjectWithFallback, mapPool } from "@/shared/ai/openRouter";
 
-function buildPrompt(
-  txns: EnrichmentTxnInput[],
-  catalog: EnrichmentCatalog,
-) {
+function buildPrompt(txns: EnrichmentTxnInput[], catalog: EnrichmentCatalog) {
   const txnLines = txns.map((txn) =>
     JSON.stringify({
       transactionId: txn.id,
@@ -45,7 +42,7 @@ function buildPrompt(
     '- "Uber Eats" / "UBER CANADA/UBEREATS" => company Uber, brand Uber Eats',
     '- "OpenAI ChatGPT Subscription" => company OpenAI (slug openai), product ChatGPT, type SaaS, tags AI + Subscription',
     '- "Lemon Squeezy" / software checkout processors => type SaaS, tag Subscription',
-    '- "Vercel" / "GitHub" / "Cloudflare" => type Developer Tools, tags Web Development + Developer Tools',
+    '- "Vercel" / "GitHub" / "Cloudflare" => type Dev Tools, tag Online',
     '- "Tutti Frutti Dessert Cafe" => company Tutti Frutti, foodType Dessert, storeType Cafe',
     "- Strip noise: asterisks, store numbers into storeNumber, glued cities (city goes in location fields)",
     "- Section > Category > Type is spend tree. Company/brand is separate entity graph.",
@@ -53,7 +50,7 @@ function buildPrompt(
     "- Software subscriptions are SaaS under Software — never Online Retail / Shopping.",
     canonicalCategoryAiRules(),
     "- Reuse EXISTING taxonomy names/slugs for near-duplicates: Gas→Gas Stations, Restaurant→Restaurants, Convenience Store↔Convenience Stores.",
-    "- Dimension tags: attach AI for model/LLM tools, Web Development for hosting/domains/CI, Developer Tools for IDEs/git, Subscription when recurring.",
+    "- Dimension tags: attach AI for model/LLM tools and AI-primary products (CapCut, Canva Magic, SparkReceipt), Dev Tools for hosting/domains/CI/IDEs/git, Subscription when recurring.",
     "- Do not create a new type/category that is only a plural, typo, or paraphrase of an existing one.",
     "",
     formatCatalogForPrompt(catalog),

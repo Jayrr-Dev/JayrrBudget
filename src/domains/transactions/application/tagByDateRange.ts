@@ -1,11 +1,12 @@
-import { and, eq, gte, lte } from "drizzle-orm";
 import {
   hasTag,
   joinTags,
   splitTags,
 } from "@/domains/transactions/domain/tags";
 import { getDb } from "@/shared/db";
+import { invalidateTursoReadCache } from "@/shared/db/readCache";
 import { transactions } from "@/shared/db/schema";
+import { and, eq, gte, lte } from "drizzle-orm";
 
 export type TagByDateRangeInput = {
   tag: string;
@@ -67,6 +68,8 @@ export async function tagByDateRange(
       .where(eq(transactions.id, row.id));
     updated += 1;
   }
+
+  if (updated > 0) invalidateTursoReadCache();
 
   return {
     matched: matchedRows.length,

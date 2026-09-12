@@ -28,7 +28,6 @@ export const SEED_TAXONOMY: SeedTaxonomyNode[] = [
   { facet: "section", name: "Health" },
   { facet: "section", name: "Income" },
   { facet: "section", name: "Transfers" },
-  { facet: "section", name: "Travel" },
 
   {
     facet: "category",
@@ -343,9 +342,8 @@ export const SEED_TAXONOMY: SeedTaxonomyNode[] = [
   { facet: "type", name: "Subscription" },
   { facet: "type", name: "Statement" },
   { facet: "type", name: "Fee" },
-  { facet: "type", name: "AI" },
-  { facet: "type", name: "Web Development" },
-  { facet: "type", name: "Developer Tools" },
+  { facet: "tag", name: "AI" },
+  { facet: "tag", name: "Dev Tools" },
 
   { facet: "store_type", name: "Cafe" },
   { facet: "store_type", name: "Restaurant" },

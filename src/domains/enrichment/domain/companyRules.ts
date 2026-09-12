@@ -99,6 +99,10 @@ export const COMPANY_ALIASES: Record<string, CompanyRef> = {
   "annual fee rebate": { slug: "cibc", displayName: "CIBC" },
   cibc: { slug: "cibc", displayName: "CIBC" },
   "cibc loans": { slug: "cibc", displayName: "CIBC" },
+  "cibc car loan": { slug: "cibc", displayName: "CIBC" },
+  "cibc line of credit": { slug: "cibc", displayName: "CIBC" },
+  "cibc loc": { slug: "cibc", displayName: "CIBC" },
+  "plc interest charged": { slug: "cibc", displayName: "CIBC" },
   "cibc global money transfer": { slug: "cibc", displayName: "CIBC" },
   "global money transfer": { slug: "cibc", displayName: "CIBC" },
   "tax refund": {
@@ -146,6 +150,7 @@ export const COMPANY_RULES: CompanyRule[] = [
       /remise\s+en\s+argent/i,
       /cash\s*advances?/i,
       /interest\s*reversal/i,
+      /plc\s+interest\s+charged/i,
       /service\s*charge/i,
       /annual\s*fee/i,
       /\bcibc\b/i,

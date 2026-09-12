@@ -1,4 +1,10 @@
-import { integer, real, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import {
+  integer,
+  real,
+  sqliteTable,
+  text,
+  uniqueIndex,
+} from "drizzle-orm/sqlite-core";
 
 /**
  * Flat ledger (CSV-shaped) + small lookup tables for filterable dims.
@@ -35,6 +41,54 @@ export const accounts = sqliteTable("accounts", {
     .notNull()
     .$defaultFn(() => new Date()),
 });
+
+/** 1:1 synthetic amortizing loan contract (e.g. CIBC car loan). */
+export const loanTerms = sqliteTable("loan_terms", {
+  accountId: text("account_id")
+    .primaryKey()
+    .references(() => accounts.accountId, { onDelete: "cascade" }),
+  principalStart: real("principal_start").notNull(),
+  annualRate: real("annual_rate").notNull(),
+  aprDisclosed: real("apr_disclosed"),
+  paymentAmount: real("payment_amount").notNull(),
+  paymentFrequency: text("payment_frequency").notNull().default("biweekly"),
+  paymentCount: integer("payment_count").notNull(),
+  firstPaymentDate: text("first_payment_date").notNull(),
+  maturityDate: text("maturity_date").notNull(),
+  matchMerchantClean: text("match_merchant_clean").notNull(),
+  matchAmount: real("match_amount").notNull(),
+  principalOverride: real("principal_override"),
+  overrideAsOf: text("override_as_of"),
+  vehicleLabel: text("vehicle_label"),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+});
+
+/** Schedule steps linked to optional PAD transactions. */
+export const loanPaymentLinks = sqliteTable(
+  "loan_payment_links",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    loanAccountId: text("loan_account_id")
+      .notNull()
+      .references(() => accounts.accountId, { onDelete: "cascade" }),
+    paymentNumber: integer("payment_number").notNull(),
+    scheduledDate: text("scheduled_date").notNull(),
+    postedDate: text("posted_date"),
+    transactionId: text("transaction_id"),
+    paymentAmount: real("payment_amount").notNull(),
+    interestPortion: real("interest_portion").notNull(),
+    principalPortion: real("principal_portion").notNull(),
+    balanceAfter: real("balance_after").notNull(),
+  },
+  (table) => [
+    uniqueIndex("loan_payment_links_account_number_uidx").on(
+      table.loanAccountId,
+      table.paymentNumber,
+    ),
+  ],
+);
 
 export const statementUploads = sqliteTable("statement_uploads", {
   id: integer("id").primaryKey({ autoIncrement: true }),
@@ -75,6 +129,16 @@ export const statementUploads = sqliteTable("statement_uploads", {
 export const transactionSections = sqliteTable("transaction_sections", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   name: text("name").notNull().unique(),
+});
+
+/** Filter lookup: Spread (Income + Needs / Wants / Savings) */
+export const transactionSpreads = sqliteTable("transaction_spreads", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  name: text("name").notNull().unique(),
+  /** Target share of net pay: 50 / 30 / 20 */
+  targetPercent: integer("target_percent").notNull(),
+  description: text("description").notNull(),
+  sortOrder: integer("sort_order").notNull().default(0),
 });
 
 /** Filter lookup: Category */
@@ -136,6 +200,8 @@ export const transactions = sqliteTable(
     section: text("section"),
     category: text("category"),
     subcategory: text("subcategory"),
+    /** 50/30/20 bucket: Needs / Wants / Savings */
+    spread: text("spread"),
     transactionType: text("transaction_type"),
     /** CSV `Type` column */
     kind: text("kind"),
@@ -151,6 +217,9 @@ export const transactions = sqliteTable(
       () => transactionSubcategories.id,
       { onDelete: "set null" },
     ),
+    spreadId: integer("spread_id").references(() => transactionSpreads.id, {
+      onDelete: "set null",
+    }),
     transactionTypeId: integer("transaction_type_id").references(
       () => transactionTypes.id,
       { onDelete: "set null" },

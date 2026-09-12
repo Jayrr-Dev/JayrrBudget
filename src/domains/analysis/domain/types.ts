@@ -82,6 +82,17 @@ export type AnalysisTagBreakdown = {
   otherByPeriod: Record<string, AnalysisRankedItem[]>;
 };
 
+/** Dimensional Type (Fee / Subscription / …) from transactions.kind. */
+export type AnalysisTypeBreakdown = {
+  type: string;
+  spend: number;
+  merchants: AnalysisRankedItem[];
+  merchantSeries: AnalysisCategorySeries[];
+  merchantMonthly: Array<Record<string, string | number>>;
+  other: AnalysisRankedItem[];
+  otherByPeriod: Record<string, AnalysisRankedItem[]>;
+};
+
 export type AnalysisMerchantBreakdown = {
   merchant: string;
   spend: number;
@@ -90,6 +101,13 @@ export type AnalysisMerchantBreakdown = {
   typeMonthly: Array<Record<string, string | number>>;
   other: AnalysisRankedItem[];
   otherByPeriod: Record<string, AnalysisRankedItem[]>;
+};
+
+export type AnalysisTxnPeek = {
+  date: string;
+  description: string;
+  /** Positive = debit (outflow). Negative = credit (inflow/refund). */
+  amount: number;
 };
 
 export type AnalysisData = {
@@ -101,6 +119,12 @@ export type AnalysisData = {
   transactionCount: number;
   summary: AnalysisSummary;
   monthly: AnalysisMonthlyPoint[];
+  /**
+   * Lifestyle spend/refund peeks for leaderboard (i) popovers.
+   * Keys: `section:…`, `category:…`, `subcategory:…`, `merchant:…`,
+   * `tag:…`, `type:…`, `spread:…`, plus nested `subcategory-merchant:Sub::Merchant`, etc.
+   */
+  txnPeeks: Record<string, AnalysisTxnPeek[]>;
   sections: AnalysisRankedItem[];
   /** Rows keyed by series key for stacked section charts. */
   sectionMonthly: Array<Record<string, string | number>>;
@@ -115,6 +139,16 @@ export type AnalysisData = {
   categoriesBySection: Record<string, AnalysisRankedItem[]>;
   /** Top vendors inside each category. */
   merchantsByCategory: Record<string, AnalysisRankedItem[]>;
+  /** Spread: Income + Needs / Wants / Savings */
+  spreads: AnalysisRankedItem[];
+  spreadMonthly: Array<Record<string, string | number>>;
+  spreadSeries: AnalysisCategorySeries[];
+  spreadOther: AnalysisRankedItem[];
+  spreadOtherByPeriod: Record<string, AnalysisRankedItem[]>;
+  /** Spread bars split by category. */
+  spreadStacked: AnalysisStackedRankedBreakdown;
+  merchantsBySpread: Record<string, AnalysisRankedItem[]>;
+  categoriesBySpread: Record<string, AnalysisRankedItem[]>;
   subcategories: AnalysisRankedItem[];
   /** Rows keyed by series key for stacked subcategory charts. */
   subcategoryMonthly: Array<Record<string, string | number>>;
@@ -135,6 +169,15 @@ export type AnalysisData = {
   /** Tag bars split by category. */
   tagStacked: AnalysisStackedRankedBreakdown;
   tagBreakdowns: AnalysisTagBreakdown[];
+  /** Dimensional Type labels from transactions.kind (Fee, Subscription, …). */
+  types: AnalysisRankedItem[];
+  typeMonthly: Array<Record<string, string | number>>;
+  typeSeries: AnalysisCategorySeries[];
+  typeOther: AnalysisRankedItem[];
+  typeOtherByPeriod: Record<string, AnalysisRankedItem[]>;
+  typeCategoryByPeriod: Record<string, Record<string, AnalysisRankedItem[]>>;
+  typeStacked: AnalysisStackedRankedBreakdown;
+  typeBreakdowns: AnalysisTypeBreakdown[];
   categories: AnalysisRankedItem[];
   /** Rows keyed by series key for stacked charts. */
   categoryMonthly: Array<Record<string, string | number>>;
@@ -156,4 +199,14 @@ export type AnalysisData = {
   channels: AnalysisRankedItem[];
   weekdays: AnalysisRankedItem[];
   accounts: AnalysisRankedItem[];
+  /** Weekday vs weekend lifestyle spend. */
+  weekendSplit: AnalysisRankedItem[];
+  /** Purchase size buckets (Under $15, $15–50, …). */
+  ticketSizes: AnalysisRankedItem[];
+  /** Calendar day-of-month (1–31) lifestyle spend. */
+  dayOfMonth: AnalysisRankedItem[];
+  /** High-frequency merchants sorted by swipe count. */
+  habitMerchants: AnalysisRankedItem[];
+  /** Country from Transaction Locations. */
+  countries: AnalysisRankedItem[];
 };

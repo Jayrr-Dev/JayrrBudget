@@ -8,6 +8,39 @@ export type DashboardAccount = {
   currentBalance: number | null;
   availableBalance: number | null;
   isoCurrencyCode: string | null;
+  /** Present when account has loan_terms (synthetic amortizing loan). */
+  loanSummary?: DashboardLoanSummary | null;
+};
+
+export type DashboardLoanPayment = {
+  paymentNumber: number;
+  scheduledDate: string;
+  postedDate: string | null;
+  transactionId: string | null;
+  paymentAmount: number;
+  interestPortion: number;
+  principalPortion: number;
+  balanceAfter: number;
+  assumed: boolean;
+};
+
+export type DashboardLoanSummary = {
+  remainingPrincipal: number;
+  nextPaymentDate: string | null;
+  progressPct: number;
+  annualRate: number;
+  aprDisclosed: number | null;
+  paymentAmount: number;
+  paymentCount: number;
+  paymentsApplied: number;
+  remainingPayments: number;
+  firstPaymentDate: string;
+  maturityDate: string;
+  vehicleLabel: string | null;
+  paidInterest: number;
+  paidPrincipal: number;
+  matchMerchantClean: string;
+  payments: DashboardLoanPayment[];
 };
 
 export type DashboardTransaction = {
@@ -20,6 +53,8 @@ export type DashboardTransaction = {
   brandName: string | null;
   sectionName: string | null;
   categoryName: string | null;
+  /** 50/30/20: Needs / Wants / Savings */
+  spreadName: string | null;
   transactionTypeName: string | null;
   typeName: string | null;
   typeNames: string[];

@@ -1,4 +1,3 @@
-import { z } from "zod";
 import {
   categoryMatchKey,
   countCategoryDetailedUsage,
@@ -9,6 +8,7 @@ import { generateObjectWithFallback } from "@/shared/ai/openRouter";
 import { getDb } from "@/shared/db";
 import { transactions } from "@/shared/db/schema";
 import { eq, sql } from "drizzle-orm";
+import { z } from "zod";
 
 const consolidateSchema = z.object({
   merges: z
@@ -46,7 +46,7 @@ async function generateConsolidateMerges(labels: string[]) {
     '- "online retail" + "online marketplaces" → keep the clearer existing label',
     '- "payment" vs "credit card payment" → merge if both mean card payments',
     "Do NOT merge unrelated ideas (pharmacies ≠ insurance).",
-    'Do NOT merge "SaaS" or "Developer Tools" into "Online Retail" / shopping labels.',
+    'Do NOT merge "SaaS" or "Dev Tools" into "Online Retail" / shopping labels.',
     "Prefer the more specific common label already in the list when choosing `to`.",
     "Use Title Case for `to`. `from` must match an input label exactly.",
     "Return only real merges. Skip labels that are already unique.",
@@ -112,7 +112,11 @@ async function applyDetailedMerges(
   merges: Array<{ from: string; to: string }>,
 ) {
   if (merges.length === 0) {
-    return { mergesApplied: 0, rowsUpdated: 0, merges: [] as Array<{ from: string; to: string }> };
+    return {
+      mergesApplied: 0,
+      rowsUpdated: 0,
+      merges: [] as Array<{ from: string; to: string }>,
+    };
   }
 
   const map = new Map<string, string>();

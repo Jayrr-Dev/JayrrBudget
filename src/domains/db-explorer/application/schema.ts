@@ -1,19 +1,3 @@
-import { count, getTableColumns } from "drizzle-orm";
-import { getTableConfig } from "drizzle-orm/sqlite-core";
-import type { SQLiteTable } from "drizzle-orm/sqlite-core";
-import {
-  accounts,
-  appModules,
-  institutions,
-  statementUploads,
-  transactionCategories,
-  transactionKinds,
-  transactionSections,
-  transactionSubcategories,
-  transactionTypes,
-  transactions,
-} from "@/shared/db/schema";
-import { getDb } from "@/shared/db";
 import { columnHelp } from "@/domains/db-explorer/domain/columnHelp";
 import type {
   DbColumnInfo,
@@ -22,13 +6,35 @@ import type {
   DbTableBrowseResult,
   DbTableInfo,
 } from "@/domains/db-explorer/domain/types";
+import { getDb } from "@/shared/db";
+import {
+  accounts,
+  appModules,
+  institutions,
+  loanPaymentLinks,
+  loanTerms,
+  statementUploads,
+  transactionCategories,
+  transactionKinds,
+  transactionSections,
+  transactionSpreads,
+  transactionSubcategories,
+  transactionTypes,
+  transactions,
+} from "@/shared/db/schema";
+import { count, getTableColumns } from "drizzle-orm";
+import type { SQLiteTable } from "drizzle-orm/sqlite-core";
+import { getTableConfig } from "drizzle-orm/sqlite-core";
 
 const TABLE_MAP = {
   institutions,
   accounts,
+  loan_terms: loanTerms,
+  loan_payment_links: loanPaymentLinks,
   statement_uploads: statementUploads,
   transactions,
   transaction_sections: transactionSections,
+  transaction_spreads: transactionSpreads,
   transaction_categories: transactionCategories,
   transaction_subcategories: transactionSubcategories,
   transaction_types: transactionTypes,
@@ -93,7 +99,9 @@ export async function getSchemaGraph(): Promise<DbSchemaGraph> {
 
   for (const name of TABLE_NAMES) {
     const table = TABLE_MAP[name];
-    const [{ value: rowCount }] = await db.select({ value: count() }).from(table);
+    const [{ value: rowCount }] = await db
+      .select({ value: count() })
+      .from(table);
 
     tables.push({
       name,

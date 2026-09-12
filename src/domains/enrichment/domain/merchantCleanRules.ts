@@ -98,7 +98,11 @@ export const MERCHANT_CLEAN_ALIASES: Record<string, string> = {
   "service charge": "Service Charge",
   "global money transfer": "CIBC Global Money Transfer",
   "cibc global money transfer": "CIBC Global Money Transfer",
-  "cibc loans": "CIBC Loans",
+  "cibc loans": "CIBC Car Loan",
+  "cibc car loan": "CIBC Car Loan",
+  "plc interest charged": "CIBC Line of Credit",
+  "cibc line of credit": "CIBC Line of Credit",
+  "cibc loc": "CIBC Line of Credit",
 };
 
 /**

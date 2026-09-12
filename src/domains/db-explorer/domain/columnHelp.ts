@@ -11,6 +11,8 @@ export const TABLE_HELP: Record<string, string> = {
     "One flat ledger row matching the transactions CSV. Money, dates, categories on the same row.",
   transaction_sections:
     "Filter lookup for Section (Lifestyle, Transport, Travel, …).",
+  transaction_spreads:
+    "Filter lookup for 50/30/20 Spread (Needs / Wants / Savings).",
   transaction_categories:
     "Filter lookup for Category (Fuel, Flights, Shopping, …).",
   transaction_subcategories:
@@ -84,6 +86,8 @@ export const COLUMN_HELP: Record<string, Record<string, string>> = {
     source: "Where the row came from, usually statement.",
     statement_upload_id: "Which PDF created or updated this row.",
     updated_at: "When we last changed this ledger row.",
+    spread: "50/30/20 bucket name: Needs, Wants, or Savings.",
+    spread_id: "FK to transaction_spreads for type-safe Spread filters.",
   },
   transaction_amounts: {
     transaction_id: "Which ledger row this money belongs to.",
@@ -231,6 +235,13 @@ export const COLUMN_HELP: Record<string, Record<string, string>> = {
     is_core: "Core modules cannot be turned off.",
     created_at: "When this module row was created.",
     updated_at: "When we last changed it.",
+  },
+  transaction_spreads: {
+    id: "This Spread label's number.",
+    name: "Spread label: Needs, Wants, or Savings.",
+    target_percent: "Target share of net pay: 50, 30, or 20.",
+    description: "What this bucket covers in plain language.",
+    sort_order: "Display order in filters and charts.",
   },
 };
 

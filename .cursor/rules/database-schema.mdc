@@ -15,18 +15,23 @@ One `transactions` row = one CSV line. Filter dims also live in small lookup tab
 ## Tables
 
 1. `institutions` → `accounts` (account list / balances)
-2. `statement_uploads` (upload job metadata; optional)
-3. `transactions` — flat ledger matching the transactions CSV
-4. Filter lookups:
+2. `loan_terms` (1:1 synthetic amortizing loan contract) + `loan_payment_links` (schedule steps ↔ optional PAD txn)
+3. `statement_uploads` (upload job metadata; optional)
+4. `transactions` — flat ledger matching the transactions CSV
+5. Filter lookups:
    - `transaction_sections`
+   - `transaction_spreads` (50/30/20: Needs / Wants / Savings)
    - `transaction_categories` (optional `section_id`)
    - `transaction_subcategories` (optional `category_id`)
    - `transaction_types` (income / transfers / expenses)
    - `transaction_kinds` (CSV `Type`: Fee, Subscription, …)
-5. `app_modules` — UI module registry
+6. `app_modules` — UI module registry
 
 ## Agent rules
 
 - Do **not** reintroduce atom tables (`transaction_amounts`, `transaction_labels`, `taxonomy_nodes`, …)
 - Rebuild/import: `npx tsx scripts/rebuild-flat-transactions.ts --run`
+- Spread backfill: `npx tsx scripts/backfill-spreads.ts`
+- Car loan seed/refresh: `npx tsx scripts/seed-cibc-car-loan.ts --run`, `npx tsx scripts/refresh-loan-balances.ts --run`
+- Merchant merge for car PAD: `npx tsx scripts/merge-cibc-car-loan-merchants.ts --run`
 - Live DB is Turso only (`.env.local`)

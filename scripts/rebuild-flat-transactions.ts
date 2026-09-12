@@ -12,6 +12,10 @@ import { createClient, type Client } from "@libsql/client";
 import { createReadStream } from "node:fs";
 import { parse } from "csv-parse";
 import path from "node:path";
+import {
+  classifySpread,
+  SPREAD_DEFINITIONS,
+} from "../src/domains/transactions/domain/spreads";
 
 const APPLY = process.argv.includes("--run");
 const csvArgIdx = process.argv.indexOf("--csv");
@@ -37,6 +41,7 @@ const DROP_TABLES = [
   "bank_history_files",
   "transactions",
   "transaction_sections",
+  "transaction_spreads",
   "transaction_categories",
   "transaction_subcategories",
   "transaction_types",
@@ -148,6 +153,15 @@ async function main() {
     )
   `);
   await db.execute(`
+    CREATE TABLE transaction_spreads (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL UNIQUE,
+      target_percent INTEGER NOT NULL,
+      description TEXT NOT NULL,
+      sort_order INTEGER NOT NULL DEFAULT 0
+    )
+  `);
+  await db.execute(`
     CREATE TABLE transactions (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       transaction_id TEXT NOT NULL UNIQUE,
@@ -164,11 +178,13 @@ async function main() {
       section TEXT,
       category TEXT,
       subcategory TEXT,
+      spread TEXT,
       transaction_type TEXT,
       kind TEXT,
       section_id INTEGER REFERENCES transaction_sections(id) ON DELETE SET NULL,
       category_id INTEGER REFERENCES transaction_categories(id) ON DELETE SET NULL,
       subcategory_id INTEGER REFERENCES transaction_subcategories(id) ON DELETE SET NULL,
+      spread_id INTEGER REFERENCES transaction_spreads(id) ON DELETE SET NULL,
       transaction_type_id INTEGER REFERENCES transaction_types(id) ON DELETE SET NULL,
       kind_id INTEGER REFERENCES transaction_kinds(id) ON DELETE SET NULL,
       category_primary TEXT,
@@ -197,13 +213,29 @@ async function main() {
   await db.execute(
     `CREATE UNIQUE INDEX IF NOT EXISTS transactions_transaction_id_uidx ON transactions(transaction_id)`,
   );
-  console.log("  created lookup + transactions");
+
+  for (const def of SPREAD_DEFINITIONS) {
+    await db.execute({
+      sql: `INSERT INTO transaction_spreads (name, target_percent, description, sort_order)
+            VALUES (?, ?, ?, ?)`,
+      args: [def.name, def.targetPercent, def.description, def.sortOrder],
+    });
+  }
+  console.log("  created lookup + transactions + seeded spreads");
 
   const sectionCache = new Map<string, number>();
   const categoryCache = new Map<string, number>();
   const subCache = new Map<string, number>();
   const typeCache = new Map<string, number>();
   const kindCache = new Map<string, number>();
+  const spreadCache = new Map<string, number>();
+  for (const def of SPREAD_DEFINITIONS) {
+    const row = await db.execute({
+      sql: `SELECT id FROM transaction_spreads WHERE name = ? LIMIT 1`,
+      args: [def.name],
+    });
+    spreadCache.set(def.name.toLowerCase(), Number(row.rows[0]!.id));
+  }
   const accountNames = new Map<string, string>();
 
   console.log("\n--- import CSV ---");
@@ -279,6 +311,10 @@ async function main() {
       const kindId = kind
         ? await ensureLookup(db, "transaction_kinds", kind, kindCache)
         : null;
+      const spread = classifySpread({ section, category, subcategory });
+      const spreadId = spread
+        ? (spreadCache.get(spread.toLowerCase()) ?? null)
+        : null;
 
       const amount =
         parseMoney(row.Amount) ??
@@ -296,16 +332,16 @@ async function main() {
         sql: `INSERT INTO transactions (
           transaction_id, posted, authorized, account, account_id, description,
           original_description, merchant_clean, merchant_name, company, brand,
-          section, category, subcategory, transaction_type, kind,
-          section_id, category_id, subcategory_id, transaction_type_id, kind_id,
+          section, category, subcategory, spread, transaction_type, kind,
+          section_id, category_id, subcategory_id, spread_id, transaction_type_id, kind_id,
           category_primary, category_detailed, category_confidence, tags, channel,
           txn_code, bank_direction, cross_check, enrichment, source, pending,
           city, region, country, website, logo_url, currency, debit, credit, amount, updated_at
         ) VALUES (
           ?,?,?,?,?,?,
           ?,?,?,?,?,
-          ?,?,?,?,?,
-          ?,?,?,?,?,
+          ?,?,?,?,?,?,
+          ?,?,?,?,?,?,
           ?,?,?,?,?,
           ?,?,?,?,?,?,
           ?,?,?,?,?,?,?,?,?,?
@@ -325,11 +361,13 @@ async function main() {
           section,
           category,
           subcategory,
+          spread,
           txnType,
           kind,
           sectionId,
           categoryId,
           subcategoryId,
+          spreadId,
           transactionTypeId,
           kindId,
           emptyToNull(row.categoryPrimary),

@@ -10,6 +10,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import type { DashboardData } from "@/domains/dashboard/domain/types";
 import { queryKeys } from "@/domains/dashboard/queries/query-keys";
 
 type AddTagResponse =
@@ -43,11 +44,25 @@ export function TagsCell({ transactionId, tags }: TagsCellProps) {
 
   const mutation = useMutation({
     mutationFn: postAddTag,
-    onSuccess: async () => {
+    onSuccess: (result) => {
       setTag("");
       setError(null);
       setOpen(false);
-      await queryClient.invalidateQueries({ queryKey: queryKeys.dashboard });
+      // Patch caches from the write response — avoid refetching stale Turso reads.
+      queryClient.setQueriesData<DashboardData>(
+        { queryKey: queryKeys.dashboard },
+        (current) => {
+          if (!current?.transactions) return current;
+          return {
+            ...current,
+            transactions: current.transactions.map((txn) =>
+              txn.transactionId === transactionId
+                ? { ...txn, tagNames: result.tags }
+                : txn,
+            ),
+          };
+        },
+      );
     },
     onError: (err) => {
       setError(err instanceof Error ? err.message : "Failed");

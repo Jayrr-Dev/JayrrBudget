@@ -1,33 +1,20 @@
 "use client";
 
-import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
-import {
-  Area,
-  AreaChart,
-  Bar,
-  BarChart,
-  CartesianGrid,
-  Cell,
-  LabelList,
-  Pie,
-  PieChart,
-  ReferenceLine,
-  XAxis,
-  YAxis,
-  type PieLabelRenderProps,
-} from "recharts";
+import { badgeVariants } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   ChartContainer,
   ChartTooltip,
   ChartTooltipContent,
   type ChartConfig,
 } from "@/components/ui/chart";
-import { IconInfoCircle } from "@tabler/icons-react";
-import { ChevronDownIcon } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+  ScrollTopX,
   Table,
   TableBody,
   TableCell,
@@ -36,13 +23,13 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { formatMoney } from "@/domains/dashboard/domain/money";
 import {
   ANALYSIS_PERIOD_META,
   ANALYSIS_PERIOD_OPTIONS,
@@ -51,18 +38,44 @@ import type {
   AnalysisCategoryBreakdown,
   AnalysisCategorySeries,
   AnalysisData,
+  AnalysisMerchantBreakdown,
   AnalysisPeriod,
   AnalysisRange,
   AnalysisRankedItem,
   AnalysisStackedRankedBreakdown,
   AnalysisSubcategoryBreakdown,
   AnalysisTagBreakdown,
-  AnalysisMerchantBreakdown,
+  AnalysisTxnPeek,
+  AnalysisTypeBreakdown,
 } from "@/domains/analysis/domain/types";
 import { fetchAnalysis } from "@/domains/analysis/queries/fetchAnalysis";
 import { analysisQueryKeys } from "@/domains/analysis/queries/query-keys";
+import { formatMoney } from "@/domains/dashboard/domain/money";
 import { cn } from "@/lib/utils";
-import { formatDisplayDate } from "@/shared/lib/format-date";
+import {
+  formatDisplayDate,
+  formatShortDisplayDate,
+} from "@/shared/lib/format-date";
+import { IconInfoCircle } from "@tabler/icons-react";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { ChevronDownIcon } from "lucide-react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  Area,
+  AreaChart,
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  Label,
+  LabelList,
+  Pie,
+  PieChart,
+  ReferenceLine,
+  XAxis,
+  YAxis,
+  type PieLabelRenderProps,
+} from "recharts";
 
 const RANGE_OPTIONS: { value: AnalysisRange; label: string }[] = [
   { value: "1w", label: "1 week" },
@@ -75,23 +88,34 @@ const RANGE_OPTIONS: { value: AnalysisRange; label: string }[] = [
 
 type AnalysisTab =
   | "main"
-  | "summary"
   | "sections"
+  | "spreads"
   | "categories"
   | "subcategories"
   | "tags"
+  | "types"
   | "merchants"
   | "patterns";
 
 const TAB_OPTIONS: { value: AnalysisTab; label: string }[] = [
   { value: "main", label: "Main" },
-  { value: "summary", label: "Summary" },
   { value: "sections", label: "Sections" },
   { value: "categories", label: "Categories" },
   { value: "subcategories", label: "Subcategories" },
   { value: "tags", label: "Tags" },
+  { value: "types", label: "Types" },
+  { value: "spreads", label: "Spreads" },
   { value: "merchants", label: "Merchants" },
   { value: "patterns", label: "Patterns" },
+];
+
+type FacetPane = "visualizations" | "summary" | "average" | "range";
+
+const FACET_PANE_OPTIONS: { value: FacetPane; label: string }[] = [
+  { value: "visualizations", label: "Visualizations" },
+  { value: "summary", label: "Summary" },
+  { value: "average", label: "Average" },
+  { value: "range", label: "High Mid Low" },
 ];
 
 const TREND_CONFIG = {
@@ -121,14 +145,15 @@ const TREND_LEGEND_COLORS = [
   TREND_CONFIG.transfers.color,
 ];
 
+/** Light fills with enough chroma for readable stacked bands + dark callouts. */
 const CATEGORY_COLORS = [
-  "oklch(0.55 0.12 35)",
-  "oklch(0.5 0.1 220)",
-  "oklch(0.52 0.1 155)",
-  "oklch(0.58 0.11 85)",
-  "oklch(0.48 0.09 300)",
-  "oklch(0.45 0.08 20)",
-  "oklch(0.42 0.04 250)",
+  "oklch(0.78 0.16 35)",
+  "oklch(0.76 0.14 220)",
+  "oklch(0.77 0.14 155)",
+  "oklch(0.8 0.15 85)",
+  "oklch(0.76 0.13 300)",
+  "oklch(0.77 0.13 20)",
+  "oklch(0.74 0.08 250)",
 ];
 
 type BreakdownView = "bar" | "pie";
@@ -138,11 +163,19 @@ const BREAKDOWN_VIEW_OPTIONS: { value: BreakdownView; label: string }[] = [
   { value: "pie", label: "Pie" },
 ];
 
+/** Distance between cursor/active point and the tooltip card (Recharts default is 10). */
+const CHART_TOOLTIP_OFFSET = 28;
+
+/** Keep the card inside the chart; Recharts flips left/up when it would overflow. */
+const CHART_TOOLTIP_ESCAPE = { x: false, y: false } as const;
+
 function useAnalysis(range: AnalysisRange, period: AnalysisPeriod) {
   return useQuery({
     queryKey: analysisQueryKeys.range(range, period),
     queryFn: () => fetchAnalysis(range, period),
     placeholderData: keepPreviousData,
+    staleTime: 5 * 60_000,
+    refetchOnWindowFocus: false,
   });
 }
 
@@ -167,7 +200,11 @@ function InfoTip({ label, children }: { label: string; children: string }) {
           <IconInfoCircle className="size-4" />
         </button>
       </TooltipTrigger>
-      <TooltipContent side="top" sideOffset={6} className="max-w-xs text-left leading-snug">
+      <TooltipContent
+        side="top"
+        sideOffset={6}
+        className="max-w-xs text-left leading-snug"
+      >
         {children}
       </TooltipContent>
     </Tooltip>
@@ -299,6 +336,37 @@ function formatPiePercent(percent: number) {
 const PIE_LABEL_RADIAN = Math.PI / 180;
 const PIE_LABEL_INK = "#171717";
 
+function PieCenterTotal({
+  viewBox,
+  total,
+  currency,
+}: {
+  viewBox?: { cx?: number; cy?: number };
+  total: number;
+  currency: string;
+}) {
+  const cx = viewBox?.cx;
+  const cy = viewBox?.cy;
+  if (cx == null || cy == null) return null;
+
+  return (
+    <text textAnchor="middle" dominantBaseline="central">
+      <tspan x={cx} y={cy - 12} fill="var(--muted-foreground)" fontSize={12}>
+        Total
+      </tspan>
+      <tspan
+        x={cx}
+        y={cy + 10}
+        fill="var(--foreground)"
+        fontSize={16}
+        fontWeight={600}
+      >
+        {formatMoney(total, currency)}
+      </tspan>
+    </text>
+  );
+}
+
 function PieDonutLabel({
   cx = 0,
   cy = 0,
@@ -318,11 +386,14 @@ function PieDonutLabel({
   const sliceName = String(name);
   const label = formatPiePercent(share);
   const inside = share >= 0.08;
-  const showName = sliceName.length > 0 && (inside ? share >= 0.12 : share >= 0.04);
+  const showName =
+    sliceName.length > 0 && (inside ? share >= 0.12 : share >= 0.04);
 
   if (inside) {
-    const x = Number(cx) + ((Number(innerRadius) + Number(outerRadius)) / 2) * cos;
-    const y = Number(cy) + ((Number(innerRadius) + Number(outerRadius)) / 2) * sin;
+    const x =
+      Number(cx) + ((Number(innerRadius) + Number(outerRadius)) / 2) * cos;
+    const y =
+      Number(cy) + ((Number(innerRadius) + Number(outerRadius)) / 2) * sin;
     if (!showName) {
       return (
         <text
@@ -424,10 +495,17 @@ function nextVisibleKeys(allKeys: string[], current: string[], key: string) {
   return allKeys.filter((item) => selected.includes(item) || item === key);
 }
 
-function nextVisibleKeySet(allKeys: string[], current: string[], next: string[]) {
+function nextVisibleKeySet(
+  allKeys: string[],
+  current: string[],
+  next: string[],
+) {
   if (next.length === 0) return allKeys;
   const selected = activeVisibleKeys(allKeys, current);
-  if (selected.length === allKeys.length && next.length === allKeys.length - 1) {
+  if (
+    selected.length === allKeys.length &&
+    next.length === allKeys.length - 1
+  ) {
     const isolated = allKeys.find((key) => !next.includes(key));
     return isolated ? [isolated] : next;
   }
@@ -462,7 +540,7 @@ function TimeSeriesTable({
 
   if (rows.length === 0) return null;
   return (
-    <div className="max-h-72 overflow-auto rounded-lg border border-[var(--border)]">
+    <div className="max-h-72 overflow-x-hidden overflow-y-auto rounded-lg border border-[var(--border)]">
       <Table>
         <TableHeader>
           <TableRow>
@@ -596,6 +674,8 @@ function TrendChart({
             }
           />
           <ChartTooltip
+            offset={CHART_TOOLTIP_OFFSET}
+            allowEscapeViewBox={CHART_TOOLTIP_ESCAPE}
             content={
               <ChartTooltipContent
                 hideLabel={false}
@@ -604,9 +684,12 @@ function TrendChart({
                   const label =
                     TREND_CONFIG[name as keyof typeof TREND_CONFIG]?.label ??
                     String(name);
-                  const month = (item?.payload as { month?: string } | undefined)
-                    ?.month;
-                  const source = data.monthly.find((row) => row.month === month);
+                  const month = (
+                    item?.payload as { month?: string } | undefined
+                  )?.month;
+                  const source = data.monthly.find(
+                    (row) => row.month === month,
+                  );
                   const money = source
                     ? Number(source[name as keyof typeof source] ?? 0)
                     : Number(value);
@@ -684,6 +767,45 @@ function TrendChart({
   );
 }
 
+function MixTooltipRow({
+  label,
+  percent,
+  money,
+  muted = false,
+  indent = false,
+  strong = false,
+  showShare,
+  rule = false,
+}: {
+  label: string;
+  percent?: string;
+  money: string;
+  muted?: boolean;
+  indent?: boolean;
+  strong?: boolean;
+  showShare: boolean;
+  rule?: boolean;
+}) {
+  const tone = `${muted ? "text-muted-foreground" : ""} ${
+    strong ? "font-medium" : ""
+  } ${rule ? "border-t border-border/50 pt-1.5" : ""}`;
+  return (
+    <>
+      <span className={`min-w-0 truncate ${indent ? "pl-2" : ""} ${tone}`}>
+        {label}
+      </span>
+      {showShare ? (
+        <span className={`text-right font-mono tabular-nums ${tone}`}>
+          {percent ?? ""}
+        </span>
+      ) : null}
+      <span className={`text-right font-mono tabular-nums ${tone}`}>
+        {money}
+      </span>
+    </>
+  );
+}
+
 function MixTooltip({
   active,
   payload,
@@ -695,6 +817,9 @@ function MixTooltip({
   scale = "standard",
   sourceRow,
   shareOf,
+  /** When set (pie chart), all % use this base instead of the hovered slice. */
+  shareBase,
+  overlapping = false,
   interactive = true,
 }: {
   active?: boolean;
@@ -707,6 +832,9 @@ function MixTooltip({
   scale?: MixScale;
   sourceRow?: Record<string, string | number>;
   shareOf?: number;
+  shareBase?: number;
+  /** Tags (and similar) can mark the same row — do not sum series as unique spend. */
+  overlapping?: boolean;
   interactive?: boolean;
 }) {
   if (!active || !payload?.length) return null;
@@ -720,83 +848,111 @@ function MixTooltip({
         return sum + Math.max(0, Number(sourceRow[key] ?? 0));
       }, 0)
     : rows.reduce((sum, item) => sum + Number(item.value), 0);
+  const percentBase =
+    shareBase != null && shareBase > 0 ? shareBase : moneyTotal;
   const leftovers = otherItems ?? [];
-  const formatLine = (money: number, relativeValue?: number) => {
+  const shareFor = (money: number, relativeValue?: number) => {
+    if (!showShare) return undefined;
     if (isRelative && relativeValue != null) {
-      return `${formatPercent(relativeValue)} (${formatMoney(money, currency)})`;
+      return formatPercent(relativeValue);
     }
-    if (showShare && moneyTotal > 0) {
-      return `${formatPercent((money / moneyTotal) * 100)} (${formatMoney(money, currency)})`;
+    if (percentBase > 0) {
+      return formatPercent((money / percentBase) * 100);
     }
-    return formatMoney(money, currency);
+    return undefined;
   };
+
+  type TooltipLine = {
+    key: string;
+    label: string;
+    percent?: string;
+    money: string;
+    muted?: boolean;
+    indent?: boolean;
+    strong?: boolean;
+  };
+
+  const lines: TooltipLine[] = [];
+  for (const item of rows) {
+    const key = String(item.dataKey ?? item.name ?? "");
+    const name = String(config[key]?.label ?? key);
+    const extras =
+      key === "other" && leftovers.length > 0
+        ? leftovers
+        : (nestedItems?.[key] ?? []);
+    const money = sourceRow ? Number(sourceRow[key] ?? 0) : Number(item.value);
+    lines.push({
+      key,
+      label: name,
+      percent: shareFor(money, Number(item.value)),
+      money: formatMoney(money, currency),
+      strong: true,
+    });
+    for (const entry of extras) {
+      lines.push({
+        key: `${key}:${entry.name}`,
+        label: entry.name,
+        percent: shareFor(entry.spend),
+        money: formatMoney(entry.spend, currency),
+        muted: true,
+        indent: true,
+      });
+    }
+  }
+
+  const gridClass = showShare
+    ? "grid grid-cols-[minmax(0,1fr)_3.25rem_max-content] items-baseline gap-x-3 gap-y-0.5"
+    : "grid grid-cols-[minmax(0,1fr)_max-content] items-baseline gap-x-3 gap-y-0.5";
+  const totalShare =
+    shareOf != null ? formatPercent(shareOf) : showShare ? "100.0%" : undefined;
+
   return (
     <div
-      className={`${interactive ? "pointer-events-auto" : "pointer-events-none"} animate-in fade-in-0 grid min-w-40 max-w-72 gap-1.5 rounded-lg border border-border/50 bg-background px-2.5 py-1.5 text-xs shadow-xl duration-200`}
+      className={`${interactive ? "pointer-events-auto" : "pointer-events-none"} animate-in fade-in-0 grid min-w-56 max-w-80 gap-1.5 rounded-lg border border-border/50 bg-background px-2.5 py-1.5 text-xs shadow-xl duration-200`}
     >
       <div className="font-medium">
         {String(label ?? "")}
         {shareOf != null ? ` · ${formatPercent(shareOf)}` : ""}
       </div>
-      {rows.map((item) => {
-        const key = String(item.dataKey ?? item.name ?? "");
-        const name = config[key]?.label ?? key;
-        const extras =
-          key === "other" && leftovers.length > 0
-            ? leftovers
-            : (nestedItems?.[key] ?? []);
-        const money = sourceRow
-          ? Number(sourceRow[key] ?? 0)
-          : Number(item.value);
-        return (
-          <div key={key} className="grid gap-0.5">
-            <div className="flex justify-between gap-4">
-              <span className="text-muted-foreground">{name}</span>
-              <span className="font-mono font-medium tabular-nums">
-                {formatLine(money, Number(item.value))}
-              </span>
-            </div>
-            {extras.length > 0 ? (
-              <div
-                className="max-h-56 overflow-y-auto overscroll-contain pr-1"
-                onWheel={(event) => event.stopPropagation()}
-              >
-                {extras.map((entry) => (
-                  <div
-                    key={entry.name}
-                    className="flex justify-between gap-4 pl-2 text-muted-foreground"
-                  >
-                    <span className="truncate">{entry.name}</span>
-                    <span className="font-mono tabular-nums">
-                      {showShare && moneyTotal > 0
-                        ? `${formatPercent((entry.spend / moneyTotal) * 100)} (${formatMoney(entry.spend, currency)})`
-                        : formatMoney(entry.spend, currency)}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            ) : null}
-          </div>
-        );
-      })}
-      <div className="flex justify-between gap-4 border-t border-border/50 pt-1.5 font-medium">
-        <span>Total</span>
-        <span className="font-mono tabular-nums">
-          {showShare
-            ? `100.0% (${formatMoney(moneyTotal, currency)})`
-            : formatMoney(moneyTotal, currency)}
-        </span>
+      <div
+        className={`${gridClass} max-h-64 overflow-y-auto overscroll-contain pr-0.5`}
+        onWheel={(event) => event.stopPropagation()}
+      >
+        {lines.map((line) => (
+          <MixTooltipRow
+            key={line.key}
+            label={line.label}
+            percent={line.percent}
+            money={line.money}
+            muted={line.muted}
+            indent={line.indent}
+            strong={line.strong}
+            showShare={showShare}
+          />
+        ))}
+        {overlapping ? null : (
+          <MixTooltipRow
+            label="Total"
+            percent={totalShare}
+            money={formatMoney(moneyTotal, currency)}
+            strong
+            showShare={showShare}
+            rule
+          />
+        )}
       </div>
+      {overlapping && rows.length > 1 ? (
+        <div className="border-t border-border/50 pt-1.5 text-[10px] leading-snug text-muted-foreground">
+          Tags can mark the same transactions — amounts are not additive.
+        </div>
+      ) : null}
     </div>
   );
 }
 
 function useVisibleSeries(series: AnalysisCategorySeries[]) {
   const seriesKey = series.map((item) => item.key).join("\0");
-  const allKeys = useMemo(
-    () => series.map((item) => item.key),
-    [seriesKey],
-  );
+  const allKeys = useMemo(() => series.map((item) => item.key), [seriesKey]);
   const [selected, setSelected] = useState<string[]>(allKeys);
   const selectedKeySet = useMemo(() => new Set(selected), [selected]);
   const visibleKeys = useMemo(() => {
@@ -845,7 +1001,7 @@ function SeriesLegend({
       }
       spacing={1}
       aria-label="Filter series"
-      className="flex h-auto w-full max-w-full flex-wrap items-center justify-center bg-transparent"
+      className="flex h-auto w-full max-w-full flex-wrap items-center justify-start gap-1 bg-transparent"
     >
       {series.map((item, index) => (
         <ToggleGroupItem
@@ -853,21 +1009,41 @@ function SeriesLegend({
           value={item.key}
           size="sm"
           aria-label={`Toggle ${item.label}`}
-          className="h-auto max-w-[10rem] whitespace-normal bg-transparent px-1.5 py-0.5 text-xs font-normal shadow-none hover:bg-[var(--muted)] data-[state=off]:opacity-40 data-[state=on]:bg-transparent"
+          className={cn(
+            badgeVariants({ variant: "outline" }),
+            "min-w-0 rounded-sm px-2 font-normal shadow-none hover:bg-muted data-[state=off]:opacity-40 data-[state=on]:bg-transparent data-[state=on]:text-foreground",
+          )}
         >
           <span
-            className="h-2 w-2 shrink-0 rounded-[2px]"
+            className="size-2 shrink-0 rounded-[2px]"
             style={{
               backgroundColor: colors[index % colors.length],
             }}
           />
-          <span className="leading-snug break-words text-[var(--foreground)]">
+          <span className="whitespace-nowrap text-foreground">
             {item.label}
           </span>
         </ToggleGroupItem>
       ))}
     </ToggleGroup>
   );
+}
+
+/** Prefer alternating sides, but keep text inside the plot (no left/right clip). */
+function calloutSide(
+  x: number,
+  itemIndex: number,
+  label: string,
+  peakIndex: number,
+  pointCount: number,
+): 1 | -1 {
+  const approxWidth = Math.min(Math.max(label.length * 6.2, 40), 160);
+  const preferred: 1 | -1 = itemIndex % 2 === 0 ? 1 : -1;
+  // Area LabelList has no parentViewBox; first points sit just right of the Y-axis.
+  if (peakIndex <= 1 || x < approxWidth + 72) return 1;
+  if (peakIndex >= Math.max(pointCount - 2, 0)) return -1;
+  if (preferred === -1 && x < approxWidth + 96) return 1;
+  return preferred;
 }
 
 function AreaCallout({
@@ -886,8 +1062,19 @@ function AreaCallout({
   const anchorX = x;
   const anchorY = y + 7;
   const labelX = x + side * 32;
-  const labelY = y - 10 - lift;
-  const textAnchor = side === 1 ? "start" : "end";
+  // Keep labels inside the SVG — peaks at 100% sit near y≈margin.top.
+  const minLabelY = 12;
+  const desiredLabelY = y - 10 - lift;
+  const placeBelow = desiredLabelY < minLabelY && y < 40;
+  const labelY = placeBelow
+    ? Math.min(y + 18 + lift, y + 36)
+    : Math.max(minLabelY, desiredLabelY);
+  const padX = 0;
+  const boxH = 16;
+  const boxW = Math.min(Math.max(label.length * 6.4 + padX * 2, 40), 160);
+  const textX = labelX + side * 5;
+  const boxX = side === 1 ? textX - padX : textX - boxW + padX;
+  const boxY = labelY - boxH / 2;
 
   return (
     <g style={{ pointerEvents: "none" }}>
@@ -895,21 +1082,16 @@ function AreaCallout({
         x1={anchorX}
         y1={anchorY}
         x2={labelX}
-        y2={labelY + 2}
+        y2={labelY + (placeBelow ? -2 : 2)}
         stroke="#111"
         strokeWidth={1}
       />
       <circle cx={anchorX} cy={anchorY} r={2.25} fill="#111" />
-      <text
-        x={labelX + side * 5}
-        y={labelY}
-        textAnchor={textAnchor}
-        dominantBaseline="middle"
-        fill="#111"
-        className="text-[11px] font-medium"
-      >
-        {label}
-      </text>
+      <foreignObject x={boxX} y={boxY} width={boxW} height={boxH}>
+        <div className="flex h-full items-center justify-center rounded-md bg-[var(--background)]/55 text-center text-[11px] leading-none font-medium text-[#111] backdrop-blur-[3px]">
+          <span className="truncate">{label}</span>
+        </div>
+      </foreignObject>
     </g>
   );
 }
@@ -927,7 +1109,9 @@ function OtherBreakdownTable({
   );
   const { visibleKeys, setVisibleKeys } = useVisibleSeries(series);
   const visibleSet = useMemo(() => new Set(visibleKeys), [visibleKeys]);
-  const visibleItems = (items ?? []).filter((item) => visibleSet.has(item.name));
+  const visibleItems = (items ?? []).filter((item) =>
+    visibleSet.has(item.name),
+  );
   const total = visibleItems.reduce((sum, item) => sum + item.spend, 0);
   const allKeys = series.map((item) => item.key);
 
@@ -937,10 +1121,11 @@ function OtherBreakdownTable({
       <div>
         <p className="text-sm font-medium">Other ({visibleItems.length})</p>
         <p className="text-xs text-[var(--muted-foreground)]">
-          Last 15% of spend, rolled into Other. Click a name to hide it. Share is of this pile.
+          Last 15% of spend, rolled into Other. Click a name to hide it. Share
+          is of this pile.
         </p>
       </div>
-      <div className="max-h-72 overflow-auto rounded-lg border border-[var(--border)]">
+      <div className="max-h-72 overflow-x-hidden overflow-y-auto rounded-lg border border-[var(--border)]">
         <Table>
           <TableHeader>
             <TableRow>
@@ -1011,6 +1196,7 @@ function StackedMixChart({
   other,
   otherByPeriod,
   nestedByPeriod,
+  overlapping = false,
 }: {
   title: string;
   info: string;
@@ -1023,11 +1209,45 @@ function StackedMixChart({
   other?: AnalysisRankedItem[];
   otherByPeriod?: Record<string, AnalysisRankedItem[]>;
   nestedByPeriod?: Record<string, Record<string, AnalysisRankedItem[]>>;
+  /** Multi-label series (tags): standard mode draws unstacked so shared rows are not double-counted. */
+  overlapping?: boolean;
 }) {
-  const { visibleKeys, visibleSeries, setVisibleKeys } = useVisibleSeries(series);
+  const { visibleKeys, visibleSeries, setVisibleKeys } =
+    useVisibleSeries(series);
   const [scale, setScale] = useState<MixScale>("standard");
   const isArea = variant === "area";
   const isRelative = isArea && scale === "relative";
+  const stackAreas = !overlapping || isRelative;
+  const chartShellRef = useRef<HTMLDivElement>(null);
+  const tooltipOpenRef = useRef(false);
+  const [tooltipForcedOff, setTooltipForcedOff] = useState(false);
+
+  useEffect(() => {
+    const dismissIfOutside = (event: PointerEvent) => {
+      if (!tooltipOpenRef.current) return;
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (chartShellRef.current?.contains(target)) return;
+      tooltipOpenRef.current = false;
+      setTooltipForcedOff(true);
+    };
+    const dismissOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || !tooltipOpenRef.current) return;
+      tooltipOpenRef.current = false;
+      setTooltipForcedOff(true);
+    };
+    document.addEventListener("pointerdown", dismissIfOutside);
+    document.addEventListener("keydown", dismissOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", dismissIfOutside);
+      document.removeEventListener("keydown", dismissOnEscape);
+    };
+  }, []);
+
+  const markTooltipOpen = () => {
+    tooltipOpenRef.current = true;
+    setTooltipForcedOff(false);
+  };
   const chartRows = useMemo(
     () => (isRelative ? toRelativeRows(monthly, visibleKeys) : monthly),
     [isRelative, monthly, visibleKeys],
@@ -1065,6 +1285,9 @@ function StackedMixChart({
   const mixTooltip = (
     <ChartTooltip
       trigger="click"
+      active={tooltipForcedOff ? false : undefined}
+      offset={CHART_TOOLTIP_OFFSET}
+      allowEscapeViewBox={CHART_TOOLTIP_ESCAPE}
       wrapperStyle={{ pointerEvents: "auto", zIndex: 40 }}
       content={(props) => {
         const row = props.payload?.[0]?.payload as
@@ -1097,6 +1320,7 @@ function StackedMixChart({
             nestedItems={month ? nestedByPeriod?.[month] : undefined}
             scale={isRelative ? "relative" : "standard"}
             sourceRow={sourceRow}
+            overlapping={overlapping}
           />
         );
       }}
@@ -1115,117 +1339,156 @@ function StackedMixChart({
           </ChartActions>
         }
       />
-      <ChartContainer
-        config={config}
-        className={isArea ? "aspect-[5/2] w-full" : "aspect-[2/1] w-full"}
-        initialDimension={{ width: 640, height: isArea ? 320 : 280 }}
-      >
-        {isArea ? (
-          <AreaChart
-            data={chartRows}
-            margin={{ left: 8, right: 28, top: 28, bottom: 0 }}
-            accessibilityLayer
-          >
-            <CartesianGrid vertical={false} />
-            <XAxis
-              dataKey="label"
-              tickLine={false}
-              axisLine={false}
-              tickMargin={8}
-              minTickGap={28}
-            />
-            <YAxis
-              tickLine={false}
-              axisLine={false}
-              width={52}
-              domain={isRelative ? [0, 100] : ["auto", "auto"]}
-              tickFormatter={(value) =>
-                isRelative
-                  ? formatPercent(Number(value))
-                  : moneyTick(Number(value), currency)
-              }
-            />
-            {mixTooltip}
-            {visibleSeries.map((item) => (
-              <Area
-                key={item.key}
-                type="monotone"
-                dataKey={item.key}
-                stackId="spend"
-                stroke={`var(--color-${item.key})`}
-                fill={`var(--color-${item.key})`}
-                fillOpacity={0.92}
-                strokeWidth={1}
-                name={item.label}
-              >
-                <LabelList
-                  dataKey={item.key}
-                  content={(props) => {
-                    const peakIndex = peakIndexByKey.get(item.key) ?? -1;
-                    if (props.index !== peakIndex) return null;
-                    const row = chartRows[peakIndex];
-                    const value = Number(row?.[item.key] ?? 0);
-                    const total = visibleSeries.reduce(
-                      (sum, entry) => sum + Number(row?.[entry.key] ?? 0),
-                      0,
-                    );
-                    if (value <= 0 || total <= 0 || value / total < 0.05) {
-                      return null;
-                    }
-                    const x = Number(props.x ?? 0);
-                    const y = Number(props.y ?? 0);
-                    if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
-                    const itemIndex = visibleSeries.findIndex(
-                      (entry) => entry.key === item.key,
-                    );
-                    return (
-                      <AreaCallout
-                        x={x}
-                        y={y}
-                        label={item.label}
-                        side={itemIndex % 2 === 0 ? 1 : -1}
-                        lift={(itemIndex % 3) * 12}
-                      />
-                    );
-                  }}
-                />
-              </Area>
-            ))}
-          </AreaChart>
-        ) : (
-          <BarChart
-            data={monthly}
-            margin={{ left: 8, right: 8, top: 8, bottom: 0 }}
-            accessibilityLayer
-          >
-            <CartesianGrid vertical={false} />
-            <XAxis
-              dataKey="label"
-              tickLine={false}
-              axisLine={false}
-              tickMargin={8}
-              minTickGap={28}
-            />
-            <YAxis
-              tickLine={false}
-              axisLine={false}
-              width={52}
-              tickFormatter={(value) => moneyTick(Number(value), currency)}
-            />
-            {mixTooltip}
-            {visibleSeries.map((item) => (
-              <Bar
-                key={item.key}
-                dataKey={item.key}
-                stackId="spend"
-                fill={`var(--color-${item.key})`}
-                radius={item.key === lastKey ? [3, 3, 0, 0] : 0}
-                name={item.label}
+      <div ref={chartShellRef}>
+        <ChartContainer
+          config={config}
+          className={
+            isArea
+              ? "aspect-[5/2] w-full overflow-visible"
+              : "aspect-[2/1] w-full overflow-visible"
+          }
+          initialDimension={{ width: 640, height: isArea ? 320 : 280 }}
+        >
+          {isArea ? (
+            <AreaChart
+              data={chartRows}
+              margin={{ left: 8, right: 48, top: 44, bottom: 0 }}
+              accessibilityLayer
+              onClick={(state) => {
+                if (state?.activeTooltipIndex != null) markTooltipOpen();
+              }}
+            >
+              <CartesianGrid vertical={false} />
+              <XAxis
+                dataKey="label"
+                tickLine={false}
+                axisLine={false}
+                tickMargin={8}
+                minTickGap={28}
               />
-            ))}
-          </BarChart>
-        )}
-      </ChartContainer>
+              <YAxis
+                tickLine={false}
+                axisLine={false}
+                width={72}
+                tickMargin={6}
+                domain={isRelative ? [0, 100] : ["auto", "auto"]}
+                tickFormatter={(value) =>
+                  isRelative
+                    ? formatPercent(Number(value))
+                    : moneyTick(Number(value), currency)
+                }
+              />
+              {mixTooltip}
+              {visibleSeries.map((item) => (
+                <Area
+                  key={item.key}
+                  type="monotone"
+                  dataKey={item.key}
+                  stackId={stackAreas ? "spend" : undefined}
+                  stroke="var(--foreground)"
+                  strokeOpacity={0.72}
+                  fill={`var(--color-${item.key})`}
+                  fillOpacity={stackAreas ? 0.52 : 0.28}
+                  strokeWidth={1.75}
+                  name={item.label}
+                  dot={false}
+                  activeDot={{
+                    r: 4,
+                    fill: `oklch(from var(--color-${item.key}) 0.42 calc(c * 1.4) h)`,
+                    stroke: `oklch(from var(--color-${item.key}) 0.3 calc(c * 1.25) h)`,
+                    strokeWidth: 1,
+                  }}
+                >
+                  <LabelList
+                    dataKey={item.key}
+                    content={(props) => {
+                      const peakIndex = peakIndexByKey.get(item.key) ?? -1;
+                      if (props.index !== peakIndex) return null;
+                      const row = chartRows[peakIndex];
+                      const value = Number(row?.[item.key] ?? 0);
+                      const peakBaseline = stackAreas
+                        ? visibleSeries.reduce(
+                            (sum, entry) => sum + Number(row?.[entry.key] ?? 0),
+                            0,
+                          )
+                        : Math.max(
+                            ...visibleSeries.map((entry) =>
+                              Number(row?.[entry.key] ?? 0),
+                            ),
+                            0,
+                          );
+                      if (
+                        value <= 0 ||
+                        peakBaseline <= 0 ||
+                        value / peakBaseline < 0.05
+                      ) {
+                        return null;
+                      }
+                      const x = Number(props.x ?? 0);
+                      const y = Number(props.y ?? 0);
+                      if (!Number.isFinite(x) || !Number.isFinite(y))
+                        return null;
+                      const itemIndex = visibleSeries.findIndex(
+                        (entry) => entry.key === item.key,
+                      );
+                      return (
+                        <AreaCallout
+                          x={x}
+                          y={y}
+                          label={item.label}
+                          side={calloutSide(
+                            x,
+                            itemIndex,
+                            item.label,
+                            peakIndex,
+                            chartRows.length,
+                          )}
+                          lift={(itemIndex % 3) * 12}
+                        />
+                      );
+                    }}
+                  />
+                </Area>
+              ))}
+            </AreaChart>
+          ) : (
+            <BarChart
+              data={monthly}
+              margin={{ left: 8, right: 8, top: 8, bottom: 0 }}
+              accessibilityLayer
+              onClick={(state) => {
+                if (state?.activeTooltipIndex != null) markTooltipOpen();
+              }}
+            >
+              <CartesianGrid vertical={false} />
+              <XAxis
+                dataKey="label"
+                tickLine={false}
+                axisLine={false}
+                tickMargin={8}
+                minTickGap={28}
+              />
+              <YAxis
+                tickLine={false}
+                axisLine={false}
+                width={52}
+                tickFormatter={(value) => moneyTick(Number(value), currency)}
+              />
+              {mixTooltip}
+              {visibleSeries.map((item) => (
+                <Bar
+                  key={item.key}
+                  dataKey={item.key}
+                  stackId="spend"
+                  fill={`var(--color-${item.key})`}
+                  radius={item.key === lastKey ? [3, 3, 0, 0] : 0}
+                  name={item.label}
+                />
+              ))}
+            </BarChart>
+          )}
+        </ChartContainer>
+      </div>
       <SeriesLegend
         series={series}
         value={visibleKeys}
@@ -1278,7 +1541,7 @@ function stackedRowTooltip(
           dataKey: item.key,
           name: item.label,
         }))
-        : (props.payload ?? []).map((item) => ({
+      : (props.payload ?? []).map((item) => ({
           value: Number(item.value),
           dataKey:
             typeof item.dataKey === "string" || typeof item.dataKey === "number"
@@ -1300,6 +1563,7 @@ function stackedRowTooltip(
       currency={currency}
       otherItems={otherByRow?.[rowName]}
       shareOf={shareOf}
+      shareBase={pieTotal && pieTotal > 0 ? pieTotal : undefined}
       interactive={interactive}
     />
   );
@@ -1326,7 +1590,8 @@ function StackedRankedBarChart({
   otherByRow?: Record<string, AnalysisRankedItem[]>;
   showViewToggle?: boolean;
 }) {
-  const { visibleKeys, visibleSeries, setVisibleKeys } = useVisibleSeries(series);
+  const { visibleKeys, visibleSeries, setVisibleKeys } =
+    useVisibleSeries(series);
   const [view, setView] = useState<BreakdownView>("bar");
   const config = useMemo(() => {
     const next: ChartConfig = {};
@@ -1384,6 +1649,8 @@ function StackedRankedBarChart({
             margin={{ top: 16, right: 96, bottom: 16, left: 96 }}
           >
             <ChartTooltip
+              offset={CHART_TOOLTIP_OFFSET}
+              allowEscapeViewBox={CHART_TOOLTIP_ESCAPE}
               wrapperStyle={{ pointerEvents: "none" }}
               content={(props) =>
                 stackedRowTooltip(
@@ -1419,6 +1686,16 @@ function StackedRankedBarChart({
               label={PieDonutLabel}
               labelLine={false}
             >
+              <Label
+                position="center"
+                content={({ viewBox }) => (
+                  <PieCenterTotal
+                    viewBox={viewBox as { cx?: number; cy?: number }}
+                    total={pieTotal}
+                    currency={currency}
+                  />
+                )}
+              />
               {pieRows.map((row, index) => (
                 <Cell
                   key={String(row.name)}
@@ -1436,7 +1713,10 @@ function StackedRankedBarChart({
             ["--rows" as string]: rows.length,
             height: `calc(2.4rem * ${Math.max(rows.length, 1)} + 4rem)`,
           }}
-          initialDimension={{ width: 640, height: Math.max(420, rows.length * 38) }}
+          initialDimension={{
+            width: 640,
+            height: Math.max(420, rows.length * 38),
+          }}
         >
           <BarChart
             data={rows}
@@ -1461,6 +1741,8 @@ function StackedRankedBarChart({
               tickFormatter={(value) => moneyTick(Number(value), currency)}
             />
             <ChartTooltip
+              offset={CHART_TOOLTIP_OFFSET}
+              allowEscapeViewBox={CHART_TOOLTIP_ESCAPE}
               content={(props) =>
                 stackedRowTooltip(props, config, currency, otherByRow)
               }
@@ -1692,6 +1974,8 @@ function RankedBarChart({
             tickFormatter={(value) => moneyTick(Number(value), currency)}
           />
           <ChartTooltip
+            offset={CHART_TOOLTIP_OFFSET}
+            allowEscapeViewBox={CHART_TOOLTIP_ESCAPE}
             content={
               <ChartTooltipContent
                 hideLabel
@@ -1705,7 +1989,10 @@ function RankedBarChart({
             radius={[0, 4, 4, 0]}
             name="spend"
             onClick={(data) => {
-              const row = data as { name?: string; payload?: { name?: string } };
+              const row = data as {
+                name?: string;
+                payload?: { name?: string };
+              };
               const name = row.payload?.name ?? row.name;
               if (onSelect && typeof name === "string") onSelect(name);
             }}
@@ -1754,6 +2041,8 @@ function WeekdayChart({ data }: { data: AnalysisData }) {
             tickFormatter={(value) => moneyTick(Number(value), data.currency)}
           />
           <ChartTooltip
+            offset={CHART_TOOLTIP_OFFSET}
+            allowEscapeViewBox={CHART_TOOLTIP_ESCAPE}
             content={
               <ChartTooltipContent
                 formatter={(value) => formatMoney(Number(value), data.currency)}
@@ -1765,6 +2054,166 @@ function WeekdayChart({ data }: { data: AnalysisData }) {
             fill="var(--color-spend)"
             radius={[4, 4, 0, 0]}
             name="spend"
+          />
+        </BarChart>
+      </ChartContainer>
+    </section>
+  );
+}
+
+function DayOfMonthChart({ data }: { data: AnalysisData }) {
+  const rows = data.dayOfMonth ?? [];
+  const config = {
+    spend: { label: "Spend", color: "oklch(0.55 0.12 35)" },
+  } satisfies ChartConfig;
+
+  if (rows.every((row) => row.spend === 0)) return null;
+
+  return (
+    <section className="space-y-3 rounded-xl border border-[var(--border)] bg-[var(--background)] p-4 sm:p-5">
+      <ChartTitle
+        title="Spend by day of month"
+        info="Calendar day (1–31) of the authorized date when present. Spikes often line up with rent, loans, or payday shopping."
+      />
+      <ChartContainer
+        config={config}
+        className="aspect-[2.4/1] w-full"
+        initialDimension={{ width: 640, height: 240 }}
+      >
+        <BarChart
+          data={rows}
+          margin={{ left: 8, right: 8, top: 8, bottom: 0 }}
+          accessibilityLayer
+        >
+          <CartesianGrid vertical={false} />
+          <XAxis
+            dataKey="name"
+            tickLine={false}
+            axisLine={false}
+            tickMargin={8}
+            interval={1}
+          />
+          <YAxis
+            tickLine={false}
+            axisLine={false}
+            width={52}
+            tickFormatter={(value) => moneyTick(Number(value), data.currency)}
+          />
+          <ChartTooltip
+            offset={CHART_TOOLTIP_OFFSET}
+            allowEscapeViewBox={CHART_TOOLTIP_ESCAPE}
+            content={
+              <ChartTooltipContent
+                labelFormatter={(label) => `Day ${label}`}
+                formatter={(value, _name, item) => {
+                  const count = Number(
+                    (item?.payload as AnalysisRankedItem | undefined)?.count ??
+                      0,
+                  );
+                  return (
+                    <div className="flex w-full flex-col gap-0.5">
+                      <span>{formatMoney(Number(value), data.currency)}</span>
+                      <span className="text-[var(--muted-foreground)]">
+                        {count} txn{count === 1 ? "" : "s"}
+                      </span>
+                    </div>
+                  );
+                }}
+              />
+            }
+          />
+          <Bar
+            dataKey="spend"
+            fill="var(--color-spend)"
+            radius={[3, 3, 0, 0]}
+            name="spend"
+          />
+        </BarChart>
+      </ChartContainer>
+    </section>
+  );
+}
+
+function FrequencyBarChart({
+  title,
+  info,
+  rows,
+  currency,
+  color = "oklch(0.5 0.1 220)",
+  labelWidth = 140,
+}: {
+  title: string;
+  info: string;
+  rows: AnalysisRankedItem[];
+  currency: string;
+  color?: string;
+  labelWidth?: number;
+}) {
+  const config = {
+    count: { label: "Trips", color },
+  } satisfies ChartConfig;
+
+  if (rows.length === 0) return null;
+
+  return (
+    <section className="space-y-3 rounded-xl border border-[var(--border)] bg-[var(--background)] p-4 sm:p-5">
+      <ChartTitle title={title} info={info} />
+      <ChartContainer
+        config={config}
+        className="aspect-auto h-[min(28rem,calc(2.2rem*var(--rows)+3rem))] w-full"
+        style={{ ["--rows" as string]: rows.length }}
+        initialDimension={{ width: 640, height: 360 }}
+      >
+        <BarChart
+          data={rows}
+          layout="vertical"
+          margin={{ left: 8, right: 16, top: 8, bottom: 0 }}
+          accessibilityLayer
+        >
+          <CartesianGrid horizontal={false} />
+          <YAxis
+            dataKey="name"
+            type="category"
+            width={labelWidth}
+            tickLine={false}
+            axisLine={false}
+            tickMargin={8}
+          />
+          <XAxis
+            type="number"
+            tickLine={false}
+            axisLine={false}
+            allowDecimals={false}
+          />
+          <ChartTooltip
+            offset={CHART_TOOLTIP_OFFSET}
+            allowEscapeViewBox={CHART_TOOLTIP_ESCAPE}
+            content={
+              <ChartTooltipContent
+                formatter={(value, _name, item) => {
+                  const spend = Number(
+                    (item?.payload as AnalysisRankedItem | undefined)?.spend ??
+                      0,
+                  );
+                  return (
+                    <div className="flex w-full flex-col gap-0.5">
+                      <span>
+                        {Number(value)} trip{Number(value) === 1 ? "" : "s"}
+                      </span>
+                      <span className="text-[var(--muted-foreground)]">
+                        {formatMoney(spend, currency)}
+                      </span>
+                    </div>
+                  );
+                }}
+              />
+            }
+          />
+          <Bar
+            dataKey="count"
+            fill="var(--color-count)"
+            radius={[0, 4, 4, 0]}
+            name="count"
           />
         </BarChart>
       </ChartContainer>
@@ -1832,6 +2281,8 @@ function NetLineChart({
           />
           <ReferenceLine y={0} stroke="#171717" strokeOpacity={0.28} />
           <ChartTooltip
+            offset={CHART_TOOLTIP_OFFSET}
+            allowEscapeViewBox={CHART_TOOLTIP_ESCAPE}
             content={
               <ChartTooltipContent
                 formatter={(value) => formatMoney(Number(value), data.currency)}
@@ -1891,7 +2342,9 @@ function CategoryDrilldown({
             key={item.category}
             type="button"
             size="sm"
-            variant={item.category === breakdown.category ? "default" : "outline"}
+            variant={
+              item.category === breakdown.category ? "default" : "outline"
+            }
             onClick={() => onSelect(item.category)}
           >
             {item.category}
@@ -1945,20 +2398,57 @@ function SegmentedControl<T extends string>({
     <div
       role="group"
       aria-label={ariaLabel}
-      className="flex flex-wrap gap-1 rounded-lg border border-[var(--border)] p-1"
+      className="inline-flex max-w-full flex-wrap gap-0.5 rounded-lg border border-[var(--border)] p-0.5"
     >
       {options.map((option) => (
         <Button
           key={option.value}
           type="button"
-          size="sm"
+          size="xs"
           variant={value === option.value ? "default" : "ghost"}
-          className={cn(value === option.value && "pointer-events-none")}
+          className={cn(
+            "px-2 font-normal",
+            value === option.value && "pointer-events-none",
+          )}
           onClick={() => onChange(option.value)}
         >
           {option.label}
         </Button>
       ))}
+    </div>
+  );
+}
+
+function FacetPaneShell({
+  pane,
+  onPaneChange,
+  visualizations,
+  summary,
+  average,
+  range,
+}: {
+  pane: FacetPane;
+  onPaneChange: (value: FacetPane) => void;
+  visualizations: ReactNode;
+  summary: ReactNode;
+  average: ReactNode;
+  range: ReactNode;
+}) {
+  return (
+    <div className="space-y-3">
+      <SegmentedControl
+        ariaLabel="Facet view"
+        options={FACET_PANE_OPTIONS}
+        value={pane}
+        onChange={onPaneChange}
+      />
+      {pane === "visualizations"
+        ? visualizations
+        : pane === "summary"
+          ? summary
+          : pane === "average"
+            ? average
+            : range}
     </div>
   );
 }
@@ -1993,6 +2483,101 @@ function vendorsRecord(
   return next;
 }
 
+function txnPeekKey(facet: string, ...parts: string[]) {
+  return `${facet}:${parts.join("::")}`;
+}
+
+function peeksFor(
+  data: AnalysisData,
+  facet: string,
+  ...parts: string[]
+): AnalysisTxnPeek[] {
+  return data.txnPeeks?.[txnPeekKey(facet, ...parts)] ?? [];
+}
+
+function RowTxnsPopover({
+  label,
+  currency,
+  transactions,
+}: {
+  label: string;
+  currency: string;
+  transactions: AnalysisTxnPeek[];
+}) {
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          aria-label={`Transactions for ${label}`}
+          onClick={(event) => event.stopPropagation()}
+          onPointerDown={(event) => event.stopPropagation()}
+          className="inline-flex size-5 shrink-0 items-center justify-center rounded-md text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]"
+        >
+          <IconInfoCircle className="size-3.5" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        align="end"
+        side="left"
+        className="w-[min(32rem,calc(100vw-2rem))] gap-0 overflow-hidden p-0"
+      >
+        <div className="border-b border-[var(--border)] px-3 py-2 text-sm font-medium">
+          {label}
+          <span className="ml-2 font-normal text-[var(--muted-foreground)]">
+            {transactions.length}
+            {transactions.length === 120 ? "+" : ""} txn
+            {transactions.length === 1 ? "" : "s"}
+          </span>
+        </div>
+        <div className="max-h-72 overflow-auto">
+          {transactions.length === 0 ? (
+            <p className="px-3 py-4 text-sm text-[var(--muted-foreground)]">
+              No transactions in this range.
+            </p>
+          ) : (
+            <table className="w-full text-sm">
+              <tbody>
+                {transactions.map((txn, index) => {
+                  const isCredit = txn.amount < 0;
+                  return (
+                    <tr
+                      key={`${txn.date}-${txn.description}-${index}`}
+                      className="border-b border-[var(--border)] last:border-b-0"
+                    >
+                      <td className="whitespace-nowrap px-3 py-1.5 align-top tabular-nums text-[var(--muted-foreground)]">
+                        {formatShortDisplayDate(txn.date)}
+                      </td>
+                      <td className="max-w-[12rem] truncate px-2 py-1.5 align-top text-[var(--foreground)]">
+                        {txn.description}
+                      </td>
+                      <td className="whitespace-nowrap px-2 py-1.5 text-right align-top font-mono tabular-nums">
+                        {formatMoney(Math.abs(txn.amount), currency)}
+                      </td>
+                      <td className="px-3 py-1.5 text-right align-top">
+                        <span
+                          className={`text-xs font-medium tabular-nums ${
+                            isCredit
+                              ? "text-[var(--foreground)]"
+                              : "text-[var(--muted-foreground)]"
+                          }`}
+                          aria-label={isCredit ? "Credit" : "Debit"}
+                        >
+                          {isCredit ? "CR" : "DR"}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 function LeaderboardTable({
   title,
   info,
@@ -2001,6 +2586,8 @@ function LeaderboardTable({
   currency,
   totalSpend,
   vendorsByRow,
+  transactionsForRow,
+  transactionsForVendor,
 }: {
   title: string;
   info: string;
@@ -2009,72 +2596,123 @@ function LeaderboardTable({
   currency: string;
   totalSpend: number;
   vendorsByRow?: Record<string, AnalysisRankedItem[]>;
+  transactionsForRow?: (rowName: string) => AnalysisTxnPeek[];
+  transactionsForVendor?: (
+    rowName: string,
+    vendorName: string,
+  ) => AnalysisTxnPeek[];
 }) {
   const [openName, setOpenName] = useState<string | null>(null);
   const top = rows.slice(0, 10);
   const topTotal = top.reduce((sum, row) => sum + row.spend, 0);
   const topCount = top.reduce((sum, row) => sum + (row.count ?? 0), 0);
-  const grid =
-    "grid w-full grid-cols-[1.5rem_minmax(0,1fr)_9rem_4rem_3.75rem_1rem] items-center gap-x-3 px-3";
+  const canExpand = Boolean(vendorsByRow);
+  const showTxns = Boolean(transactionsForRow);
+  const gridCols = canExpand
+    ? showTxns
+      ? "grid-cols-[1.5rem_minmax(0,1fr)_9rem_4rem_3.75rem_1rem_1.25rem]"
+      : "grid-cols-[1.5rem_minmax(0,1fr)_9rem_4rem_3.75rem_1rem]"
+    : showTxns
+      ? "grid-cols-[1.5rem_minmax(0,1fr)_9rem_4rem_3.75rem_1.25rem]"
+      : "grid-cols-[1.5rem_minmax(0,1fr)_9rem_4rem_3.75rem]";
+  const grid = `grid w-full items-center gap-x-3 px-3 ${gridCols}`;
 
   return (
     <section className="space-y-3 rounded-xl border border-[var(--border)] bg-[var(--background)] p-4 sm:p-5">
       <ChartTitle title={title} info={info} />
       {top.length === 0 ? (
-        <p className="text-sm text-[var(--muted-foreground)]">Nothing in this range.</p>
+        <p className="text-sm text-[var(--muted-foreground)]">
+          Nothing in this range.
+        </p>
       ) : (
         <div className="overflow-hidden rounded-lg border border-[var(--border)]">
-          <div className={`${grid} border-b border-[var(--border)] py-2 text-xs text-[var(--muted-foreground)]`}>
+          <div
+            className={`${grid} border-b border-[var(--border)] py-2 text-xs text-[var(--muted-foreground)]`}
+          >
             <span>#</span>
             <span className="min-w-0 truncate">{nameLabel}</span>
             <span className="text-right">Spend</span>
             <span className="text-right">Count</span>
             <span className="text-right">Share</span>
-            <span />
+            {canExpand ? <span /> : null}
+            {showTxns ? <span className="sr-only">Info</span> : null}
           </div>
           <div>
             {top.map((row, index) => {
               const vendors = vendorsByRow?.[row.name] ?? [];
-              const isOpen = openName === row.name;
-              return (
-                <div key={row.name} className="not-last:border-b border-[var(--border)]">
-                  <button
-                    type="button"
-                    aria-expanded={isOpen}
-                    onClick={() =>
-                      setOpenName((current) => (current === row.name ? null : row.name))
-                    }
-                    className={`${grid} py-2.5 text-left text-sm`}
-                  >
-                    <span className="text-[var(--muted-foreground)] tabular-nums">
-                      {index + 1}
-                    </span>
-                    <span className="min-w-0 truncate font-medium">{row.name}</span>
-                    <span className="text-right font-mono text-sm tabular-nums">
-                      {formatMoney(row.spend, currency)}
-                    </span>
-                    <span className="text-right font-mono text-sm tabular-nums text-[var(--muted-foreground)]">
-                      {row.count ?? 0}
-                    </span>
-                    <span className="text-right font-mono text-sm tabular-nums text-[var(--muted-foreground)]">
-                      {formatShare(row.spend, totalSpend)}
-                    </span>
+              const isOpen = canExpand && openName === row.name;
+              const txnCell = showTxns ? (
+                <RowTxnsPopover
+                  label={row.name}
+                  currency={currency}
+                  transactions={transactionsForRow?.(row.name) ?? []}
+                />
+              ) : null;
+              const mainCells = (
+                <>
+                  <span className="text-[var(--muted-foreground)] tabular-nums">
+                    {index + 1}
+                  </span>
+                  <span className="min-w-0 truncate font-medium">
+                    {row.name}
+                  </span>
+                  <span className="text-right font-mono text-sm tabular-nums">
+                    {formatMoney(row.spend, currency)}
+                  </span>
+                  <span className="text-right font-mono text-sm tabular-nums text-[var(--muted-foreground)]">
+                    {row.count ?? 0}
+                  </span>
+                  <span className="text-right font-mono text-sm tabular-nums text-[var(--muted-foreground)]">
+                    {formatShare(row.spend, totalSpend)}
+                  </span>
+                  {canExpand ? (
                     <ChevronDownIcon
                       className={`size-4 shrink-0 text-[var(--muted-foreground)] transition-transform ${
                         isOpen ? "rotate-180" : ""
                       }`}
                     />
-                  </button>
+                  ) : null}
+                </>
+              );
+              return (
+                <div
+                  key={row.name}
+                  className="not-last:border-b border-[var(--border)]"
+                >
+                  <div className={`${grid} py-2.5 text-sm`}>
+                    {canExpand ? (
+                      <button
+                        type="button"
+                        aria-expanded={isOpen}
+                        onClick={() =>
+                          setOpenName((current) =>
+                            current === row.name ? null : row.name,
+                          )
+                        }
+                        className="contents text-left"
+                      >
+                        {mainCells}
+                      </button>
+                    ) : (
+                      mainCells
+                    )}
+                    {txnCell}
+                  </div>
                   {isOpen ? (
                     vendors.length === 0 ? (
-                      <p className={`${grid} pb-2.5 text-sm text-[var(--muted-foreground)]`}>
+                      <p
+                        className={`${grid} pb-2.5 text-sm text-[var(--muted-foreground)]`}
+                      >
                         <span />
-                        <span className="col-span-5">None in this range.</span>
+                        <span className="col-span-4">None in this range.</span>
                       </p>
                     ) : (
                       <div className="pb-2">
                         {vendors.map((vendor) => (
-                          <div key={vendor.name} className={`${grid} py-1 text-sm`}>
+                          <div
+                            key={vendor.name}
+                            className={`${grid} py-1 text-sm`}
+                          >
                             <span />
                             <span className="min-w-0 truncate text-[var(--muted-foreground)]">
                               {vendor.name}
@@ -2088,7 +2726,19 @@ function LeaderboardTable({
                             <span className="text-right font-mono tabular-nums text-[var(--muted-foreground)]">
                               {formatShare(vendor.spend, row.spend)}
                             </span>
-                            <span />
+                            {canExpand ? <span /> : null}
+                            {showTxns ? (
+                              <RowTxnsPopover
+                                label={vendor.name}
+                                currency={currency}
+                                transactions={
+                                  transactionsForVendor?.(
+                                    row.name,
+                                    vendor.name,
+                                  ) ?? []
+                                }
+                              />
+                            ) : null}
                           </div>
                         ))}
                       </div>
@@ -2098,7 +2748,9 @@ function LeaderboardTable({
               );
             })}
           </div>
-          <div className={`${grid} border-t border-[var(--border)] py-2 text-sm font-medium`}>
+          <div
+            className={`${grid} border-t border-[var(--border)] py-2 text-sm font-medium`}
+          >
             <span />
             <span className="min-w-0 truncate">Top {top.length}</span>
             <span className="text-right font-mono tabular-nums">
@@ -2110,7 +2762,8 @@ function LeaderboardTable({
             <span className="text-right font-mono tabular-nums">
               {formatShare(topTotal, totalSpend)}
             </span>
-            <span />
+            {canExpand ? <span /> : null}
+            {showTxns ? <span /> : null}
           </div>
         </div>
       )}
@@ -2118,86 +2771,339 @@ function LeaderboardTable({
   );
 }
 
-function SummaryTab({ data }: { data: AnalysisData }) {
-  const total = data.summary.totalSpend;
-  const merchantsBySubcategory = vendorsRecord(
-    (data.subcategoryBreakdowns ?? []).map((item) => ({
-      name: item.subcategory,
-      vendors: item.merchants,
-    })),
+function formatAvgCount(value: number) {
+  return value.toLocaleString(undefined, {
+    maximumFractionDigits: 1,
+    minimumFractionDigits: value > 0 && value < 10 ? 1 : 0,
+  });
+}
+
+/** High / median / low across period buckets that had spend (> 0). */
+function periodSpendRangeFromValues(values: number[]) {
+  const sorted = values.filter((value) => value > 0).sort((a, b) => a - b);
+  if (sorted.length === 0) return { high: 0, mid: 0, low: 0 };
+  const high = sorted[sorted.length - 1] ?? 0;
+  const low = sorted[0] ?? 0;
+  const midAt = Math.floor(sorted.length / 2);
+  const mid =
+    sorted.length % 2 === 0
+      ? ((sorted[midAt - 1] ?? 0) + (sorted[midAt] ?? 0)) / 2
+      : (sorted[midAt] ?? 0);
+  return { high, mid, low };
+}
+
+function periodSpendRange(
+  monthly: Array<Record<string, string | number>>,
+  key: string,
+) {
+  return periodSpendRangeFromValues(
+    monthly.map((row) => Number(row[key] ?? 0)),
   );
-  const merchantsByTag = vendorsRecord(
-    (data.tagBreakdowns ?? []).map((item) => ({
-      name: item.tag,
-      vendors: item.merchants,
-    })),
+}
+
+function periodSpendRangeFromOther(
+  otherByPeriod: Record<string, AnalysisRankedItem[]> | undefined,
+  name: string,
+) {
+  if (!otherByPeriod) return { high: 0, mid: 0, low: 0 };
+  return periodSpendRangeFromValues(
+    Object.values(otherByPeriod).map(
+      (items) => items.find((item) => item.name === name)?.spend ?? 0,
+    ),
   );
-  const splitsByMerchant = vendorsRecord(
-    (data.merchantBreakdowns ?? []).map((item) => ({
-      name: item.merchant,
-      vendors: item.types,
-    })),
-  );
+}
+
+function seriesKeyForLabel(name: string, series: AnalysisCategorySeries[]) {
+  return series.find((item) => item.label === name)?.key;
+}
+
+/** High / mid / low spend across header range period buckets. */
+function RangeLeaderboardTable({
+  title,
+  info,
+  nameLabel,
+  rows,
+  series,
+  monthly,
+  currency,
+  otherByPeriod,
+  transactionsForRow,
+}: {
+  title: string;
+  info: string;
+  nameLabel: string;
+  rows: AnalysisRankedItem[];
+  series: AnalysisCategorySeries[];
+  monthly: Array<Record<string, string | number>>;
+  currency: string;
+  otherByPeriod?: Record<string, AnalysisRankedItem[]>;
+  transactionsForRow?: (rowName: string) => AnalysisTxnPeek[];
+}) {
+  const showTxns = Boolean(transactionsForRow);
+  const top = useMemo(() => {
+    return rows
+      .map((row) => {
+        const key = seriesKeyForLabel(row.name, series);
+        const stats = key
+          ? periodSpendRange(monthly, key)
+          : periodSpendRangeFromOther(otherByPeriod, row.name);
+        return { name: row.name, spend: row.spend, ...stats };
+      })
+      .filter((row) => row.high > 0)
+      .sort((a, b) => b.high - a.high || b.spend - a.spend)
+      .slice(0, 10);
+  }, [rows, series, monthly, otherByPeriod]);
+
+  const grid = showTxns
+    ? "grid w-fit max-w-full grid-cols-[1.5rem_minmax(7rem,14rem)_7.25rem_7.25rem_7.25rem_1.25rem] items-center gap-x-4 px-3"
+    : "grid w-fit max-w-full grid-cols-[1.5rem_minmax(7rem,14rem)_7.25rem_7.25rem_7.25rem] items-center gap-x-4 px-3";
+
   return (
-    <div className="grid gap-6 lg:grid-cols-2">
-      <LeaderboardTable
-        title="Top sections"
-        info="Biggest taxonomy sections by lifestyle spend. Click a row to see the vendors inside."
-        nameLabel="Section"
-        rows={data.sections}
-        currency={data.currency}
-        totalSpend={total}
-        vendorsByRow={data.merchantsBySection}
-      />
-      <LeaderboardTable
-        title="Top categories"
-        info="Biggest categories by lifestyle spend. Click a row to see the vendors inside."
-        nameLabel="Category"
-        rows={data.categories}
-        currency={data.currency}
-        totalSpend={total}
-        vendorsByRow={data.merchantsByCategory}
-      />
-      <LeaderboardTable
-        title="Top subcategories"
-        info="Biggest subcategories by lifestyle spend. Click a row to see the vendors inside."
-        nameLabel="Subcategory"
-        rows={data.subcategories}
-        currency={data.currency}
-        totalSpend={total}
-        vendorsByRow={merchantsBySubcategory}
-      />
-      <LeaderboardTable
-        title="Top tags"
-        info="Biggest tags by lifestyle spend. A transaction can carry more than one tag. Click a row to see the vendors inside."
-        nameLabel="Tag"
-        rows={data.tags}
-        currency={data.currency}
-        totalSpend={total}
-        vendorsByRow={merchantsByTag}
-      />
-      <LeaderboardTable
-        title="Top merchants"
-        info="Biggest Merchant clean names by lifestyle spend. Click a row to see the subcategories inside."
-        nameLabel="Merchant"
-        rows={data.merchants}
-        currency={data.currency}
-        totalSpend={total}
-        vendorsByRow={splitsByMerchant}
-      />
-      {data.sections.map((section) => (
-        <LeaderboardTable
-          key={section.name}
-          title={`Top ${section.name} categories`}
-          info={`Biggest categories inside ${section.name}. Share is of that section. Click a row to see the vendors inside.`}
-          nameLabel="Category"
-          rows={data.categoriesBySection?.[section.name] ?? []}
-          currency={data.currency}
-          totalSpend={section.spend}
-          vendorsByRow={data.merchantsByCategory}
-        />
-      ))}
-    </div>
+    <section className="space-y-3 rounded-xl border border-[var(--border)] bg-[var(--background)] p-4 sm:p-5">
+      <ChartTitle title={title} info={info} />
+      {top.length === 0 ? (
+        <p className="text-sm text-[var(--muted-foreground)]">
+          Nothing in this range.
+        </p>
+      ) : (
+        <div className="w-fit max-w-full overflow-x-hidden rounded-lg border border-[var(--border)]">
+          <ScrollTopX className="rounded-lg">
+            <div
+              className={`${grid} border-b border-[var(--border)] py-2 text-xs text-[var(--muted-foreground)]`}
+            >
+              <span>#</span>
+              <span className="min-w-0 truncate">{nameLabel}</span>
+              <span className="text-right">High</span>
+              <span className="text-right">Mid</span>
+              <span className="text-right">Low</span>
+              {showTxns ? <span className="sr-only">Info</span> : null}
+            </div>
+            <div>
+              {top.map((row, index) => (
+                <div
+                  key={row.name}
+                  className={`${grid} not-last:border-b border-[var(--border)] py-2.5 text-sm`}
+                >
+                  <span className="text-[var(--muted-foreground)] tabular-nums">
+                    {index + 1}
+                  </span>
+                  <span className="min-w-0 truncate font-medium text-[var(--foreground)]">
+                    {row.name}
+                  </span>
+                  <span className="text-right font-mono tabular-nums text-[var(--foreground)]">
+                    {formatMoney(row.high, currency)}
+                  </span>
+                  <span className="text-right font-mono tabular-nums text-[var(--muted-foreground)]">
+                    {formatMoney(row.mid, currency)}
+                  </span>
+                  <span className="text-right font-mono tabular-nums text-[var(--muted-foreground)]">
+                    {formatMoney(row.low, currency)}
+                  </span>
+                  {showTxns ? (
+                    <RowTxnsPopover
+                      label={row.name}
+                      currency={currency}
+                      transactions={transactionsForRow?.(row.name) ?? []}
+                    />
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          </ScrollTopX>
+        </div>
+      )}
+    </section>
+  );
+}
+
+/** Like Summary, but spend/count divided by header period buckets. */
+function AverageLeaderboardTable({
+  title,
+  info,
+  nameLabel,
+  rows,
+  currency,
+  period,
+  periodCount,
+  vendorsByRow,
+  transactionsForRow,
+  transactionsForVendor,
+}: {
+  title: string;
+  info: string;
+  nameLabel: string;
+  rows: AnalysisRankedItem[];
+  currency: string;
+  period: AnalysisPeriod;
+  periodCount: number;
+  vendorsByRow?: Record<string, AnalysisRankedItem[]>;
+  transactionsForRow?: (rowName: string) => AnalysisTxnPeek[];
+  transactionsForVendor?: (
+    rowName: string,
+    vendorName: string,
+  ) => AnalysisTxnPeek[];
+}) {
+  const [openName, setOpenName] = useState<string | null>(null);
+  const meta = ANALYSIS_PERIOD_META[period];
+  const divisor = Math.max(periodCount, 1);
+  const top = rows.slice(0, 10);
+  const topAvgCost = top.reduce((sum, row) => sum + row.spend, 0) / divisor;
+  const topAvgCount =
+    top.reduce((sum, row) => sum + (row.count ?? 0), 0) / divisor;
+  const canExpand = Boolean(vendorsByRow);
+  const showTxns = Boolean(transactionsForRow);
+  const gridCols = canExpand
+    ? showTxns
+      ? "grid-cols-[1.5rem_minmax(0,1fr)_9rem_5.5rem_1rem_1.25rem]"
+      : "grid-cols-[1.5rem_minmax(0,1fr)_9rem_5.5rem_1rem]"
+    : showTxns
+      ? "grid-cols-[1.5rem_minmax(0,1fr)_9rem_5.5rem_1.25rem]"
+      : "grid-cols-[1.5rem_minmax(0,1fr)_9rem_5.5rem]";
+  const grid = `grid w-full items-center gap-x-3 px-3 ${gridCols}`;
+
+  return (
+    <section className="space-y-3 rounded-xl border border-[var(--border)] bg-[var(--background)] p-4 sm:p-5">
+      <ChartTitle title={title} info={info} />
+      {top.length === 0 ? (
+        <p className="text-sm text-[var(--muted-foreground)]">
+          Nothing in this range.
+        </p>
+      ) : (
+        <div className="overflow-hidden rounded-lg border border-[var(--border)]">
+          <div
+            className={`${grid} border-b border-[var(--border)] py-2 text-xs text-[var(--muted-foreground)]`}
+          >
+            <span>#</span>
+            <span className="min-w-0 truncate">{nameLabel}</span>
+            <span className="text-right">{meta.avgCostLabel}</span>
+            <span className="text-right">{meta.avgCountLabel}</span>
+            {canExpand ? <span /> : null}
+            {showTxns ? <span className="sr-only">Info</span> : null}
+          </div>
+          <div>
+            {top.map((row, index) => {
+              const vendors = vendorsByRow?.[row.name] ?? [];
+              const isOpen = canExpand && openName === row.name;
+              const avgCost = row.spend / divisor;
+              const avgCount = (row.count ?? 0) / divisor;
+              const mainCells = (
+                <>
+                  <span className="text-[var(--muted-foreground)] tabular-nums">
+                    {index + 1}
+                  </span>
+                  <span className="min-w-0 truncate font-medium">
+                    {row.name}
+                  </span>
+                  <span className="text-right font-mono text-sm tabular-nums">
+                    {formatMoney(avgCost, currency)}
+                  </span>
+                  <span className="text-right font-mono text-sm tabular-nums text-[var(--muted-foreground)]">
+                    {formatAvgCount(avgCount)}
+                  </span>
+                  {canExpand ? (
+                    <ChevronDownIcon
+                      className={`size-4 shrink-0 text-[var(--muted-foreground)] transition-transform ${
+                        isOpen ? "rotate-180" : ""
+                      }`}
+                    />
+                  ) : null}
+                </>
+              );
+              return (
+                <div
+                  key={row.name}
+                  className="not-last:border-b border-[var(--border)]"
+                >
+                  <div className={`${grid} py-2.5 text-sm`}>
+                    {canExpand ? (
+                      <button
+                        type="button"
+                        aria-expanded={isOpen}
+                        onClick={() =>
+                          setOpenName((current) =>
+                            current === row.name ? null : row.name,
+                          )
+                        }
+                        className="contents text-left"
+                      >
+                        {mainCells}
+                      </button>
+                    ) : (
+                      mainCells
+                    )}
+                    {showTxns ? (
+                      <RowTxnsPopover
+                        label={row.name}
+                        currency={currency}
+                        transactions={transactionsForRow?.(row.name) ?? []}
+                      />
+                    ) : null}
+                  </div>
+                  {isOpen ? (
+                    vendors.length === 0 ? (
+                      <p
+                        className={`${grid} pb-2.5 text-sm text-[var(--muted-foreground)]`}
+                      >
+                        <span />
+                        <span className="col-span-3">No vendors listed.</span>
+                        <span />
+                      </p>
+                    ) : (
+                      <div className="pb-2">
+                        {vendors.slice(0, 8).map((vendor) => (
+                          <div
+                            key={vendor.name}
+                            className={`${grid} py-1 text-sm`}
+                          >
+                            <span />
+                            <span className="min-w-0 truncate text-[var(--muted-foreground)]">
+                              {vendor.name}
+                            </span>
+                            <span className="text-right font-mono tabular-nums">
+                              {formatMoney(vendor.spend / divisor, currency)}
+                            </span>
+                            <span className="text-right font-mono tabular-nums text-[var(--muted-foreground)]">
+                              {formatAvgCount((vendor.count ?? 0) / divisor)}
+                            </span>
+                            {canExpand ? <span /> : null}
+                            {showTxns ? (
+                              <RowTxnsPopover
+                                label={vendor.name}
+                                currency={currency}
+                                transactions={
+                                  transactionsForVendor?.(
+                                    row.name,
+                                    vendor.name,
+                                  ) ?? []
+                                }
+                              />
+                            ) : null}
+                          </div>
+                        ))}
+                      </div>
+                    )
+                  ) : null}
+                </div>
+              );
+            })}
+          </div>
+          <div
+            className={`${grid} border-t border-[var(--border)] py-2 text-sm font-medium`}
+          >
+            <span />
+            <span className="min-w-0 truncate">Top {top.length}</span>
+            <span className="text-right font-mono tabular-nums">
+              {formatMoney(topAvgCost, currency)}
+            </span>
+            <span className="text-right font-mono tabular-nums">
+              {formatAvgCount(topAvgCount)}
+            </span>
+            {canExpand ? <span /> : null}
+            {showTxns ? <span /> : null}
+          </div>
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -2235,22 +3141,17 @@ function MainTab({
         />
         <Stat
           label={periodMeta.txnRateLabel}
-          value={
-            (data.summary.transactionsPerPeriod ?? 0).toLocaleString(
-              undefined,
-              {
-                maximumFractionDigits: 1,
-              },
-            )
-          }
+          value={(data.summary.transactionsPerPeriod ?? 0).toLocaleString(
+            undefined,
+            {
+              maximumFractionDigits: 1,
+            },
+          )}
           info={`Transaction count divided by ${periodMeta.nounPlural} in this range (same buckets as the ${periodMeta.label.toLowerCase()} charts).`}
         />
         <Stat
           label={periodMeta.incomeRateLabel}
-          value={formatMoney(
-            data.summary.incomePerPeriod ?? 0,
-            data.currency,
-          )}
+          value={formatMoney(data.summary.incomePerPeriod ?? 0, data.currency)}
           info={`Income divided by ${periodMeta.nounPlural} in this range (same buckets as the ${periodMeta.label.toLowerCase()} charts).`}
         />
         <Stat
@@ -2278,11 +3179,7 @@ function MainTab({
         />
       </section>
 
-      <TrendChart
-        data={data}
-        period={period}
-        onPeriodChange={onPeriodChange}
-      />
+      <TrendChart data={data} period={period} onPeriodChange={onPeriodChange} />
       <div className="grid gap-6 lg:grid-cols-2">
         <RankedBarChart
           title="Top spending categories"
@@ -2310,41 +3207,293 @@ function SectionsTab({
   period: AnalysisPeriod;
   onPeriodChange: (value: AnalysisPeriod) => void;
 }) {
+  const [pane, setPane] = useState<FacetPane>("visualizations");
+  const total = data.summary.totalSpend;
+  const periodCount = Math.max(data.monthly.length, 1);
+  const periodMeta = ANALYSIS_PERIOD_META[period];
+
   return (
-    <div className="space-y-6">
-      <StackedRankedBarChart
-        title="Section breakdown"
-        info="Each section bar splits by its biggest categories. The last 15% of that section rolls into Other. Hover Other to see the names."
-        rows={data.sectionStacked.rows}
-        series={data.sectionStacked.series}
-        currency={data.currency}
-        labelWidth={120}
-        otherByRow={data.sectionStacked.otherByRow}
-        showViewToggle
-      />
-      <StackedMixChart
-        title="Section mix over time"
-        info={`${ANALYSIS_PERIOD_META[period].label} lifestyle spend by taxonomy section. Named bands are the first 85%. The last 15% is Other.`}
-        series={data.sectionSeries}
-        monthly={data.sectionMonthly}
-        currency={data.currency}
-        period={period}
-        onPeriodChange={onPeriodChange}
-        variant="area"
-        other={data.sectionOther}
-        otherByPeriod={data.sectionOtherByPeriod}
-      />
-      <TaxonomyBreakdownTable
-        title="All sections"
-        info="Every section in this range with spend, share of lifestyle outflow, and top categories inside each section."
-        nameLabel="Section"
-        rows={data.sections}
-        currency={data.currency}
-        totalSpend={data.summary.totalSpend}
-        nestedLabel="Top categories"
-        stacked={data.sectionStacked}
-      />
-    </div>
+    <FacetPaneShell
+      pane={pane}
+      onPaneChange={setPane}
+      visualizations={
+        <div className="space-y-6">
+          <StackedRankedBarChart
+            title="Section breakdown"
+            info="Each section bar splits by its biggest categories. The last 15% of that section rolls into Other. Hover Other to see the names."
+            rows={data.sectionStacked.rows}
+            series={data.sectionStacked.series}
+            currency={data.currency}
+            labelWidth={120}
+            otherByRow={data.sectionStacked.otherByRow}
+            showViewToggle
+          />
+          <StackedMixChart
+            title="Section mix over time"
+            info={`${ANALYSIS_PERIOD_META[period].label} lifestyle spend by taxonomy section. Named bands are the first 85%. The last 15% is Other.`}
+            series={data.sectionSeries}
+            monthly={data.sectionMonthly}
+            currency={data.currency}
+            period={period}
+            onPeriodChange={onPeriodChange}
+            variant="area"
+            other={data.sectionOther}
+            otherByPeriod={data.sectionOtherByPeriod}
+          />
+          <TaxonomyBreakdownTable
+            title="All sections"
+            info="Every section in this range with spend, share of lifestyle outflow, and top categories inside each section."
+            nameLabel="Section"
+            rows={data.sections}
+            currency={data.currency}
+            totalSpend={total}
+            nestedLabel="Top categories"
+            stacked={data.sectionStacked}
+          />
+        </div>
+      }
+      summary={
+        <div className="grid gap-6 lg:grid-cols-2">
+          <LeaderboardTable
+            title="Top sections"
+            info="Biggest taxonomy sections by lifestyle spend. Click a row to see the vendors inside."
+            nameLabel="Section"
+            rows={data.sections}
+            currency={data.currency}
+            totalSpend={total}
+            vendorsByRow={data.merchantsBySection}
+            transactionsForRow={(name) => peeksFor(data, "section", name)}
+            transactionsForVendor={(row, vendor) =>
+              peeksFor(data, "section-merchant", row, vendor)
+            }
+          />
+          {data.sections.map((section) => (
+            <LeaderboardTable
+              key={section.name}
+              title={`Top ${section.name} categories`}
+              info={`Biggest categories inside ${section.name}. Share is of that section. Click a row to see the vendors inside.`}
+              nameLabel="Category"
+              rows={data.categoriesBySection?.[section.name] ?? []}
+              currency={data.currency}
+              totalSpend={section.spend}
+              vendorsByRow={data.merchantsByCategory}
+              transactionsForRow={(name) =>
+                peeksFor(data, "section-category", section.name, name)
+              }
+              transactionsForVendor={(row, vendor) =>
+                peeksFor(data, "category-merchant", row, vendor)
+              }
+            />
+          ))}
+        </div>
+      }
+      average={
+        <div className="grid gap-6 lg:grid-cols-2">
+          <AverageLeaderboardTable
+            title="Average by section"
+            info={`Total spend and transaction count for each section, divided by ${periodCount} ${periodMeta.nounPlural} in this range (same buckets as the ${periodMeta.label.toLowerCase()} charts).`}
+            nameLabel="Section"
+            rows={data.sections}
+            currency={data.currency}
+            period={period}
+            periodCount={periodCount}
+            vendorsByRow={data.merchantsBySection}
+            transactionsForRow={(name) => peeksFor(data, "section", name)}
+            transactionsForVendor={(row, vendor) =>
+              peeksFor(data, "section-merchant", row, vendor)
+            }
+          />
+          {data.sections.map((section) => (
+            <AverageLeaderboardTable
+              key={section.name}
+              title={`Average ${section.name} categories`}
+              info={`Category averages inside ${section.name}, per ${periodMeta.noun}.`}
+              nameLabel="Category"
+              rows={data.categoriesBySection?.[section.name] ?? []}
+              currency={data.currency}
+              period={period}
+              periodCount={periodCount}
+              vendorsByRow={data.merchantsByCategory}
+              transactionsForRow={(name) =>
+                peeksFor(data, "section-category", section.name, name)
+              }
+              transactionsForVendor={(row, vendor) =>
+                peeksFor(data, "category-merchant", row, vendor)
+              }
+            />
+          ))}
+        </div>
+      }
+      range={
+        <RangeLeaderboardTable
+          title="High Mid Low by section"
+          info={`Highest, median, and lowest ${periodMeta.label.toLowerCase()} spend for each section inside the selected header range. Zero buckets are skipped.`}
+          nameLabel="Section"
+          rows={data.sections}
+          series={data.sectionSeries}
+          monthly={data.sectionMonthly}
+          currency={data.currency}
+          otherByPeriod={data.sectionOtherByPeriod}
+          transactionsForRow={(name) => peeksFor(data, "section", name)}
+        />
+      }
+    />
+  );
+}
+
+function SpreadsTab({
+  data,
+  period,
+  onPeriodChange,
+}: {
+  data: AnalysisData;
+  period: AnalysisPeriod;
+  onPeriodChange: (value: AnalysisPeriod) => void;
+}) {
+  const [pane, setPane] = useState<FacetPane>("visualizations");
+  const total = data.summary.totalSpend;
+  const periodCount = Math.max(data.monthly.length, 1);
+  const periodMeta = ANALYSIS_PERIOD_META[period];
+
+  return (
+    <FacetPaneShell
+      pane={pane}
+      onPaneChange={setPane}
+      visualizations={
+        <div className="space-y-6">
+          <StackedRankedBarChart
+            title="Spread breakdown"
+            info="Income plus Needs / Wants / Savings bars, each split by their biggest categories. The last 15% of that spread rolls into Other. Hover Other to see the names."
+            rows={data.spreadStacked.rows}
+            series={data.spreadStacked.series}
+            currency={data.currency}
+            labelWidth={100}
+            otherByRow={data.spreadStacked.otherByRow}
+            showViewToggle
+          />
+          <StackedMixChart
+            title="Spread mix over time"
+            info={`${ANALYSIS_PERIOD_META[period].label} mix: Needs + Wants + Savings spend, plus Surplus (income minus those three). Surplus is money earned and not spent in the 50/30/20 buckets.`}
+            series={data.spreadSeries}
+            monthly={data.spreadMonthly}
+            currency={data.currency}
+            period={period}
+            onPeriodChange={onPeriodChange}
+            variant="area"
+            other={data.spreadOther}
+            otherByPeriod={data.spreadOtherByPeriod}
+          />
+          <TaxonomyBreakdownTable
+            title="All spreads"
+            info="Income plus Needs (50%), Wants (30%), and Savings (20%) in this range. Spend share is of lifestyle outflow; Income is absolute inflows."
+            nameLabel="Spread"
+            rows={data.spreads}
+            currency={data.currency}
+            totalSpend={total}
+            nestedLabel="Top categories"
+            stacked={data.spreadStacked}
+          />
+        </div>
+      }
+      summary={
+        <div className="grid gap-6 lg:grid-cols-2">
+          <LeaderboardTable
+            title="Top spreads"
+            info="Income and 50/30/20 buckets by amount. Click a row to see the vendors inside."
+            nameLabel="Spread"
+            rows={data.spreads}
+            currency={data.currency}
+            totalSpend={total}
+            vendorsByRow={data.merchantsBySpread}
+            transactionsForRow={(name) => peeksFor(data, "spread", name)}
+            transactionsForVendor={(row, vendor) =>
+              peeksFor(data, "spread-merchant", row, vendor)
+            }
+          />
+          {data.spreads.map((spread) => (
+            <LeaderboardTable
+              key={spread.name}
+              title={`Top ${spread.name} categories`}
+              info={`Biggest categories inside ${spread.name}. Share is of that spread. Click a row to see the vendors inside.`}
+              nameLabel="Category"
+              rows={data.categoriesBySpread?.[spread.name] ?? []}
+              currency={data.currency}
+              totalSpend={spread.spend}
+              vendorsByRow={data.merchantsByCategory}
+              transactionsForRow={(name) =>
+                peeksFor(data, "spread-category", spread.name, name)
+              }
+              transactionsForVendor={(row, vendor) =>
+                peeksFor(data, "category-merchant", row, vendor)
+              }
+            />
+          ))}
+        </div>
+      }
+      average={
+        <div className="grid gap-6 lg:grid-cols-2">
+          <AverageLeaderboardTable
+            title="Average by spread"
+            info={`Total amount and transaction count for each spread (Income + Needs / Wants / Savings), divided by ${periodCount} ${periodMeta.nounPlural} in this range (same buckets as the ${periodMeta.label.toLowerCase()} charts).`}
+            nameLabel="Spread"
+            rows={data.spreads}
+            currency={data.currency}
+            period={period}
+            periodCount={periodCount}
+            vendorsByRow={data.merchantsBySpread}
+            transactionsForRow={(name) => peeksFor(data, "spread", name)}
+            transactionsForVendor={(row, vendor) =>
+              peeksFor(data, "spread-merchant", row, vendor)
+            }
+          />
+          {data.spreads.map((spread) => (
+            <AverageLeaderboardTable
+              key={spread.name}
+              title={`Average ${spread.name} categories`}
+              info={`Category averages inside ${spread.name}, per ${periodMeta.noun}.`}
+              nameLabel="Category"
+              rows={data.categoriesBySpread?.[spread.name] ?? []}
+              currency={data.currency}
+              period={period}
+              periodCount={periodCount}
+              vendorsByRow={data.merchantsByCategory}
+              transactionsForRow={(name) =>
+                peeksFor(data, "spread-category", spread.name, name)
+              }
+              transactionsForVendor={(row, vendor) =>
+                peeksFor(data, "category-merchant", row, vendor)
+              }
+            />
+          ))}
+        </div>
+      }
+      range={
+        <RangeLeaderboardTable
+          title="High Mid Low by spread"
+          info={`Highest, median, and lowest ${periodMeta.label.toLowerCase()} amount for Needs, Wants, Savings, and Surplus (income − those three) inside the selected header range. Zero buckets are skipped.`}
+          nameLabel="Spread"
+          rows={[
+            ...data.spreads,
+            ...(() => {
+              const totalSurplus = data.spreadMonthly.reduce(
+                (sum, row) => sum + Number(row.surplus ?? 0),
+                0,
+              );
+              return totalSurplus > 0
+                ? [{ name: "Surplus", spend: totalSurplus, count: 0 }]
+                : [];
+            })(),
+          ]}
+          series={data.spreadSeries}
+          monthly={data.spreadMonthly}
+          currency={data.currency}
+          otherByPeriod={data.spreadOtherByPeriod}
+          transactionsForRow={(name) =>
+            name === "Surplus" ? [] : peeksFor(data, "spread", name)
+          }
+        />
+      }
+    />
   );
 }
 
@@ -2361,49 +3510,165 @@ function CategoriesTab({
   period: AnalysisPeriod;
   onPeriodChange: (value: AnalysisPeriod) => void;
 }) {
+  const [pane, setPane] = useState<FacetPane>("visualizations");
+  const total = data.summary.totalSpend;
+  const periodCount = Math.max(data.monthly.length, 1);
+  const periodMeta = ANALYSIS_PERIOD_META[period];
+  const merchantsBySubcategory = vendorsRecord(
+    (data.subcategoryBreakdowns ?? []).map((item) => ({
+      name: item.subcategory,
+      vendors: item.merchants,
+    })),
+  );
+
   return (
-    <div className="space-y-6">
-      <StackedRankedBarChart
-        title="Category breakdown"
-        info="Each category bar splits by its biggest subcategories. The last 15% of that category rolls into Other. Hover Other to see the names."
-        rows={data.categoryStacked.rows}
-        series={data.categoryStacked.series}
-        currency={data.currency}
-        labelWidth={160}
-        onSelect={onSelectCategory}
-        otherByRow={data.categoryStacked.otherByRow}
-        showViewToggle
-      />
-      <StackedMixChart
-        title="Category mix over time"
-        info={`Stacked ${ANALYSIS_PERIOD_META[period].label.toLowerCase()} lifestyle spend. Named bands are the first 85%. The last 15% is Other.`}
-        series={data.categorySeries}
-        monthly={data.categoryMonthly}
-        currency={data.currency}
-        period={period}
-        onPeriodChange={onPeriodChange}
-        variant="area"
-        other={data.categoryOther}
-        otherByPeriod={data.categoryOtherByPeriod}
-      />
-      <CategoryDrilldown
-        data={data}
-        selected={category}
-        onSelect={onSelectCategory}
-        period={period}
-        onPeriodChange={onPeriodChange}
-      />
-      <TaxonomyBreakdownTable
-        title="All categories"
-        info="Every category in this range with spend, share of lifestyle outflow, and top subcategories inside each category."
-        nameLabel="Category"
-        rows={data.categories}
-        currency={data.currency}
-        totalSpend={data.summary.totalSpend}
-        nestedLabel="Top subcategories"
-        stacked={data.categoryStacked}
-      />
-    </div>
+    <FacetPaneShell
+      pane={pane}
+      onPaneChange={setPane}
+      visualizations={
+        <div className="space-y-6">
+          <StackedRankedBarChart
+            title="Category breakdown"
+            info="Each category bar splits by its biggest subcategories. The last 15% of that category rolls into Other. Hover Other to see the names."
+            rows={data.categoryStacked.rows}
+            series={data.categoryStacked.series}
+            currency={data.currency}
+            labelWidth={160}
+            onSelect={onSelectCategory}
+            otherByRow={data.categoryStacked.otherByRow}
+            showViewToggle
+          />
+          <StackedMixChart
+            title="Category mix over time"
+            info={`Stacked ${ANALYSIS_PERIOD_META[period].label.toLowerCase()} lifestyle spend. Named bands are the first 85%. The last 15% is Other.`}
+            series={data.categorySeries}
+            monthly={data.categoryMonthly}
+            currency={data.currency}
+            period={period}
+            onPeriodChange={onPeriodChange}
+            variant="area"
+            other={data.categoryOther}
+            otherByPeriod={data.categoryOtherByPeriod}
+          />
+          <CategoryDrilldown
+            data={data}
+            selected={category}
+            onSelect={onSelectCategory}
+            period={period}
+            onPeriodChange={onPeriodChange}
+          />
+          <TaxonomyBreakdownTable
+            title="All categories"
+            info="Every category in this range with spend, share of lifestyle outflow, and top subcategories inside each category."
+            nameLabel="Category"
+            rows={data.categories}
+            currency={data.currency}
+            totalSpend={total}
+            nestedLabel="Top subcategories"
+            stacked={data.categoryStacked}
+          />
+        </div>
+      }
+      summary={
+        <div className="grid gap-6 lg:grid-cols-2">
+          <LeaderboardTable
+            title="Top categories"
+            info="Biggest categories by lifestyle spend. Click a row to see the vendors inside."
+            nameLabel="Category"
+            rows={data.categories}
+            currency={data.currency}
+            totalSpend={total}
+            vendorsByRow={data.merchantsByCategory}
+            transactionsForRow={(name) => peeksFor(data, "category", name)}
+            transactionsForVendor={(row, vendor) =>
+              peeksFor(data, "category-merchant", row, vendor)
+            }
+          />
+          {data.categories.map((item) => {
+            const rows =
+              data.breakdowns.find((entry) => entry.category === item.name)
+                ?.types ??
+              categoriesForSection(data.categoryStacked, item.name);
+            if (rows.length === 0) return null;
+            return (
+              <LeaderboardTable
+                key={item.name}
+                title={`Top ${item.name} subcategories`}
+                info={`Biggest subcategories inside ${item.name}. Share is of that category. Click a row to see the vendors inside.`}
+                nameLabel="Subcategory"
+                rows={rows}
+                currency={data.currency}
+                totalSpend={item.spend}
+                vendorsByRow={merchantsBySubcategory}
+                transactionsForRow={(name) =>
+                  peeksFor(data, "subcategory", name)
+                }
+                transactionsForVendor={(row, vendor) =>
+                  peeksFor(data, "subcategory-merchant", row, vendor)
+                }
+              />
+            );
+          })}
+        </div>
+      }
+      average={
+        <div className="grid gap-6 lg:grid-cols-2">
+          <AverageLeaderboardTable
+            title="Average by category"
+            info={`Total spend and transaction count for each category, divided by ${periodCount} ${periodMeta.nounPlural} in this range.`}
+            nameLabel="Category"
+            rows={data.categories}
+            currency={data.currency}
+            period={period}
+            periodCount={periodCount}
+            vendorsByRow={data.merchantsByCategory}
+            transactionsForRow={(name) => peeksFor(data, "category", name)}
+            transactionsForVendor={(row, vendor) =>
+              peeksFor(data, "category-merchant", row, vendor)
+            }
+          />
+          {data.categories.map((item) => {
+            const rows =
+              data.breakdowns.find((entry) => entry.category === item.name)
+                ?.types ??
+              categoriesForSection(data.categoryStacked, item.name);
+            if (rows.length === 0) return null;
+            return (
+              <AverageLeaderboardTable
+                key={item.name}
+                title={`Average ${item.name} subcategories`}
+                info={`Subcategory averages inside ${item.name}, per ${periodMeta.noun}.`}
+                nameLabel="Subcategory"
+                rows={rows}
+                currency={data.currency}
+                period={period}
+                periodCount={periodCount}
+                vendorsByRow={merchantsBySubcategory}
+                transactionsForRow={(name) =>
+                  peeksFor(data, "subcategory", name)
+                }
+                transactionsForVendor={(row, vendor) =>
+                  peeksFor(data, "subcategory-merchant", row, vendor)
+                }
+              />
+            );
+          })}
+        </div>
+      }
+      range={
+        <RangeLeaderboardTable
+          title="High Mid Low by category"
+          info={`Highest, median, and lowest ${periodMeta.label.toLowerCase()} spend for each category inside the selected header range. Zero buckets are skipped.`}
+          nameLabel="Category"
+          rows={data.categories}
+          series={data.categorySeries}
+          monthly={data.categoryMonthly}
+          currency={data.currency}
+          otherByPeriod={data.categoryOtherByPeriod}
+          transactionsForRow={(name) => peeksFor(data, "category", name)}
+        />
+      }
+    />
   );
 }
 
@@ -2483,56 +3748,161 @@ function SubcategoriesTab({
   period: AnalysisPeriod;
   onPeriodChange: (value: AnalysisPeriod) => void;
 }) {
+  const [pane, setPane] = useState<FacetPane>("visualizations");
   const stacked = data.subcategoryStacked ?? { rows: [], series: [] };
   const breakdowns = data.subcategoryBreakdowns ?? [];
+  const total = data.summary.totalSpend;
+  const periodCount = Math.max(data.monthly.length, 1);
+  const periodMeta = ANALYSIS_PERIOD_META[period];
+  const merchantsBySubcategory = vendorsRecord(
+    breakdowns.map((item) => ({
+      name: item.subcategory,
+      vendors: item.merchants,
+    })),
+  );
 
   return (
-    <div className="space-y-6">
-      <StackedRankedBarChart
-        title="Subcategory breakdown"
-        info="Every subcategory with spend, sliced by Merchant clean. The last 15% inside each row rolls into Other. Click a bar to open its merchant detail."
-        rows={stacked.rows}
-        series={stacked.series}
-        currency={data.currency}
-        labelWidth={180}
-        onSelect={(name) => {
-          if (breakdowns.some((item) => item.subcategory === name)) {
-            onSelectSubcategory(name);
-          }
-        }}
-        otherByRow={stacked.otherByRow}
-        showViewToggle
-      />
-      <StackedMixChart
-        title="Subcategory mix over time"
-        info={`${ANALYSIS_PERIOD_META[period].label} spend by subcategory. Named bands are the first 85%. The last 15% is Other.`}
-        series={data.subcategorySeries}
-        monthly={data.subcategoryMonthly}
-        currency={data.currency}
-        period={period}
-        onPeriodChange={onPeriodChange}
-        variant="area"
-        other={data.subcategoryOther}
-        otherByPeriod={data.subcategoryOtherByPeriod}
-      />
-      <SubcategoryDrilldown
-        data={data}
-        selected={subcategory}
-        onSelect={onSelectSubcategory}
-        period={period}
-        onPeriodChange={onPeriodChange}
-      />
-      <TaxonomyBreakdownTable
-        title="All subcategories"
-        info="Every subcategory label in this range with spend, share of lifestyle outflow, and top Merchant clean names inside each subcategory."
-        nameLabel="Subcategory"
-        rows={data.subcategories}
-        currency={data.currency}
-        totalSpend={data.summary.totalSpend}
-        nestedLabel="Top merchants"
-        stacked={stacked}
-      />
-    </div>
+    <FacetPaneShell
+      pane={pane}
+      onPaneChange={setPane}
+      visualizations={
+        <div className="space-y-6">
+          <StackedRankedBarChart
+            title="Subcategory breakdown"
+            info="Every subcategory with spend, sliced by Merchant clean. The last 15% inside each row rolls into Other. Click a bar to open its merchant detail."
+            rows={stacked.rows}
+            series={stacked.series}
+            currency={data.currency}
+            labelWidth={180}
+            onSelect={(name) => {
+              if (breakdowns.some((item) => item.subcategory === name)) {
+                onSelectSubcategory(name);
+              }
+            }}
+            otherByRow={stacked.otherByRow}
+            showViewToggle
+          />
+          <StackedMixChart
+            title="Subcategory mix over time"
+            info={`${ANALYSIS_PERIOD_META[period].label} spend by subcategory. Named bands are the first 85%. The last 15% is Other.`}
+            series={data.subcategorySeries}
+            monthly={data.subcategoryMonthly}
+            currency={data.currency}
+            period={period}
+            onPeriodChange={onPeriodChange}
+            variant="area"
+            other={data.subcategoryOther}
+            otherByPeriod={data.subcategoryOtherByPeriod}
+          />
+          <SubcategoryDrilldown
+            data={data}
+            selected={subcategory}
+            onSelect={onSelectSubcategory}
+            period={period}
+            onPeriodChange={onPeriodChange}
+          />
+          <TaxonomyBreakdownTable
+            title="All subcategories"
+            info="Every subcategory label in this range with spend, share of lifestyle outflow, and top Merchant clean names inside each subcategory."
+            nameLabel="Subcategory"
+            rows={data.subcategories}
+            currency={data.currency}
+            totalSpend={total}
+            nestedLabel="Top merchants"
+            stacked={stacked}
+          />
+        </div>
+      }
+      summary={
+        <div className="grid gap-6 lg:grid-cols-2">
+          <LeaderboardTable
+            title="Top subcategories"
+            info="Biggest subcategories by lifestyle spend. Click a row to see the vendors inside."
+            nameLabel="Subcategory"
+            rows={data.subcategories}
+            currency={data.currency}
+            totalSpend={total}
+            vendorsByRow={merchantsBySubcategory}
+            transactionsForRow={(name) => peeksFor(data, "subcategory", name)}
+            transactionsForVendor={(row, vendor) =>
+              peeksFor(data, "subcategory-merchant", row, vendor)
+            }
+          />
+          {data.subcategories.map((item) => {
+            const rows =
+              breakdowns.find((entry) => entry.subcategory === item.name)
+                ?.merchants ?? categoriesForSection(stacked, item.name);
+            if (rows.length === 0) return null;
+            return (
+              <LeaderboardTable
+                key={item.name}
+                title={`Top ${item.name} merchants`}
+                info={`Biggest Merchant clean names inside ${item.name}. Share is of that subcategory.`}
+                nameLabel="Merchant"
+                rows={rows}
+                currency={data.currency}
+                totalSpend={item.spend}
+                transactionsForRow={(name) =>
+                  peeksFor(data, "subcategory-merchant", item.name, name)
+                }
+              />
+            );
+          })}
+        </div>
+      }
+      average={
+        <div className="grid gap-6 lg:grid-cols-2">
+          <AverageLeaderboardTable
+            title="Average by subcategory"
+            info={`Total spend and transaction count for each subcategory, divided by ${periodCount} ${periodMeta.nounPlural} in this range.`}
+            nameLabel="Subcategory"
+            rows={data.subcategories}
+            currency={data.currency}
+            period={period}
+            periodCount={periodCount}
+            vendorsByRow={merchantsBySubcategory}
+            transactionsForRow={(name) => peeksFor(data, "subcategory", name)}
+            transactionsForVendor={(row, vendor) =>
+              peeksFor(data, "subcategory-merchant", row, vendor)
+            }
+          />
+          {data.subcategories.map((item) => {
+            const rows =
+              breakdowns.find((entry) => entry.subcategory === item.name)
+                ?.merchants ?? categoriesForSection(stacked, item.name);
+            if (rows.length === 0) return null;
+            return (
+              <AverageLeaderboardTable
+                key={item.name}
+                title={`Average ${item.name} merchants`}
+                info={`Merchant averages inside ${item.name}, per ${periodMeta.noun}.`}
+                nameLabel="Merchant"
+                rows={rows}
+                currency={data.currency}
+                period={period}
+                periodCount={periodCount}
+                transactionsForRow={(name) =>
+                  peeksFor(data, "subcategory-merchant", item.name, name)
+                }
+              />
+            );
+          })}
+        </div>
+      }
+      range={
+        <RangeLeaderboardTable
+          title="High Mid Low by subcategory"
+          info={`Highest, median, and lowest ${periodMeta.label.toLowerCase()} spend for each subcategory inside the selected header range. Zero buckets are skipped.`}
+          nameLabel="Subcategory"
+          rows={data.subcategories}
+          series={data.subcategorySeries}
+          monthly={data.subcategoryMonthly}
+          currency={data.currency}
+          otherByPeriod={data.subcategoryOtherByPeriod}
+          transactionsForRow={(name) => peeksFor(data, "subcategory", name)}
+        />
+      }
+    />
   );
 }
 
@@ -2610,9 +3980,17 @@ function TagsTab({
   period: AnalysisPeriod;
   onPeriodChange: (value: AnalysisPeriod) => void;
 }) {
+  const [pane, setPane] = useState<FacetPane>("visualizations");
   const stacked = data.tagStacked ?? { rows: [], series: [] };
   const breakdowns = data.tagBreakdowns ?? [];
   const tags = data.tags ?? [];
+  const total = data.summary.totalSpend;
+  const merchantsByTag = vendorsRecord(
+    breakdowns.map((item) => ({
+      name: item.tag,
+      vendors: item.merchants,
+    })),
+  );
 
   if (tags.length === 0) {
     return (
@@ -2626,53 +4004,304 @@ function TagsTab({
   }
 
   return (
-    <div className="space-y-6">
-      <StackedRankedBarChart
-        title="Tag breakdown"
-        info="Every tag with spend, sliced by category. The last 15% inside each row rolls into Other. A transaction can carry more than one tag, so rows can overlap. Click a bar to open its merchant detail."
-        rows={stacked.rows}
-        series={stacked.series}
-        currency={data.currency}
-        labelWidth={160}
-        onSelect={(name) => {
-          if (breakdowns.some((item) => item.tag === name)) {
-            onSelectTag(name);
+    <FacetPaneShell
+      pane={pane}
+      onPaneChange={setPane}
+      visualizations={
+        <div className="space-y-6">
+          <StackedRankedBarChart
+            title="Tag breakdown"
+            info="Every tag with spend, sliced by category. The last 15% inside each row rolls into Other. A transaction can carry more than one tag, so rows can overlap. Click a bar to open its merchant detail."
+            rows={stacked.rows}
+            series={stacked.series}
+            currency={data.currency}
+            labelWidth={160}
+            onSelect={(name) => {
+              if (breakdowns.some((item) => item.tag === name)) {
+                onSelectTag(name);
+              }
+            }}
+            otherByRow={stacked.otherByRow}
+            showViewToggle
+          />
+          <StackedMixChart
+            title="Tag mix over time"
+            info={`${ANALYSIS_PERIOD_META[period].label} spend by tag. Standard draws each tag from zero so shared tags are not stacked twice. Relative is share of the tag-sum (can exceed unique spend). Named bands are the first 85%. The last 15% is Other.`}
+            series={data.tagSeries}
+            monthly={data.tagMonthly}
+            currency={data.currency}
+            period={period}
+            onPeriodChange={onPeriodChange}
+            variant="area"
+            overlapping
+            other={data.tagOther}
+            otherByPeriod={data.tagOtherByPeriod}
+            nestedByPeriod={data.tagCategoryByPeriod}
+          />
+          <TagDrilldown
+            data={data}
+            selected={tag}
+            onSelect={onSelectTag}
+            period={period}
+            onPeriodChange={onPeriodChange}
+          />
+          <TaxonomyBreakdownTable
+            title="All tags"
+            info="Every tag in this range with spend, share of lifestyle outflow, and top categories. Shares can add up past 100% because one row can have several tags."
+            nameLabel="Tag"
+            rows={tags}
+            currency={data.currency}
+            totalSpend={total}
+            nestedLabel="Top categories"
+            stacked={stacked}
+          />
+        </div>
+      }
+      summary={
+        <LeaderboardTable
+          title="Top tags"
+          info="Biggest tags by lifestyle spend. A transaction can carry more than one tag. Click a row to see the vendors inside."
+          nameLabel="Tag"
+          rows={tags}
+          currency={data.currency}
+          totalSpend={total}
+          vendorsByRow={merchantsByTag}
+          transactionsForRow={(name) => peeksFor(data, "tag", name)}
+          transactionsForVendor={(row, vendor) =>
+            peeksFor(data, "tag-merchant", row, vendor)
           }
-        }}
-        otherByRow={stacked.otherByRow}
-        showViewToggle
+        />
+      }
+      average={
+        <AverageLeaderboardTable
+          title="Average by tag"
+          info={`Total spend and transaction count for each tag, divided by ${Math.max(data.monthly.length, 1)} ${ANALYSIS_PERIOD_META[period].nounPlural} in this range. One row can carry several tags.`}
+          nameLabel="Tag"
+          rows={tags}
+          currency={data.currency}
+          period={period}
+          periodCount={Math.max(data.monthly.length, 1)}
+          vendorsByRow={merchantsByTag}
+          transactionsForRow={(name) => peeksFor(data, "tag", name)}
+          transactionsForVendor={(row, vendor) =>
+            peeksFor(data, "tag-merchant", row, vendor)
+          }
+        />
+      }
+      range={
+        <RangeLeaderboardTable
+          title="High Mid Low by tag"
+          info={`Highest, median, and lowest ${ANALYSIS_PERIOD_META[period].label.toLowerCase()} spend for each tag inside the selected header range. Zero buckets are skipped.`}
+          nameLabel="Tag"
+          rows={tags}
+          series={data.tagSeries}
+          monthly={data.tagMonthly}
+          currency={data.currency}
+          otherByPeriod={data.tagOtherByPeriod}
+          transactionsForRow={(name) => peeksFor(data, "tag", name)}
+        />
+      }
+    />
+  );
+}
+
+function TypeDrilldown({
+  data,
+  selected,
+  onSelect,
+  period,
+  onPeriodChange,
+}: {
+  data: AnalysisData;
+  selected: string;
+  onSelect: (type: string) => void;
+  period: AnalysisPeriod;
+  onPeriodChange: (value: AnalysisPeriod) => void;
+}) {
+  const breakdown: AnalysisTypeBreakdown | undefined =
+    data.typeBreakdowns.find((item) => item.type === selected) ??
+    data.typeBreakdowns[0];
+
+  if (!breakdown) return null;
+
+  return (
+    <section className="space-y-4">
+      <ChartTitle
+        title="Type detail"
+        info="Pick a type (Fee, Subscription, …). Merchants come from Merchant clean on each typed transaction."
       />
+      <div className="flex flex-wrap gap-1">
+        {data.typeBreakdowns.map((item) => (
+          <Button
+            key={item.type}
+            type="button"
+            size="sm"
+            variant={item.type === breakdown.type ? "default" : "outline"}
+            onClick={() => onSelect(item.type)}
+          >
+            {item.type}
+          </Button>
+        ))}
+      </div>
       <StackedMixChart
-        title="Tag mix over time"
-        info={`${ANALYSIS_PERIOD_META[period].label} spend by tag. Named bands are the first 85%. The last 15% is Other. Hover a period to see categories inside each tag.`}
-        series={data.tagSeries}
-        monthly={data.tagMonthly}
+        title={`${breakdown.type} merchant mix`}
+        info={`How ${breakdown.type} splits by Merchant clean over ${ANALYSIS_PERIOD_META[period].nounPlural}. ${formatMoney(breakdown.spend, data.currency)} in this range.`}
+        series={breakdown.merchantSeries}
+        monthly={breakdown.merchantMonthly}
         currency={data.currency}
         period={period}
         onPeriodChange={onPeriodChange}
-        variant="area"
-        other={data.tagOther}
-        otherByPeriod={data.tagOtherByPeriod}
-        nestedByPeriod={data.tagCategoryByPeriod}
+        other={breakdown.other}
+        otherByPeriod={breakdown.otherByPeriod}
       />
-      <TagDrilldown
-        data={data}
-        selected={tag}
-        onSelect={onSelectTag}
-        period={period}
-        onPeriodChange={onPeriodChange}
-      />
-      <TaxonomyBreakdownTable
-        title="All tags"
-        info="Every tag in this range with spend, share of lifestyle outflow, and top categories. Shares can add up past 100% because one row can have several tags."
-        nameLabel="Tag"
-        rows={tags}
+      <RankedBarChart
+        title={`${breakdown.type} merchants`}
+        info="Merchant clean names inside this type."
+        rows={breakdown.merchants}
         currency={data.currency}
-        totalSpend={data.summary.totalSpend}
-        nestedLabel="Top categories"
-        stacked={stacked}
+        color="oklch(0.55 0.12 35)"
+        labelWidth={160}
       />
-    </div>
+    </section>
+  );
+}
+
+function TypesTab({
+  data,
+  type,
+  onSelectType,
+  period,
+  onPeriodChange,
+}: {
+  data: AnalysisData;
+  type: string;
+  onSelectType: (name: string) => void;
+  period: AnalysisPeriod;
+  onPeriodChange: (value: AnalysisPeriod) => void;
+}) {
+  const [pane, setPane] = useState<FacetPane>("visualizations");
+  const stacked = data.typeStacked ?? { rows: [], series: [] };
+  const breakdowns = data.typeBreakdowns ?? [];
+  const types = data.types ?? [];
+  const total = data.summary.totalSpend;
+  const merchantsByType = vendorsRecord(
+    breakdowns.map((item) => ({
+      name: item.type,
+      vendors: item.merchants,
+    })),
+  );
+
+  if (types.length === 0) {
+    return (
+      <div className="rounded-xl border border-dashed border-[var(--border)] px-6 py-16 text-center">
+        <p className="text-lg font-medium">No types in this range</p>
+        <p className="mt-1 text-sm text-[var(--muted-foreground)]">
+          Type labels on transactions (Fee, Subscription, …) show up here the
+          same way tags do.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <FacetPaneShell
+      pane={pane}
+      onPaneChange={setPane}
+      visualizations={
+        <div className="space-y-6">
+          <StackedRankedBarChart
+            title="Type breakdown"
+            info="Every type with spend, sliced by category. The last 15% inside each row rolls into Other. A transaction can carry more than one type, so rows can overlap. Click a bar to open its merchant detail."
+            rows={stacked.rows}
+            series={stacked.series}
+            currency={data.currency}
+            labelWidth={160}
+            onSelect={(name) => {
+              if (breakdowns.some((item) => item.type === name)) {
+                onSelectType(name);
+              }
+            }}
+            otherByRow={stacked.otherByRow}
+            showViewToggle
+          />
+          <StackedMixChart
+            title="Type mix over time"
+            info={`${ANALYSIS_PERIOD_META[period].label} spend by type. Standard draws each type from zero so shared types are not stacked twice. Relative is share of the type-sum (can exceed unique spend). Named bands are the first 85%. The last 15% is Other.`}
+            series={data.typeSeries}
+            monthly={data.typeMonthly}
+            currency={data.currency}
+            period={period}
+            onPeriodChange={onPeriodChange}
+            variant="area"
+            overlapping
+            other={data.typeOther}
+            otherByPeriod={data.typeOtherByPeriod}
+            nestedByPeriod={data.typeCategoryByPeriod}
+          />
+          <TypeDrilldown
+            data={data}
+            selected={type}
+            onSelect={onSelectType}
+            period={period}
+            onPeriodChange={onPeriodChange}
+          />
+          <TaxonomyBreakdownTable
+            title="All types"
+            info="Every type in this range with spend, share of lifestyle outflow, and top categories. Shares can add up past 100% because one row can have several types."
+            nameLabel="Type"
+            rows={types}
+            currency={data.currency}
+            totalSpend={total}
+            nestedLabel="Top categories"
+            stacked={stacked}
+          />
+        </div>
+      }
+      summary={
+        <LeaderboardTable
+          title="Top types"
+          info="Biggest types by lifestyle spend. A transaction can carry more than one type. Click a row to see the vendors inside."
+          nameLabel="Type"
+          rows={types}
+          currency={data.currency}
+          totalSpend={total}
+          vendorsByRow={merchantsByType}
+          transactionsForRow={(name) => peeksFor(data, "type", name)}
+          transactionsForVendor={(row, vendor) =>
+            peeksFor(data, "type-merchant", row, vendor)
+          }
+        />
+      }
+      average={
+        <AverageLeaderboardTable
+          title="Average by type"
+          info={`Total spend and transaction count for each type, divided by ${Math.max(data.monthly.length, 1)} ${ANALYSIS_PERIOD_META[period].nounPlural} in this range. One row can carry several types.`}
+          nameLabel="Type"
+          rows={types}
+          currency={data.currency}
+          period={period}
+          periodCount={Math.max(data.monthly.length, 1)}
+          vendorsByRow={merchantsByType}
+          transactionsForRow={(name) => peeksFor(data, "type", name)}
+          transactionsForVendor={(row, vendor) =>
+            peeksFor(data, "type-merchant", row, vendor)
+          }
+        />
+      }
+      range={
+        <RangeLeaderboardTable
+          title="High Mid Low by type"
+          info={`Highest, median, and lowest ${ANALYSIS_PERIOD_META[period].label.toLowerCase()} spend for each type inside the selected header range. Zero buckets are skipped.`}
+          nameLabel="Type"
+          rows={types}
+          series={data.typeSeries}
+          monthly={data.typeMonthly}
+          currency={data.currency}
+          otherByPeriod={data.typeOtherByPeriod}
+          transactionsForRow={(name) => peeksFor(data, "type", name)}
+        />
+      }
+    />
   );
 }
 
@@ -2752,9 +4381,17 @@ function MerchantsTab({
   period: AnalysisPeriod;
   onPeriodChange: (value: AnalysisPeriod) => void;
 }) {
+  const [pane, setPane] = useState<FacetPane>("visualizations");
   const stacked = data.merchantStacked ?? { rows: [], series: [] };
   const breakdowns = data.merchantBreakdowns ?? [];
   const merchants = data.merchants ?? [];
+  const total = data.summary.totalSpend;
+  const splitsByMerchant = vendorsRecord(
+    breakdowns.map((item) => ({
+      name: item.merchant,
+      vendors: item.types,
+    })),
+  );
 
   if (merchants.length === 0) {
     return (
@@ -2768,65 +4405,152 @@ function MerchantsTab({
   }
 
   return (
-    <div className="space-y-6">
-      <StackedRankedBarChart
-        title="Merchant breakdown"
-        info="Every Merchant clean name with spend, sliced by subcategory. The last 15% inside each row rolls into Other. Click a bar to open its subcategory detail."
-        rows={stacked.rows}
-        series={stacked.series}
-        currency={data.currency}
-        labelWidth={180}
-        onSelect={(name) => {
-          if (breakdowns.some((item) => item.merchant === name)) {
-            onSelectMerchant(name);
+    <FacetPaneShell
+      pane={pane}
+      onPaneChange={setPane}
+      visualizations={
+        <div className="space-y-6">
+          <StackedRankedBarChart
+            title="Merchant breakdown"
+            info="Every Merchant clean name with spend, sliced by subcategory. The last 15% inside each row rolls into Other. Click a bar to open its subcategory detail."
+            rows={stacked.rows}
+            series={stacked.series}
+            currency={data.currency}
+            labelWidth={180}
+            onSelect={(name) => {
+              if (breakdowns.some((item) => item.merchant === name)) {
+                onSelectMerchant(name);
+              }
+            }}
+            otherByRow={stacked.otherByRow}
+            showViewToggle
+          />
+          <StackedMixChart
+            title="Merchant mix over time"
+            info={`${ANALYSIS_PERIOD_META[period].label} spend by Merchant clean. Named bands are the first 85%. The last 15% is Other.`}
+            series={data.merchantSeries ?? []}
+            monthly={data.merchantMonthly ?? []}
+            currency={data.currency}
+            period={period}
+            onPeriodChange={onPeriodChange}
+            variant="area"
+            other={data.merchantOther}
+            otherByPeriod={data.merchantOtherByPeriod}
+          />
+          <MerchantDrilldown
+            data={data}
+            selected={merchant}
+            onSelect={onSelectMerchant}
+            period={period}
+            onPeriodChange={onPeriodChange}
+          />
+          <TaxonomyBreakdownTable
+            title="All merchants"
+            info="Every Merchant clean name in this range with spend, share of lifestyle outflow, and top subcategories inside each merchant."
+            nameLabel="Merchant clean"
+            rows={merchants}
+            currency={data.currency}
+            totalSpend={total}
+            nestedLabel="Top subcategories"
+            stacked={stacked}
+          />
+          <RankedBarChart
+            title="Places"
+            info="From Transaction Locations. City when present, else region. Online-only rows with no city are skipped."
+            rows={data.places}
+            currency={data.currency}
+            color="oklch(0.48 0.09 300)"
+          />
+        </div>
+      }
+      summary={
+        <LeaderboardTable
+          title="Top merchants"
+          info="Biggest Merchant clean names by lifestyle spend. Click a row to see the subcategories inside."
+          nameLabel="Merchant"
+          rows={merchants}
+          currency={data.currency}
+          totalSpend={total}
+          vendorsByRow={splitsByMerchant}
+          transactionsForRow={(name) => peeksFor(data, "merchant", name)}
+          transactionsForVendor={(row, vendor) =>
+            peeksFor(data, "subcategory-merchant", vendor, row)
           }
-        }}
-        otherByRow={stacked.otherByRow}
-        showViewToggle
-      />
-      <StackedMixChart
-        title="Merchant mix over time"
-        info={`${ANALYSIS_PERIOD_META[period].label} spend by Merchant clean. Named bands are the first 85%. The last 15% is Other.`}
-        series={data.merchantSeries ?? []}
-        monthly={data.merchantMonthly ?? []}
-        currency={data.currency}
-        period={period}
-        onPeriodChange={onPeriodChange}
-        variant="area"
-        other={data.merchantOther}
-        otherByPeriod={data.merchantOtherByPeriod}
-      />
-      <MerchantDrilldown
-        data={data}
-        selected={merchant}
-        onSelect={onSelectMerchant}
-        period={period}
-        onPeriodChange={onPeriodChange}
-      />
-      <TaxonomyBreakdownTable
-        title="All merchants"
-        info="Every Merchant clean name in this range with spend, share of lifestyle outflow, and top subcategories inside each merchant."
-        nameLabel="Merchant clean"
-        rows={merchants}
-        currency={data.currency}
-        totalSpend={data.summary.totalSpend}
-        nestedLabel="Top subcategories"
-        stacked={stacked}
-      />
-      <RankedBarChart
-        title="Places"
-        info="From Transaction Locations. City when present, else region. Online-only rows with no city are skipped."
-        rows={data.places}
-        currency={data.currency}
-        color="oklch(0.48 0.09 300)"
-      />
-    </div>
+        />
+      }
+      average={
+        <AverageLeaderboardTable
+          title="Average by merchant"
+          info={`Total spend and transaction count for each Merchant clean name, divided by ${Math.max(data.monthly.length, 1)} ${ANALYSIS_PERIOD_META[period].nounPlural} in this range.`}
+          nameLabel="Merchant"
+          rows={merchants}
+          currency={data.currency}
+          period={period}
+          periodCount={Math.max(data.monthly.length, 1)}
+          vendorsByRow={splitsByMerchant}
+          transactionsForRow={(name) => peeksFor(data, "merchant", name)}
+          transactionsForVendor={(row, vendor) =>
+            peeksFor(data, "subcategory-merchant", vendor, row)
+          }
+        />
+      }
+      range={
+        <RangeLeaderboardTable
+          title="High Mid Low by merchant"
+          info={`Highest, median, and lowest ${ANALYSIS_PERIOD_META[period].label.toLowerCase()} spend for each Merchant clean name inside the selected header range. Zero buckets are skipped.`}
+          nameLabel="Merchant"
+          rows={merchants}
+          series={data.merchantSeries}
+          monthly={data.merchantMonthly}
+          currency={data.currency}
+          otherByPeriod={data.merchantOtherByPeriod}
+          transactionsForRow={(name) => peeksFor(data, "merchant", name)}
+        />
+      }
+    />
   );
 }
 
 function PatternsTab({ data }: { data: AnalysisData }) {
+  const weekend = data.weekendSplit ?? [];
+  const weekdaySpend =
+    weekend.find((row) => row.name === "Weekday")?.spend ?? 0;
+  const weekendSpend =
+    weekend.find((row) => row.name === "Weekend")?.spend ?? 0;
+  const weekendShare =
+    weekdaySpend + weekendSpend > 0
+      ? Math.round((weekendSpend / (weekdaySpend + weekendSpend)) * 100)
+      : 0;
+  const ticketSizes = data.ticketSizes ?? [];
+  const smallTicket = ticketSizes.find((row) => row.name === "Under $15");
+  const habitMerchants = data.habitMerchants ?? [];
+  const countries = data.countries ?? [];
+
   return (
     <div className="space-y-6">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <Stat
+          label="Weekend share"
+          value={`${weekendShare}%`}
+          info={`${formatMoney(weekendSpend, data.currency)} on Sat–Sun vs ${formatMoney(weekdaySpend, data.currency)} on weekdays.`}
+        />
+        <Stat
+          label="Small swipes"
+          value={(smallTicket?.count ?? 0).toLocaleString("en-US")}
+          info={`Under $15 purchases totaling ${formatMoney(smallTicket?.spend ?? 0, data.currency)}.`}
+        />
+        <Stat
+          label="Habit merchants"
+          value={habitMerchants.length.toLocaleString("en-US")}
+          info="Vendors with 6+ lifestyle purchases in this range."
+        />
+        <Stat
+          label="Countries"
+          value={(countries.length || 0).toLocaleString("en-US")}
+          info="Distinct countries on location-tagged spend rows."
+        />
+      </div>
+
       <div className="grid gap-6 lg:grid-cols-2">
         <RankedBarChart
           title="How you pay"
@@ -2836,15 +4560,62 @@ function PatternsTab({ data }: { data: AnalysisData }) {
           color="oklch(0.45 0.08 20)"
         />
         <RankedBarChart
-          title="By account"
-          info="Lifestyle spend on each linked account. Card purchases sit on the card; chequing shows PAD, e-transfer, and cash."
-          rows={data.accounts}
+          title="Weekday vs weekend"
+          info="Lifestyle spend split into Mon–Fri and Sat–Sun using the authorized date when present."
+          rows={weekend}
+          currency={data.currency}
+          color="oklch(0.52 0.1 155)"
+          labelWidth={100}
+        />
+      </div>
+
+      <WeekdayChart data={data} />
+      <DayOfMonthChart data={data} />
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        <RankedBarChart
+          title="Purchase size"
+          info="How much each lifestyle swipe cost. Lots of small trips can still be cheap; a few large tickets usually dominate dollars."
+          rows={ticketSizes}
+          currency={data.currency}
+          color="oklch(0.55 0.12 35)"
+          labelWidth={110}
+        />
+        <FrequencyBarChart
+          title="Habit merchants"
+          info="Merchants you hit 6+ times in this range, ranked by trip count. Spend shows in the tooltip."
+          rows={habitMerchants}
           currency={data.currency}
           color="oklch(0.5 0.1 220)"
           labelWidth={150}
         />
       </div>
-      <WeekdayChart data={data} />
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        <RankedBarChart
+          title="Places"
+          info="From Transaction Locations. City when present, else region. Online-only rows with no city are skipped."
+          rows={data.places}
+          currency={data.currency}
+          color="oklch(0.48 0.09 300)"
+        />
+        <RankedBarChart
+          title="Countries"
+          info="Normalized country on location-tagged spend (Canada / United States / Philippines, …)."
+          rows={countries}
+          currency={data.currency}
+          color="oklch(0.5 0.08 250)"
+        />
+      </div>
+
+      <RankedBarChart
+        title="By account"
+        info="Lifestyle spend on each linked account. Card purchases sit on the card; chequing shows PAD, e-transfer, and cash."
+        rows={data.accounts}
+        currency={data.currency}
+        color="oklch(0.5 0.1 220)"
+        labelWidth={150}
+      />
     </div>
   );
 }
@@ -2856,6 +4627,7 @@ export function AnalysisDashboard() {
   const [category, setCategory] = useState("");
   const [subcategory, setSubcategory] = useState("");
   const [tag, setTag] = useState("");
+  const [type, setType] = useState("");
   const [merchant, setMerchant] = useState("");
   const query = useAnalysis(range, period);
   const data = query.data;
@@ -2880,6 +4652,12 @@ export function AnalysisDashboard() {
   }, [data, tag]);
 
   useEffect(() => {
+    const names = data?.typeBreakdowns.map((item) => item.type) ?? [];
+    if (names.length === 0) return;
+    if (!names.includes(type)) setType(names[0] ?? "");
+  }, [data, type]);
+
+  useEffect(() => {
     const names = data?.merchantBreakdowns.map((item) => item.merchant) ?? [];
     if (names.length === 0) return;
     if (!names.includes(merchant)) setMerchant(names[0] ?? "");
@@ -2894,7 +4672,9 @@ export function AnalysisDashboard() {
               Finance
             </p>
             <div className="flex items-center gap-1">
-              <h1 className="text-3xl font-semibold tracking-tight">Analysis</h1>
+              <h1 className="text-3xl font-semibold tracking-tight">
+                Analysis
+              </h1>
               <InfoTip label="Analysis info">
                 {data
                   ? `Range ${formatDisplayDate(data.earliestDate)} – ${formatDisplayDate(data.latestDate)}. Spend is purchases plus remittances, net of refunds. Paying a card from chequing counts once as an internal transfer.`
@@ -2913,94 +4693,113 @@ export function AnalysisDashboard() {
           </div>
         </header>
 
-        <SegmentedControl
-          ariaLabel="Analysis view"
-          options={TAB_OPTIONS}
-          value={tab}
-          onChange={setTab}
-        />
+        <div className="space-y-2">
+          <SegmentedControl
+            ariaLabel="Analysis view"
+            options={TAB_OPTIONS}
+            value={tab}
+            onChange={setTab}
+          />
 
-        {query.isError ? (
-          <div className="rounded-xl border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-800">
-            {query.error.message}
-          </div>
-        ) : null}
+          {query.isError ? (
+            <div className="rounded-xl border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-800">
+              {query.error.message}
+            </div>
+          ) : null}
 
-        {query.isPending && !data ? (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {Array.from({ length: 4 }).map((_, index) => (
-              <div
-                key={index}
-                className="h-24 animate-pulse rounded-xl border border-[var(--border)] bg-[var(--muted)]/40"
-              />
-            ))}
-          </div>
-        ) : null}
+          {query.isPending && !data ? (
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              {Array.from({ length: 4 }).map((_, index) => (
+                <div
+                  key={index}
+                  className="h-24 animate-pulse rounded-xl border border-[var(--border)] bg-[var(--muted)]/40"
+                />
+              ))}
+            </div>
+          ) : null}
 
-        {data && data.transactionCount === 0 ? <EmptyState /> : null}
+          {data && data.transactionCount === 0 ? <EmptyState /> : null}
 
-        {data && data.transactionCount > 0 ? (
-          <>
-            {tab === "main" ? (
-              <MainTab
-                data={data}
-                period={period}
-                onPeriodChange={setPeriod}
-                onSelectCategory={(name) => {
-                  if (data.breakdowns.some((item) => item.category === name)) {
-                    setCategory(name);
-                    setTab("categories");
-                  }
-                }}
-              />
-            ) : null}
-            {tab === "summary" ? <SummaryTab data={data} /> : null}
-            {tab === "sections" ? (
-              <SectionsTab
-                data={data}
-                period={period}
-                onPeriodChange={setPeriod}
-              />
-            ) : null}
-            {tab === "categories" ? (
-              <CategoriesTab
-                data={data}
-                category={category}
-                onSelectCategory={setCategory}
-                period={period}
-                onPeriodChange={setPeriod}
-              />
-            ) : null}
-            {tab === "subcategories" ? (
-              <SubcategoriesTab
-                data={data}
-                subcategory={subcategory}
-                onSelectSubcategory={setSubcategory}
-                period={period}
-                onPeriodChange={setPeriod}
-              />
-            ) : null}
-            {tab === "tags" ? (
-              <TagsTab
-                data={data}
-                tag={tag}
-                onSelectTag={setTag}
-                period={period}
-                onPeriodChange={setPeriod}
-              />
-            ) : null}
-            {tab === "merchants" ? (
-              <MerchantsTab
-                data={data}
-                merchant={merchant}
-                onSelectMerchant={setMerchant}
-                period={period}
-                onPeriodChange={setPeriod}
-              />
-            ) : null}
-            {tab === "patterns" ? <PatternsTab data={data} /> : null}
-          </>
-        ) : null}
+          {data && data.transactionCount > 0 ? (
+            <>
+              {tab === "main" ? (
+                <MainTab
+                  data={data}
+                  period={period}
+                  onPeriodChange={setPeriod}
+                  onSelectCategory={(name) => {
+                    if (
+                      data.breakdowns.some((item) => item.category === name)
+                    ) {
+                      setCategory(name);
+                      setTab("categories");
+                    }
+                  }}
+                />
+              ) : null}
+              {tab === "sections" ? (
+                <SectionsTab
+                  data={data}
+                  period={period}
+                  onPeriodChange={setPeriod}
+                />
+              ) : null}
+              {tab === "spreads" ? (
+                <SpreadsTab
+                  data={data}
+                  period={period}
+                  onPeriodChange={setPeriod}
+                />
+              ) : null}
+              {tab === "categories" ? (
+                <CategoriesTab
+                  data={data}
+                  category={category}
+                  onSelectCategory={setCategory}
+                  period={period}
+                  onPeriodChange={setPeriod}
+                />
+              ) : null}
+              {tab === "subcategories" ? (
+                <SubcategoriesTab
+                  data={data}
+                  subcategory={subcategory}
+                  onSelectSubcategory={setSubcategory}
+                  period={period}
+                  onPeriodChange={setPeriod}
+                />
+              ) : null}
+              {tab === "tags" ? (
+                <TagsTab
+                  data={data}
+                  tag={tag}
+                  onSelectTag={setTag}
+                  period={period}
+                  onPeriodChange={setPeriod}
+                />
+              ) : null}
+              {tab === "types" ? (
+                <TypesTab
+                  data={data}
+                  type={type}
+                  onSelectType={setType}
+                  period={period}
+                  onPeriodChange={setPeriod}
+                />
+              ) : null}
+              {tab === "merchants" ? (
+                <MerchantsTab
+                  data={data}
+                  merchant={merchant}
+                  onSelectMerchant={setMerchant}
+                  period={period}
+                  onPeriodChange={setPeriod}
+                />
+              ) : null}
+              {tab === "patterns" ? <PatternsTab data={data} /> : null}
+            </>
+          ) : null}
+        </div>
       </div>
     </TooltipProvider>
   );

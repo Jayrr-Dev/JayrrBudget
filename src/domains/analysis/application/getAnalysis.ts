@@ -15,12 +15,21 @@ import type {
   AnalysisPeriod,
   AnalysisRange,
   AnalysisRankedItem,
+  AnalysisTxnPeek,
 } from "@/domains/analysis/domain/types";
 import { singularCategoryKey } from "@/domains/statements/application/categoryVocabulary";
+import {
+  classifySpread,
+  SPREAD_DEFINITIONS,
+  type SpreadName,
+} from "@/domains/transactions/domain/spreads";
 import { splitTags } from "@/domains/transactions/domain/tags";
 import { getDb } from "@/shared/db";
+import { cachedTursoRead } from "@/shared/db/readCache";
 import { accounts, transactions } from "@/shared/db/schema";
 import { eq, gte, max, min } from "drizzle-orm";
+
+const ANALYSIS_CACHE_TTL_MS = 5 * 60_000;
 
 export type GetAnalysisResult =
   | { ok: true; data: AnalysisData }
@@ -28,8 +37,63 @@ export type GetAnalysisResult =
 
 const TOP_STACKED_CATEGORY_ROWS = 15;
 const TOP_STACKED_SECTION_ROWS = 12;
+const TOP_STACKED_SPREAD_ROWS = 4;
 const NAMED_SHARE = 0.85;
 const UNCATEGORIZED = "Uncategorized";
+const PEEK_LIMIT = 120;
+
+function peekKey(facet: string, ...parts: string[]) {
+  return `${facet}:${parts.join("::")}`;
+}
+
+function pushPeek(
+  map: Map<string, AnalysisTxnPeek[]>,
+  key: string,
+  peek: AnalysisTxnPeek,
+) {
+  const list = map.get(key);
+  if (list) list.push(peek);
+  else map.set(key, [peek]);
+}
+
+function finalizePeeks(
+  map: Map<string, AnalysisTxnPeek[]>,
+): Record<string, AnalysisTxnPeek[]> {
+  const out: Record<string, AnalysisTxnPeek[]> = {};
+  for (const [key, list] of map) {
+    out[key] = list
+      .slice()
+      .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
+      .slice(0, PEEK_LIMIT);
+  }
+  return out;
+}
+
+const SPREAD_ORDER = new Map(
+  SPREAD_DEFINITIONS.map((def, index) => [def.name, index]),
+);
+
+function resolveSpreadName(input: {
+  spreadName?: string | null;
+  sectionName?: string | null;
+  categoryName?: string | null;
+  subcategoryName?: string | null;
+}): SpreadName | null {
+  const fromDb = input.spreadName?.trim();
+  if (
+    fromDb === "Income" ||
+    fromDb === "Needs" ||
+    fromDb === "Wants" ||
+    fromDb === "Savings"
+  ) {
+    return fromDb;
+  }
+  return classifySpread({
+    section: input.sectionName,
+    category: input.categoryName,
+    subcategory: input.subcategoryName,
+  });
+}
 const OTHER = "Other";
 const OTHER_KEY = "other";
 
@@ -139,6 +203,62 @@ function placeLabel(city: string | null, region: string | null) {
   return REGION_NAMES[regionName.toLowerCase()] ?? titleCase(regionName);
 }
 
+const COUNTRY_NAMES: Record<string, string> = {
+  can: "Canada",
+  ca: "Canada",
+  canada: "Canada",
+  usa: "United States",
+  us: "United States",
+  "united states": "United States",
+  phl: "Philippines",
+  ph: "Philippines",
+  philippines: "Philippines",
+  gbr: "United Kingdom",
+  gb: "United Kingdom",
+  uk: "United Kingdom",
+  de: "Germany",
+  deu: "Germany",
+  germany: "Germany",
+  cze: "Czechia",
+  cz: "Czechia",
+  au: "Australia",
+  aus: "Australia",
+};
+
+function countryLabel(country: string | null) {
+  const raw = country?.trim();
+  if (!raw) return null;
+  return COUNTRY_NAMES[raw.toLowerCase()] ?? titleCase(raw);
+}
+
+const TICKET_SIZE_ORDER = [
+  "Under $15",
+  "$15–50",
+  "$50–100",
+  "$100–250",
+  "$250–1,000",
+  "$1,000+",
+] as const;
+
+function ticketSizeLabel(amount: number) {
+  if (amount < 15) return "Under $15";
+  if (amount < 50) return "$15–50";
+  if (amount < 100) return "$50–100";
+  if (amount < 250) return "$100–250";
+  if (amount < 1000) return "$250–1,000";
+  return "$1,000+";
+}
+
+function dayOfMonthLabel(isoDate: string) {
+  const day = Number(isoDate.slice(8, 10));
+  if (!Number.isFinite(day) || day < 1 || day > 31) return null;
+  return String(day);
+}
+
+function weekendPart(weekday: string) {
+  return weekday === "Saturday" || weekday === "Sunday" ? "Weekend" : "Weekday";
+}
+
 function merchantLabel(input: {
   companyName: string | null;
   merchantClean: string | null;
@@ -157,12 +277,43 @@ function merchantLabel(input: {
 function merchantCleanLabel(input: {
   merchantClean: string | null;
   description: string | null;
+  companyName?: string | null;
+  brandName?: string | null;
 }) {
   const clean = input.merchantClean?.trim();
+  const company = input.companyName?.trim() || input.brandName?.trim() || null;
+  // Generic payment labels (Loan Payment, Credit Memo) hide the real vendor.
+  if (clean && !isGenericMerchantClean(clean)) return clean;
+  if (company) return company;
   if (clean) return clean;
   const description = input.description?.trim();
   if (!description) return "Unknown";
   return description.replace(/\s+/g, " ").slice(0, 42);
+}
+
+const GENERIC_MERCHANT_CLEANS = new Set([
+  "loan payment",
+  "loan payments",
+  "credit memo",
+  "payment",
+  "payments",
+  "payment thank you",
+  "thank you",
+  "cash advance",
+  "cash adv",
+  "transfer",
+  "transfers",
+]);
+
+function isGenericMerchantClean(value: string) {
+  const keyed = typeKey(value);
+  if (GENERIC_MERCHANT_CLEANS.has(keyed)) return true;
+  // Type aliases like "loan payment" → Personal Financing are labels, not vendors.
+  if (TYPE_ALIASES[keyed]) return true;
+  const singular = singularCategoryKey(value);
+  return Boolean(
+    GENERIC_MERCHANT_CLEANS.has(singular) || TYPE_ALIASES[singular],
+  );
 }
 
 type RankBucket = { spend: number; count: number };
@@ -196,6 +347,14 @@ function rankAll(map: Map<string, RankBucket>): AnalysisRankedItem[] {
     }))
     .filter((item) => item.spend > 0)
     .sort((a, b) => b.spend - a.spend);
+}
+
+function rankSpreads(map: Map<string, RankBucket>): AnalysisRankedItem[] {
+  return rankAll(map).sort(
+    (a, b) =>
+      (SPREAD_ORDER.get(a.name as SpreadName) ?? 99) -
+      (SPREAD_ORDER.get(b.name as SpreadName) ?? 99),
+  );
 }
 
 function vendorsByName(
@@ -427,6 +586,60 @@ function buildStackedSeries(
   return { series, monthly, other, otherByPeriod };
 }
 
+/**
+ * 50/30/20 mix: Needs / Wants / Savings plus Surplus.
+ * Surplus = max(0, income − Needs − Wants − Savings) for that period.
+ * Income itself is a separate Spread row on the breakdown chart.
+ */
+function buildSpreadMixSeries(
+  periodKeys: string[],
+  spendByLabel: Map<string, Map<string, number>>,
+  incomeByPeriod: Map<string, number>,
+  period: AnalysisPeriod,
+) {
+  const series = [
+    { key: "needs", label: "Needs" },
+    { key: "wants", label: "Wants" },
+    { key: "savings", label: "Savings" },
+    { key: "surplus", label: "Surplus" },
+  ] as const;
+  const spendKeys: Array<{
+    name: Exclude<SpreadName, "Income">;
+    key: "needs" | "wants" | "savings";
+  }> = [
+    { name: "Needs", key: "needs" },
+    { name: "Wants", key: "wants" },
+    { name: "Savings", key: "savings" },
+  ];
+
+  const monthly = periodKeys.map((month) => {
+    const row: Record<string, string | number> = {
+      month,
+      label: periodLabel(month, period),
+      needs: 0,
+      wants: 0,
+      savings: 0,
+      surplus: 0,
+    };
+    let spreadSpend = 0;
+    for (const { name, key } of spendKeys) {
+      const amount = Math.max(0, spendByLabel.get(name)?.get(month) ?? 0);
+      row[key] = roundMoney(amount);
+      spreadSpend += amount;
+    }
+    const income = Math.max(0, incomeByPeriod.get(month) ?? 0);
+    row.surplus = roundMoney(Math.max(0, income - spreadSpend));
+    return row;
+  });
+
+  return {
+    series: series.map((item) => ({ key: item.key, label: item.label })),
+    monthly,
+    other: [] as AnalysisRankedItem[],
+    otherByPeriod: {} as Record<string, AnalysisRankedItem[]>,
+  };
+}
+
 function nestedItemsByPeriod(
   periodKeys: string[],
   nestedMonth: Map<string, Map<string, Map<string, number>>>,
@@ -587,6 +800,7 @@ function emptyAnalysis(
       inboundTransfersIgnored: 0,
     },
     monthly: [],
+    txnPeeks: {},
     sections: [],
     sectionMonthly: [],
     sectionSeries: [],
@@ -596,6 +810,14 @@ function emptyAnalysis(
     merchantsBySection: {},
     categoriesBySection: {},
     merchantsByCategory: {},
+    spreads: [],
+    spreadMonthly: [],
+    spreadSeries: [],
+    spreadOther: [],
+    spreadOtherByPeriod: {},
+    spreadStacked: { rows: [], series: [] },
+    merchantsBySpread: {},
+    categoriesBySpread: {},
     subcategories: [],
     subcategoryMonthly: [],
     subcategorySeries: [],
@@ -611,6 +833,14 @@ function emptyAnalysis(
     tagCategoryByPeriod: {},
     tagStacked: { rows: [], series: [] },
     tagBreakdowns: [],
+    types: [],
+    typeMonthly: [],
+    typeSeries: [],
+    typeOther: [],
+    typeOtherByPeriod: {},
+    typeCategoryByPeriod: {},
+    typeStacked: { rows: [], series: [] },
+    typeBreakdowns: [],
     categories: [],
     categoryMonthly: [],
     categorySeries: [],
@@ -629,12 +859,29 @@ function emptyAnalysis(
     channels: [],
     weekdays: [],
     accounts: [],
+    weekendSplit: [],
+    ticketSizes: [],
+    dayOfMonth: [],
+    habitMerchants: [],
+    countries: [],
   };
 }
 
 export async function getAnalysis(
   range: AnalysisRange = "12m",
   period: AnalysisPeriod = "monthly",
+): Promise<GetAnalysisResult> {
+  return cachedTursoRead({
+    key: `analysis:patterns-v2:${range}:${period}`,
+    ttlMs: ANALYSIS_CACHE_TTL_MS,
+    load: () => loadAnalysis(range, period),
+    shouldCache: (result) => result.ok,
+  });
+}
+
+async function loadAnalysis(
+  range: AnalysisRange,
+  period: AnalysisPeriod,
 ): Promise<GetAnalysisResult> {
   try {
     const db = getDb();
@@ -670,14 +917,17 @@ export async function getAnalysis(
       paymentChannel: transactions.channel,
       city: transactions.city,
       region: transactions.region,
+      country: transactions.country,
       merchantClean: transactions.merchantClean,
       enrichmentChannel: transactions.channel,
       sectionName: transactions.section,
       categoryName: transactions.category,
       typeName: transactions.subcategory,
+      spreadName: transactions.spread,
       companyName: transactions.company,
       brandName: transactions.brand,
       tags: transactions.tags,
+      kind: transactions.kind,
     } as const;
 
     const filtered =
@@ -717,6 +967,8 @@ export async function getAnalysis(
     const categoryMonthSpend = new Map<string, Map<string, number>>();
     const sectionSpend = new Map<string, RankBucket>();
     const sectionMonthSpend = new Map<string, Map<string, number>>();
+    const spreadSpend = new Map<string, RankBucket>();
+    const spreadMonthSpend = new Map<string, Map<string, number>>();
     const subcategorySpend = new Map<string, RankBucket>();
     const subcategoryMonthSpend = new Map<string, Map<string, number>>();
     const merchantSpend = new Map<string, RankBucket>();
@@ -724,10 +976,17 @@ export async function getAnalysis(
     const channelSpend = new Map<string, RankBucket>();
     const weekdaySpend = new Map<string, RankBucket>();
     const accountSpend = new Map<string, RankBucket>();
+    const weekendSpend = new Map<string, RankBucket>();
+    const ticketSizeSpend = new Map<string, RankBucket>();
+    const dayOfMonthSpend = new Map<string, RankBucket>();
+    const countrySpend = new Map<string, RankBucket>();
+    const habitMerchantSpend = new Map<string, RankBucket>();
     const typeByCategory = new Map<string, Map<string, RankBucket>>();
     const categoryBySection = new Map<string, Map<string, RankBucket>>();
+    const categoryBySpread = new Map<string, Map<string, RankBucket>>();
     const merchantByCategory = new Map<string, Map<string, RankBucket>>();
     const vendorBySection = new Map<string, Map<string, RankBucket>>();
+    const vendorBySpread = new Map<string, Map<string, RankBucket>>();
     const vendorByCategory = new Map<string, Map<string, RankBucket>>();
     const merchantBySubcategory = new Map<string, Map<string, RankBucket>>();
     const typeMonthByCategory = new Map<
@@ -750,12 +1009,25 @@ export async function getAnalysis(
       string,
       Map<string, Map<string, number>>
     >();
+    const typeSpend = new Map<string, RankBucket>();
+    const typeMonthSpend = new Map<string, Map<string, number>>();
+    const merchantByType = new Map<string, Map<string, RankBucket>>();
+    const merchantMonthByType = new Map<
+      string,
+      Map<string, Map<string, number>>
+    >();
+    const categoryByType = new Map<string, Map<string, RankBucket>>();
+    const categoryMonthByType = new Map<
+      string,
+      Map<string, Map<string, number>>
+    >();
     const merchantMonthSpend = new Map<string, Map<string, number>>();
     const subcategoryByMerchant = new Map<string, Map<string, RankBucket>>();
     const subcategoryMonthByMerchant = new Map<
       string,
       Map<string, Map<string, number>>
     >();
+    const txnPeekMap = new Map<string, AnalysisTxnPeek[]>();
 
     let totalSpend = 0;
     let totalIncome = 0;
@@ -823,16 +1095,21 @@ export async function getAnalysis(
         addCategory(category, month, abs);
         const place = placeLabel(row.city, row.region);
         if (place) addRank(placeSpend, place, abs);
+        const country = countryLabel(row.country);
+        if (country) addRank(countrySpend, country, abs);
         addRank(
           channelSpend,
           channelLabel(row.paymentChannel, row.enrichmentChannel),
           abs,
         );
-        addRank(
-          weekdaySpend,
-          spendWeekday(row.postedDate, row.authorizedDate),
-          abs,
+        const weekday = spendWeekday(row.postedDate, row.authorizedDate);
+        addRank(weekdaySpend, weekday, abs);
+        addRank(weekendSpend, weekendPart(weekday), abs);
+        addRank(ticketSizeSpend, ticketSizeLabel(abs), abs);
+        const dayLabel = dayOfMonthLabel(
+          row.authorizedDate?.trim() || row.postedDate,
         );
+        if (dayLabel) addRank(dayOfMonthSpend, dayLabel, abs);
         addRank(
           accountSpend,
           row.accountName?.trim() || "Unknown account",
@@ -856,8 +1133,23 @@ export async function getAnalysis(
         const cleanMerchant = merchantCleanLabel({
           merchantClean: row.merchantClean,
           description: row.description,
+          companyName: row.companyName ?? row.brandName ?? null,
+          brandName: row.brandName,
         });
+        const spread = resolveSpreadName({
+          spreadName: row.spreadName,
+          sectionName: row.sectionName,
+          categoryName: row.categoryName,
+          subcategoryName: row.typeName,
+        });
+        if (spread) {
+          addRank(spreadSpend, spread, abs);
+          addMonthSpend(spreadMonthSpend, spread, month, abs);
+          nestedAdd(categoryBySpread, spread, category, abs);
+          nestedAdd(vendorBySpread, spread, cleanMerchant, abs);
+        }
         addRank(merchantSpend, cleanMerchant, abs);
+        addRank(habitMerchantSpend, cleanMerchant, abs);
         addMonthSpend(merchantMonthSpend, cleanMerchant, month, abs);
         nestedAdd(subcategoryByMerchant, cleanMerchant, type, abs);
         nestedMonthAdd(
@@ -889,6 +1181,83 @@ export async function getAnalysis(
           nestedAdd(categoryByTag, tag, category, abs);
           nestedMonthAdd(categoryMonthByTag, tag, category, month, abs);
         }
+        for (const typeLabel of splitTags(row.kind)) {
+          addRank(typeSpend, typeLabel, abs);
+          addMonthSpend(typeMonthSpend, typeLabel, month, abs);
+          nestedAdd(merchantByType, typeLabel, cleanMerchant, abs);
+          nestedMonthAdd(
+            merchantMonthByType,
+            typeLabel,
+            cleanMerchant,
+            month,
+            abs,
+          );
+          nestedAdd(categoryByType, typeLabel, category, abs);
+          nestedMonthAdd(categoryMonthByType, typeLabel, category, month, abs);
+        }
+        {
+          const peek: AnalysisTxnPeek = {
+            date: row.postedDate,
+            description:
+              row.description?.trim() ||
+              row.merchantClean?.trim() ||
+              cleanMerchant,
+            amount: abs,
+          };
+          pushPeek(txnPeekMap, peekKey("section", section), peek);
+          pushPeek(txnPeekMap, peekKey("category", category), peek);
+          pushPeek(txnPeekMap, peekKey("subcategory", type), peek);
+          pushPeek(txnPeekMap, peekKey("merchant", cleanMerchant), peek);
+          pushPeek(
+            txnPeekMap,
+            peekKey("section-category", section, category),
+            peek,
+          );
+          pushPeek(
+            txnPeekMap,
+            peekKey("section-merchant", section, cleanMerchant),
+            peek,
+          );
+          pushPeek(
+            txnPeekMap,
+            peekKey("category-merchant", category, cleanMerchant),
+            peek,
+          );
+          pushPeek(
+            txnPeekMap,
+            peekKey("subcategory-merchant", type, cleanMerchant),
+            peek,
+          );
+          if (spread) {
+            pushPeek(txnPeekMap, peekKey("spread", spread), peek);
+            pushPeek(
+              txnPeekMap,
+              peekKey("spread-category", spread, category),
+              peek,
+            );
+            pushPeek(
+              txnPeekMap,
+              peekKey("spread-merchant", spread, cleanMerchant),
+              peek,
+            );
+          }
+          for (const tag of splitTags(row.tags)) {
+            pushPeek(txnPeekMap, peekKey("tag", tag), peek);
+            pushPeek(
+              txnPeekMap,
+              peekKey("tag-merchant", tag, cleanMerchant),
+              peek,
+            );
+          }
+          for (const typeLabel of splitTags(row.kind)) {
+            pushPeek(txnPeekMap, peekKey("type", typeLabel), peek);
+            pushPeek(
+              txnPeekMap,
+              peekKey("type-merchant", typeLabel, cleanMerchant),
+              peek,
+            );
+          }
+        }
       } else if (kind === "refund") {
         bucket.spend -= abs;
         totalSpend -= abs;
@@ -903,6 +1272,8 @@ export async function getAnalysis(
         const cleanMerchant = merchantCleanLabel({
           merchantClean: row.merchantClean,
           description: row.description,
+          companyName: row.companyName ?? row.brandName ?? null,
+          brandName: row.brandName,
         });
         addRank(merchantSpend, cleanMerchant, -abs);
         addMonthSpend(merchantMonthSpend, cleanMerchant, month, -abs);
@@ -918,6 +1289,18 @@ export async function getAnalysis(
         addMonthSpend(sectionMonthSpend, section, month, -abs);
         addRank(subcategorySpend, type, -abs);
         addMonthSpend(subcategoryMonthSpend, type, month, -abs);
+        const spread = resolveSpreadName({
+          spreadName: row.spreadName,
+          sectionName: row.sectionName,
+          categoryName: row.categoryName,
+          subcategoryName: row.typeName,
+        });
+        if (spread) {
+          addRank(spreadSpend, spread, -abs);
+          addMonthSpend(spreadMonthSpend, spread, month, -abs);
+          nestedAdd(categoryBySpread, spread, category, -abs);
+          nestedAdd(vendorBySpread, spread, cleanMerchant, -abs);
+        }
         nestedAdd(typeByCategory, category, type, -abs);
         nestedAdd(categoryBySection, section, category, -abs);
         nestedAdd(vendorBySection, section, cleanMerchant, -abs);
@@ -938,9 +1321,124 @@ export async function getAnalysis(
           nestedAdd(categoryByTag, tag, category, -abs);
           nestedMonthAdd(categoryMonthByTag, tag, category, month, -abs);
         }
+        for (const typeLabel of splitTags(row.kind)) {
+          addRank(typeSpend, typeLabel, -abs);
+          addMonthSpend(typeMonthSpend, typeLabel, month, -abs);
+          nestedAdd(merchantByType, typeLabel, cleanMerchant, -abs);
+          nestedMonthAdd(
+            merchantMonthByType,
+            typeLabel,
+            cleanMerchant,
+            month,
+            -abs,
+          );
+          nestedAdd(categoryByType, typeLabel, category, -abs);
+          nestedMonthAdd(categoryMonthByType, typeLabel, category, month, -abs);
+        }
+        {
+          const peek: AnalysisTxnPeek = {
+            date: row.postedDate,
+            description:
+              row.description?.trim() ||
+              row.merchantClean?.trim() ||
+              cleanMerchant,
+            amount: -abs,
+          };
+          pushPeek(txnPeekMap, peekKey("section", section), peek);
+          pushPeek(txnPeekMap, peekKey("category", category), peek);
+          pushPeek(txnPeekMap, peekKey("subcategory", type), peek);
+          pushPeek(txnPeekMap, peekKey("merchant", cleanMerchant), peek);
+          pushPeek(
+            txnPeekMap,
+            peekKey("section-category", section, category),
+            peek,
+          );
+          pushPeek(
+            txnPeekMap,
+            peekKey("section-merchant", section, cleanMerchant),
+            peek,
+          );
+          pushPeek(
+            txnPeekMap,
+            peekKey("category-merchant", category, cleanMerchant),
+            peek,
+          );
+          pushPeek(
+            txnPeekMap,
+            peekKey("subcategory-merchant", type, cleanMerchant),
+            peek,
+          );
+          if (spread) {
+            pushPeek(txnPeekMap, peekKey("spread", spread), peek);
+            pushPeek(
+              txnPeekMap,
+              peekKey("spread-category", spread, category),
+              peek,
+            );
+            pushPeek(
+              txnPeekMap,
+              peekKey("spread-merchant", spread, cleanMerchant),
+              peek,
+            );
+          }
+          for (const tag of splitTags(row.tags)) {
+            pushPeek(txnPeekMap, peekKey("tag", tag), peek);
+            pushPeek(
+              txnPeekMap,
+              peekKey("tag-merchant", tag, cleanMerchant),
+              peek,
+            );
+          }
+          for (const typeLabel of splitTags(row.kind)) {
+            pushPeek(txnPeekMap, peekKey("type", typeLabel), peek);
+            pushPeek(
+              txnPeekMap,
+              peekKey("type-merchant", typeLabel, cleanMerchant),
+              peek,
+            );
+          }
+        }
       } else {
         bucket.income += abs;
         totalIncome += abs;
+        const cleanMerchant = merchantCleanLabel({
+          merchantClean: row.merchantClean,
+          description: row.description,
+          companyName: row.companyName ?? row.brandName ?? null,
+          brandName: row.brandName,
+        });
+        const spread =
+          resolveSpreadName({
+            spreadName: row.spreadName,
+            sectionName: row.sectionName,
+            categoryName: row.categoryName,
+            subcategoryName: row.typeName,
+          }) ?? "Income";
+        addRank(spreadSpend, spread, abs);
+        addMonthSpend(spreadMonthSpend, spread, month, abs);
+        nestedAdd(categoryBySpread, spread, category, abs);
+        nestedAdd(vendorBySpread, spread, cleanMerchant, abs);
+        {
+          const peek: AnalysisTxnPeek = {
+            date: row.postedDate,
+            description:
+              row.description?.trim() ||
+              row.merchantClean?.trim() ||
+              cleanMerchant,
+            amount: -abs,
+          };
+          pushPeek(txnPeekMap, peekKey("spread", spread), peek);
+          pushPeek(
+            txnPeekMap,
+            peekKey("spread-category", spread, category),
+            peek,
+          );
+          pushPeek(
+            txnPeekMap,
+            peekKey("spread-merchant", spread, cleanMerchant),
+            peek,
+          );
+        }
       }
 
       monthlyMap.set(month, bucket);
@@ -984,6 +1482,7 @@ export async function getAnalysis(
 
     const categories = rankAll(categorySpend);
     const sections = rankAll(sectionSpend);
+    const spreads = rankSpreads(spreadSpend);
     const subcategories = rankAll(subcategorySpend);
 
     const {
@@ -992,6 +1491,20 @@ export async function getAnalysis(
       other: sectionOther,
       otherByPeriod: sectionOtherByPeriod,
     } = buildStackedSeries(monthKeys, sectionMonthSpend, sections, period);
+    const incomeByPeriod = new Map(
+      monthKeys.map((key) => [key, monthlyMap.get(key)?.income ?? 0]),
+    );
+    const {
+      series: spreadSeries,
+      monthly: spreadMonthly,
+      other: spreadOther,
+      otherByPeriod: spreadOtherByPeriod,
+    } = buildSpreadMixSeries(
+      monthKeys,
+      spreadMonthSpend,
+      incomeByPeriod,
+      period,
+    );
     const {
       series: subcategorySeries,
       monthly: subcategoryMonthly,
@@ -1013,6 +1526,15 @@ export async function getAnalysis(
       otherByPeriod: tagOtherByPeriod,
     } = buildStackedSeries(monthKeys, tagMonthSpend, tags, period);
 
+    const types = rankAll(typeSpend);
+
+    const {
+      series: typeSeries,
+      monthly: typeMonthly,
+      other: typeOther,
+      otherByPeriod: typeOtherByPeriod,
+    } = buildStackedSeries(monthKeys, typeMonthSpend, types, period);
+
     const merchants = rankAll(merchantSpend);
 
     const {
@@ -1032,6 +1554,11 @@ export async function getAnalysis(
       categoryBySection,
       TOP_STACKED_SECTION_ROWS,
     );
+    const spreadStacked = buildNestedStackedBars(
+      spreads,
+      categoryBySpread,
+      TOP_STACKED_SPREAD_ROWS,
+    );
     const subcategoryStacked = buildNestedStackedBars(
       subcategories,
       merchantBySubcategory,
@@ -1047,6 +1574,21 @@ export async function getAnalysis(
       monthKeys,
       categoryMonthByTag,
       tagKeyByName,
+    );
+    const typeStacked = buildNestedStackedBars(
+      types,
+      categoryByType,
+      types.length,
+    );
+    const typeKeyByName = new Map(
+      typeSeries
+        .filter((item) => item.key !== OTHER_KEY)
+        .map((item) => [item.label, item.key]),
+    );
+    const typeCategoryByPeriod = nestedItemsByPeriod(
+      monthKeys,
+      categoryMonthByType,
+      typeKeyByName,
     );
     const merchantStacked = buildNestedStackedBars(
       merchants,
@@ -1069,6 +1611,44 @@ export async function getAnalysis(
         count: bucket.count,
       };
     });
+
+    const weekendSplit = (["Weekday", "Weekend"] as const).map((name) => {
+      const bucket = weekendSpend.get(name) ?? emptyBucket();
+      return {
+        name,
+        spend: roundMoney(bucket.spend),
+        count: bucket.count,
+      };
+    });
+
+    const ticketSizes = TICKET_SIZE_ORDER.map((name) => {
+      const bucket = ticketSizeSpend.get(name) ?? emptyBucket();
+      return {
+        name,
+        spend: roundMoney(bucket.spend),
+        count: bucket.count,
+      };
+    }).filter((item) => item.count > 0 || item.spend > 0);
+
+    const dayOfMonth = Array.from({ length: 31 }, (_, index) => {
+      const name = String(index + 1);
+      const bucket = dayOfMonthSpend.get(name) ?? emptyBucket();
+      return {
+        name,
+        spend: roundMoney(bucket.spend),
+        count: bucket.count,
+      };
+    });
+
+    const habitMerchants = [...habitMerchantSpend.entries()]
+      .map(([name, bucket]) => ({
+        name,
+        spend: roundMoney(bucket.spend),
+        count: bucket.count,
+      }))
+      .filter((item) => item.count >= 6 && item.spend > 0)
+      .sort((a, b) => b.count - a.count || b.spend - a.spend)
+      .slice(0, 12);
 
     const breakdowns = categories.slice(0, 12).map((item) => {
       const types = rankAll(typeByCategory.get(item.name) ?? new Map());
@@ -1145,6 +1725,30 @@ export async function getAnalysis(
       };
     });
 
+    const typeBreakdowns = types.map((item) => {
+      const merchants = rankAll(merchantByType.get(item.name) ?? new Map());
+      const {
+        series: merchantSeries,
+        monthly: merchantMonthly,
+        other,
+        otherByPeriod,
+      } = buildStackedSeries(
+        monthKeys,
+        merchantMonthByType.get(item.name) ?? new Map(),
+        merchants,
+        period,
+      );
+      return {
+        type: item.name,
+        spend: item.spend,
+        merchants,
+        merchantSeries,
+        merchantMonthly,
+        other,
+        otherByPeriod,
+      };
+    });
+
     const merchantBreakdowns = merchants.map((item) => {
       const types = rankAll(subcategoryByMerchant.get(item.name) ?? new Map());
       const {
@@ -1195,6 +1799,7 @@ export async function getAnalysis(
           inboundTransfersIgnored: roundMoney(inboundTransfersIgnored),
         },
         monthly,
+        txnPeeks: finalizePeeks(txnPeekMap),
         sections,
         sectionMonthly,
         sectionSeries,
@@ -1213,6 +1818,20 @@ export async function getAnalysis(
           categories.map((item) => item.name),
           vendorByCategory,
         ),
+        spreads,
+        spreadMonthly,
+        spreadSeries,
+        spreadOther,
+        spreadOtherByPeriod,
+        spreadStacked,
+        merchantsBySpread: vendorsByName(
+          spreads.map((item) => item.name),
+          vendorBySpread,
+        ),
+        categoriesBySpread: vendorsByName(
+          spreads.map((item) => item.name),
+          categoryBySpread,
+        ),
         subcategories,
         subcategoryMonthly,
         subcategorySeries,
@@ -1228,6 +1847,14 @@ export async function getAnalysis(
         tagCategoryByPeriod,
         tagStacked,
         tagBreakdowns,
+        types,
+        typeMonthly,
+        typeSeries,
+        typeOther,
+        typeOtherByPeriod,
+        typeCategoryByPeriod,
+        typeStacked,
+        typeBreakdowns,
         categories,
         categoryMonthly,
         categorySeries,
@@ -1246,6 +1873,11 @@ export async function getAnalysis(
         channels: rankMap(channelSpend, 6),
         weekdays,
         accounts: rankMap(accountSpend, 8),
+        weekendSplit,
+        ticketSizes,
+        dayOfMonth,
+        habitMerchants,
+        countries: rankMap(countrySpend, 8),
       },
     };
   } catch (error) {
