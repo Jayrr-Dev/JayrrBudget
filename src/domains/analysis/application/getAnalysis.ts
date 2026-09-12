@@ -1,5 +1,7 @@
-import { eq } from "drizzle-orm";
-import { classifyCashFlow, spendCategoryLabel } from "@/domains/analysis/domain/cashFlow";
+import {
+  classifyCashFlow,
+  spendCategoryLabel,
+} from "@/domains/analysis/domain/cashFlow";
 import {
   addDays,
   addMonths,
@@ -11,13 +13,14 @@ import {
 import type {
   AnalysisData,
   AnalysisPeriod,
-  AnalysisRankedItem,
   AnalysisRange,
+  AnalysisRankedItem,
 } from "@/domains/analysis/domain/types";
 import { singularCategoryKey } from "@/domains/statements/application/categoryVocabulary";
 import { splitTags } from "@/domains/transactions/domain/tags";
 import { getDb } from "@/shared/db";
 import { accounts, transactions } from "@/shared/db/schema";
+import { eq, gte, max, min } from "drizzle-orm";
 
 export type GetAnalysisResult =
   | { ok: true; data: AnalysisData }
@@ -43,8 +46,7 @@ function rangeStartDate(latestDate: string, range: AnalysisRange) {
   if (range === "1w") return addDays(latestDate, -6);
   if (range === "1m") return addDays(latestDate, -29);
 
-  const monthsBack =
-    range === "3m" ? 2 : range === "6m" ? 5 : 11;
+  const monthsBack = range === "3m" ? 2 : range === "6m" ? 5 : 11;
   return `${addMonths(monthKey(latestDate), -monthsBack)}-01`;
 }
 
@@ -211,7 +213,10 @@ function vendorsByName(
 function splitNamedAndOther(ranked: AnalysisRankedItem[]) {
   const total = ranked.reduce((sum, item) => sum + item.spend, 0);
   if (ranked.length === 0 || total <= 0) {
-    return { named: [] as AnalysisRankedItem[], other: [] as AnalysisRankedItem[] };
+    return {
+      named: [] as AnalysisRankedItem[],
+      other: [] as AnalysisRankedItem[],
+    };
   }
   if (ranked.length === 1) {
     return { named: ranked, other: [] as AnalysisRankedItem[] };
@@ -231,10 +236,7 @@ function splitNamedAndOther(ranked: AnalysisRankedItem[]) {
   };
 }
 
-function namedUntilShare(
-  ranked: Array<[string, number]>,
-  total: number,
-) {
+function namedUntilShare(ranked: Array<[string, number]>, total: number) {
   const named = new Set<string>();
   if (total <= 0 || ranked.length === 0) return named;
   if (ranked.length === 1) {
@@ -511,7 +513,8 @@ function buildNestedStackedBars(
   }
 
   let seriesLabels = [...segmentUnion].sort(
-    (a, b) => (globalSegmentSpend.get(b) ?? 0) - (globalSegmentSpend.get(a) ?? 0),
+    (a, b) =>
+      (globalSegmentSpend.get(b) ?? 0) - (globalSegmentSpend.get(a) ?? 0),
   );
   if (hasOther) seriesLabels.push(OTHER);
 
@@ -636,53 +639,65 @@ export async function getAnalysis(
   try {
     const db = getDb();
 
-    const rows = await db
+    const [bounds] = await db
       .select({
-        id: transactions.id,
-        description: transactions.description,
-        accountName: accounts.name,
-        accountType: accounts.type,
-        amount: transactions.amount,
-        currencyCode: transactions.currency,
-        postedDate: transactions.posted,
-        authorizedDate: transactions.authorized,
-        categoryPrimary: transactions.categoryPrimary,
-        categoryDetailed: transactions.categoryDetailed,
-        transactionCode: transactions.txnCode,
-        paymentChannel: transactions.channel,
-        city: transactions.city,
-        region: transactions.region,
-        merchantClean: transactions.merchantClean,
-        enrichmentChannel: transactions.channel,
-        sectionName: transactions.section,
-        categoryName: transactions.category,
-        typeName: transactions.subcategory,
-        companyName: transactions.company,
-        brandName: transactions.brand,
-        tags: transactions.tags,
+        earliestDate: min(transactions.posted),
+        latestDate: max(transactions.posted),
       })
-      .from(transactions)
-      .innerJoin(accounts, eq(accounts.accountId, transactions.accountId));
+      .from(transactions);
 
-    if (rows.length === 0) {
+    const earliestDate = bounds?.earliestDate ?? null;
+    const latestDate = bounds?.latestDate ?? null;
+    if (!latestDate) {
       return { ok: true, data: emptyAnalysis(range, period) };
     }
 
-    const sortedDates = rows
-      .map((row) => row.postedDate)
-      .filter(Boolean)
-      .sort();
-    const earliestDate = sortedDates[0] ?? null;
-    const latestDate = sortedDates[sortedDates.length - 1] ?? null;
     const startDate =
-      latestDate && range !== "all"
-        ? rangeStartDate(latestDate, range)
-        : earliestDate;
+      range !== "all" ? rangeStartDate(latestDate, range) : earliestDate;
 
-    const filtered = rows.filter((row) => {
-      if (!startDate || range === "all") return true;
-      return row.postedDate >= startDate;
-    });
+    const selectColumns = {
+      id: transactions.id,
+      description: transactions.description,
+      accountName: accounts.name,
+      accountType: accounts.type,
+      amount: transactions.amount,
+      currencyCode: transactions.currency,
+      postedDate: transactions.posted,
+      authorizedDate: transactions.authorized,
+      categoryPrimary: transactions.categoryPrimary,
+      categoryDetailed: transactions.categoryDetailed,
+      transactionCode: transactions.txnCode,
+      paymentChannel: transactions.channel,
+      city: transactions.city,
+      region: transactions.region,
+      merchantClean: transactions.merchantClean,
+      enrichmentChannel: transactions.channel,
+      sectionName: transactions.section,
+      categoryName: transactions.category,
+      typeName: transactions.subcategory,
+      companyName: transactions.company,
+      brandName: transactions.brand,
+      tags: transactions.tags,
+    } as const;
+
+    const filtered =
+      startDate && range !== "all"
+        ? await db
+            .select(selectColumns)
+            .from(transactions)
+            .innerJoin(accounts, eq(accounts.accountId, transactions.accountId))
+            .where(gte(transactions.posted, startDate))
+        : await db
+            .select(selectColumns)
+            .from(transactions)
+            .innerJoin(
+              accounts,
+              eq(accounts.accountId, transactions.accountId),
+            );
+
+    if (filtered.length === 0) {
+      return { ok: true, data: emptyAnalysis(range, period) };
+    }
 
     const currency =
       filtered.find((row) => row.currencyCode)?.currencyCode ?? "CAD";
@@ -813,8 +828,16 @@ export async function getAnalysis(
           channelLabel(row.paymentChannel, row.enrichmentChannel),
           abs,
         );
-        addRank(weekdaySpend, spendWeekday(row.postedDate, row.authorizedDate), abs);
-        addRank(accountSpend, row.accountName?.trim() || "Unknown account", abs);
+        addRank(
+          weekdaySpend,
+          spendWeekday(row.postedDate, row.authorizedDate),
+          abs,
+        );
+        addRank(
+          accountSpend,
+          row.accountName?.trim() || "Unknown account",
+          abs,
+        );
         const type = spendTypeLabel(
           row.typeName,
           row.categoryDetailed,
@@ -968,12 +991,7 @@ export async function getAnalysis(
       monthly: sectionMonthly,
       other: sectionOther,
       otherByPeriod: sectionOtherByPeriod,
-    } = buildStackedSeries(
-      monthKeys,
-      sectionMonthSpend,
-      sections,
-      period,
-    );
+    } = buildStackedSeries(monthKeys, sectionMonthSpend, sections, period);
     const {
       series: subcategorySeries,
       monthly: subcategoryMonthly,
@@ -993,12 +1011,7 @@ export async function getAnalysis(
       monthly: tagMonthly,
       other: tagOther,
       otherByPeriod: tagOtherByPeriod,
-    } = buildStackedSeries(
-      monthKeys,
-      tagMonthSpend,
-      tags,
-      period,
-    );
+    } = buildStackedSeries(monthKeys, tagMonthSpend, tags, period);
 
     const merchants = rankAll(merchantSpend);
 
@@ -1007,12 +1020,7 @@ export async function getAnalysis(
       monthly: merchantMonthly,
       other: merchantOther,
       otherByPeriod: merchantOtherByPeriod,
-    } = buildStackedSeries(
-      monthKeys,
-      merchantMonthSpend,
-      merchants,
-      period,
-    );
+    } = buildStackedSeries(monthKeys, merchantMonthSpend, merchants, period);
 
     const categoryStacked = buildNestedStackedBars(
       categories,
@@ -1029,11 +1037,7 @@ export async function getAnalysis(
       merchantBySubcategory,
       subcategories.length,
     );
-    const tagStacked = buildNestedStackedBars(
-      tags,
-      categoryByTag,
-      tags.length,
-    );
+    const tagStacked = buildNestedStackedBars(tags, categoryByTag, tags.length);
     const tagKeyByName = new Map(
       tagSeries
         .filter((item) => item.key !== OTHER_KEY)
@@ -1055,12 +1059,7 @@ export async function getAnalysis(
       monthly: categoryMonthly,
       other: categoryOther,
       otherByPeriod: categoryOtherByPeriod,
-    } = buildStackedSeries(
-      monthKeys,
-      categoryMonthSpend,
-      categories,
-      period,
-    );
+    } = buildStackedSeries(monthKeys, categoryMonthSpend, categories, period);
 
     const weekdays = WEEKDAYS.map((name) => {
       const bucket = weekdaySpend.get(name) ?? emptyBucket();
