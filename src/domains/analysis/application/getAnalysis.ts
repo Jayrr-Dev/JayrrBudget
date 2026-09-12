@@ -76,10 +76,15 @@ const WEEKDAYS = [
 ] as const;
 
 function weekdayLabel(isoDate: string) {
-  const [year, month, day] = isoDate.split("-").map(Number);
+  const [year, month, day] = isoDate.slice(0, 10).split("-").map(Number);
   if (!year || !month || !day) return "Unknown";
   const dow = new Date(Date.UTC(year, month - 1, day)).getUTCDay();
   return WEEKDAYS[(dow + 6) % 7];
+}
+
+function spendWeekday(postedDate: string, authorizedDate: string | null) {
+  const raw = authorizedDate?.trim() || postedDate;
+  return weekdayLabel(raw);
 }
 
 function titleCase(value: string) {
@@ -158,19 +163,49 @@ function merchantCleanLabel(input: {
   return description.replace(/\s+/g, " ").slice(0, 42);
 }
 
-function addRank(map: Map<string, number>, name: string, delta: number) {
-  map.set(name, (map.get(name) ?? 0) + delta);
+type RankBucket = { spend: number; count: number };
+
+function emptyBucket(): RankBucket {
+  return { spend: 0, count: 0 };
 }
 
-function rankMap(map: Map<string, number>, limit = 10) {
+function addRank(
+  map: Map<string, RankBucket>,
+  name: string,
+  spendDelta: number,
+  countDelta = 1,
+) {
+  const cur = map.get(name) ?? emptyBucket();
+  cur.spend += spendDelta;
+  cur.count += countDelta;
+  map.set(name, cur);
+}
+
+function rankMap(map: Map<string, RankBucket>, limit = 10) {
   return rankAll(map).slice(0, limit);
 }
 
-function rankAll(map: Map<string, number>): AnalysisRankedItem[] {
+function rankAll(map: Map<string, RankBucket>): AnalysisRankedItem[] {
   return [...map.entries()]
-    .map(([name, spend]) => ({ name, spend: roundMoney(spend) }))
+    .map(([name, bucket]) => ({
+      name,
+      spend: roundMoney(bucket.spend),
+      count: bucket.count,
+    }))
     .filter((item) => item.spend > 0)
     .sort((a, b) => b.spend - a.spend);
+}
+
+function vendorsByName(
+  names: string[],
+  nested: Map<string, Map<string, RankBucket>>,
+  limit = 10,
+) {
+  const next: Record<string, AnalysisRankedItem[]> = {};
+  for (const name of names) {
+    next[name] = rankAll(nested.get(name) ?? new Map()).slice(0, limit);
+  }
+  return next;
 }
 
 function splitNamedAndOther(ranked: AnalysisRankedItem[]) {
@@ -285,13 +320,14 @@ function spendTypeLabel(
 }
 
 function nestedAdd(
-  root: Map<string, Map<string, number>>,
+  root: Map<string, Map<string, RankBucket>>,
   outer: string,
   inner: string,
-  delta: number,
+  spendDelta: number,
+  countDelta = 1,
 ) {
-  const innerMap = root.get(outer) ?? new Map<string, number>();
-  innerMap.set(inner, (innerMap.get(inner) ?? 0) + delta);
+  const innerMap = root.get(outer) ?? new Map<string, RankBucket>();
+  addRank(innerMap, inner, spendDelta, countDelta);
   root.set(outer, innerMap);
 }
 
@@ -380,6 +416,7 @@ function buildStackedSeries(
       .map((item) => ({
         name: item.name,
         spend: roundMoney(spendByLabel.get(item.name)?.get(month) ?? 0),
+        count: item.count,
       }))
       .filter((item) => item.spend > 0);
     if (items.length > 0) otherByPeriod[month] = items;
@@ -412,7 +449,11 @@ function nestedItemsByPeriod(
       const items = [...bucket.entries()]
         .filter(([, amount]) => amount > 0)
         .sort((a, b) => b[1] - a[1])
-        .map(([name, spend]) => ({ name, spend: roundMoney(spend) }));
+        .map(([name, spend]) => ({
+          name,
+          spend: roundMoney(spend),
+          count: 0,
+        }));
       if (items.length > 0) named[key] = items;
     }
     if (Object.keys(named).length > 0) result[month] = named;
@@ -422,7 +463,7 @@ function nestedItemsByPeriod(
 
 function buildNestedStackedBars(
   outers: AnalysisRankedItem[],
-  nested: Map<string, Map<string, number>>,
+  nested: Map<string, Map<string, RankBucket>>,
   outerLimit: number,
 ) {
   const limited = outers.slice(0, outerLimit).filter((item) => item.spend > 0);
@@ -436,7 +477,8 @@ function buildNestedStackedBars(
   for (const outer of limited) {
     const inner = nested.get(outer.name) ?? new Map();
     const rankedInner = [...inner.entries()]
-      .filter(([, amount]) => amount > 0)
+      .filter(([, bucket]) => bucket.spend > 0)
+      .map(([segment, bucket]) => [segment, bucket.spend] as [string, number])
       .sort((a, b) => b[1] - a[1]);
 
     for (const [segment, amount] of rankedInner) {
@@ -454,8 +496,8 @@ function buildNestedStackedBars(
   for (const outer of limited) {
     const inner = nested.get(outer.name) ?? new Map();
     const topSet = topSegmentsByOuter.get(outer.name) ?? new Set<string>();
-    for (const [segment, amount] of inner) {
-      if (amount > 0 && !topSet.has(segment)) {
+    for (const [segment, bucket] of inner) {
+      if (bucket.spend > 0 && !topSet.has(segment)) {
         hasOther = true;
         break;
       }
@@ -486,12 +528,12 @@ function buildNestedStackedBars(
     const inner = nested.get(outer.name) ?? new Map();
     const topSet = topSegmentsByOuter.get(outer.name) ?? new Set<string>();
 
-    for (const [segment, amount] of inner) {
-      if (amount <= 0) continue;
+    for (const [segment, bucket] of inner) {
+      if (bucket.spend <= 0) continue;
       const label = topSet.has(segment) ? segment : OTHER;
       const key = keyByLabel.get(label);
       if (!key) continue;
-      row[key] = roundMoney(Number(row[key] ?? 0) + amount);
+      row[key] = roundMoney(Number(row[key] ?? 0) + bucket.spend);
     }
     return row;
   });
@@ -501,9 +543,13 @@ function buildNestedStackedBars(
     const inner = nested.get(outer.name) ?? new Map();
     const topSet = topSegmentsByOuter.get(outer.name) ?? new Set<string>();
     const leftovers = [...inner.entries()]
-      .filter(([segment, amount]) => amount > 0 && !topSet.has(segment))
-      .sort((a, b) => b[1] - a[1])
-      .map(([name, spend]) => ({ name, spend: roundMoney(spend) }));
+      .filter(([segment, bucket]) => bucket.spend > 0 && !topSet.has(segment))
+      .sort((a, b) => b[1].spend - a[1].spend)
+      .map(([name, bucket]) => ({
+        name,
+        spend: roundMoney(bucket.spend),
+        count: bucket.count,
+      }));
     if (leftovers.length > 0) otherByRow[outer.name] = leftovers;
   }
 
@@ -531,6 +577,9 @@ function emptyAnalysis(
       internalTransfers: 0,
       transferCount: 0,
       spendCount: 0,
+      transactionCount: 0,
+      transactionsPerPeriod: 0,
+      incomePerPeriod: 0,
       refunds: 0,
       inboundTransfersIgnored: 0,
     },
@@ -541,6 +590,9 @@ function emptyAnalysis(
     sectionOther: [],
     sectionOtherByPeriod: {},
     sectionStacked: { rows: [], series: [] },
+    merchantsBySection: {},
+    categoriesBySection: {},
+    merchantsByCategory: {},
     subcategories: [],
     subcategoryMonthly: [],
     subcategorySeries: [],
@@ -593,6 +645,7 @@ export async function getAnalysis(
         amount: transactions.amount,
         currencyCode: transactions.currency,
         postedDate: transactions.posted,
+        authorizedDate: transactions.authorized,
         categoryPrimary: transactions.categoryPrimary,
         categoryDetailed: transactions.categoryDetailed,
         transactionCode: transactions.txnCode,
@@ -645,21 +698,23 @@ export async function getAnalysis(
       string,
       { spend: number; income: number; transfers: number }
     >();
-    const categorySpend = new Map<string, number>();
+    const categorySpend = new Map<string, RankBucket>();
     const categoryMonthSpend = new Map<string, Map<string, number>>();
-    const sectionSpend = new Map<string, number>();
+    const sectionSpend = new Map<string, RankBucket>();
     const sectionMonthSpend = new Map<string, Map<string, number>>();
-    const subcategorySpend = new Map<string, number>();
+    const subcategorySpend = new Map<string, RankBucket>();
     const subcategoryMonthSpend = new Map<string, Map<string, number>>();
-    const merchantSpend = new Map<string, number>();
-    const placeSpend = new Map<string, number>();
-    const channelSpend = new Map<string, number>();
-    const weekdaySpend = new Map<string, number>();
-    const accountSpend = new Map<string, number>();
-    const typeByCategory = new Map<string, Map<string, number>>();
-    const categoryBySection = new Map<string, Map<string, number>>();
-    const merchantByCategory = new Map<string, Map<string, number>>();
-    const merchantBySubcategory = new Map<string, Map<string, number>>();
+    const merchantSpend = new Map<string, RankBucket>();
+    const placeSpend = new Map<string, RankBucket>();
+    const channelSpend = new Map<string, RankBucket>();
+    const weekdaySpend = new Map<string, RankBucket>();
+    const accountSpend = new Map<string, RankBucket>();
+    const typeByCategory = new Map<string, Map<string, RankBucket>>();
+    const categoryBySection = new Map<string, Map<string, RankBucket>>();
+    const merchantByCategory = new Map<string, Map<string, RankBucket>>();
+    const vendorBySection = new Map<string, Map<string, RankBucket>>();
+    const vendorByCategory = new Map<string, Map<string, RankBucket>>();
+    const merchantBySubcategory = new Map<string, Map<string, RankBucket>>();
     const typeMonthByCategory = new Map<
       string,
       Map<string, Map<string, number>>
@@ -668,20 +723,20 @@ export async function getAnalysis(
       string,
       Map<string, Map<string, number>>
     >();
-    const tagSpend = new Map<string, number>();
+    const tagSpend = new Map<string, RankBucket>();
     const tagMonthSpend = new Map<string, Map<string, number>>();
-    const merchantByTag = new Map<string, Map<string, number>>();
+    const merchantByTag = new Map<string, Map<string, RankBucket>>();
     const merchantMonthByTag = new Map<
       string,
       Map<string, Map<string, number>>
     >();
-    const categoryByTag = new Map<string, Map<string, number>>();
+    const categoryByTag = new Map<string, Map<string, RankBucket>>();
     const categoryMonthByTag = new Map<
       string,
       Map<string, Map<string, number>>
     >();
     const merchantMonthSpend = new Map<string, Map<string, number>>();
-    const subcategoryByMerchant = new Map<string, Map<string, number>>();
+    const subcategoryByMerchant = new Map<string, Map<string, RankBucket>>();
     const subcategoryMonthByMerchant = new Map<
       string,
       Map<string, Map<string, number>>
@@ -695,10 +750,15 @@ export async function getAnalysis(
     let refunds = 0;
     let inboundTransfersIgnored = 0;
 
-    function addCategory(name: string, month: string, delta: number) {
-      categorySpend.set(name, (categorySpend.get(name) ?? 0) + delta);
+    function addCategory(
+      name: string,
+      month: string,
+      spendDelta: number,
+      countDelta = 1,
+    ) {
+      addRank(categorySpend, name, spendDelta, countDelta);
       const byMonth = categoryMonthSpend.get(name) ?? new Map();
-      byMonth.set(month, (byMonth.get(month) ?? 0) + delta);
+      byMonth.set(month, (byMonth.get(month) ?? 0) + spendDelta);
       categoryMonthSpend.set(name, byMonth);
     }
 
@@ -753,7 +813,7 @@ export async function getAnalysis(
           channelLabel(row.paymentChannel, row.enrichmentChannel),
           abs,
         );
-        addRank(weekdaySpend, weekdayLabel(row.postedDate), abs);
+        addRank(weekdaySpend, spendWeekday(row.postedDate, row.authorizedDate), abs);
         addRank(accountSpend, row.accountName?.trim() || "Unknown account", abs);
         const type = spendTypeLabel(
           row.typeName,
@@ -787,6 +847,8 @@ export async function getAnalysis(
         nestedAdd(typeByCategory, category, type, abs);
         nestedAdd(categoryBySection, section, category, abs);
         nestedAdd(merchantByCategory, category, merchant, abs);
+        nestedAdd(vendorBySection, section, cleanMerchant, abs);
+        nestedAdd(vendorByCategory, category, cleanMerchant, abs);
         nestedAdd(merchantBySubcategory, type, cleanMerchant, abs);
         nestedMonthAdd(typeMonthByCategory, category, type, month, abs);
         nestedMonthAdd(
@@ -835,6 +897,8 @@ export async function getAnalysis(
         addMonthSpend(subcategoryMonthSpend, type, month, -abs);
         nestedAdd(typeByCategory, category, type, -abs);
         nestedAdd(categoryBySection, section, category, -abs);
+        nestedAdd(vendorBySection, section, cleanMerchant, -abs);
+        nestedAdd(vendorByCategory, category, cleanMerchant, -abs);
         nestedAdd(merchantBySubcategory, type, cleanMerchant, -abs);
         nestedMonthAdd(
           merchantMonthBySubcategory,
@@ -891,21 +955,13 @@ export async function getAnalysis(
     const periodsWithSpend = monthly.filter((point) => point.spend > 0).length;
     const avgPeriodSpend =
       periodsWithSpend > 0 ? totalSpend / periodsWithSpend : 0;
+    const periodBucketCount = Math.max(monthKeys.length, 1);
+    const transactionsPerPeriod = filtered.length / periodBucketCount;
+    const incomePerPeriod = totalIncome / periodBucketCount;
 
-    const categories = [...categorySpend.entries()]
-      .map(([name, spend]) => ({ name, spend: roundMoney(spend) }))
-      .filter((item) => item.spend > 0)
-      .sort((a, b) => b.spend - a.spend);
-
-    const sections = [...sectionSpend.entries()]
-      .map(([name, spend]) => ({ name, spend: roundMoney(spend) }))
-      .filter((item) => item.spend > 0)
-      .sort((a, b) => b.spend - a.spend);
-
-    const subcategories = [...subcategorySpend.entries()]
-      .map(([name, spend]) => ({ name, spend: roundMoney(spend) }))
-      .filter((item) => item.spend > 0)
-      .sort((a, b) => b.spend - a.spend);
+    const categories = rankAll(categorySpend);
+    const sections = rankAll(sectionSpend);
+    const subcategories = rankAll(subcategorySpend);
 
     const {
       series: sectionSeries,
@@ -930,10 +986,7 @@ export async function getAnalysis(
       period,
     );
 
-    const tags = [...tagSpend.entries()]
-      .map(([name, spend]) => ({ name, spend: roundMoney(spend) }))
-      .filter((item) => item.spend > 0)
-      .sort((a, b) => b.spend - a.spend);
+    const tags = rankAll(tagSpend);
 
     const {
       series: tagSeries,
@@ -947,10 +1000,7 @@ export async function getAnalysis(
       period,
     );
 
-    const merchants = [...merchantSpend.entries()]
-      .map(([name, spend]) => ({ name, spend: roundMoney(spend) }))
-      .filter((item) => item.spend > 0)
-      .sort((a, b) => b.spend - a.spend);
+    const merchants = rankAll(merchantSpend);
 
     const {
       series: merchantSeries,
@@ -1012,10 +1062,14 @@ export async function getAnalysis(
       period,
     );
 
-    const weekdays = WEEKDAYS.map((name) => ({
-      name,
-      spend: roundMoney(weekdaySpend.get(name) ?? 0),
-    })).filter((item) => item.spend > 0);
+    const weekdays = WEEKDAYS.map((name) => {
+      const bucket = weekdaySpend.get(name) ?? emptyBucket();
+      return {
+        name,
+        spend: roundMoney(bucket.spend),
+        count: bucket.count,
+      };
+    });
 
     const breakdowns = categories.slice(0, 12).map((item) => {
       const types = rankAll(typeByCategory.get(item.name) ?? new Map());
@@ -1135,6 +1189,9 @@ export async function getAnalysis(
           internalTransfers: roundMoney(internalTransfers),
           transferCount,
           spendCount,
+          transactionCount: filtered.length,
+          transactionsPerPeriod: roundMoney(transactionsPerPeriod),
+          incomePerPeriod: roundMoney(incomePerPeriod),
           refunds: roundMoney(refunds),
           inboundTransfersIgnored: roundMoney(inboundTransfersIgnored),
         },
@@ -1145,6 +1202,18 @@ export async function getAnalysis(
         sectionOther,
         sectionOtherByPeriod,
         sectionStacked,
+        merchantsBySection: vendorsByName(
+          sections.map((item) => item.name),
+          vendorBySection,
+        ),
+        categoriesBySection: vendorsByName(
+          sections.map((item) => item.name),
+          categoryBySection,
+        ),
+        merchantsByCategory: vendorsByName(
+          categories.map((item) => item.name),
+          vendorByCategory,
+        ),
         subcategories,
         subcategoryMonthly,
         subcategorySeries,

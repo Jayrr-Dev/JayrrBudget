@@ -13,6 +13,8 @@ export type AnalysisMonthlyPoint = {
 export type AnalysisRankedItem = {
   name: string;
   spend: number;
+  /** Lifestyle purchase/refund rows that hit this bucket. */
+  count: number;
 };
 
 export type AnalysisSummary = {
@@ -28,6 +30,12 @@ export type AnalysisSummary = {
   internalTransfers: number;
   transferCount: number;
   spendCount: number;
+  /** All ledger rows in the selected range (spend, income, transfers, …). */
+  transactionCount: number;
+  /** transactionCount ÷ number of selected period buckets in range. */
+  transactionsPerPeriod: number;
+  /** totalIncome ÷ number of selected period buckets in range. */
+  incomePerPeriod: number;
   refunds: number;
   inboundTransfersIgnored: number;
 };
@@ -101,6 +109,12 @@ export type AnalysisData = {
   sectionOtherByPeriod: Record<string, AnalysisRankedItem[]>;
   /** Section bars split by category. */
   sectionStacked: AnalysisStackedRankedBreakdown;
+  /** Top vendors inside each section. */
+  merchantsBySection: Record<string, AnalysisRankedItem[]>;
+  /** Top categories inside each section. */
+  categoriesBySection: Record<string, AnalysisRankedItem[]>;
+  /** Top vendors inside each category. */
+  merchantsByCategory: Record<string, AnalysisRankedItem[]>;
   subcategories: AnalysisRankedItem[];
   /** Rows keyed by series key for stacked subcategory charts. */
   subcategoryMonthly: Array<Record<string, string | number>>;

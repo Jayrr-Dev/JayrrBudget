@@ -24,6 +24,8 @@ export const ANALYSIS_PERIOD_META: Record<
     nounPlural: string;
     avgLabel: string;
     peakLabel: string;
+    txnRateLabel: string;
+    incomeRateLabel: string;
   }
 > = {
   monthly: {
@@ -32,6 +34,8 @@ export const ANALYSIS_PERIOD_META: Record<
     nounPlural: "months",
     avgLabel: "Avg monthly spend",
     peakLabel: "Peak month",
+    txnRateLabel: "Transactions / month",
+    incomeRateLabel: "Income / month",
   },
   biweekly: {
     label: "Biweekly",
@@ -39,6 +43,8 @@ export const ANALYSIS_PERIOD_META: Record<
     nounPlural: "2-week periods",
     avgLabel: "Avg biweekly spend",
     peakLabel: "Peak 2 weeks",
+    txnRateLabel: "Transactions / 2 weeks",
+    incomeRateLabel: "Income / 2 weeks",
   },
   weekly: {
     label: "Weekly",
@@ -46,6 +52,8 @@ export const ANALYSIS_PERIOD_META: Record<
     nounPlural: "weeks",
     avgLabel: "Avg weekly spend",
     peakLabel: "Peak week",
+    txnRateLabel: "Transactions / week",
+    incomeRateLabel: "Income / week",
   },
   daily: {
     label: "Daily",
@@ -53,6 +61,8 @@ export const ANALYSIS_PERIOD_META: Record<
     nounPlural: "days",
     avgLabel: "Avg daily spend",
     peakLabel: "Peak day",
+    txnRateLabel: "Transactions / day",
+    incomeRateLabel: "Income / day",
   },
 };
 

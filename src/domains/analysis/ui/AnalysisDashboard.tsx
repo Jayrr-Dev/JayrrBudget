@@ -10,10 +10,9 @@ import {
   CartesianGrid,
   Cell,
   LabelList,
-  Line,
-  LineChart,
   Pie,
   PieChart,
+  ReferenceLine,
   XAxis,
   YAxis,
   type PieLabelRenderProps,
@@ -25,6 +24,7 @@ import {
   type ChartConfig,
 } from "@/components/ui/chart";
 import { IconInfoCircle } from "@tabler/icons-react";
+import { ChevronDownIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import {
@@ -458,6 +458,7 @@ function TimeSeriesTable({
   const keys = visibleKeys ?? internal.visibleKeys;
   const setKeys = onVisibleKeysChange ?? internal.setVisibleKeys;
   const filterable = columns.length > 1;
+  const newestFirst = useMemo(() => [...rows].reverse(), [rows]);
 
   if (rows.length === 0) return null;
   return (
@@ -494,7 +495,7 @@ function TimeSeriesTable({
           </TableRow>
         </TableHeader>
         <TableBody>
-          {rows.map((row) => (
+          {newestFirst.map((row) => (
             <TableRow key={String(row.month ?? row.label)}>
               <TableCell className="whitespace-nowrap font-medium">
                 {String(row.label ?? "")}
@@ -694,6 +695,7 @@ function MixTooltip({
   scale = "standard",
   sourceRow,
   shareOf,
+  interactive = true,
 }: {
   active?: boolean;
   payload?: Array<{ value?: number; dataKey?: string | number; name?: string }>;
@@ -705,6 +707,7 @@ function MixTooltip({
   scale?: MixScale;
   sourceRow?: Record<string, string | number>;
   shareOf?: number;
+  interactive?: boolean;
 }) {
   if (!active || !payload?.length) return null;
   const rows = payload.filter((item) => Number(item.value) > 0);
@@ -728,7 +731,9 @@ function MixTooltip({
     return formatMoney(money, currency);
   };
   return (
-    <div className="grid min-w-40 max-w-72 gap-1.5 rounded-lg border border-border/50 bg-background px-2.5 py-1.5 text-xs shadow-xl">
+    <div
+      className={`${interactive ? "pointer-events-auto" : "pointer-events-none"} animate-in fade-in-0 grid min-w-40 max-w-72 gap-1.5 rounded-lg border border-border/50 bg-background px-2.5 py-1.5 text-xs shadow-xl duration-200`}
+    >
       <div className="font-medium">
         {String(label ?? "")}
         {shareOf != null ? ` · ${formatPercent(shareOf)}` : ""}
@@ -752,7 +757,10 @@ function MixTooltip({
               </span>
             </div>
             {extras.length > 0 ? (
-              <div className="max-h-40 overflow-auto">
+              <div
+                className="max-h-56 overflow-y-auto overscroll-contain pr-1"
+                onWheel={(event) => event.stopPropagation()}
+              >
                 {extras.map((entry) => (
                   <div
                     key={entry.name}
@@ -1056,6 +1064,8 @@ function StackedMixChart({
 
   const mixTooltip = (
     <ChartTooltip
+      trigger="click"
+      wrapperStyle={{ pointerEvents: "auto", zIndex: 40 }}
       content={(props) => {
         const row = props.payload?.[0]?.payload as
           | { month?: string }
@@ -1253,6 +1263,7 @@ function stackedRowTooltip(
   otherByRow?: Record<string, AnalysisRankedItem[]>,
   series?: AnalysisCategorySeries[],
   pieTotal?: number,
+  interactive = true,
 ) {
   const raw = props.payload?.[0]?.payload;
   const row =
@@ -1289,6 +1300,7 @@ function stackedRowTooltip(
       currency={currency}
       otherItems={otherByRow?.[rowName]}
       shareOf={shareOf}
+      interactive={interactive}
     />
   );
 }
@@ -1364,11 +1376,15 @@ function StackedRankedBarChart({
       {isPie ? (
         <ChartContainer
           config={config}
-          className="mx-auto aspect-square w-full max-w-2xl"
-          initialDimension={{ width: 640, height: 640 }}
+          className="mx-auto aspect-square w-full max-w-4xl"
+          initialDimension={{ width: 800, height: 640 }}
         >
-          <PieChart accessibilityLayer margin={{ top: 8, right: 8, bottom: 8, left: 8 }}>
+          <PieChart
+            accessibilityLayer
+            margin={{ top: 16, right: 96, bottom: 16, left: 96 }}
+          >
             <ChartTooltip
+              wrapperStyle={{ pointerEvents: "none" }}
               content={(props) =>
                 stackedRowTooltip(
                   props,
@@ -1377,6 +1393,7 @@ function StackedRankedBarChart({
                   otherByRow,
                   visibleSeries,
                   pieTotal,
+                  false,
                 )
               }
             />
@@ -1389,6 +1406,8 @@ function StackedRankedBarChart({
               paddingAngle={1.5}
               stroke="var(--background)"
               strokeWidth={2}
+              isAnimationActive={false}
+              activeShape={false}
               style={onSelect ? { cursor: "pointer" } : undefined}
               onClick={(data) => {
                 const name =
@@ -1553,6 +1572,7 @@ function TaxonomyBreakdownTable({
             <TableHead>{nameLabel}</TableHead>
             {nestedLabel ? <TableHead>{nestedLabel}</TableHead> : null}
             <TableHead className="text-right">Spend</TableHead>
+            <TableHead className="text-right">Count</TableHead>
             <TableHead className="text-right">Share</TableHead>
           </TableRow>
         </TableHeader>
@@ -1589,6 +1609,9 @@ function TaxonomyBreakdownTable({
                   {formatMoney(row.spend, currency)}
                 </TableCell>
                 <TableCell className="text-right font-mono tabular-nums text-[var(--muted-foreground)]">
+                  {row.count ?? 0}
+                </TableCell>
+                <TableCell className="text-right font-mono tabular-nums text-[var(--muted-foreground)]">
                   {on ? formatShare(row.spend, totalSpend) : "—"}
                 </TableCell>
               </TableRow>
@@ -1600,6 +1623,9 @@ function TaxonomyBreakdownTable({
             <TableCell colSpan={nestedLabel ? 2 : 1}>Total</TableCell>
             <TableCell className="text-right font-mono tabular-nums">
               {formatMoney(tableTotal, currency)}
+            </TableCell>
+            <TableCell className="text-right font-mono tabular-nums">
+              {visibleRows.reduce((sum, row) => sum + (row.count ?? 0), 0)}
             </TableCell>
             <TableCell className="text-right font-mono tabular-nums">
               {formatShare(tableTotal, totalSpend)}
@@ -1701,7 +1727,7 @@ function WeekdayChart({ data }: { data: AnalysisData }) {
     <section className="space-y-3 rounded-xl border border-[var(--border)] bg-[var(--background)] p-4 sm:p-5">
       <ChartTitle
         title="Spend by weekday"
-        info="Posted date from Transaction Dates. Lifestyle spend only."
+        info="Day you spent, from the authorized date when we have it. Posted date is the fallback. Weekend swipes no longer pile onto Monday."
       />
       <ChartContainer
         config={config}
@@ -1759,6 +1785,10 @@ function NetLineChart({
     ...point,
     net: Math.round((point.income - point.spend) * 100) / 100,
   }));
+  const maxNet = Math.max(...points.map((point) => point.net), 0);
+  const minNet = Math.min(...points.map((point) => point.net), 0);
+  const splitAt =
+    maxNet <= 0 ? 0 : minNet >= 0 ? 1 : maxNet / (maxNet - minNet);
   const config = {
     net: { label: "Net", color: "oklch(0.45 0.06 250)" },
   } satisfies ChartConfig;
@@ -1775,11 +1805,17 @@ function NetLineChart({
         className="aspect-[2.4/1] w-full"
         initialDimension={{ width: 640, height: 240 }}
       >
-        <LineChart
+        <AreaChart
           data={points}
           margin={{ left: 8, right: 8, top: 8, bottom: 0 }}
           accessibilityLayer
         >
+          <defs>
+            <linearGradient id="net-cash-split" x1="0" y1="0" x2="0" y2="1">
+              <stop offset={splitAt} stopColor="#86efac" />
+              <stop offset={splitAt} stopColor="#fca5a5" />
+            </linearGradient>
+          </defs>
           <CartesianGrid vertical={false} />
           <XAxis
             dataKey="label"
@@ -1794,6 +1830,7 @@ function NetLineChart({
             width={52}
             tickFormatter={(value) => moneyTick(Number(value), data.currency)}
           />
+          <ReferenceLine y={0} stroke="#171717" strokeOpacity={0.28} />
           <ChartTooltip
             content={
               <ChartTooltipContent
@@ -1801,15 +1838,18 @@ function NetLineChart({
               />
             }
           />
-          <Line
+          <Area
             type="monotone"
             dataKey="net"
             stroke="var(--color-net)"
             strokeWidth={2}
+            fill="url(#net-cash-split)"
+            fillOpacity={0.55}
+            baseValue={0}
             dot={false}
             name="net"
           />
-        </LineChart>
+        </AreaChart>
       </ChartContainer>
       <TimeSeriesTable
         rows={points}
@@ -1923,6 +1963,36 @@ function SegmentedControl<T extends string>({
   );
 }
 
+function categoriesForSection(
+  stacked: AnalysisStackedRankedBreakdown | undefined,
+  sectionName: string,
+) {
+  if (!stacked) return [];
+  const row = stacked.rows.find((item) => item.name === sectionName);
+  if (!row) return [];
+  const leftovers = stacked.otherByRow?.[sectionName] ?? [];
+  const leftoverSet = new Set(leftovers.map((item) => item.name));
+  const named = stacked.series
+    .filter((series) => series.key !== "other")
+    .map((series) => ({
+      name: series.label,
+      spend: Number(row[series.key] ?? 0),
+      count: 0,
+    }))
+    .filter((item) => item.spend > 0 && !leftoverSet.has(item.name));
+  return [...named, ...leftovers].sort((a, b) => b.spend - a.spend);
+}
+
+function vendorsRecord(
+  entries: Array<{ name: string; vendors: AnalysisRankedItem[] }>,
+) {
+  const next: Record<string, AnalysisRankedItem[]> = {};
+  for (const entry of entries) {
+    next[entry.name] = entry.vendors.slice(0, 10);
+  }
+  return next;
+}
+
 function LeaderboardTable({
   title,
   info,
@@ -1930,7 +2000,7 @@ function LeaderboardTable({
   rows,
   currency,
   totalSpend,
-  onSelect,
+  vendorsByRow,
 }: {
   title: string;
   info: string;
@@ -1938,10 +2008,14 @@ function LeaderboardTable({
   rows: AnalysisRankedItem[];
   currency: string;
   totalSpend: number;
-  onSelect?: (name: string) => void;
+  vendorsByRow?: Record<string, AnalysisRankedItem[]>;
 }) {
+  const [openName, setOpenName] = useState<string | null>(null);
   const top = rows.slice(0, 10);
   const topTotal = top.reduce((sum, row) => sum + row.spend, 0);
+  const topCount = top.reduce((sum, row) => sum + (row.count ?? 0), 0);
+  const grid =
+    "grid w-full grid-cols-[1.5rem_minmax(0,1fr)_9rem_4rem_3.75rem_1rem] items-center gap-x-3 px-3";
 
   return (
     <section className="space-y-3 rounded-xl border border-[var(--border)] bg-[var(--background)] p-4 sm:p-5">
@@ -1949,123 +2023,180 @@ function LeaderboardTable({
       {top.length === 0 ? (
         <p className="text-sm text-[var(--muted-foreground)]">Nothing in this range.</p>
       ) : (
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="w-10">#</TableHead>
-              <TableHead>{nameLabel}</TableHead>
-              <TableHead className="text-right">Spend</TableHead>
-              <TableHead className="text-right">Share</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {top.map((row, index) => (
-              <TableRow key={row.name}>
-                <TableCell className="text-[var(--muted-foreground)] tabular-nums">
-                  {index + 1}
-                </TableCell>
-                <TableCell className="font-medium">
-                  {onSelect ? (
-                    <button
-                      type="button"
-                      onClick={() => onSelect(row.name)}
-                      className="text-left font-medium hover:underline"
-                    >
-                      {row.name}
-                    </button>
-                  ) : (
-                    row.name
-                  )}
-                </TableCell>
-                <TableCell className="text-right font-mono tabular-nums">
-                  {formatMoney(row.spend, currency)}
-                </TableCell>
-                <TableCell className="text-right font-mono tabular-nums text-[var(--muted-foreground)]">
-                  {formatShare(row.spend, totalSpend)}
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-          <TableFooter>
-            <TableRow>
-              <TableCell colSpan={2}>Top {top.length}</TableCell>
-              <TableCell className="text-right font-mono tabular-nums">
-                {formatMoney(topTotal, currency)}
-              </TableCell>
-              <TableCell className="text-right font-mono tabular-nums">
-                {formatShare(topTotal, totalSpend)}
-              </TableCell>
-            </TableRow>
-          </TableFooter>
-        </Table>
+        <div className="overflow-hidden rounded-lg border border-[var(--border)]">
+          <div className={`${grid} border-b border-[var(--border)] py-2 text-xs text-[var(--muted-foreground)]`}>
+            <span>#</span>
+            <span className="min-w-0 truncate">{nameLabel}</span>
+            <span className="text-right">Spend</span>
+            <span className="text-right">Count</span>
+            <span className="text-right">Share</span>
+            <span />
+          </div>
+          <div>
+            {top.map((row, index) => {
+              const vendors = vendorsByRow?.[row.name] ?? [];
+              const isOpen = openName === row.name;
+              return (
+                <div key={row.name} className="not-last:border-b border-[var(--border)]">
+                  <button
+                    type="button"
+                    aria-expanded={isOpen}
+                    onClick={() =>
+                      setOpenName((current) => (current === row.name ? null : row.name))
+                    }
+                    className={`${grid} py-2.5 text-left text-sm`}
+                  >
+                    <span className="text-[var(--muted-foreground)] tabular-nums">
+                      {index + 1}
+                    </span>
+                    <span className="min-w-0 truncate font-medium">{row.name}</span>
+                    <span className="text-right font-mono text-sm tabular-nums">
+                      {formatMoney(row.spend, currency)}
+                    </span>
+                    <span className="text-right font-mono text-sm tabular-nums text-[var(--muted-foreground)]">
+                      {row.count ?? 0}
+                    </span>
+                    <span className="text-right font-mono text-sm tabular-nums text-[var(--muted-foreground)]">
+                      {formatShare(row.spend, totalSpend)}
+                    </span>
+                    <ChevronDownIcon
+                      className={`size-4 shrink-0 text-[var(--muted-foreground)] transition-transform ${
+                        isOpen ? "rotate-180" : ""
+                      }`}
+                    />
+                  </button>
+                  {isOpen ? (
+                    vendors.length === 0 ? (
+                      <p className={`${grid} pb-2.5 text-sm text-[var(--muted-foreground)]`}>
+                        <span />
+                        <span className="col-span-5">None in this range.</span>
+                      </p>
+                    ) : (
+                      <div className="pb-2">
+                        {vendors.map((vendor) => (
+                          <div key={vendor.name} className={`${grid} py-1 text-sm`}>
+                            <span />
+                            <span className="min-w-0 truncate text-[var(--muted-foreground)]">
+                              {vendor.name}
+                            </span>
+                            <span className="text-right font-mono tabular-nums">
+                              {formatMoney(vendor.spend, currency)}
+                            </span>
+                            <span className="text-right font-mono tabular-nums text-[var(--muted-foreground)]">
+                              {vendor.count ?? 0}
+                            </span>
+                            <span className="text-right font-mono tabular-nums text-[var(--muted-foreground)]">
+                              {formatShare(vendor.spend, row.spend)}
+                            </span>
+                            <span />
+                          </div>
+                        ))}
+                      </div>
+                    )
+                  ) : null}
+                </div>
+              );
+            })}
+          </div>
+          <div className={`${grid} border-t border-[var(--border)] py-2 text-sm font-medium`}>
+            <span />
+            <span className="min-w-0 truncate">Top {top.length}</span>
+            <span className="text-right font-mono tabular-nums">
+              {formatMoney(topTotal, currency)}
+            </span>
+            <span className="text-right font-mono tabular-nums">
+              {topCount}
+            </span>
+            <span className="text-right font-mono tabular-nums">
+              {formatShare(topTotal, totalSpend)}
+            </span>
+            <span />
+          </div>
+        </div>
       )}
     </section>
   );
 }
 
-function SummaryTab({
-  data,
-  onSelectSection,
-  onSelectCategory,
-  onSelectSubcategory,
-  onSelectTag,
-  onSelectMerchant,
-}: {
-  data: AnalysisData;
-  onSelectSection: (name: string) => void;
-  onSelectCategory: (name: string) => void;
-  onSelectSubcategory: (name: string) => void;
-  onSelectTag: (name: string) => void;
-  onSelectMerchant: (name: string) => void;
-}) {
+function SummaryTab({ data }: { data: AnalysisData }) {
   const total = data.summary.totalSpend;
+  const merchantsBySubcategory = vendorsRecord(
+    (data.subcategoryBreakdowns ?? []).map((item) => ({
+      name: item.subcategory,
+      vendors: item.merchants,
+    })),
+  );
+  const merchantsByTag = vendorsRecord(
+    (data.tagBreakdowns ?? []).map((item) => ({
+      name: item.tag,
+      vendors: item.merchants,
+    })),
+  );
+  const splitsByMerchant = vendorsRecord(
+    (data.merchantBreakdowns ?? []).map((item) => ({
+      name: item.merchant,
+      vendors: item.types,
+    })),
+  );
   return (
     <div className="grid gap-6 lg:grid-cols-2">
       <LeaderboardTable
         title="Top sections"
-        info="Biggest taxonomy sections by lifestyle spend. Click a name to open Sections."
+        info="Biggest taxonomy sections by lifestyle spend. Click a row to see the vendors inside."
         nameLabel="Section"
         rows={data.sections}
         currency={data.currency}
         totalSpend={total}
-        onSelect={onSelectSection}
+        vendorsByRow={data.merchantsBySection}
       />
       <LeaderboardTable
         title="Top categories"
-        info="Biggest categories by lifestyle spend. Click a name to open that category."
+        info="Biggest categories by lifestyle spend. Click a row to see the vendors inside."
         nameLabel="Category"
         rows={data.categories}
         currency={data.currency}
         totalSpend={total}
-        onSelect={onSelectCategory}
+        vendorsByRow={data.merchantsByCategory}
       />
       <LeaderboardTable
         title="Top subcategories"
-        info="Biggest subcategories by lifestyle spend. Click a name to open that subcategory."
+        info="Biggest subcategories by lifestyle spend. Click a row to see the vendors inside."
         nameLabel="Subcategory"
         rows={data.subcategories}
         currency={data.currency}
         totalSpend={total}
-        onSelect={onSelectSubcategory}
+        vendorsByRow={merchantsBySubcategory}
       />
       <LeaderboardTable
         title="Top tags"
-        info="Biggest tags by lifestyle spend. A transaction can carry more than one tag. Click a name to open that tag."
+        info="Biggest tags by lifestyle spend. A transaction can carry more than one tag. Click a row to see the vendors inside."
         nameLabel="Tag"
         rows={data.tags}
         currency={data.currency}
         totalSpend={total}
-        onSelect={onSelectTag}
+        vendorsByRow={merchantsByTag}
       />
       <LeaderboardTable
         title="Top merchants"
-        info="Biggest Merchant clean names by lifestyle spend. Click a name to open that merchant."
+        info="Biggest Merchant clean names by lifestyle spend. Click a row to see the subcategories inside."
         nameLabel="Merchant"
         rows={data.merchants}
         currency={data.currency}
         totalSpend={total}
-        onSelect={onSelectMerchant}
+        vendorsByRow={splitsByMerchant}
       />
+      {data.sections.map((section) => (
+        <LeaderboardTable
+          key={section.name}
+          title={`Top ${section.name} categories`}
+          info={`Biggest categories inside ${section.name}. Share is of that section. Click a row to see the vendors inside.`}
+          nameLabel="Category"
+          rows={data.categoriesBySection?.[section.name] ?? []}
+          currency={data.currency}
+          totalSpend={section.spend}
+          vendorsByRow={data.merchantsByCategory}
+        />
+      ))}
     </div>
   );
 }
@@ -2084,7 +2215,7 @@ function MainTab({
   const periodMeta = ANALYSIS_PERIOD_META[period];
   return (
     <div className="space-y-6">
-      <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+      <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         <Stat
           label="Lifestyle spending"
           value={formatMoney(data.summary.totalSpend, data.currency)}
@@ -2094,6 +2225,33 @@ function MainTab({
           label="Income"
           value={formatMoney(data.summary.totalIncome, data.currency)}
           info="Payroll, cashback, and e-transfers in. Card payment credits on the visa are not income."
+        />
+        <Stat
+          label="Transactions"
+          value={String(
+            data.summary.transactionCount ?? data.transactionCount ?? 0,
+          )}
+          info="All ledger rows in this date range (spend, income, transfers, and the rest)."
+        />
+        <Stat
+          label={periodMeta.txnRateLabel}
+          value={
+            (data.summary.transactionsPerPeriod ?? 0).toLocaleString(
+              undefined,
+              {
+                maximumFractionDigits: 1,
+              },
+            )
+          }
+          info={`Transaction count divided by ${periodMeta.nounPlural} in this range (same buckets as the ${periodMeta.label.toLowerCase()} charts).`}
+        />
+        <Stat
+          label={periodMeta.incomeRateLabel}
+          value={formatMoney(
+            data.summary.incomePerPeriod ?? 0,
+            data.currency,
+          )}
+          info={`Income divided by ${periodMeta.nounPlural} in this range (same buckets as the ${periodMeta.label.toLowerCase()} charts).`}
         />
         <Stat
           label={periodMeta.avgLabel}
@@ -2796,42 +2954,7 @@ export function AnalysisDashboard() {
                 }}
               />
             ) : null}
-            {tab === "summary" ? (
-              <SummaryTab
-                data={data}
-                onSelectSection={() => setTab("sections")}
-                onSelectCategory={(name) => {
-                  if (data.breakdowns.some((item) => item.category === name)) {
-                    setCategory(name);
-                  }
-                  setTab("categories");
-                }}
-                onSelectSubcategory={(name) => {
-                  if (
-                    data.subcategoryBreakdowns.some(
-                      (item) => item.subcategory === name,
-                    )
-                  ) {
-                    setSubcategory(name);
-                  }
-                  setTab("subcategories");
-                }}
-                onSelectTag={(name) => {
-                  if (data.tagBreakdowns.some((item) => item.tag === name)) {
-                    setTag(name);
-                  }
-                  setTab("tags");
-                }}
-                onSelectMerchant={(name) => {
-                  if (
-                    data.merchantBreakdowns.some((item) => item.merchant === name)
-                  ) {
-                    setMerchant(name);
-                  }
-                  setTab("merchants");
-                }}
-              />
-            ) : null}
+            {tab === "summary" ? <SummaryTab data={data} /> : null}
             {tab === "sections" ? (
               <SectionsTab
                 data={data}
