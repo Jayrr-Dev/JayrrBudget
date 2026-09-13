@@ -463,38 +463,38 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
     patterns: [/lexus\s*of\s*edmonton/i],
   },
 
-  // --- Travel (no Travel section — Lodging/Attractions → Lifestyle, flights → Transport) ---
+  // --- Travel ---
   {
     categoryDetailed: "Hotels & Vacation Rentals",
     categoryPrimary: "TRAVEL",
     tree: {
-      section: "Lifestyle",
+      section: "Travel",
       category: "Lodging",
       type: "Hotels & Vacation Rentals",
     },
-    patterns: [
-      /airbnb/i,
-      /hilton/i,
-      /agoda/i,
-      /the\s*crestmont/i,
-    ],
+    patterns: [/airbnb/i, /hilton/i, /agoda/i, /the\s*crestmont/i],
   },
   {
     categoryDetailed: "Airline Tickets",
     categoryPrimary: "TRAVEL",
     tree: {
-      section: "Transport",
+      section: "Travel",
       category: "Flights",
       type: "Airline Tickets",
     },
-    patterns: [/cebu\s*pacific/i, /cebu\s*air/i, /cheap\s*tickets/i, /trip\.com/i],
+    patterns: [
+      /cebu\s*pacific/i,
+      /cebu\s*air/i,
+      /cheap\s*tickets/i,
+      /trip\.com/i,
+    ],
   },
   {
     categoryDetailed: "Car Rental",
     categoryPrimary: "TRAVEL",
     tree: {
-      section: "Transport",
-      category: "Vehicle",
+      section: "Travel",
+      category: "Flights",
       type: "Car Rental",
     },
     patterns: [/\bavis\b/i, /etoll\s*avis/i],
@@ -503,7 +503,7 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
     categoryDetailed: "In-Flight",
     categoryPrimary: "TRAVEL",
     tree: {
-      section: "Transport",
+      section: "Travel",
       category: "Flights",
       type: "In-Flight",
     },
@@ -513,9 +513,9 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
     categoryDetailed: "Attractions & Tours",
     categoryPrimary: "ENTERTAINMENT",
     tree: {
-      section: "Lifestyle",
-      category: "Attractions & Tours",
-      type: "Theme Parks",
+      section: "Travel",
+      category: "Sightseeing",
+      type: "Attractions & Tours",
     },
     patterns: [
       /circle\s*line/i,
@@ -794,7 +794,6 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
   {
     categoryDetailed: "Property & Auto Insurance",
     categoryPrimary: "LOAN_PAYMENTS",
-    tags: ["Subscription"],
     tree: {
       section: "Finance",
       category: "Insurance",

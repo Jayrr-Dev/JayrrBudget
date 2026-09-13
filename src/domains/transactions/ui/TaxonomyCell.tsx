@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import {
   Combobox,
@@ -13,7 +13,7 @@ import { queryKeys } from "@/domains/dashboard/queries/query-keys";
 import type { TransactionTaxonomy } from "@/domains/transactions/application/getTransactionTaxonomy";
 import type { TaxonomyField } from "@/domains/transactions/application/updateTransactionTaxonomy";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 type TaxonomyResponse =
@@ -57,6 +57,7 @@ async function postUpdateTaxonomy(input: {
   return data;
 }
 
+/** Patch every dashboard query (overview + /transactions all-rows). */
 function patchDashboardCaches(
   queryClient: ReturnType<typeof useQueryClient>,
   result: Extract<UpdateResponse, { ok: true }>,
@@ -117,7 +118,7 @@ type TaxonomyCellProps = {
   placeholder?: string;
 };
 
-/** Type a name and press Enter to create it when missing from the list. */
+/** Searchable combobox for one taxonomy column; options cascade from parent dims. */
 export function TaxonomyCell({
   transactionId,
   field,
@@ -128,27 +129,27 @@ export function TaxonomyCell({
 }: TaxonomyCellProps) {
   const queryClient = useQueryClient();
   const taxonomy = useTaxonomy();
+  /** Optimistic selection while the POST is in flight / until props catch up. */
   const [pendingValue, setPendingValue] = useState<string | null | undefined>(
     undefined,
   );
-  const [inputValue, setInputValue] = useState(() => normName(value) ?? "");
-  const highlightedRef = useRef<string | null>(null);
 
   const committed = normName(value);
   const selected = pendingValue !== undefined ? pendingValue : committed;
 
+  // Drop optimistic state once the dashboard row matches (incl. cascade clears).
   useEffect(() => {
     if (pendingValue === undefined) return;
-    if (committed === pendingValue) setPendingValue(undefined);
+    if (committed === pendingValue) {
+      setPendingValue(undefined);
+    }
   }, [committed, pendingValue]);
 
-  useEffect(() => {
-    setInputValue(selected ?? "");
-  }, [selected]);
-
-  const baseOptions = useMemo(() => {
+  const options = useMemo(() => {
     const data = taxonomy.data;
-    if (!data) return namesMatching([], selected);
+    if (!data) {
+      return namesMatching([], selected);
+    }
 
     if (field === "section") {
       return namesMatching(
@@ -190,21 +191,12 @@ export function TaxonomyCell({
     );
   }, [taxonomy.data, field, selected, sectionName, categoryName]);
 
-  const query = inputValue.trim();
-  const exactMatch = baseOptions.some(
-    (name) => name.toLowerCase() === query.toLowerCase(),
-  );
-  // Use the typed string as the item value so the default filter keeps it visible.
-  const createValue = query && !exactMatch ? query : null;
-  const options = createValue ? [...baseOptions, createValue] : baseOptions;
-
   const mutation = useMutation({
     mutationFn: postUpdateTaxonomy,
     onSuccess: (result) => {
+      // Mutation body is source of truth — patch caches, do not refetch.
+      // Refetching can reintroduce stale process-local Turso read cache.
       patchDashboardCaches(queryClient, result);
-      void queryClient.invalidateQueries({
-        queryKey: queryKeys.transactionTaxonomy,
-      });
     },
     onError: (err) => {
       setPendingValue(undefined);
@@ -212,30 +204,12 @@ export function TaxonomyCell({
     },
   });
 
-  function commit(nextValue: string | null) {
-    if (nextValue === selected) return;
-    if (mutation.isPending) return;
-    setPendingValue(nextValue);
-    setInputValue(nextValue ?? "");
-    mutation.mutate({
-      transactionId,
-      field,
-      value: nextValue,
-    });
-  }
-
   return (
     <Combobox
       items={options}
       value={selected}
-      inputValue={inputValue}
-      onInputValueChange={(next) => {
-        setInputValue(next);
-      }}
-      onItemHighlighted={(item) => {
-        highlightedRef.current = typeof item === "string" ? item : null;
-      }}
       onValueChange={(next, details) => {
+        // Only persist real commits — ignore filter/typing/focus noise.
         const reason = details?.reason;
         if (
           reason === "input-change" ||
@@ -250,7 +224,14 @@ export function TaxonomyCell({
           return;
         }
         const nextValue = typeof next === "string" ? normName(next) : null;
-        commit(nextValue);
+        if (nextValue === selected) return;
+        if (mutation.isPending) return;
+        setPendingValue(nextValue);
+        mutation.mutate({
+          transactionId,
+          field,
+          value: nextValue,
+        });
       }}
       disabled={mutation.isPending || taxonomy.isPending}
     >
@@ -258,52 +239,15 @@ export function TaxonomyCell({
         placeholder={placeholder}
         className="h-8 w-full min-w-[8rem] border-transparent bg-transparent shadow-none hover:border-[var(--border)] hover:bg-[var(--muted)]/40"
         showClear={Boolean(selected)}
-        onKeyDown={(event) => {
-          if (event.key !== "Enter" || event.nativeEvent.isComposing) return;
-          if (mutation.isPending) return;
-
-          const typed = inputValue.trim();
-          if (!typed) return;
-
-          const exact = baseOptions.find(
-            (name) => name.toLowerCase() === typed.toLowerCase(),
-          );
-          if (exact) {
-            event.preventDefault();
-            commit(exact);
-            return;
-          }
-
-          const highlighted = highlightedRef.current;
-          const highlightIsExisting =
-            !!highlighted &&
-            baseOptions.some(
-              (name) => name.toLowerCase() === highlighted.toLowerCase(),
-            ) &&
-            highlighted.toLowerCase().includes(typed.toLowerCase());
-
-          // Arrow-highlighted existing match: let Combobox select it.
-          if (highlightIsExisting && highlighted !== createValue) {
-            return;
-          }
-
-          // No exact match (Empty / Create row): Enter adds the typed value.
-          event.preventDefault();
-          event.stopPropagation();
-          commit(typed);
-        }}
       />
       <ComboboxContent className="w-56">
-        <ComboboxEmpty>No match - press Enter to add</ComboboxEmpty>
+        <ComboboxEmpty>No match</ComboboxEmpty>
         <ComboboxList>
-          {(item) => {
-            const isCreate = createValue != null && item === createValue;
-            return (
-              <ComboboxItem key={isCreate ? `create:${item}` : item} value={item}>
-                {isCreate ? `Create "${item}"` : item}
-              </ComboboxItem>
-            );
-          }}
+          {(item) => (
+            <ComboboxItem key={item} value={item}>
+              {item}
+            </ComboboxItem>
+          )}
         </ComboboxList>
       </ComboboxContent>
     </Combobox>

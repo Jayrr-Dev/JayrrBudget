@@ -1,9 +1,6 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
-import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { PersistentNoteFab } from "@/components/layout/PersistentNoteFab";
 import {
   Sidebar,
   SidebarBody,
@@ -11,12 +8,16 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import { Spinner } from "@/components/ui/spinner";
-import { cn } from "@/lib/utils";
-import { motion } from "motion/react";
 import type { AppModuleRecord } from "@/domains/modules/domain/types";
 import { fetchModules } from "@/domains/modules/queries/modules";
 import { moduleQueryKeys } from "@/domains/modules/queries/query-keys";
 import { resolveModuleIcon } from "@/domains/modules/ui/moduleIcons";
+import { cn } from "@/lib/utils";
+import { useQuery } from "@tanstack/react-query";
+import { motion } from "motion/react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { useState } from "react";
 
 function Brand() {
   const { open, animate } = useSidebar();
@@ -191,6 +192,7 @@ export function AppShell({
           {children}
         </div>
       </main>
+      <PersistentNoteFab />
     </div>
   );
 }

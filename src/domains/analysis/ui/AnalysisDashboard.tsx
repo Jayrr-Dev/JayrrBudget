@@ -51,14 +51,16 @@ import type {
 import { fetchAnalysis } from "@/domains/analysis/queries/fetchAnalysis";
 import { analysisQueryKeys } from "@/domains/analysis/queries/query-keys";
 import { formatMoney } from "@/domains/dashboard/domain/money";
+import { addScratchNoteRow } from "@/domains/scratch-note/scratchNoteStore";
 import { cn } from "@/lib/utils";
+import { downloadCsv, toCsv } from "@/shared/lib/csv";
 import {
   formatDisplayDate,
   formatShortDisplayDate,
 } from "@/shared/lib/format-date";
 import { IconInfoCircle } from "@tabler/icons-react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { ChevronDownIcon } from "lucide-react";
+import { ChevronDownIcon, PlusIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   Area,
@@ -233,22 +235,55 @@ function Stat({
   );
 }
 
+function csvFilenameFromTitle(title: string) {
+  const slug = title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
+  return slug || "export";
+}
+
 function ChartTitle({
   title,
   info,
   actions,
+  csv,
 }: {
   title: string;
   info: string;
   actions?: ReactNode;
+  /** When set, shows Export CSV on the far right of the header. */
+  csv?: { headers: string[]; rows: unknown[][]; filename?: string };
 }) {
+  const exportButton = csv ? (
+    <Button
+      type="button"
+      variant="outline"
+      size="xs"
+      disabled={csv.rows.length === 0}
+      onClick={() =>
+        downloadCsv(
+          csv.filename ?? csvFilenameFromTitle(title),
+          toCsv(csv.headers, csv.rows),
+        )
+      }
+    >
+      Export CSV
+    </Button>
+  ) : null;
+
   return (
     <div className="flex flex-wrap items-start justify-between gap-2">
       <div className="flex items-center gap-1">
         <h2 className="text-lg font-semibold tracking-tight">{title}</h2>
         <InfoTip label={`${title} info`}>{info}</InfoTip>
       </div>
-      {actions}
+      {actions || exportButton ? (
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          {actions}
+          {exportButton}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -643,6 +678,15 @@ function TrendChart({
             <PeriodViews value={period} onChange={onPeriodChange} />
           </ChartActions>
         }
+        csv={{
+          headers: ["Period", "Spend", "Income", "Transfers"],
+          rows: data.monthly.map((row) => [
+            String(row.label ?? row.month ?? ""),
+            Number(row.spend ?? 0),
+            Number(row.income ?? 0),
+            Number(row.transfers ?? 0),
+          ]),
+        }}
       />
       <ChartContainer
         config={TREND_CONFIG}
@@ -1338,6 +1382,13 @@ function StackedMixChart({
             <PeriodViews value={period} onChange={onPeriodChange} />
           </ChartActions>
         }
+        csv={{
+          headers: ["Period", ...series.map((item) => item.label)],
+          rows: monthly.map((row) => [
+            String(row.label ?? row.month ?? ""),
+            ...series.map((item) => Number(row[item.key] ?? 0)),
+          ]),
+        }}
       />
       <div ref={chartShellRef}>
         <ChartContainer
@@ -1637,6 +1688,14 @@ function StackedRankedBarChart({
             />
           ) : undefined
         }
+        csv={{
+          headers: ["Name", ...series.map((item) => item.label), "Spend"],
+          rows: rows.map((row) => [
+            String(row.name ?? ""),
+            ...series.map((item) => Number(row[item.key] ?? 0)),
+            Number(row.spend ?? 0),
+          ]),
+        }}
       />
       {isPie ? (
         <ChartContainer
@@ -1847,7 +1906,27 @@ function TaxonomyBreakdownTable({
 
   return (
     <section className="space-y-3 rounded-xl border border-[var(--border)] bg-[var(--background)] p-4 sm:p-5">
-      <ChartTitle title={title} info={info} />
+      <ChartTitle
+        title={title}
+        info={info}
+        csv={{
+          headers: nestedLabel
+            ? [nameLabel, nestedLabel, "Spend", "Count", "Share %"]
+            : [nameLabel, "Spend", "Count", "Share %"],
+          rows: rows.map((row) => {
+            const share =
+              totalSpend > 0
+                ? Math.round((row.spend / totalSpend) * 10000) / 100
+                : 0;
+            const nested = nestedLabel
+              ? (stackedBreakdownText(row.name, stacked, currency) ?? "")
+              : null;
+            return nestedLabel
+              ? [row.name, nested, row.spend, row.count ?? 0, share]
+              : [row.name, row.spend, row.count ?? 0, share];
+          }),
+        }}
+      />
       <Table>
         <TableHeader>
           <TableRow>
@@ -1944,7 +2023,14 @@ function RankedBarChart({
 
   return (
     <section className="space-y-3 rounded-xl border border-[var(--border)] bg-[var(--background)] p-4 sm:p-5">
-      <ChartTitle title={title} info={info} />
+      <ChartTitle
+        title={title}
+        info={info}
+        csv={{
+          headers: ["Name", "Spend", "Count"],
+          rows: rows.map((row) => [row.name, row.spend, row.count ?? 0]),
+        }}
+      />
       <ChartContainer
         config={config}
         className="aspect-auto h-[min(28rem,calc(2.2rem*var(--rows)+3rem))] w-full"
@@ -2015,6 +2101,14 @@ function WeekdayChart({ data }: { data: AnalysisData }) {
       <ChartTitle
         title="Spend by weekday"
         info="Day you spent, from the authorized date when we have it. Posted date is the fallback. Weekend swipes no longer pile onto Monday."
+        csv={{
+          headers: ["Weekday", "Spend", "Count"],
+          rows: data.weekdays.map((row) => [
+            row.name,
+            row.spend,
+            row.count ?? 0,
+          ]),
+        }}
       />
       <ChartContainer
         config={config}
@@ -2074,6 +2168,10 @@ function DayOfMonthChart({ data }: { data: AnalysisData }) {
       <ChartTitle
         title="Spend by day of month"
         info="Calendar day (1–31) of the authorized date when present. Spikes often line up with rent, loans, or payday shopping."
+        csv={{
+          headers: ["Day", "Spend", "Count"],
+          rows: rows.map((row) => [row.name, row.spend, row.count ?? 0]),
+        }}
       />
       <ChartContainer
         config={config}
@@ -2157,7 +2255,14 @@ function FrequencyBarChart({
 
   return (
     <section className="space-y-3 rounded-xl border border-[var(--border)] bg-[var(--background)] p-4 sm:p-5">
-      <ChartTitle title={title} info={info} />
+      <ChartTitle
+        title={title}
+        info={info}
+        csv={{
+          headers: ["Name", "Trips", "Spend"],
+          rows: rows.map((row) => [row.name, row.count ?? 0, row.spend]),
+        }}
+      />
       <ChartContainer
         config={config}
         className="aspect-auto h-[min(28rem,calc(2.2rem*var(--rows)+3rem))] w-full"
@@ -2248,6 +2353,15 @@ function NetLineChart({
         title="Net cash flow"
         info="Income minus lifestyle spend. Internal transfers excluded so paying a credit card does not look like extra income or extra spend."
         actions={<PeriodViews value={period} onChange={onPeriodChange} />}
+        csv={{
+          headers: ["Period", "Net", "Income", "Spend"],
+          rows: points.map((row) => [
+            String(row.label ?? row.month ?? ""),
+            row.net,
+            Number(row.income ?? 0),
+            Number(row.spend ?? 0),
+          ]),
+        }}
       />
       <ChartContainer
         config={config}
@@ -2548,8 +2662,21 @@ function RowTxnsPopover({
                       <td className="whitespace-nowrap px-3 py-1.5 align-top tabular-nums text-[var(--muted-foreground)]">
                         {formatShortDisplayDate(txn.date)}
                       </td>
-                      <td className="max-w-[12rem] truncate px-2 py-1.5 align-top text-[var(--foreground)]">
-                        {txn.description}
+                      <td className="max-w-[12rem] px-2 py-1.5 align-top text-[var(--foreground)]">
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="block truncate">
+                              {txn.description}
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent
+                            side="top"
+                            sideOffset={6}
+                            className="z-[60] max-w-sm text-left leading-snug"
+                          >
+                            {txn.description}
+                          </TooltipContent>
+                        </Tooltip>
                       </td>
                       <td className="whitespace-nowrap px-2 py-1.5 text-right align-top font-mono tabular-nums">
                         {formatMoney(Math.abs(txn.amount), currency)}
@@ -2610,16 +2737,30 @@ function LeaderboardTable({
   const showTxns = Boolean(transactionsForRow);
   const gridCols = canExpand
     ? showTxns
-      ? "grid-cols-[1.5rem_minmax(0,1fr)_9rem_4rem_3.75rem_1rem_1.25rem]"
-      : "grid-cols-[1.5rem_minmax(0,1fr)_9rem_4rem_3.75rem_1rem]"
+      ? "grid-cols-[1.75rem_minmax(0,1fr)_9rem_4rem_3.75rem_1rem_1.25rem]"
+      : "grid-cols-[1.75rem_minmax(0,1fr)_9rem_4rem_3.75rem_1rem]"
     : showTxns
-      ? "grid-cols-[1.5rem_minmax(0,1fr)_9rem_4rem_3.75rem_1.25rem]"
-      : "grid-cols-[1.5rem_minmax(0,1fr)_9rem_4rem_3.75rem]";
+      ? "grid-cols-[1.75rem_minmax(0,1fr)_9rem_4rem_3.75rem_1.25rem]"
+      : "grid-cols-[1.75rem_minmax(0,1fr)_9rem_4rem_3.75rem]";
   const grid = `grid w-full items-center gap-x-3 px-3 ${gridCols}`;
 
   return (
     <section className="space-y-3 rounded-xl border border-[var(--border)] bg-[var(--background)] p-4 sm:p-5">
-      <ChartTitle title={title} info={info} />
+      <ChartTitle
+        title={title}
+        info={info}
+        csv={{
+          headers: [nameLabel, "Spend", "Count", "Share %"],
+          rows: rows.map((row) => [
+            row.name,
+            row.spend,
+            row.count ?? 0,
+            totalSpend > 0
+              ? Math.round((row.spend / totalSpend) * 10000) / 100
+              : 0,
+          ]),
+        }}
+      />
       {top.length === 0 ? (
         <p className="text-sm text-[var(--muted-foreground)]">
           Nothing in this range.
@@ -2713,7 +2854,24 @@ function LeaderboardTable({
                             key={vendor.name}
                             className={`${grid} py-1 text-sm`}
                           >
-                            <span />
+                            <button
+                              type="button"
+                              title={`Add ${vendor.name} to note`}
+                              aria-label={`Add ${vendor.name} to note`}
+                              className="inline-flex size-5 items-center justify-center rounded text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                addScratchNoteRow({
+                                  name: vendor.name,
+                                  spend: vendor.spend,
+                                  count: vendor.count ?? 0,
+                                  currency,
+                                  parent: row.name,
+                                });
+                              }}
+                            >
+                              <PlusIcon className="size-3.5" strokeWidth={2} />
+                            </button>
                             <span className="min-w-0 truncate text-[var(--muted-foreground)]">
                               {vendor.name}
                             </span>
@@ -2840,7 +2998,7 @@ function RangeLeaderboardTable({
   transactionsForRow?: (rowName: string) => AnalysisTxnPeek[];
 }) {
   const showTxns = Boolean(transactionsForRow);
-  const top = useMemo(() => {
+  const ranked = useMemo(() => {
     return rows
       .map((row) => {
         const key = seriesKeyForLabel(row.name, series);
@@ -2850,9 +3008,9 @@ function RangeLeaderboardTable({
         return { name: row.name, spend: row.spend, ...stats };
       })
       .filter((row) => row.high > 0)
-      .sort((a, b) => b.high - a.high || b.spend - a.spend)
-      .slice(0, 10);
+      .sort((a, b) => b.high - a.high || b.spend - a.spend);
   }, [rows, series, monthly, otherByPeriod]);
+  const top = ranked.slice(0, 10);
 
   const grid = showTxns
     ? "grid w-fit max-w-full grid-cols-[1.5rem_minmax(7rem,14rem)_7.25rem_7.25rem_7.25rem_1.25rem] items-center gap-x-4 px-3"
@@ -2860,7 +3018,14 @@ function RangeLeaderboardTable({
 
   return (
     <section className="space-y-3 rounded-xl border border-[var(--border)] bg-[var(--background)] p-4 sm:p-5">
-      <ChartTitle title={title} info={info} />
+      <ChartTitle
+        title={title}
+        info={info}
+        csv={{
+          headers: [nameLabel, "High", "Mid", "Low"],
+          rows: ranked.map((row) => [row.name, row.high, row.mid, row.low]),
+        }}
+      />
       {top.length === 0 ? (
         <p className="text-sm text-[var(--muted-foreground)]">
           Nothing in this range.
@@ -2944,27 +3109,41 @@ function AverageLeaderboardTable({
   ) => AnalysisTxnPeek[];
 }) {
   const [openName, setOpenName] = useState<string | null>(null);
+  const [showAll, setShowAll] = useState(false);
   const meta = ANALYSIS_PERIOD_META[period];
   const divisor = Math.max(periodCount, 1);
-  const top = rows.slice(0, 10);
-  const topAvgCost = top.reduce((sum, row) => sum + row.spend, 0) / divisor;
-  const topAvgCount =
-    top.reduce((sum, row) => sum + (row.count ?? 0), 0) / divisor;
+  const hasMore = rows.length > 10;
+  const visible = showAll ? rows : rows.slice(0, 10);
+  const visibleAvgCost =
+    visible.reduce((sum, row) => sum + row.spend, 0) / divisor;
+  const visibleAvgCount =
+    visible.reduce((sum, row) => sum + (row.count ?? 0), 0) / divisor;
   const canExpand = Boolean(vendorsByRow);
   const showTxns = Boolean(transactionsForRow);
   const gridCols = canExpand
     ? showTxns
-      ? "grid-cols-[1.5rem_minmax(0,1fr)_9rem_5.5rem_1rem_1.25rem]"
-      : "grid-cols-[1.5rem_minmax(0,1fr)_9rem_5.5rem_1rem]"
+      ? "grid-cols-[1.75rem_minmax(0,1fr)_9rem_5.5rem_1rem_1.25rem]"
+      : "grid-cols-[1.75rem_minmax(0,1fr)_9rem_5.5rem_1rem]"
     : showTxns
-      ? "grid-cols-[1.5rem_minmax(0,1fr)_9rem_5.5rem_1.25rem]"
-      : "grid-cols-[1.5rem_minmax(0,1fr)_9rem_5.5rem]";
+      ? "grid-cols-[1.75rem_minmax(0,1fr)_9rem_5.5rem_1.25rem]"
+      : "grid-cols-[1.75rem_minmax(0,1fr)_9rem_5.5rem]";
   const grid = `grid w-full items-center gap-x-3 px-3 ${gridCols}`;
 
   return (
     <section className="space-y-3 rounded-xl border border-[var(--border)] bg-[var(--background)] p-4 sm:p-5">
-      <ChartTitle title={title} info={info} />
-      {top.length === 0 ? (
+      <ChartTitle
+        title={title}
+        info={info}
+        csv={{
+          headers: [nameLabel, meta.avgCostLabel, meta.avgCountLabel],
+          rows: rows.map((row) => [
+            row.name,
+            Math.round((row.spend / divisor) * 100) / 100,
+            Math.round(((row.count ?? 0) / divisor) * 100) / 100,
+          ]),
+        }}
+      />
+      {visible.length === 0 ? (
         <p className="text-sm text-[var(--muted-foreground)]">
           Nothing in this range.
         </p>
@@ -2981,7 +3160,7 @@ function AverageLeaderboardTable({
             {showTxns ? <span className="sr-only">Info</span> : null}
           </div>
           <div>
-            {top.map((row, index) => {
+            {visible.map((row, index) => {
               const vendors = vendorsByRow?.[row.name] ?? [];
               const isOpen = canExpand && openName === row.name;
               const avgCost = row.spend / divisor;
@@ -3055,7 +3234,24 @@ function AverageLeaderboardTable({
                             key={vendor.name}
                             className={`${grid} py-1 text-sm`}
                           >
-                            <span />
+                            <button
+                              type="button"
+                              title={`Add ${vendor.name} to note`}
+                              aria-label={`Add ${vendor.name} to note`}
+                              className="inline-flex size-5 items-center justify-center rounded text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                addScratchNoteRow({
+                                  name: vendor.name,
+                                  spend: vendor.spend / divisor,
+                                  count: vendor.count ?? 0,
+                                  currency,
+                                  parent: row.name,
+                                });
+                              }}
+                            >
+                              <PlusIcon className="size-3.5" strokeWidth={2} />
+                            </button>
                             <span className="min-w-0 truncate text-[var(--muted-foreground)]">
                               {vendor.name}
                             </span>
@@ -3091,18 +3287,34 @@ function AverageLeaderboardTable({
             className={`${grid} border-t border-[var(--border)] py-2 text-sm font-medium`}
           >
             <span />
-            <span className="min-w-0 truncate">Top {top.length}</span>
-            <span className="text-right font-mono tabular-nums">
-              {formatMoney(topAvgCost, currency)}
+            <span className="min-w-0 truncate">
+              {showAll ? `All ${visible.length}` : `Top ${visible.length}`}
             </span>
             <span className="text-right font-mono tabular-nums">
-              {formatAvgCount(topAvgCount)}
+              {formatMoney(visibleAvgCost, currency)}
+            </span>
+            <span className="text-right font-mono tabular-nums">
+              {formatAvgCount(visibleAvgCount)}
             </span>
             {canExpand ? <span /> : null}
             {showTxns ? <span /> : null}
           </div>
         </div>
       )}
+      {hasMore ? (
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="h-8 w-full text-[var(--muted-foreground)]"
+          onClick={() => setShowAll((current) => !current)}
+        >
+          {showAll ? "Show less" : `Show more (${rows.length - 10} more)`}
+          <ChevronDownIcon
+            className={`size-4 transition-transform ${showAll ? "rotate-180" : ""}`}
+          />
+        </Button>
+      ) : null}
     </section>
   );
 }

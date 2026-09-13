@@ -1,8 +1,5 @@
 "use client";
 
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { PlusIcon } from "lucide-react";
-import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -12,6 +9,9 @@ import {
 } from "@/components/ui/popover";
 import type { DashboardData } from "@/domains/dashboard/domain/types";
 import { queryKeys } from "@/domains/dashboard/queries/query-keys";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { PlusIcon } from "lucide-react";
+import { useState } from "react";
 
 type AddTagResponse =
   | { ok: true; tags: string[]; added: boolean; tag: string }
