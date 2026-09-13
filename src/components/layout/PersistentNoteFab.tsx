@@ -91,6 +91,7 @@ function NoteTab({
       title="Double-click name to rename"
       onClick={onSelect}
       onKeyDown={(event) => {
+        if (editing) return;
         if (event.key === "Enter" || event.key === " ") {
           event.preventDefault();
           onSelect();
@@ -194,7 +195,7 @@ export function PersistentNoteFab() {
             }
             style={{ width: FAB_SIZE_PX, height: FAB_SIZE_PX }}
             className={cn(
-              "pointer-events-auto relative flex shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-full border border-[var(--border)]",
+              "pointer-events-auto relative flex shrink-0 cursor-pointer items-center justify-center rounded-full border border-[var(--border)]",
               "bg-[var(--background)] text-[var(--foreground)] shadow-md",
               "transition-[box-shadow,background-color,color] duration-200 ease-out",
               "hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-1",
