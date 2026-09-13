@@ -49,6 +49,13 @@ import type {
   AnalysisTypeBreakdown,
 } from "@/domains/analysis/domain/types";
 import { fetchAnalysis } from "@/domains/analysis/queries/fetchAnalysis";
+import {
+  DEFAULT_ANALYSIS_UI_PREFS,
+  readAnalysisUiPrefs,
+  writeAnalysisUiPrefs,
+  type AnalysisTab,
+  type FacetPane,
+} from "@/domains/analysis/ui/analysisUiPrefs";
 import { analysisQueryKeys } from "@/domains/analysis/queries/query-keys";
 import { formatMoney } from "@/domains/dashboard/domain/money";
 import { addScratchNoteRow } from "@/domains/scratch-note/scratchNoteStore";
@@ -88,17 +95,6 @@ const RANGE_OPTIONS: { value: AnalysisRange; label: string }[] = [
   { value: "all", label: "All time" },
 ];
 
-type AnalysisTab =
-  | "main"
-  | "sections"
-  | "spreads"
-  | "categories"
-  | "subcategories"
-  | "tags"
-  | "types"
-  | "merchants"
-  | "patterns";
-
 const TAB_OPTIONS: { value: AnalysisTab; label: string }[] = [
   { value: "main", label: "Main" },
   { value: "sections", label: "Sections" },
@@ -110,8 +106,6 @@ const TAB_OPTIONS: { value: AnalysisTab; label: string }[] = [
   { value: "merchants", label: "Merchants" },
   { value: "patterns", label: "Patterns" },
 ];
-
-type FacetPane = "visualizations" | "summary" | "average" | "range";
 
 const FACET_PANE_OPTIONS: { value: FacetPane; label: string }[] = [
   { value: "visualizations", label: "Visualizations" },
@@ -3414,12 +3408,15 @@ function SectionsTab({
   data,
   period,
   onPeriodChange,
+  pane,
+  onPaneChange,
 }: {
   data: AnalysisData;
   period: AnalysisPeriod;
   onPeriodChange: (value: AnalysisPeriod) => void;
+  pane: FacetPane;
+  onPaneChange: (value: FacetPane) => void;
 }) {
-  const [pane, setPane] = useState<FacetPane>("visualizations");
   const total = data.summary.totalSpend;
   const periodCount = Math.max(data.monthly.length, 1);
   const periodMeta = ANALYSIS_PERIOD_META[period];
@@ -3427,7 +3424,7 @@ function SectionsTab({
   return (
     <FacetPaneShell
       pane={pane}
-      onPaneChange={setPane}
+      onPaneChange={onPaneChange}
       visualizations={
         <div className="space-y-6">
           <StackedRankedBarChart
@@ -3557,12 +3554,15 @@ function SpreadsTab({
   data,
   period,
   onPeriodChange,
+  pane,
+  onPaneChange,
 }: {
   data: AnalysisData;
   period: AnalysisPeriod;
   onPeriodChange: (value: AnalysisPeriod) => void;
+  pane: FacetPane;
+  onPaneChange: (value: FacetPane) => void;
 }) {
-  const [pane, setPane] = useState<FacetPane>("visualizations");
   const total = data.summary.totalSpend;
   const periodCount = Math.max(data.monthly.length, 1);
   const periodMeta = ANALYSIS_PERIOD_META[period];
@@ -3570,7 +3570,7 @@ function SpreadsTab({
   return (
     <FacetPaneShell
       pane={pane}
-      onPaneChange={setPane}
+      onPaneChange={onPaneChange}
       visualizations={
         <div className="space-y-6">
           <StackedRankedBarChart
@@ -3715,14 +3715,17 @@ function CategoriesTab({
   onSelectCategory,
   period,
   onPeriodChange,
+  pane,
+  onPaneChange,
 }: {
   data: AnalysisData;
   category: string;
   onSelectCategory: (name: string) => void;
   period: AnalysisPeriod;
   onPeriodChange: (value: AnalysisPeriod) => void;
+  pane: FacetPane;
+  onPaneChange: (value: FacetPane) => void;
 }) {
-  const [pane, setPane] = useState<FacetPane>("visualizations");
   const total = data.summary.totalSpend;
   const periodCount = Math.max(data.monthly.length, 1);
   const periodMeta = ANALYSIS_PERIOD_META[period];
@@ -3736,7 +3739,7 @@ function CategoriesTab({
   return (
     <FacetPaneShell
       pane={pane}
-      onPaneChange={setPane}
+      onPaneChange={onPaneChange}
       visualizations={
         <div className="space-y-6">
           <StackedRankedBarChart
@@ -3953,14 +3956,17 @@ function SubcategoriesTab({
   onSelectSubcategory,
   period,
   onPeriodChange,
+  pane,
+  onPaneChange,
 }: {
   data: AnalysisData;
   subcategory: string;
   onSelectSubcategory: (name: string) => void;
   period: AnalysisPeriod;
   onPeriodChange: (value: AnalysisPeriod) => void;
+  pane: FacetPane;
+  onPaneChange: (value: FacetPane) => void;
 }) {
-  const [pane, setPane] = useState<FacetPane>("visualizations");
   const stacked = data.subcategoryStacked ?? { rows: [], series: [] };
   const breakdowns = data.subcategoryBreakdowns ?? [];
   const total = data.summary.totalSpend;
@@ -3976,7 +3982,7 @@ function SubcategoriesTab({
   return (
     <FacetPaneShell
       pane={pane}
-      onPaneChange={setPane}
+      onPaneChange={onPaneChange}
       visualizations={
         <div className="space-y-6">
           <StackedRankedBarChart
@@ -4185,14 +4191,17 @@ function TagsTab({
   onSelectTag,
   period,
   onPeriodChange,
+  pane,
+  onPaneChange,
 }: {
   data: AnalysisData;
   tag: string;
   onSelectTag: (name: string) => void;
   period: AnalysisPeriod;
   onPeriodChange: (value: AnalysisPeriod) => void;
+  pane: FacetPane;
+  onPaneChange: (value: FacetPane) => void;
 }) {
-  const [pane, setPane] = useState<FacetPane>("visualizations");
   const stacked = data.tagStacked ?? { rows: [], series: [] };
   const breakdowns = data.tagBreakdowns ?? [];
   const tags = data.tags ?? [];
@@ -4218,7 +4227,7 @@ function TagsTab({
   return (
     <FacetPaneShell
       pane={pane}
-      onPaneChange={setPane}
+      onPaneChange={onPaneChange}
       visualizations={
         <div className="space-y-6">
           <StackedRankedBarChart
@@ -4384,14 +4393,17 @@ function TypesTab({
   onSelectType,
   period,
   onPeriodChange,
+  pane,
+  onPaneChange,
 }: {
   data: AnalysisData;
   type: string;
   onSelectType: (name: string) => void;
   period: AnalysisPeriod;
   onPeriodChange: (value: AnalysisPeriod) => void;
+  pane: FacetPane;
+  onPaneChange: (value: FacetPane) => void;
 }) {
-  const [pane, setPane] = useState<FacetPane>("visualizations");
   const stacked = data.typeStacked ?? { rows: [], series: [] };
   const breakdowns = data.typeBreakdowns ?? [];
   const types = data.types ?? [];
@@ -4418,7 +4430,7 @@ function TypesTab({
   return (
     <FacetPaneShell
       pane={pane}
-      onPaneChange={setPane}
+      onPaneChange={onPaneChange}
       visualizations={
         <div className="space-y-6">
           <StackedRankedBarChart
@@ -4586,14 +4598,17 @@ function MerchantsTab({
   onSelectMerchant,
   period,
   onPeriodChange,
+  pane,
+  onPaneChange,
 }: {
   data: AnalysisData;
   merchant: string;
   onSelectMerchant: (name: string) => void;
   period: AnalysisPeriod;
   onPeriodChange: (value: AnalysisPeriod) => void;
+  pane: FacetPane;
+  onPaneChange: (value: FacetPane) => void;
 }) {
-  const [pane, setPane] = useState<FacetPane>("visualizations");
   const stacked = data.merchantStacked ?? { rows: [], series: [] };
   const breakdowns = data.merchantBreakdowns ?? [];
   const merchants = data.merchants ?? [];
@@ -4619,7 +4634,7 @@ function MerchantsTab({
   return (
     <FacetPaneShell
       pane={pane}
-      onPaneChange={setPane}
+      onPaneChange={onPaneChange}
       visualizations={
         <div className="space-y-6">
           <StackedRankedBarChart
@@ -4833,16 +4848,64 @@ function PatternsTab({ data }: { data: AnalysisData }) {
 }
 
 export function AnalysisDashboard() {
-  const [range, setRange] = useState<AnalysisRange>("12m");
-  const [period, setPeriod] = useState<AnalysisPeriod>("monthly");
-  const [tab, setTab] = useState<AnalysisTab>("main");
-  const [category, setCategory] = useState("");
-  const [subcategory, setSubcategory] = useState("");
-  const [tag, setTag] = useState("");
-  const [type, setType] = useState("");
-  const [merchant, setMerchant] = useState("");
+  const [range, setRange] = useState<AnalysisRange>(
+    DEFAULT_ANALYSIS_UI_PREFS.range,
+  );
+  const [period, setPeriod] = useState<AnalysisPeriod>(
+    DEFAULT_ANALYSIS_UI_PREFS.period,
+  );
+  const [tab, setTab] = useState<AnalysisTab>(DEFAULT_ANALYSIS_UI_PREFS.tab);
+  const [pane, setPane] = useState<FacetPane>(DEFAULT_ANALYSIS_UI_PREFS.pane);
+  const [category, setCategory] = useState(DEFAULT_ANALYSIS_UI_PREFS.category);
+  const [subcategory, setSubcategory] = useState(
+    DEFAULT_ANALYSIS_UI_PREFS.subcategory,
+  );
+  const [tag, setTag] = useState(DEFAULT_ANALYSIS_UI_PREFS.tag);
+  const [type, setType] = useState(DEFAULT_ANALYSIS_UI_PREFS.type);
+  const [merchant, setMerchant] = useState(DEFAULT_ANALYSIS_UI_PREFS.merchant);
+  const [prefsReady, setPrefsReady] = useState(false);
   const query = useAnalysis(range, period);
   const data = query.data;
+
+  useEffect(() => {
+    const prefs = readAnalysisUiPrefs();
+    setRange(prefs.range);
+    setPeriod(prefs.period);
+    setTab(prefs.tab);
+    setPane(prefs.pane);
+    setCategory(prefs.category);
+    setSubcategory(prefs.subcategory);
+    setTag(prefs.tag);
+    setType(prefs.type);
+    setMerchant(prefs.merchant);
+    setPrefsReady(true);
+  }, []);
+
+  useEffect(() => {
+    if (!prefsReady) return;
+    writeAnalysisUiPrefs({
+      range,
+      period,
+      tab,
+      pane,
+      category,
+      subcategory,
+      tag,
+      type,
+      merchant,
+    });
+  }, [
+    prefsReady,
+    range,
+    period,
+    tab,
+    pane,
+    category,
+    subcategory,
+    tag,
+    type,
+    merchant,
+  ]);
 
   useEffect(() => {
     const names = data?.breakdowns.map((item) => item.category) ?? [];
@@ -4954,6 +5017,8 @@ export function AnalysisDashboard() {
                   data={data}
                   period={period}
                   onPeriodChange={setPeriod}
+                  pane={pane}
+                  onPaneChange={setPane}
                 />
               ) : null}
               {tab === "spreads" ? (
@@ -4961,6 +5026,8 @@ export function AnalysisDashboard() {
                   data={data}
                   period={period}
                   onPeriodChange={setPeriod}
+                  pane={pane}
+                  onPaneChange={setPane}
                 />
               ) : null}
               {tab === "categories" ? (
@@ -4970,6 +5037,8 @@ export function AnalysisDashboard() {
                   onSelectCategory={setCategory}
                   period={period}
                   onPeriodChange={setPeriod}
+                  pane={pane}
+                  onPaneChange={setPane}
                 />
               ) : null}
               {tab === "subcategories" ? (
@@ -4979,6 +5048,8 @@ export function AnalysisDashboard() {
                   onSelectSubcategory={setSubcategory}
                   period={period}
                   onPeriodChange={setPeriod}
+                  pane={pane}
+                  onPaneChange={setPane}
                 />
               ) : null}
               {tab === "tags" ? (
@@ -4988,6 +5059,8 @@ export function AnalysisDashboard() {
                   onSelectTag={setTag}
                   period={period}
                   onPeriodChange={setPeriod}
+                  pane={pane}
+                  onPaneChange={setPane}
                 />
               ) : null}
               {tab === "types" ? (
@@ -4997,6 +5070,8 @@ export function AnalysisDashboard() {
                   onSelectType={setType}
                   period={period}
                   onPeriodChange={setPeriod}
+                  pane={pane}
+                  onPaneChange={setPane}
                 />
               ) : null}
               {tab === "merchants" ? (
@@ -5006,6 +5081,8 @@ export function AnalysisDashboard() {
                   onSelectMerchant={setMerchant}
                   period={period}
                   onPeriodChange={setPeriod}
+                  pane={pane}
+                  onPaneChange={setPane}
                 />
               ) : null}
               {tab === "patterns" ? <PatternsTab data={data} /> : null}

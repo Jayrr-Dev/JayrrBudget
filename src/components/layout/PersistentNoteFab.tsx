@@ -73,6 +73,8 @@ function NoteTab({
   };
 
   const onKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    // Keep Space (and other keys) out of the tab's activation handler.
+    event.stopPropagation();
     if (event.key === "Enter") {
       event.preventDefault();
       commit();
@@ -87,11 +89,13 @@ function NoteTab({
     <div
       role="tab"
       aria-selected={isActive}
-      tabIndex={0}
+      tabIndex={editing ? -1 : 0}
       title="Double-click name to rename"
       onClick={onSelect}
       onKeyDown={(event) => {
         if (editing) return;
+        // Ignore bubbled keys from checkbox / rename input.
+        if (event.target !== event.currentTarget) return;
         if (event.key === "Enter" || event.key === " ") {
           event.preventDefault();
           onSelect();
@@ -129,6 +133,7 @@ function NoteTab({
           onChange={(event) => setDraft(event.target.value)}
           onBlur={commit}
           onKeyDown={onKeyDown}
+          onKeyUp={(event) => event.stopPropagation()}
           onClick={(event) => event.stopPropagation()}
         />
       ) : (
@@ -269,8 +274,12 @@ export function PersistentNoteFab() {
                 <thead className="sticky top-0 bg-[var(--background)]">
                   <tr className="border-b border-[var(--border)] text-xs text-[var(--muted-foreground)]">
                     <th className="px-2 py-1.5 text-left font-medium">Name</th>
-                    <th className="px-2 py-1.5 text-right font-medium">Spend</th>
-                    <th className="px-2 py-1.5 text-right font-medium">Count</th>
+                    <th className="px-2 py-1.5 text-right font-medium">
+                      Spend
+                    </th>
+                    <th className="px-2 py-1.5 text-right font-medium">
+                      Count
+                    </th>
                     <th className="w-7 px-1 py-1.5">
                       <span className="sr-only">Remove</span>
                     </th>
