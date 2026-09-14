@@ -48,7 +48,6 @@ import type {
   AnalysisTxnPeek,
   AnalysisTypeBreakdown,
 } from "@/domains/analysis/domain/types";
-import { fetchAnalysis } from "@/domains/analysis/queries/fetchAnalysis";
 import {
   DEFAULT_ANALYSIS_UI_PREFS,
   readAnalysisUiPrefs,
@@ -56,7 +55,6 @@ import {
   type AnalysisTab,
   type FacetPane,
 } from "@/domains/analysis/ui/analysisUiPrefs";
-import { analysisQueryKeys } from "@/domains/analysis/queries/query-keys";
 import { formatMoney } from "@/domains/dashboard/domain/money";
 import { addScratchNoteRow } from "@/domains/scratch-note/scratchNoteStore";
 import { cn } from "@/lib/utils";
@@ -66,7 +64,8 @@ import {
   formatShortDisplayDate,
 } from "@/shared/lib/format-date";
 import { IconInfoCircle } from "@tabler/icons-react";
-import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { useQuery as useConvexQuery } from "convex/react";
+import { api } from "@convex/_generated/api";
 import { ChevronDownIcon, PlusIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
@@ -166,13 +165,24 @@ const CHART_TOOLTIP_OFFSET = 28;
 const CHART_TOOLTIP_ESCAPE = { x: false, y: false } as const;
 
 function useAnalysis(range: AnalysisRange, period: AnalysisPeriod) {
-  return useQuery({
-    queryKey: analysisQueryKeys.range(range, period),
-    queryFn: () => fetchAnalysis(range, period),
-    placeholderData: keepPreviousData,
-    staleTime: 5 * 60_000,
-    refetchOnWindowFocus: false,
-  });
+  const result = useConvexQuery(api.analysis.get, { range, period });
+  const failed =
+    result != null && "ok" in result && (result as { ok: boolean }).ok === false;
+  const data: AnalysisData | undefined =
+    result != null && "ok" in result && (result as { ok: boolean }).ok === true
+      ? ((result as { data: AnalysisData }).data as AnalysisData)
+      : undefined;
+  const errorMessage =
+    failed && result && "error" in result
+      ? String((result as { error: unknown }).error)
+      : null;
+  return {
+    data,
+    isPending: result === undefined,
+    isError: failed,
+    isFetching: result === undefined,
+    error: errorMessage ? new Error(errorMessage) : null,
+  };
 }
 
 function moneyTick(value: number, currency: string) {
@@ -4979,7 +4989,7 @@ export function AnalysisDashboard() {
 
           {query.isError ? (
             <div className="rounded-xl border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-800">
-              {query.error.message}
+              {query.error?.message ?? "Analysis failed"}
             </div>
           ) : null}
 

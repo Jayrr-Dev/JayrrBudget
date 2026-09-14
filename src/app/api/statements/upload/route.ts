@@ -1,3 +1,4 @@
+import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { importBankStatement } from "@/domains/statements/application/importBankStatement";
 import { errorMessage } from "@/shared/lib/error-message";
@@ -6,6 +7,14 @@ export const runtime = "nodejs";
 export const maxDuration = 300;
 
 export async function POST(request: Request) {
+  const session = await auth();
+  if (!session.userId) {
+    return NextResponse.json(
+      { error: "Authentication required" },
+      { status: 401 },
+    );
+  }
+
   let form: FormData;
   try {
     form = await request.formData();

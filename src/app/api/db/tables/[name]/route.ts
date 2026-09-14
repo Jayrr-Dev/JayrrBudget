@@ -24,10 +24,11 @@ export async function GET(request: Request, context: RouteContext) {
   const offset = Number(searchParams.get("offset") ?? "0");
 
   try {
-    const data = await browseTable(name, {
-      limit: Number.isFinite(limit) ? limit : 50,
-      offset: Number.isFinite(offset) ? offset : 0,
-    });
+    const data = await browseTable(
+      name,
+      Number.isFinite(limit) ? limit : 50,
+      Number.isFinite(offset) ? offset : 0,
+    );
     return NextResponse.json({ ok: true, data });
   } catch (error) {
     return NextResponse.json(

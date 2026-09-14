@@ -1,4 +1,4 @@
-import { parseAnalysisRange } from "@/domains/analysis/application/getAnalysis";
+import { parseAnalysisRange } from "@/domains/analysis/domain/periods";
 import { parseAnalysisPeriod } from "@/domains/analysis/domain/periods";
 import type {
   AnalysisPeriod,

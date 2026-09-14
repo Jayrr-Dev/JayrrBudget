@@ -1,21 +1,20 @@
+/**
+ * Legacy Turso / Drizzle entry — **not** used by the live Next app.
+ * Live reads/writes go through Convex (`NEXT_PUBLIC_CONVEX_URL`).
+ * Kept so one-off scripts under `scripts/` can still load `.env.local` Turso
+ * credentials when intentionally auditing the archived remote.
+ */
 import { createClient } from "@libsql/client";
 import { drizzle } from "drizzle-orm/libsql";
 import * as schema from "./schema";
 
 function getDatabaseUrl() {
   const url = process.env.DATABASE_URL?.trim();
-  const onVercel = Boolean(process.env.VERCEL);
 
   if (!url) {
     throw new Error(
-      "DATABASE_URL is not set. Add Turso credentials to .env.local (see .env.example). " +
-        "Do not use archived SQLite under archive/db/ — see archive/db/README.md.",
-    );
-  }
-
-  if (onVercel && (url.startsWith("file:") || url.includes("./data/"))) {
-    throw new Error(
-      "DATABASE_URL points at a local SQLite file on Vercel. Use a Turso libsql:// URL.",
+      "DATABASE_URL is not set. The live app uses Convex (NEXT_PUBLIC_CONVEX_URL). " +
+        "Only legacy scripts need Turso credentials in .env.local.",
     );
   }
 
@@ -49,6 +48,7 @@ function createDbClient() {
   });
 }
 
+/** @deprecated Live app uses Convex. Legacy scripts only. */
 export function getLibsqlClient() {
   const url = getDatabaseUrl();
   const authToken = process.env.DATABASE_AUTH_TOKEN?.trim() ?? "";
@@ -66,6 +66,7 @@ export function getLibsqlClient() {
   return globalForDb.libsql;
 }
 
+/** @deprecated Live app uses Convex. Legacy scripts only. */
 export function getDb() {
   return drizzle(getLibsqlClient(), { schema });
 }

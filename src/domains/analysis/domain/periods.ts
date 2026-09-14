@@ -1,4 +1,4 @@
-import type { AnalysisPeriod } from "@/domains/analysis/domain/types";
+import type { AnalysisPeriod, AnalysisRange } from "@/domains/analysis/domain/types";
 
 /** Monday 2018-01-01. Biweekly windows count forward from this day. */
 const BIWEEK_EPOCH_UTC = Date.UTC(2018, 0, 1);
@@ -237,4 +237,15 @@ export function parseAnalysisPeriod(value: string | null): AnalysisPeriod {
     return value;
   }
   return "monthly";
+}
+
+/** Parse `?range=` or fall back to 12m. */
+export function parseAnalysisRange(
+  value: string | null | undefined,
+): AnalysisRange {
+  const allowed = ["1w", "1m", "3m", "6m", "12m", "all"] as const;
+  if (value && (allowed as readonly string[]).includes(value)) {
+    return value as AnalysisRange;
+  }
+  return "12m";
 }

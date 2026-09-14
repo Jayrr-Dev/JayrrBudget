@@ -1,33 +1,15 @@
 import { NextResponse } from "next/server";
-import { runCategoryHygienePipeline } from "@/domains/statements/application/runCategoryHygienePipeline";
-import { isOpenRouterConfigured } from "@/shared/ai/openRouter";
-import { errorMessage } from "@/shared/lib/error-message";
 
 export const runtime = "nodejs";
-export const maxDuration = 300;
 
-/**
- * Always re-fire category hygiene:
- * label consolidate → deterministic rules → AI cleaning pass with full context.
- */
+/** @deprecated Turso hygiene pipeline — not ported to Convex yet. */
 export async function POST() {
-  if (!isOpenRouterConfigured()) {
-    return NextResponse.json(
-      {
-        error: "Missing OPENROUTER_API_KEY. Add it to .env.local.",
-        code: "OPENROUTER_NOT_CONFIGURED",
-      },
-      { status: 503 },
-    );
-  }
-
-  try {
-    const result = await runCategoryHygienePipeline();
-    return NextResponse.json({ ok: true, ...result });
-  } catch (error) {
-    return NextResponse.json(
-      { error: errorMessage(error, "Category hygiene failed") },
-      { status: 500 },
-    );
-  }
+  return NextResponse.json(
+    {
+      error:
+        "Category hygiene still targets Turso. Run legacy scripts under scripts/ against an archived DATABASE_URL, or reimplement against Convex.",
+      code: "TURSO_LEGACY",
+    },
+    { status: 410 },
+  );
 }

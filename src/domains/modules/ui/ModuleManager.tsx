@@ -1,40 +1,29 @@
 "use client";
 
 import { createColumnHelper } from "@tanstack/react-table";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation } from "convex/react";
+import { useQuery } from "convex/react";
+import { api } from "@convex/_generated/api";
 import { Badge } from "@/components/ui/badge";
 import { DataTable } from "@/components/ui/data-table";
 import type { DataTableFeatures } from "@/components/ui/data-table-features";
 import { Switch } from "@/components/ui/switch";
 import type { AppModuleRecord } from "@/domains/modules/domain/types";
-import {
-  fetchModules,
-  updateModuleEnabled,
-} from "@/domains/modules/queries/modules";
-import { moduleQueryKeys } from "@/domains/modules/queries/query-keys";
 import { resolveModuleIcon } from "@/domains/modules/ui/moduleIcons";
 
 const columnHelper = createColumnHelper<DataTableFeatures, AppModuleRecord>();
 
 function ModuleEnabledSwitch({ module }: { module: AppModuleRecord }) {
-  const queryClient = useQueryClient();
-  const toggle = useMutation({
-    mutationFn: (enabled: boolean) =>
-      updateModuleEnabled(module.slug, enabled),
-    onSuccess: async () => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: moduleQueryKeys.all }),
-        queryClient.invalidateQueries({ queryKey: moduleQueryKeys.enabled }),
-      ]);
-    },
-  });
+  const setEnabled = useMutation(api.modules.setEnabled);
 
   return (
     <Switch
       size="lg"
       checked={module.enabled}
-      disabled={module.isCore || toggle.isPending}
-      onCheckedChange={(checked) => toggle.mutate(Boolean(checked))}
+      disabled={module.isCore}
+      onCheckedChange={(checked) =>
+        void setEnabled({ slug: module.slug, enabled: Boolean(checked) })
+      }
     />
   );
 }
@@ -80,41 +69,20 @@ const columns = columnHelper.columns([
 ]);
 
 export function ModuleManager() {
-  const modules = useQuery({
-    queryKey: moduleQueryKeys.all,
-    queryFn: () => fetchModules(),
-  });
+  const modules = useQuery(api.modules.list, {});
 
-  if (modules.isPending) {
+  if (modules === undefined) {
     return (
       <p className="text-sm text-[var(--muted-foreground)]">Loading modules…</p>
     );
   }
 
-  if (modules.isError) {
-    return (
-      <div className="rounded-xl border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-800">
-        {modules.error.message}
-      </div>
-    );
-  }
-
   return (
-    <div className="space-y-4">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Module manager</h1>
-        <p className="text-[var(--muted-foreground)]">
-          Toggle product modules. Core modules stay on. Sidebar follows enabled
-          modules.
-        </p>
-      </div>
-      <DataTable
-        columns={columns}
-        data={modules.data.modules}
-        searchKey="name"
-        searchPlaceholder="Filter modules…"
-        pageSize={20}
-      />
-    </div>
+    <DataTable
+      columns={columns}
+      data={modules}
+      searchKey="name"
+      searchPlaceholder="Filter modules…"
+    />
   );
 }

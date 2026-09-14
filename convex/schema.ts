@@ -1,0 +1,260 @@
+import { defineSchema, defineTable } from "convex/server";
+import { v } from "convex/values";
+
+/**
+ * Personal ledgers: every private row is scoped by `userId`.
+ * Business keys stay as strings; Convex `_id` is not the ledger id.
+ * Uniqueness is enforced in upserts via indexes (no SQL UNIQUE).
+ *
+ * `userId` is optional only so legacy rows can be claimed by backfill;
+ * live writes always set it via requireUser().
+ */
+const userId = v.optional(v.id("users"));
+
+export default defineSchema({
+  users: defineTable({
+    tokenIdentifier: v.string(),
+    clerkUserId: v.string(),
+    email: v.union(v.string(), v.null()),
+    name: v.union(v.string(), v.null()),
+    createdAt: v.number(),
+  })
+    .index("by_tokenIdentifier", ["tokenIdentifier"])
+    .index("by_clerkUserId", ["clerkUserId"]),
+
+  institutions: defineTable({
+    userId,
+    institutionId: v.string(),
+    name: v.union(v.string(), v.null()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_userId", ["userId"])
+    .index("by_userId_institutionId", ["userId", "institutionId"]),
+
+  accounts: defineTable({
+    userId,
+    accountId: v.string(),
+    institutionId: v.string(),
+    name: v.string(),
+    officialName: v.union(v.string(), v.null()),
+    mask: v.union(v.string(), v.null()),
+    type: v.union(v.string(), v.null()),
+    subtype: v.union(v.string(), v.null()),
+    currentBalance: v.union(v.number(), v.null()),
+    availableBalance: v.union(v.number(), v.null()),
+    isoCurrencyCode: v.union(v.string(), v.null()),
+    updatedAt: v.number(),
+  })
+    .index("by_userId", ["userId"])
+    .index("by_userId_accountId", ["userId", "accountId"])
+    .index("by_userId_institutionId", ["userId", "institutionId"]),
+
+  loanTerms: defineTable({
+    userId,
+    accountId: v.string(),
+    principalStart: v.number(),
+    annualRate: v.number(),
+    aprDisclosed: v.union(v.number(), v.null()),
+    paymentAmount: v.number(),
+    paymentFrequency: v.string(),
+    paymentCount: v.number(),
+    firstPaymentDate: v.string(),
+    maturityDate: v.string(),
+    matchMerchantClean: v.string(),
+    matchAmount: v.number(),
+    principalOverride: v.union(v.number(), v.null()),
+    overrideAsOf: v.union(v.string(), v.null()),
+    vehicleLabel: v.union(v.string(), v.null()),
+    updatedAt: v.number(),
+  })
+    .index("by_userId", ["userId"])
+    .index("by_userId_accountId", ["userId", "accountId"]),
+
+  loanPaymentLinks: defineTable({
+    userId,
+    loanAccountId: v.string(),
+    paymentNumber: v.number(),
+    scheduledDate: v.string(),
+    postedDate: v.union(v.string(), v.null()),
+    transactionId: v.union(v.string(), v.null()),
+    paymentAmount: v.number(),
+    interestPortion: v.number(),
+    principalPortion: v.number(),
+    balanceAfter: v.number(),
+  })
+    .index("by_userId", ["userId"])
+    .index("by_userId_loanAccountId", ["userId", "loanAccountId"])
+    .index("by_userId_loanAccountId_paymentNumber", [
+      "userId",
+      "loanAccountId",
+      "paymentNumber",
+    ]),
+
+  statementUploads: defineTable({
+    userId,
+    /** Turso integer PK — keeps statement detail URLs stable. */
+    uploadId: v.number(),
+    filename: v.string(),
+    fileHash: v.union(v.string(), v.null()),
+    status: v.string(),
+    accountId: v.union(v.string(), v.null()),
+    institutionName: v.union(v.string(), v.null()),
+    accountName: v.union(v.string(), v.null()),
+    accountMask: v.union(v.string(), v.null()),
+    currency: v.union(v.string(), v.null()),
+    pageCount: v.union(v.number(), v.null()),
+    transactionCount: v.union(v.number(), v.null()),
+    insertedCount: v.union(v.number(), v.null()),
+    updatedCount: v.union(v.number(), v.null()),
+    skippedCount: v.union(v.number(), v.null()),
+    statementPeriodStart: v.union(v.string(), v.null()),
+    statementPeriodEnd: v.union(v.string(), v.null()),
+    openingBalance: v.union(v.number(), v.null()),
+    closingBalance: v.union(v.number(), v.null()),
+    totalDebits: v.union(v.number(), v.null()),
+    totalCredits: v.union(v.number(), v.null()),
+    transactionSum: v.union(v.number(), v.null()),
+    computedClosing: v.union(v.number(), v.null()),
+    balanceDelta: v.union(v.number(), v.null()),
+    balanceOk: v.union(v.boolean(), v.null()),
+    ocrStorageId: v.optional(v.id("_storage")),
+    ocrMarkdown: v.optional(v.union(v.string(), v.null())),
+    error: v.union(v.string(), v.null()),
+    createdAt: v.number(),
+    completedAt: v.union(v.number(), v.null()),
+  })
+    .index("by_userId", ["userId"])
+    .index("by_userId_fileHash", ["userId", "fileHash"])
+    .index("by_userId_status", ["userId", "status"])
+    .index("by_userId_uploadId", ["userId", "uploadId"]),
+
+  transactionSections: defineTable({
+    userId,
+    legacyId: v.number(),
+    name: v.string(),
+  })
+    .index("by_userId", ["userId"])
+    .index("by_userId_name", ["userId", "name"])
+    .index("by_userId_legacyId", ["userId", "legacyId"]),
+
+  transactionSpreads: defineTable({
+    userId,
+    legacyId: v.number(),
+    name: v.string(),
+    targetPercent: v.number(),
+    description: v.string(),
+    sortOrder: v.number(),
+  })
+    .index("by_userId", ["userId"])
+    .index("by_userId_name", ["userId", "name"])
+    .index("by_userId_legacyId", ["userId", "legacyId"]),
+
+  transactionCategories: defineTable({
+    userId,
+    legacyId: v.number(),
+    name: v.string(),
+    sectionLegacyId: v.union(v.number(), v.null()),
+  })
+    .index("by_userId", ["userId"])
+    .index("by_userId_name", ["userId", "name"])
+    .index("by_userId_legacyId", ["userId", "legacyId"]),
+
+  transactionSubcategories: defineTable({
+    userId,
+    legacyId: v.number(),
+    name: v.string(),
+    categoryLegacyId: v.union(v.number(), v.null()),
+  })
+    .index("by_userId", ["userId"])
+    .index("by_userId_name", ["userId", "name"])
+    .index("by_userId_legacyId", ["userId", "legacyId"]),
+
+  transactionTypes: defineTable({
+    userId,
+    legacyId: v.number(),
+    name: v.string(),
+  })
+    .index("by_userId", ["userId"])
+    .index("by_userId_name", ["userId", "name"])
+    .index("by_userId_legacyId", ["userId", "legacyId"]),
+
+  transactionKinds: defineTable({
+    userId,
+    legacyId: v.number(),
+    name: v.string(),
+  })
+    .index("by_userId", ["userId"])
+    .index("by_userId_name", ["userId", "name"])
+    .index("by_userId_legacyId", ["userId", "legacyId"]),
+
+  transactions: defineTable({
+    userId,
+    transactionId: v.string(),
+    posted: v.string(),
+    authorized: v.union(v.string(), v.null()),
+    account: v.union(v.string(), v.null()),
+    accountId: v.string(),
+    description: v.string(),
+    originalDescription: v.union(v.string(), v.null()),
+    merchantClean: v.union(v.string(), v.null()),
+    merchantName: v.union(v.string(), v.null()),
+    company: v.union(v.string(), v.null()),
+    brand: v.union(v.string(), v.null()),
+    section: v.union(v.string(), v.null()),
+    category: v.union(v.string(), v.null()),
+    subcategory: v.union(v.string(), v.null()),
+    spread: v.union(v.string(), v.null()),
+    transactionType: v.union(v.string(), v.null()),
+    kind: v.union(v.string(), v.null()),
+    sectionLegacyId: v.union(v.number(), v.null()),
+    categoryLegacyId: v.union(v.number(), v.null()),
+    subcategoryLegacyId: v.union(v.number(), v.null()),
+    spreadLegacyId: v.union(v.number(), v.null()),
+    transactionTypeLegacyId: v.union(v.number(), v.null()),
+    kindLegacyId: v.union(v.number(), v.null()),
+    categoryPrimary: v.union(v.string(), v.null()),
+    categoryDetailed: v.union(v.string(), v.null()),
+    categoryConfidence: v.union(v.string(), v.null()),
+    tags: v.union(v.string(), v.null()),
+    channel: v.union(v.string(), v.null()),
+    txnCode: v.union(v.string(), v.null()),
+    bankDirection: v.union(v.string(), v.null()),
+    crossCheck: v.union(v.string(), v.null()),
+    enrichment: v.union(v.string(), v.null()),
+    source: v.union(v.string(), v.null()),
+    pending: v.boolean(),
+    city: v.union(v.string(), v.null()),
+    region: v.union(v.string(), v.null()),
+    country: v.union(v.string(), v.null()),
+    website: v.union(v.string(), v.null()),
+    logoUrl: v.union(v.string(), v.null()),
+    currency: v.string(),
+    debit: v.union(v.number(), v.null()),
+    credit: v.union(v.number(), v.null()),
+    amount: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_userId", ["userId"])
+    .index("by_userId_transactionId", ["userId", "transactionId"])
+    .index("by_userId_posted", ["userId", "posted"])
+    .index("by_userId_accountId_posted", ["userId", "accountId", "posted"]),
+
+  appModules: defineTable({
+    userId,
+    legacyId: v.number(),
+    slug: v.string(),
+    name: v.string(),
+    description: v.union(v.string(), v.null()),
+    href: v.string(),
+    icon: v.string(),
+    category: v.string(),
+    enabled: v.boolean(),
+    sortOrder: v.number(),
+    isCore: v.boolean(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_userId", ["userId"])
+    .index("by_userId_slug", ["userId", "slug"]),
+});

@@ -1,82 +1,22 @@
 ---
-description: Live DB is Turso only; never use archived local SQLite under archive/db/
-globs: archive/db/**,scripts/**,src/shared/db/**,drizzle.config.ts,.env.example,AGENTS.md
+description: Live DB is Convex with Clerk personal userId scoping; Turso is legacy
+globs: archive/db/**,scripts/**,src/shared/db/**,convex/**,drizzle.config.ts,.env.example,AGENTS.md
 alwaysApply: false
 ---
 
-# Database: Turso only
+# Database: Convex + Clerk (personal ledgers)
 
 ## Live source of truth
 
-- App and scripts use **Turso** via `DATABASE_URL` + `DATABASE_AUTH_TOKEN` in `.env.local`.
-- Entry point: `getDb()` in `src/shared/db/index.ts`. It throws if `DATABASE_URL` is missing (no silent local fallback).
+- App uses **Convex** + **Clerk**. Every private row is scoped by `userId`.
+- Auth helpers: `convex/lib/auth.ts` (`requireUser` / `ensureUser`).
+- Never trust client-supplied `userId`. Gate Next AI routes with Clerk `auth()`.
 
-## Archived SQLite — do not use
+## Invite-only
 
-- Path: `archive/db/*.db` (see `archive/db/README.md`).
-- These are **stale snapshots** from before Turso. Taxonomy rewrites / consolidations / `transaction_type` backfill on them were **never** the live app DB unless explicitly pushed.
-- **Never** open them with `createClient({ url: "file:..." })`, `getDb()` without dotenv, or hardcode `file:./data/jayrr-budget.db`.
-- `data/` must not hold a live `jayrr-budget.db`. If you find one, treat it as a mistake — move to `archive/db/` and document why.
+- Keep Clerk public signup disabled; invite users from the Clerk Dashboard.
+- After first sign-in, `users.ensure` + `migrations.claimUnownedData` claim pre-auth import rows.
 
-## Required script pattern
+## Legacy Turso / scripts
 
-```ts
-import { config } from "dotenv";
-config({ path: ".env.local" });
-// then getDb() or @libsql/client with process.env.DATABASE_URL
-```
-
-## Hygiene / backfills (Turso)
-
-- Taxonomy only: `npx tsx scripts/run-category-hygiene.ts`
-- Hygiene + enrichment: `npx tsx scripts/run-hygiene-enrichment.ts`
-- **`transaction_type` backfill:** `npx tsx scripts/backfill-transaction-types.ts`
-- **Inspect counts:** `npx tsx scripts/check-transaction-types.ts` (`--run` to backfill)
-- Verify env target before writes: confirm URL is `libsql://…turso.io`, not `file:`.
-
-## `transaction_type` facet
-
-Cash-flow labels (`income` / `transfers` / `expenses`) live on `transaction_labels.role = "transaction_type"`. Not the same as section **Income**/**Transfers** or dimensional **type** (AI, Subscription, …).
-
-- Implementation: `backfillTransactionTypes.ts`, slugs via `transactionTypeSlug()` → `txn-type-*`
-- **Never** slug `transaction_type` nodes as bare `income`/`transfers`/`expenses` (section slug collision)
-- Success check: `transaction_type` label count === `transactions` count
-- No `PRAGMA` on Turso; scripts must `config({ path: ".env.local" })` before `getDb()`
-
-## Restore from archive (rare, user must ask)
-
-Only when the user explicitly wants to overwrite Turso from the snapshot:
-
-```bash
-LOCAL_DATABASE_URL=file:./archive/db/jayrr-budget.db node scripts/push-local-to-turso.mjs
-```
-
-Do not invent a local DB path or reintroduce a `data/jayrr-budget.db` fallback.
-
-## Turso performance (do not reintroduce N+1)
-
-Every Drizzle/libsql call is a **network** round trip. Per-row loops that were fine on local SQLite hang for minutes on Turso.
-
-**Broken pattern (do not write):**
-
-```ts
-for (const row of rows) {
-  await upsertTaxonomyNode(...); // ×3 per row
-  await db.select(...).where(eq(transactionId, row.id));
-  await db.delete(...);
-  await db.insert(...);
-}
-```
-
-**Required pattern:**
-
-- Cache `ensureNamedNode` / `upsertTaxonomyNode` by `facet|slug|parent`
-- Prefetch enrichment ids and labels into `Set`/`Map` once
-- Resolve unique rule trees once, reuse node ids in the loop
-- Decide in memory; write with `@libsql/client` `batch()` (see `applySpendDimensions.ts`)
-- One-off renames/splits → set-based SQL (seconds), **not** full hygiene
-- Still slow → kill jobs with no progress after ~60s
-
-**Reference:** `src/domains/enrichment/application/applySpendDimensions.ts` (cache + prefetch + `uniqueTrees`).
-
-Also see `AGENTS.md` → **Turso performance**.
+- `src/shared/db` + most of `scripts/` are archive tooling only.

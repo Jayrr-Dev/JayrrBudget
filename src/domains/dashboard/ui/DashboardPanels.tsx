@@ -1,7 +1,8 @@
 "use client";
 
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "convex/react";
 import Link from "next/link";
+import { api } from "@convex/_generated/api";
 import { Button } from "@/components/ui/button";
 import { formatMoney, formatLedgerSpend } from "@/domains/dashboard/domain/money";
 import type {
@@ -9,16 +10,18 @@ import type {
   DashboardData,
   DashboardTransaction,
 } from "@/domains/dashboard/domain/types";
-import { fetchDashboard } from "@/domains/dashboard/queries/fetchDashboard";
-import { queryKeys } from "@/domains/dashboard/queries/query-keys";
 import { StatementUpload } from "@/domains/statements/ui/StatementUpload";
 import { formatDisplayDate } from "@/shared/lib/format-date";
 
-export function useDashboard() {
-  return useQuery({
-    queryKey: queryKeys.dashboard,
-    queryFn: () => fetchDashboard(),
-  });
+export function useDashboard(transactionLimit: number | null = 250) {
+  const result = useQuery(api.dashboard.get, { transactionLimit });
+  return {
+    data: result?.ok ? result.data : undefined,
+    error: result && !result.ok ? new Error(result.error) : null,
+    isPending: result === undefined,
+    isError: Boolean(result && !result.ok),
+    isSuccess: Boolean(result?.ok),
+  };
 }
 
 export function DashboardToolbar({
@@ -26,18 +29,10 @@ export function DashboardToolbar({
 }: {
   onImported?: () => Promise<void> | void;
 } = {}) {
-  const queryClient = useQueryClient();
-
   return (
     <div className="flex flex-wrap items-start justify-end gap-2">
       <StatementUpload
         onImported={async () => {
-          await queryClient.invalidateQueries({
-            queryKey: queryKeys.dashboard,
-          });
-          await queryClient.invalidateQueries({
-            queryKey: queryKeys.dashboardAll,
-          });
           await onImported?.();
         }}
       />

@@ -9,11 +9,11 @@ import {
 } from "@/components/ui/sidebar";
 import { Spinner } from "@/components/ui/spinner";
 import type { AppModuleRecord } from "@/domains/modules/domain/types";
-import { fetchModules } from "@/domains/modules/queries/modules";
-import { moduleQueryKeys } from "@/domains/modules/queries/query-keys";
 import { resolveModuleIcon } from "@/domains/modules/ui/moduleIcons";
 import { cn } from "@/lib/utils";
-import { useQuery } from "@tanstack/react-query";
+import { api } from "@convex/_generated/api";
+import { UserButton } from "@clerk/nextjs";
+import { useQuery } from "convex/react";
 import { motion } from "motion/react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -119,8 +119,8 @@ function SidebarFooterLink() {
   return (
     <div
       className={cn(
-        "w-full border-t border-[var(--sidebar-border)] pt-3",
-        !showLabel && "flex justify-center",
+        "flex w-full flex-col gap-3 border-t border-[var(--sidebar-border)] pt-3",
+        !showLabel && "items-center",
       )}
     >
       <SidebarLink
@@ -134,6 +134,25 @@ function SidebarFooterLink() {
           })(),
         }}
       />
+      <div
+        className={cn(
+          "flex items-center gap-2 px-2.5",
+          !showLabel && "justify-center px-0",
+        )}
+      >
+        <UserButton
+          appearance={{
+            elements: {
+              avatarBox: "size-8",
+            },
+          }}
+        />
+        {showLabel ? (
+          <span className="truncate text-xs text-[var(--muted-foreground)]">
+            Account
+          </span>
+        ) : null}
+      </div>
     </div>
   );
 }
@@ -149,11 +168,11 @@ export function AppShell({
 }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
-  const modulesQuery = useQuery({
-    queryKey: moduleQueryKeys.enabled,
-    queryFn: () => fetchModules({ enabledOnly: true }),
-  });
-
+  const modulesList = useQuery(api.modules.list, { enabledOnly: true });
+  const modulesQuery = {
+    data: modulesList ? { modules: modulesList } : undefined,
+    isPending: modulesList === undefined,
+  };
   const modules = modulesQuery.data?.modules ?? [];
   const navModules = modules.filter((mod) => mod.slug !== "modules");
   const fullBleedDatabase =

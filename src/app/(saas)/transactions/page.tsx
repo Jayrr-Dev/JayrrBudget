@@ -1,19 +1,14 @@
 "use client";
 
-import { fetchDashboard } from "@/domains/dashboard/queries/fetchDashboard";
-import { queryKeys } from "@/domains/dashboard/queries/query-keys";
 import {
   DashboardToolbar,
   LoadingSkeleton,
+  useDashboard,
 } from "@/domains/dashboard/ui/DashboardPanels";
 import { TransactionsDataTable } from "@/domains/transactions/ui/TransactionsDataTable";
-import { useQuery } from "@tanstack/react-query";
 
 export default function TransactionsPage() {
-  const dashboard = useQuery({
-    queryKey: queryKeys.dashboardAll,
-    queryFn: () => fetchDashboard({ limit: "all" }),
-  });
+  const dashboard = useDashboard(null);
   const data = dashboard.data;
 
   return (

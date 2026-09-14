@@ -1,3 +1,4 @@
+import { auth } from "@clerk/nextjs/server";
 import {
   convertToModelMessages,
   stepCountIs,
@@ -6,18 +7,46 @@ import {
 } from "ai";
 import { getBudgetContextForCanvas } from "@/domains/canvas/application/getBudgetContextForCanvas";
 import { canvasClientTools } from "@/domains/canvas/domain/canvasTools";
+import type { CanvasSnapshot } from "@/domains/canvas/domain/canvasContext";
 import {
   chatModel,
   getModelChain,
   isOpenRouterConfigured,
 } from "@/shared/ai/openRouter";
 import { errorMessage } from "@/shared/lib/error-message";
-import type { CanvasSnapshot } from "@/domains/canvas/domain/canvasContext";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
 
+const RATE_WINDOW_MS = 60_000;
+const RATE_MAX = 20;
+const rateBuckets = new Map<string, { count: number; resetAt: number }>();
+
+function allowRate(userId: string) {
+  const now = Date.now();
+  const bucket = rateBuckets.get(userId);
+  if (!bucket || now >= bucket.resetAt) {
+    rateBuckets.set(userId, { count: 1, resetAt: now + RATE_WINDOW_MS });
+    return true;
+  }
+  if (bucket.count >= RATE_MAX) return false;
+  bucket.count += 1;
+  return true;
+}
+
 export async function POST(request: Request) {
+  const session = await auth();
+  if (!session.userId) {
+    return Response.json({ error: "Authentication required" }, { status: 401 });
+  }
+
+  if (!allowRate(session.userId)) {
+    return Response.json(
+      { error: "Too many AI requests. Try again in a minute." },
+      { status: 429 },
+    );
+  }
+
   if (!isOpenRouterConfigured()) {
     return Response.json(
       {
@@ -52,6 +81,7 @@ export async function POST(request: Request) {
   const canvas = body.canvas ?? null;
   let budget: unknown;
   try {
+    // Uses authenticated Convex client → only this user's ledger.
     budget = await getBudgetContextForCanvas();
   } catch (error) {
     budget = {
@@ -74,8 +104,8 @@ export async function POST(request: Request) {
 
   const system = [
     "You are the JayrrBudget canvas assistant inside tldraw.",
-    "You can read the live canvas snapshot and the user's budget ledger.",
-    "When the user asks to draw, rearrange, label, or clear the board, use tools.",
+    "You can read the live canvas snapshot and the signed-in user's budget ledger only.",
+    "Never invent other users' data. When the user asks to draw, rearrange, label, or clear the board, use tools.",
     "Keep layouts readable: space shapes, use short labels, prefer geo + text/notes.",
     "Coordinate space: x increases right, y increases down. Origin is top-left.",
     "After tool calls, briefly say what changed.",
