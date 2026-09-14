@@ -6,7 +6,7 @@ Personal budgeting app: **Next.js** on **Vercel**, **Convex** for the live ledge
 
 1. Install and init Convex Auth (`JWT_PRIVATE_KEY` + `JWKS` on the Convex dashboard). See [Convex Auth setup](https://labs.convex.dev/auth/setup).
 2. Set `NEXT_PUBLIC_CONVEX_URL` (see `.env.example`).
-3. Sign up once at `/sign-in`. The app remaps imported ledger rows to that user (`migrations.reassignAllLedgersToCurrentUser`).
+3. Sign up once at `/sign-in`. The app claims import rows with no `userId` (`migrations.claimUnownedData`). Admin-only cutover can still remap all ledgers if needed.
 
 Each user gets a private ledger (`userId` on every row). There is no shared household model yet.
 

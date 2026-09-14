@@ -7,19 +7,36 @@ import {
   SidebarLink,
   useSidebar,
 } from "@/components/ui/sidebar";
+import {
+  Popover,
+  PopoverContent,
+  PopoverDescription,
+  PopoverHeader,
+  PopoverTitle,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { Spinner } from "@/components/ui/spinner";
 import type { AppModuleRecord } from "@/domains/modules/domain/types";
 import { resolveModuleIcon } from "@/domains/modules/ui/moduleIcons";
 import { cn } from "@/lib/utils";
+import { budgetBrandLabel } from "@/shared/lib/budget-brand";
 import { api } from "@convex/_generated/api";
 import { useAuthActions } from "@convex-dev/auth/react";
-import { useQuery } from "convex/react";
+import { IconLogout, IconUser } from "@tabler/icons-react";
+import { useQueryClient } from "@tanstack/react-query";
+import { useConvexAuth, useQuery } from "convex/react";
 import { motion } from "motion/react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { useState } from "react";
 
-function Brand() {
+function useBrandLabel() {
+  const { isAuthenticated } = useConvexAuth();
+  const me = useQuery(api.users.me, isAuthenticated ? {} : "skip");
+  return budgetBrandLabel(me?.name);
+}
+
+function Brand({ label }: { label: string }) {
   const { open, animate } = useSidebar();
   const showLabel = !animate || open;
 
@@ -47,7 +64,7 @@ function Brand() {
           transition={{ duration: 0.15 }}
           className="overflow-hidden text-sm font-semibold tracking-tight whitespace-nowrap text-[var(--sidebar-foreground)]"
         >
-          JayrrBudget
+          {label}
         </motion.span>
       ) : null}
     </Link>
@@ -119,56 +136,102 @@ function SidebarFooterLink() {
   return (
     <div
       className={cn(
-        "flex w-full flex-col gap-3 border-t border-[var(--sidebar-border)] pt-3",
+        "flex w-full flex-col gap-1 border-t border-[var(--sidebar-border)] pt-3",
         !showLabel && "items-center",
       )}
     >
       <SidebarLink
-        active={isActivePath(pathname, "/modules")}
+        active={isActivePath(pathname, "/profile")}
         link={{
-          label: "Modules",
-          href: "/modules",
-          icon: (() => {
-            const Icon = resolveModuleIcon("IconPuzzle");
-            return <Icon className="size-5 shrink-0 opacity-90" />;
-          })(),
+          label: "Profile",
+          href: "/profile",
+          icon: <IconUser className="size-5 shrink-0 opacity-90" />,
         }}
       />
-      <div
-        className={cn(
-          "flex items-center gap-2 px-2.5",
-          !showLabel && "justify-center px-0",
-        )}
-      >
-        <SignOutButton showLabel={showLabel} />
-      </div>
+      <SignOutButton />
     </div>
   );
 }
 
-function SignOutButton({ showLabel }: { showLabel: boolean }) {
+function SignOutButton() {
   const { signOut } = useAuthActions();
-  const router = useRouter();
+  const queryClient = useQueryClient();
+  const { open, animate } = useSidebar();
+  const showLabel = !animate || open;
+  const [openConfirm, setOpenConfirm] = useState(false);
+  const [pending, setPending] = useState(false);
+
   return (
-    <button
-      type="button"
-      onClick={() => {
-        void signOut().then(() => {
-          router.replace("/sign-in");
-          router.refresh();
-        });
-      }}
-      className={cn(
-        "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-[var(--muted-foreground)] hover:bg-[var(--surface-2)] hover:text-[var(--foreground)]",
-        !showLabel && "justify-center px-0",
-      )}
-      title="Sign out"
-    >
-      <span className="flex size-8 items-center justify-center rounded-full border border-[var(--border)] text-xs font-medium">
-        Out
-      </span>
-      {showLabel ? <span className="truncate text-xs">Sign out</span> : null}
-    </button>
+    <Popover open={openConfirm} onOpenChange={setOpenConfirm}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          title="Sign out"
+          className={cn(
+            "group/sidebar relative flex items-center rounded-lg transition-colors",
+            showLabel
+              ? "h-10 w-full gap-3 px-2.5"
+              : "size-10 shrink-0 justify-center self-center px-0",
+            "text-[var(--sidebar-foreground)] hover:bg-[var(--sidebar-accent)]/70",
+            openConfirm && "bg-[var(--sidebar-accent)]/70",
+          )}
+        >
+          <span className="flex size-5 shrink-0 items-center justify-center [&_svg]:size-5">
+            <IconLogout className="size-5 shrink-0 opacity-90" />
+          </span>
+          {showLabel ? (
+            <motion.span
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.15 }}
+              className="overflow-hidden text-sm font-medium whitespace-nowrap"
+            >
+              Sign out
+            </motion.span>
+          ) : null}
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        side="right"
+        align="end"
+        sideOffset={8}
+        className="w-56 gap-3 bg-[var(--surface)] p-3 text-[var(--foreground)] ring-[var(--border)]"
+      >
+        <PopoverHeader>
+          <PopoverTitle>Sign out?</PopoverTitle>
+          <PopoverDescription className="text-[var(--muted-foreground)]">
+            You’ll need to sign in again to open your ledger.
+          </PopoverDescription>
+        </PopoverHeader>
+        <div className="flex justify-end gap-2">
+          <button
+            type="button"
+            disabled={pending}
+            onClick={() => setOpenConfirm(false)}
+            className="rounded-md px-2.5 py-1.5 text-sm text-[var(--muted-foreground)] hover:bg-[var(--surface-2)] hover:text-[var(--foreground)]"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            disabled={pending}
+            onClick={() => {
+              setPending(true);
+              void signOut()
+                .then(() => {
+                  queryClient.clear();
+                  // Full navigation drops Convex React query cache + shell state.
+                  window.location.assign("/sign-in");
+                })
+                .catch(() => setPending(false));
+            }}
+            className="rounded-md bg-[var(--accent)] px-2.5 py-1.5 text-sm font-medium text-[var(--accent-foreground)] disabled:opacity-60"
+          >
+            {pending ? "Signing out…" : "Sign out"}
+          </button>
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -183,13 +246,18 @@ export function AppShell({
 }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
-  const modulesList = useQuery(api.modules.list, { enabledOnly: true });
+  const brandLabel = useBrandLabel();
+  const { isAuthenticated } = useConvexAuth();
+  const modulesList = useQuery(
+    api.modules.list,
+    isAuthenticated ? { enabledOnly: true } : "skip",
+  );
   const modulesQuery = {
     data: modulesList ? { modules: modulesList } : undefined,
     isPending: modulesList === undefined,
   };
   const modules = modulesQuery.data?.modules ?? [];
-  const navModules = modules.filter((mod) => mod.slug !== "modules");
+  const navModules = modules;
   const fullBleedDatabase =
     pathname === "/database" || pathname.startsWith("/database/");
 
@@ -202,9 +270,12 @@ export function AppShell({
       )}
     >
       <Sidebar open={open} setOpen={setOpen} animate>
-        <SidebarBody className="w-full justify-between gap-8">
+        <SidebarBody
+          className="w-full justify-between gap-8"
+          title={brandLabel}
+        >
           <div className="flex min-h-0 w-full flex-1 flex-col gap-4 overflow-hidden">
-            <Brand />
+            <Brand label={brandLabel} />
             {modulesQuery.isPending ? (
               <ModulesLoading />
             ) : (

@@ -1,6 +1,8 @@
 "use client";
 
-import { useSyncExternalStore } from "react";
+import { api } from "@convex/_generated/api";
+import { useMutation, useQuery } from "convex/react";
+import { useEffect, useRef } from "react";
 
 export type ScratchNoteRow = {
   id: string;
@@ -27,38 +29,14 @@ export type ScratchNoteState = {
 
 const STORAGE_KEY = "jayrr-budget.scratch-note-v2";
 const LEGACY_STORAGE_KEY = "jayrr-budget.scratch-note-table";
+const MIGRATED_KEY = "jayrr-budget.scratch-note-migrated-convex";
 const OPEN_EVENT = "jayrr-scratch-note-open";
 
-const listeners = new Set<() => void>();
-/** Stable SSR snapshot — must not allocate a new object each call. */
-const SERVER_SNAPSHOT: ScratchNoteState = emptyState();
-let state: ScratchNoteState = emptyState();
-let hydrated = false;
-
-function newId(prefix = "n") {
-  return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
-}
-
-function emptyState(): ScratchNoteState {
-  const id = "tab-1";
-  return {
-    tabs: [{ id, name: "Note 1", rows: [] }],
-    activeId: id,
-    receiveId: id,
-  };
-}
-
-function emit() {
-  for (const listener of listeners) listener();
-}
-
-function persist() {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-  } catch {
-    // ignore
-  }
-}
+const EMPTY_STATE: ScratchNoteState = {
+  tabs: [{ id: "tab-1", name: "Sheet 1", rows: [] }],
+  activeId: "tab-1",
+  receiveId: "tab-1",
+};
 
 function isRow(value: unknown): value is ScratchNoteRow {
   return (
@@ -81,7 +59,8 @@ function isTab(value: unknown): value is ScratchNoteTab {
   );
 }
 
-function readFromStorage(): ScratchNoteState {
+function readLocalStorageState(): ScratchNoteState | null {
+  if (typeof window === "undefined") return null;
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
@@ -102,49 +81,32 @@ function readFromStorage(): ScratchNoteState {
       }
     }
 
-    // Migrate flat v1 row array into a single tab
     const legacy = localStorage.getItem(LEGACY_STORAGE_KEY);
     if (legacy) {
       const rows = JSON.parse(legacy) as unknown;
       if (Array.isArray(rows) && rows.every(isRow)) {
         const id = "tab-1";
         return {
-          tabs: [{ id, name: "Note 1", rows }],
+          tabs: [{ id, name: "Sheet 1", rows }],
           activeId: id,
           receiveId: id,
         };
       }
     }
   } catch {
-    // fall through
+    // ignore
   }
-  return emptyState();
+  return null;
 }
 
-function ensureHydrated() {
-  if (hydrated || typeof window === "undefined") return;
-  hydrated = true;
-  state = readFromStorage();
-}
-
-function getSnapshot(): ScratchNoteState {
-  ensureHydrated();
-  return state;
-}
-
-function getServerSnapshot(): ScratchNoteState {
-  return SERVER_SNAPSHOT;
-}
-
-function subscribe(listener: () => void) {
-  listeners.add(listener);
-  return () => listeners.delete(listener);
-}
-
-function setState(next: ScratchNoteState) {
-  state = next;
-  persist();
-  emit();
+function clearLocalStorageNotes() {
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(LEGACY_STORAGE_KEY);
+    localStorage.setItem(MIGRATED_KEY, "1");
+  } catch {
+    // ignore
+  }
 }
 
 function openNotePopover() {
@@ -153,123 +115,75 @@ function openNotePopover() {
   }
 }
 
-export function useScratchNote() {
-  return useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+/** Live note pad from Convex (falls back to empty while loading). */
+export function useScratchNote(): ScratchNoteState {
+  const data = useQuery(api.scratchNotes.get);
+  return data ?? EMPTY_STATE;
 }
 
-export function addScratchNoteRow(
-  input: Omit<ScratchNoteRow, "id"> & { id?: string },
-) {
-  ensureHydrated();
-  const receiveId = state.receiveId;
-  const tab = state.tabs.find((t) => t.id === receiveId);
-  if (!tab) return;
+/** One-shot localStorage → Convex when cloud pad still empty. */
+export function useScratchNoteLocalMigration() {
+  const importIfEmpty = useMutation(api.scratchNotes.importIfEmpty);
+  const ran = useRef(false);
 
-  const existing = tab.rows.find(
-    (row) =>
-      row.name === input.name &&
-      (row.parent ?? "") === (input.parent ?? "") &&
-      row.currency === input.currency,
-  );
-
-  const nextRows = existing
-    ? tab.rows.map((row) =>
-        row.id === existing.id
-          ? { ...row, spend: input.spend, count: input.count }
-          : row,
-      )
-    : [
-        ...tab.rows,
-        {
-          id:
-            input.id ??
-            `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
-          name: input.name,
-          spend: input.spend,
-          count: input.count,
-          currency: input.currency,
-          parent: input.parent,
-        },
-      ];
-
-  setState({
-    ...state,
-    activeId: receiveId,
-    tabs: state.tabs.map((t) =>
-      t.id === receiveId ? { ...t, rows: nextRows } : t,
-    ),
-  });
-  openNotePopover();
+  useEffect(() => {
+    if (ran.current || typeof window === "undefined") return;
+    if (localStorage.getItem(MIGRATED_KEY) === "1") {
+      ran.current = true;
+      return;
+    }
+    const local = readLocalStorageState();
+    if (!local) {
+      try {
+        localStorage.setItem(MIGRATED_KEY, "1");
+      } catch {
+        // ignore
+      }
+      ran.current = true;
+      return;
+    }
+    ran.current = true;
+    void importIfEmpty(local)
+      .then(() => clearLocalStorageNotes())
+      .catch(() => {
+        ran.current = false;
+      });
+  }, [importIfEmpty]);
 }
 
-export function removeScratchNoteRow(rowId: string) {
-  ensureHydrated();
-  setState({
-    ...state,
-    tabs: state.tabs.map((tab) =>
-      tab.id === state.activeId
-        ? { ...tab, rows: tab.rows.filter((row) => row.id !== rowId) }
-        : tab,
-    ),
-  });
-}
+export function useScratchNoteActions() {
+  const addRowMut = useMutation(api.scratchNotes.addRow);
+  const removeRowMut = useMutation(api.scratchNotes.removeRow);
+  const clearActiveMut = useMutation(api.scratchNotes.clearActive);
+  const selectTabMut = useMutation(api.scratchNotes.selectTab);
+  const setReceiveTabMut = useMutation(api.scratchNotes.setReceiveTab);
+  const addTabMut = useMutation(api.scratchNotes.addTab);
+  const closeTabMut = useMutation(api.scratchNotes.closeTab);
+  const renameTabMut = useMutation(api.scratchNotes.renameTab);
 
-/** Clears rows on the currently viewed tab. */
-export function clearScratchNote() {
-  ensureHydrated();
-  setState({
-    ...state,
-    tabs: state.tabs.map((tab) =>
-      tab.id === state.activeId ? { ...tab, rows: [] } : tab,
-    ),
-  });
-}
-
-export function selectScratchNoteTab(tabId: string) {
-  ensureHydrated();
-  if (!state.tabs.some((t) => t.id === tabId)) return;
-  setState({ ...state, activeId: tabId });
-}
-
-/** Checkbox: which tab receives Analysis + rows. */
-export function setScratchNoteReceiveTab(tabId: string) {
-  ensureHydrated();
-  if (!state.tabs.some((t) => t.id === tabId)) return;
-  setState({ ...state, receiveId: tabId });
-}
-
-export function addScratchNoteTab() {
-  ensureHydrated();
-  const id = newId("tab");
-  const name = `Note ${state.tabs.length + 1}`;
-  setState({
-    tabs: [...state.tabs, { id, name, rows: [] }],
-    activeId: id,
-    receiveId: state.receiveId,
-  });
-}
-
-export function closeScratchNoteTab(tabId: string) {
-  ensureHydrated();
-  if (state.tabs.length <= 1) return;
-  const tabs = state.tabs.filter((t) => t.id !== tabId);
-  const activeId =
-    state.activeId === tabId ? (tabs[0]?.id ?? state.activeId) : state.activeId;
-  const receiveId =
-    state.receiveId === tabId ? activeId : state.receiveId;
-  setState({ tabs, activeId, receiveId });
-}
-
-export function renameScratchNoteTab(tabId: string, name: string) {
-  ensureHydrated();
-  const trimmed = name.trim();
-  if (!trimmed) return;
-  setState({
-    ...state,
-    tabs: state.tabs.map((tab) =>
-      tab.id === tabId ? { ...tab, name: trimmed } : tab,
-    ),
-  });
+  return {
+    addRow: async (
+      input: Omit<ScratchNoteRow, "id"> & { id?: string },
+    ) => {
+      await addRowMut({
+        name: input.name,
+        spend: input.spend,
+        count: input.count,
+        currency: input.currency,
+        parent: input.parent,
+        id: input.id,
+      });
+      openNotePopover();
+    },
+    removeRow: (rowId: string) => void removeRowMut({ rowId }),
+    clearActive: () => void clearActiveMut({}),
+    selectTab: (tabId: string) => void selectTabMut({ tabId }),
+    setReceiveTab: (tabId: string) => void setReceiveTabMut({ tabId }),
+    addTab: () => void addTabMut({}),
+    closeTab: (tabId: string) => void closeTabMut({ tabId }),
+    renameTab: (tabId: string, name: string) =>
+      void renameTabMut({ tabId, name }),
+  };
 }
 
 export function subscribeScratchNoteOpen(listener: () => void) {

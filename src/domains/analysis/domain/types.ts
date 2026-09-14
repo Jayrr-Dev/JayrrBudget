@@ -110,6 +110,15 @@ export type AnalysisTxnPeek = {
   amount: number;
 };
 
+/**
+ * Flat entry list — Convex caps objects at 1024 fields, and peek keys
+ * (section/category/merchant combos) routinely exceed that as a Record.
+ */
+export type AnalysisTxnPeekEntry = {
+  key: string;
+  peeks: AnalysisTxnPeek[];
+};
+
 export type AnalysisData = {
   currency: string;
   range: AnalysisRange;
@@ -124,7 +133,7 @@ export type AnalysisData = {
    * Keys: `section:…`, `category:…`, `subcategory:…`, `merchant:…`,
    * `tag:…`, `type:…`, `spread:…`, plus nested `subcategory-merchant:Sub::Merchant`, etc.
    */
-  txnPeeks: Record<string, AnalysisTxnPeek[]>;
+  txnPeeks: AnalysisTxnPeekEntry[];
   sections: AnalysisRankedItem[];
   /** Rows keyed by series key for stacked section charts. */
   sectionMonthly: Array<Record<string, string | number>>;

@@ -56,7 +56,7 @@ import {
   type FacetPane,
 } from "@/domains/analysis/ui/analysisUiPrefs";
 import { formatMoney } from "@/domains/dashboard/domain/money";
-import { addScratchNoteRow } from "@/domains/scratch-note/scratchNoteStore";
+import { useScratchNoteActions } from "@/domains/scratch-note/scratchNoteStore";
 import { cn } from "@/lib/utils";
 import { downloadCsv, toCsv } from "@/shared/lib/csv";
 import {
@@ -2606,12 +2606,29 @@ function txnPeekKey(facet: string, ...parts: string[]) {
   return `${facet}:${parts.join("::")}`;
 }
 
+const txnPeekIndexCache = new WeakMap<
+  AnalysisData,
+  Map<string, AnalysisTxnPeek[]>
+>();
+
+function txnPeekIndex(data: AnalysisData) {
+  let index = txnPeekIndexCache.get(data);
+  if (!index) {
+    index = new Map();
+    for (const entry of data.txnPeeks ?? []) {
+      index.set(entry.key, entry.peeks);
+    }
+    txnPeekIndexCache.set(data, index);
+  }
+  return index;
+}
+
 function peeksFor(
   data: AnalysisData,
   facet: string,
   ...parts: string[]
 ): AnalysisTxnPeek[] {
-  return data.txnPeeks?.[txnPeekKey(facet, ...parts)] ?? [];
+  return txnPeekIndex(data).get(txnPeekKey(facet, ...parts)) ?? [];
 }
 
 function RowTxnsPopover({
@@ -2735,6 +2752,7 @@ function LeaderboardTable({
   ) => AnalysisTxnPeek[];
 }) {
   const [openName, setOpenName] = useState<string | null>(null);
+  const { addRow } = useScratchNoteActions();
   const top = rows.slice(0, 10);
   const topTotal = top.reduce((sum, row) => sum + row.spend, 0);
   const topCount = top.reduce((sum, row) => sum + (row.count ?? 0), 0);
@@ -2861,12 +2879,12 @@ function LeaderboardTable({
                           >
                             <button
                               type="button"
-                              title={`Add ${vendor.name} to note`}
-                              aria-label={`Add ${vendor.name} to note`}
+                              title={`Add ${vendor.name} to store sheet`}
+                              aria-label={`Add ${vendor.name} to store sheet`}
                               className="inline-flex size-5 items-center justify-center rounded text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]"
                               onClick={(event) => {
                                 event.stopPropagation();
-                                addScratchNoteRow({
+                                void addRow({
                                   name: vendor.name,
                                   spend: vendor.spend,
                                   count: vendor.count ?? 0,
@@ -3115,6 +3133,7 @@ function AverageLeaderboardTable({
 }) {
   const [openName, setOpenName] = useState<string | null>(null);
   const [showAll, setShowAll] = useState(false);
+  const { addRow } = useScratchNoteActions();
   const meta = ANALYSIS_PERIOD_META[period];
   const divisor = Math.max(periodCount, 1);
   const hasMore = rows.length > 10;
@@ -3241,12 +3260,12 @@ function AverageLeaderboardTable({
                           >
                             <button
                               type="button"
-                              title={`Add ${vendor.name} to note`}
-                              aria-label={`Add ${vendor.name} to note`}
+                              title={`Add ${vendor.name} to store sheet`}
+                              aria-label={`Add ${vendor.name} to store sheet`}
                               className="inline-flex size-5 items-center justify-center rounded text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]"
                               onClick={(event) => {
                                 event.stopPropagation();
-                                addScratchNoteRow({
+                                void addRow({
                                   name: vendor.name,
                                   spend: vendor.spend / divisor,
                                   count: vendor.count ?? 0,

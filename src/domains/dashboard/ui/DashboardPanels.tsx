@@ -1,6 +1,6 @@
 "use client";
 
-import { useQuery } from "convex/react";
+import { useConvexAuth, useQuery } from "convex/react";
 import Link from "next/link";
 import { api } from "@convex/_generated/api";
 import { Button } from "@/components/ui/button";
@@ -14,11 +14,15 @@ import { StatementUpload } from "@/domains/statements/ui/StatementUpload";
 import { formatDisplayDate } from "@/shared/lib/format-date";
 
 export function useDashboard(transactionLimit: number | null = 250) {
-  const result = useQuery(api.dashboard.get, { transactionLimit });
+  const { isAuthenticated } = useConvexAuth();
+  const result = useQuery(
+    api.dashboard.get,
+    isAuthenticated ? { transactionLimit } : "skip",
+  );
   return {
     data: result?.ok ? result.data : undefined,
     error: result && !result.ok ? new Error(result.error) : null,
-    isPending: result === undefined,
+    isPending: isAuthenticated && result === undefined,
     isError: Boolean(result && !result.ok),
     isSuccess: Boolean(result?.ok),
   };

@@ -25,13 +25,22 @@ export default defineSchema({
     phone: v.optional(v.string()),
     phoneVerificationTime: v.optional(v.number()),
     isAnonymous: v.optional(v.boolean()),
+    /** RBAC: admin | normal | premium (defaults to normal when missing). */
+    role: v.optional(
+      v.union(
+        v.literal("admin"),
+        v.literal("normal"),
+        v.literal("premium"),
+      ),
+    ),
     // Legacy Clerk / bootstrap fields (remove after cutover clear)
     tokenIdentifier: v.optional(v.string()),
     clerkUserId: v.optional(v.string()),
     createdAt: v.optional(v.number()),
   })
     .index("email", ["email"])
-    .index("phone", ["phone"]),
+    .index("phone", ["phone"])
+    .index("role", ["role"]),
 
   institutions: defineTable({
     userId,
@@ -268,4 +277,40 @@ export default defineSchema({
   })
     .index("by_userId", ["userId"])
     .index("by_userId_slug", ["userId", "slug"]),
+
+  /** Scratch note pads (tabs + vendor rows) for Analysis + FAB. */
+  scratchNotes: defineTable({
+    userId,
+    tabs: v.array(
+      v.object({
+        id: v.string(),
+        name: v.string(),
+        rows: v.array(
+          v.object({
+            id: v.string(),
+            name: v.string(),
+            spend: v.number(),
+            count: v.number(),
+            currency: v.string(),
+            parent: v.optional(v.string()),
+          }),
+        ),
+      }),
+    ),
+    activeId: v.string(),
+    receiveId: v.string(),
+    updatedAt: v.number(),
+  }).index("by_userId", ["userId"]),
+
+  /** Freeform note tabs (Utilitek-style text pads). */
+  userNotes: defineTable({
+    userId,
+    tabId: v.string(),
+    tabName: v.string(),
+    content: v.string(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_userId", ["userId"])
+    .index("by_userId_tabId", ["userId", "tabId"]),
 });

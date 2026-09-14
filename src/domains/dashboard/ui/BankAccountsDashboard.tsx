@@ -2,12 +2,14 @@
 
 import { Button } from "@/components/ui/button";
 import {
+  ACCOUNT_SECTION_LABELS,
   detectCardNetwork,
   displayBalanceAmount,
   formatAccountNumber,
   groupAccountsBySection,
   resolveAccountCategory,
   type AccountCategory,
+  type AccountSectionId,
   type CardNetwork,
 } from "@/domains/dashboard/domain/accountCategory";
 import { formatMoney } from "@/domains/dashboard/domain/money";
@@ -17,9 +19,11 @@ import type {
   DashboardTransaction,
 } from "@/domains/dashboard/domain/types";
 import { AccountPastTransactions } from "@/domains/dashboard/ui/AccountPastTransactions";
+import { AddLoanDialog } from "@/domains/dashboard/ui/AddLoanDialog";
+import { PlusIcon } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 
 export function accountDetailHref(accountId: string) {
   return `/accounts?account=${encodeURIComponent(accountId)}`;
@@ -372,7 +376,20 @@ export function BankAccountsDashboard({
   selectedAccountId?: string | null;
 }) {
   const router = useRouter();
-  const sections = groupAccountsBySection(accounts);
+  const [addLoanOpen, setAddLoanOpen] = useState(false);
+
+  const sections = useMemo(() => {
+    const grouped = groupAccountsBySection(accounts);
+    if (grouped.some((section) => section.id === "lending")) return grouped;
+    return [
+      ...grouped,
+      {
+        id: "lending" as AccountSectionId,
+        label: ACCOUNT_SECTION_LABELS.lending,
+        accounts: [] as DashboardAccount[],
+      },
+    ];
+  }, [accounts]);
 
   const selectedAccount = useMemo(() => {
     if (!selectedAccountId) return null;
@@ -389,15 +406,6 @@ export function BankAccountsDashboard({
     );
   }, [transactions, selectedAccount]);
 
-  if (accounts.length === 0) {
-    return (
-      <div className="rounded-xl border border-dashed border-[var(--border)] bg-[var(--surface)]/70 px-4 py-10 text-sm text-[var(--muted-foreground)]">
-        No accounts yet. Import a statement PDF from Statements to populate this
-        view.
-      </div>
-    );
-  }
-
   if (selectedAccount) {
     return (
       <AccountDetailView
@@ -408,28 +416,65 @@ export function BankAccountsDashboard({
     );
   }
 
+  const hasNonLending = sections.some(
+    (section) => section.id !== "lending" && section.accounts.length > 0,
+  );
+
   return (
     <div className="space-y-8">
+      {!hasNonLending && accounts.length === 0 ? (
+        <div className="rounded-xl border border-dashed border-[var(--border)] bg-[var(--surface)]/70 px-4 py-10 text-sm text-[var(--muted-foreground)]">
+          No deposit or credit accounts yet. Import a statement PDF from
+          Statements, or add a custom loan below.
+        </div>
+      ) : null}
+
       {sections.map((section) => (
         <section key={section.id} className="space-y-2">
-          <h2 className="px-1 text-xs font-medium tracking-[0.14em] text-[var(--muted-foreground)] uppercase">
-            {section.label}
-          </h2>
-          <ul className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)]">
-            {section.accounts.map((account, index) => (
-              <li
-                key={account.accountId}
-                className={index > 0 ? "border-t border-[var(--border)]" : ""}
+          <div className="flex items-center gap-1.5 px-1">
+            <h2 className="text-xs font-medium tracking-[0.14em] text-[var(--muted-foreground)] uppercase">
+              {section.label}
+            </h2>
+            {section.id === "lending" ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                className="size-4 shrink-0 rounded-full border border-[var(--border)] text-[var(--muted-foreground)]"
+                aria-label="Add loan"
+                onClick={() => setAddLoanOpen(true)}
               >
-                <AccountRow
-                  account={account}
-                  href={accountDetailHref(account.accountId)}
-                />
-              </li>
-            ))}
-          </ul>
+                <PlusIcon className="size-2.5" />
+              </Button>
+            ) : null}
+          </div>
+          {section.accounts.length === 0 ? (
+            section.id === "lending" ? (
+              <div className="rounded-xl border border-dashed border-[var(--border)] bg-[var(--surface)]/70 px-4 py-6 text-sm text-[var(--muted-foreground)]">
+                No lending accounts yet. Use + to add a custom loan.
+              </div>
+            ) : null
+          ) : (
+            <ul className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)]">
+              {section.accounts.map((account, index) => (
+                <li
+                  key={account.accountId}
+                  className={
+                    index > 0 ? "border-t border-[var(--border)]" : ""
+                  }
+                >
+                  <AccountRow
+                    account={account}
+                    href={accountDetailHref(account.accountId)}
+                  />
+                </li>
+              ))}
+            </ul>
+          )}
         </section>
       ))}
+
+      <AddLoanDialog open={addLoanOpen} onOpenChange={setAddLoanOpen} />
     </div>
   );
 }

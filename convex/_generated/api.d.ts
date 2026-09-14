@@ -21,15 +21,20 @@ import type * as lib_carLoanConstants from "../lib/carLoanConstants.js";
 import type * as lib_cashFlow from "../lib/cashFlow.js";
 import type * as lib_categoryKey from "../lib/categoryKey.js";
 import type * as lib_computeAnalysis from "../lib/computeAnalysis.js";
+import type * as lib_ensureModules from "../lib/ensureModules.js";
 import type * as lib_loanCompute from "../lib/loanCompute.js";
 import type * as lib_matchLoanPayments from "../lib/matchLoanPayments.js";
+import type * as lib_moduleCatalog from "../lib/moduleCatalog.js";
 import type * as lib_periods from "../lib/periods.js";
+import type * as lib_roles from "../lib/roles.js";
 import type * as lib_spreads from "../lib/spreads.js";
 import type * as lib_tags from "../lib/tags.js";
 import type * as migrations from "../migrations.js";
 import type * as modules from "../modules.js";
+import type * as scratchNotes from "../scratchNotes.js";
 import type * as statements from "../statements.js";
 import type * as transactions from "../transactions.js";
+import type * as userNotes from "../userNotes.js";
 import type * as users from "../users.js";
 
 import type {
@@ -52,15 +57,20 @@ declare const fullApi: ApiFromModules<{
   "lib/cashFlow": typeof lib_cashFlow;
   "lib/categoryKey": typeof lib_categoryKey;
   "lib/computeAnalysis": typeof lib_computeAnalysis;
+  "lib/ensureModules": typeof lib_ensureModules;
   "lib/loanCompute": typeof lib_loanCompute;
   "lib/matchLoanPayments": typeof lib_matchLoanPayments;
+  "lib/moduleCatalog": typeof lib_moduleCatalog;
   "lib/periods": typeof lib_periods;
+  "lib/roles": typeof lib_roles;
   "lib/spreads": typeof lib_spreads;
   "lib/tags": typeof lib_tags;
   migrations: typeof migrations;
   modules: typeof modules;
+  scratchNotes: typeof scratchNotes;
   statements: typeof statements;
   transactions: typeof transactions;
+  userNotes: typeof userNotes;
   users: typeof users;
 }>;
 

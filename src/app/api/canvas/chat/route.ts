@@ -40,15 +40,27 @@ function allowRate(userId: string) {
 
 export async function POST(request: Request) {
   let userKey: string;
+  let role: string | undefined;
   try {
     const client = await getAuthenticatedConvexClient();
     const me = await client.query(api.users.me, {});
-    userKey = me?.userId ?? "unknown";
+    if (!me) {
+      return Response.json({ error: "Authentication required" }, { status: 401 });
+    }
+    userKey = me.userId;
+    role = me.role;
   } catch (error) {
     if (error instanceof AuthRequiredError) {
       return Response.json({ error: "Authentication required" }, { status: 401 });
     }
     throw error;
+  }
+
+  if (role !== "admin" && role !== "premium") {
+    return Response.json(
+      { error: "Premium access required for canvas AI." },
+      { status: 403 },
+    );
   }
 
   if (!allowRate(userKey)) {

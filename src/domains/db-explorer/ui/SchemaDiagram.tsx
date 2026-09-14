@@ -50,14 +50,14 @@ const ROW_H = 18;
 const COL_GAP = NODE_W;
 const ROW_GAP = 36;
 const PAD = 48;
-const LAYOUT_ID = "domain-columns-v1";
+const LAYOUT_ID = "domain-columns-v2-auth";
 const MAX_VISIBLE_COLS = 8;
 const MIN_ZOOM = 0.35;
 const MAX_ZOOM = 2.5;
 
 /**
  * Fixed schema columns (left → right), matching the db-explorer mental model:
- * hubs/sources, then accounts + lookups, then categories.
+ * hubs/sources, then accounts + lookups, then categories, then auth/users.
  * Unknown tables fall back to required-FK depth.
  */
 const PREFERRED_COLUMN: Record<string, number> = {
@@ -65,13 +65,23 @@ const PREFERRED_COLUMN: Record<string, number> = {
   statement_uploads: 0,
   transactions: 0,
   accounts: 1,
+  loan_terms: 1,
+  loan_payment_links: 1,
   app_modules: 1,
+  scratch_notes: 1,
   transaction_sections: 1,
   transaction_spreads: 1,
   transaction_subcategories: 1,
   transaction_types: 1,
   transaction_kinds: 1,
   transaction_categories: 2,
+  users: 3,
+  auth_accounts: 3,
+  auth_sessions: 3,
+  auth_refresh_tokens: 3,
+  auth_verification_codes: 3,
+  auth_verifiers: 3,
+  auth_rate_limits: 3,
 };
 
 /** Top → bottom order inside each preferred column. */
@@ -80,13 +90,23 @@ const PREFERRED_ROW: Record<string, number> = {
   statement_uploads: 1,
   transactions: 2,
   accounts: 0,
-  app_modules: 1,
-  transaction_sections: 2,
-  transaction_spreads: 3,
-  transaction_subcategories: 4,
-  transaction_types: 5,
-  transaction_kinds: 6,
-  transaction_categories: 2,
+  loan_terms: 1,
+  loan_payment_links: 2,
+  app_modules: 3,
+  scratch_notes: 4,
+  transaction_sections: 5,
+  transaction_spreads: 6,
+  transaction_subcategories: 7,
+  transaction_types: 8,
+  transaction_kinds: 9,
+  transaction_categories: 0,
+  users: 0,
+  auth_accounts: 1,
+  auth_sessions: 2,
+  auth_refresh_tokens: 3,
+  auth_verification_codes: 4,
+  auth_verifiers: 5,
+  auth_rate_limits: 6,
 };
 
 function clamp(value: number, min: number, max: number) {

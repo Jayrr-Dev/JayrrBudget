@@ -16,10 +16,14 @@ export type DbForeignKey = {
   onDelete: string | undefined;
 };
 
+export type DbTableScope = "ledger" | "auth";
+
 export type DbTableInfo = {
   name: string;
   rowCount: number;
   columns: DbColumnInfo[];
+  /** ledger = your rows; auth = global Convex Auth / users. */
+  scope?: DbTableScope;
 };
 
 export type DbSchemaGraph = {

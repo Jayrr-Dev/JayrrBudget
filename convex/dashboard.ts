@@ -1,13 +1,26 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { ensureUser, requireUser } from "./lib/auth";
+import { buildScheduledDates } from "./lib/amortize";
 import {
   collectPadCandidates,
   computeLoanAmortization,
   summaryFromAmortize,
   type LoanTermsRow,
 } from "./lib/loanCompute";
+import {
+  normalizePaymentFrequency,
+} from "./lib/paymentFrequency";
 import { splitTags } from "./lib/tags";
+
+const MANUAL_INSTITUTION_ID = "manual";
+
+const paymentFrequencyValidator = v.union(
+  v.literal("weekly"),
+  v.literal("biweekly"),
+  v.literal("semimonthly"),
+  v.literal("monthly"),
+);
 
 function mapLoanTerms(row: {
   accountId: string;
@@ -41,6 +54,34 @@ function mapLoanTerms(row: {
     overrideAsOf: row.overrideAsOf,
     vehicleLabel: row.vehicleLabel,
   };
+}
+
+function slugifyAccountId(name: string): string {
+  const base = name
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 48);
+  return base || "loan";
+}
+
+function txnPadRows(
+  allTxns: Array<{
+    transactionId: string;
+    posted: string;
+    amount: number;
+    merchantClean: string | null;
+    description: string;
+  }>,
+) {
+  return allTxns.map((t) => ({
+    transactionId: t.transactionId,
+    posted: t.posted,
+    amount: t.amount,
+    merchantClean: t.merchantClean,
+    description: t.description,
+  }));
 }
 
 export const get = query({
@@ -85,6 +126,7 @@ export const get = query({
           : null;
 
       const txnRows = limit ? allTxns.slice(0, limit) : allTxns;
+      const padSource = txnPadRows(allTxns);
 
       let loanSummariesByAccount = new Map<
         string,
@@ -93,18 +135,9 @@ export const get = query({
 
       if (termsRows.length > 0) {
         const termsList = termsRows.map(mapLoanTerms);
-        const pads = collectPadCandidates(
-          allTxns.map((t) => ({
-            transactionId: t.transactionId,
-            posted: t.posted,
-            amount: t.amount,
-            merchantClean: t.merchantClean,
-            description: t.description,
-          })),
-          termsList[0]!.matchAmount,
-        );
         loanSummariesByAccount = new Map(
           termsList.map((terms) => {
+            const pads = collectPadCandidates(padSource, terms.matchAmount);
             const result = computeLoanAmortization(terms, pads);
             return [terms.accountId, summaryFromAmortize(terms, result)] as const;
           }),
@@ -219,6 +252,141 @@ export const get = query({
   },
 });
 
+export const createCustomLoan = mutation({
+  args: {
+    name: v.string(),
+    vehicleLabel: v.optional(v.union(v.string(), v.null())),
+    principalStart: v.number(),
+    annualRate: v.number(),
+    paymentAmount: v.number(),
+    paymentFrequency: paymentFrequencyValidator,
+    paymentCount: v.number(),
+    firstPaymentDate: v.string(),
+    matchMerchantClean: v.optional(v.union(v.string(), v.null())),
+  },
+  handler: async (ctx, args) => {
+    const user = await ensureUser(ctx);
+    const name = args.name.trim();
+    if (!name) throw new Error("Name is required");
+
+    if (
+      !Number.isFinite(args.principalStart) ||
+      args.principalStart <= 0 ||
+      !Number.isFinite(args.annualRate) ||
+      args.annualRate < 0 ||
+      !Number.isFinite(args.paymentAmount) ||
+      args.paymentAmount <= 0 ||
+      !Number.isFinite(args.paymentCount) ||
+      args.paymentCount < 1 ||
+      !/^\d{4}-\d{2}-\d{2}$/.test(args.firstPaymentDate)
+    ) {
+      throw new Error("Invalid loan terms");
+    }
+
+    const frequency = normalizePaymentFrequency(args.paymentFrequency);
+    const vehicleLabel = args.vehicleLabel?.trim() || null;
+    const matchMerchantClean = args.matchMerchantClean?.trim() || name;
+    const matchAmount = args.paymentAmount;
+
+    const scheduled = buildScheduledDates(
+      args.firstPaymentDate,
+      Math.floor(args.paymentCount),
+      frequency,
+    );
+    const maturityDate =
+      scheduled[scheduled.length - 1] ?? args.firstPaymentDate;
+
+    let accountId = slugifyAccountId(name);
+    for (let n = 2; ; n += 1) {
+      const existing = await ctx.db
+        .query("accounts")
+        .withIndex("by_userId_accountId", (q) =>
+          q.eq("userId", user._id).eq("accountId", accountId),
+        )
+        .unique();
+      if (!existing) break;
+      accountId = `${slugifyAccountId(name)}-${n}`;
+    }
+
+    const now = Date.now();
+    const manualInstitution = await ctx.db
+      .query("institutions")
+      .withIndex("by_userId_institutionId", (q) =>
+        q.eq("userId", user._id).eq("institutionId", MANUAL_INSTITUTION_ID),
+      )
+      .unique();
+    if (!manualInstitution) {
+      await ctx.db.insert("institutions", {
+        userId: user._id,
+        institutionId: MANUAL_INSTITUTION_ID,
+        name: "Manual",
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+
+    const terms: LoanTermsRow = {
+      accountId,
+      principalStart: args.principalStart,
+      annualRate: args.annualRate,
+      aprDisclosed: null,
+      paymentAmount: args.paymentAmount,
+      paymentFrequency: frequency,
+      paymentCount: Math.floor(args.paymentCount),
+      firstPaymentDate: args.firstPaymentDate,
+      maturityDate,
+      matchMerchantClean,
+      matchAmount,
+      principalOverride: null,
+      overrideAsOf: null,
+      vehicleLabel,
+    };
+
+    const allTxns = await ctx.db
+      .query("transactions")
+      .withIndex("by_userId", (q) => q.eq("userId", user._id))
+      .collect();
+    const pads = collectPadCandidates(txnPadRows(allTxns), matchAmount);
+    const amortize = computeLoanAmortization(terms, pads);
+
+    await ctx.db.insert("accounts", {
+      userId: user._id,
+      accountId,
+      institutionId: MANUAL_INSTITUTION_ID,
+      name,
+      officialName: vehicleLabel ? `${vehicleLabel} — Personal Loan` : name,
+      mask: null,
+      type: "loan",
+      subtype: "auto loan",
+      currentBalance: amortize.currentBalance,
+      availableBalance: amortize.currentBalance,
+      isoCurrencyCode: "CAD",
+      updatedAt: now,
+    });
+
+    await ctx.db.insert("loanTerms", {
+      userId: user._id,
+      accountId,
+      principalStart: terms.principalStart,
+      annualRate: terms.annualRate,
+      aprDisclosed: null,
+      paymentAmount: terms.paymentAmount,
+      paymentFrequency: terms.paymentFrequency,
+      paymentCount: terms.paymentCount,
+      firstPaymentDate: terms.firstPaymentDate,
+      maturityDate: terms.maturityDate,
+      matchMerchantClean: terms.matchMerchantClean,
+      matchAmount: terms.matchAmount,
+      principalOverride: null,
+      overrideAsOf: null,
+      vehicleLabel,
+      updatedAt: now,
+    });
+
+    return { accountId };
+  },
+});
+
 export const refreshLoans = mutation({
   args: {
     asOfDate: v.optional(v.string()),
@@ -236,16 +404,7 @@ export const refreshLoans = mutation({
       .withIndex("by_userId", (q) => q.eq("userId", user._id))
       .collect();
     const termsList = termsRows.map(mapLoanTerms);
-    const pads = collectPadCandidates(
-      allTxns.map((t) => ({
-        transactionId: t.transactionId,
-        posted: t.posted,
-        amount: t.amount,
-        merchantClean: t.merchantClean,
-        description: t.description,
-      })),
-      termsList[0]!.matchAmount,
-    );
+    const padSource = txnPadRows(allTxns);
 
     const asOfDate = args.asOfDate ?? new Date().toISOString().slice(0, 10);
     const out: {
@@ -256,6 +415,7 @@ export const refreshLoans = mutation({
     }[] = [];
 
     for (const terms of termsList) {
+      const pads = collectPadCandidates(padSource, terms.matchAmount);
       const result = computeLoanAmortization(terms, pads, asOfDate);
       const account = await ctx.db
         .query("accounts")

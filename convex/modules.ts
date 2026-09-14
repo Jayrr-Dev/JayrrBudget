@@ -1,109 +1,36 @@
+import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
-import { ensureUser, requireUser } from "./lib/auth";
-
-const SEED_MODULES = [
-  {
-    slug: "overview",
-    name: "Overview",
-    description: "Bank-style balances by account category.",
-    href: "/",
-    icon: "IconLayoutDashboard",
-    category: "core",
-    enabled: true,
-    sortOrder: 10,
-    isCore: true,
-  },
-  {
-    slug: "analysis",
-    name: "Analysis",
-    description: "Spending and cost trends over time.",
-    href: "/analysis",
-    icon: "IconChartAreaLine",
-    category: "finance",
-    enabled: true,
-    sortOrder: 15,
-    isCore: false,
-  },
-  {
-    slug: "accounts",
-    name: "Accounts",
-    description: "Linked and statement accounts.",
-    href: "/accounts",
-    icon: "IconBuildingBank",
-    category: "finance",
-    enabled: true,
-    sortOrder: 20,
-    isCore: false,
-  },
-  {
-    slug: "transactions",
-    name: "Transactions",
-    description: "Ledger with merchant enrichment.",
-    href: "/transactions",
-    icon: "IconArrowsExchange",
-    category: "finance",
-    enabled: true,
-    sortOrder: 30,
-    isCore: false,
-  },
-  {
-    slug: "statements",
-    name: "Statements",
-    description: "Import PDFs, overview stats, and parse logs.",
-    href: "/statements",
-    icon: "IconFileUpload",
-    category: "finance",
-    enabled: true,
-    sortOrder: 40,
-    isCore: false,
-  },
-  {
-    slug: "canvas",
-    name: "Canvas",
-    description: "Budget canvas workspace.",
-    href: "/canvas",
-    icon: "IconLayoutBoard",
-    category: "core",
-    enabled: true,
-    sortOrder: 50,
-    isCore: false,
-  },
-  {
-    slug: "database",
-    name: "Database",
-    description: "Schema map and live table browser.",
-    href: "/database",
-    icon: "IconDatabase",
-    category: "system",
-    enabled: true,
-    sortOrder: 90,
-    isCore: false,
-  },
-  {
-    slug: "modules",
-    name: "Modules",
-    description: "Enable or disable product modules.",
-    href: "/modules",
-    icon: "IconPuzzle",
-    category: "system",
-    enabled: true,
-    sortOrder: 100,
-    isCore: true,
-  },
-] as const;
+import { ensureUser, requireRole, userRole } from "./lib/auth";
+import { ensureModulesForUser } from "./lib/ensureModules";
+import { roleAllowsModule } from "./lib/roles";
 
 export const list = query({
   args: {
     enabledOnly: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
-    const user = await requireUser(ctx);
+    const userId = await getAuthUserId(ctx);
+    if (userId === null) {
+      return [];
+    }
+    const user = await ctx.db.get(userId);
+    if (!user) {
+      return [];
+    }
+    const role = userRole(user);
+    // Full catalog (enable/disable UI) is admin-only.
+    if (!args.enabledOnly) {
+      await requireRole(ctx, "admin");
+    }
     const rows = await ctx.db
       .query("appModules")
       .withIndex("by_userId", (q) => q.eq("userId", user._id))
       .collect();
     return rows
+      .filter((row) =>
+        args.enabledOnly ? roleAllowsModule(role, row.slug) : true,
+      )
       .filter((row) => (args.enabledOnly ? row.enabled : true))
       .sort((a, b) => a.sortOrder - b.sortOrder)
       .map((row) => ({
@@ -121,43 +48,13 @@ export const list = query({
   },
 });
 
+/** Provision modules for the signed-in user's role (idempotent). */
 export const ensure = mutation({
   args: {},
   handler: async (ctx) => {
     const user = await ensureUser(ctx);
-    const existing = await ctx.db
-      .query("appModules")
-      .withIndex("by_userId", (q) => q.eq("userId", user._id))
-      .collect();
-    const bySlug = new Map(existing.map((row) => [row.slug, row]));
-    const now = Date.now();
-    let nextLegacy =
-      existing.reduce((max, row) => Math.max(max, row.legacyId), 0) + 1;
-
-    for (const seed of SEED_MODULES) {
-      const found = bySlug.get(seed.slug);
-      if (found) {
-        await ctx.db.patch(found._id, {
-          name: seed.name,
-          description: seed.description,
-          href: seed.href,
-          icon: seed.icon,
-          category: seed.category,
-          sortOrder: seed.sortOrder,
-          isCore: seed.isCore,
-          updatedAt: now,
-        });
-        continue;
-      }
-      await ctx.db.insert("appModules", {
-        userId: user._id,
-        legacyId: nextLegacy++,
-        ...seed,
-        createdAt: now,
-        updatedAt: now,
-      });
-    }
-    return { ok: true as const };
+    const result = await ensureModulesForUser(ctx, user);
+    return { ok: true as const, ...result };
   },
 });
 
@@ -167,7 +64,7 @@ export const setEnabled = mutation({
     enabled: v.boolean(),
   },
   handler: async (ctx, args) => {
-    const user = await requireUser(ctx);
+    const user = await requireRole(ctx, "admin");
     const row = await ctx.db
       .query("appModules")
       .withIndex("by_userId_slug", (q) =>

@@ -5,33 +5,59 @@ import { useConvexAuth, useMutation } from "convex/react";
 import { api } from "@convex/_generated/api";
 import { useEffect, useRef, type ReactNode } from "react";
 
-const CLAIM_KEY = "jayrr-budget:ledgers-reassigned";
+/** One-shot claim of pre-auth import rows (null userId). Never steals other users' ledgers. */
+const CLAIM_UNOWNED_KEY = "jayrr-budget.claimed-unowned-ledgers";
 
 /**
- * After Convex Auth sign-in: one-time remap of imported ledger rows to this user.
+ * After Convex Auth sign-in:
+ * - ensure role-based modules exist for this user
+ * - optionally claim ledger rows that still have no userId
  */
 export function EnsureUserBootstrap({ children }: { children: ReactNode }) {
   const { isAuthenticated, isLoading } = useConvexAuth();
-  const reassign = useMutation(api.migrations.reassignAllLedgersToCurrentUser);
-  const ran = useRef(false);
+  const claimUnowned = useMutation(api.migrations.claimUnownedData);
+  const ensureModules = useMutation(api.modules.ensure);
+  const ranForSession = useRef(false);
 
   useEffect(() => {
-    if (isLoading || !isAuthenticated || ran.current) return;
-    if (typeof window !== "undefined" && window.localStorage.getItem(CLAIM_KEY)) {
-      return;
-    }
-    ran.current = true;
+    if (isLoading || !isAuthenticated || ranForSession.current) return;
+    ranForSession.current = true;
 
     void (async () => {
       try {
-        await reassign({});
-        window.localStorage.setItem(CLAIM_KEY, "1");
+        await ensureModules({});
       } catch (error) {
-        console.warn("[auth] ledger reassign failed", error);
-        ran.current = false;
+        console.warn("[auth] ensure modules failed", error);
+        ranForSession.current = false;
+        return;
+      }
+
+      let alreadyClaimed = false;
+      try {
+        alreadyClaimed = localStorage.getItem(CLAIM_UNOWNED_KEY) === "1";
+      } catch {
+        // ignore
+      }
+      if (alreadyClaimed) return;
+
+      try {
+        await claimUnowned({});
+        try {
+          localStorage.setItem(CLAIM_UNOWNED_KEY, "1");
+        } catch {
+          // ignore
+        }
+      } catch (error) {
+        console.warn("[auth] claim unowned ledgers failed", error);
       }
     })();
-  }, [isAuthenticated, isLoading, reassign]);
+  }, [isAuthenticated, isLoading, claimUnowned, ensureModules]);
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      ranForSession.current = false;
+    }
+  }, [isAuthenticated]);
 
   return children;
 }

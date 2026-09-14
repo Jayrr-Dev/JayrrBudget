@@ -90,10 +90,15 @@ export function computeLoanAmortization(
   pads: PadCandidateRow[],
   asOfDate = todayIso(),
 ): AmortizeResult {
-  const matchedPads = toMatchedPads(pads);
+  const matchedPads = toMatchedPads(
+    pads,
+    terms.matchAmount,
+    terms.matchMerchantClean,
+  );
   const scheduledDates = buildScheduledDates(
     terms.firstPaymentDate,
     terms.paymentCount,
+    terms.paymentFrequency,
   );
   const matchedByNumber = matchPadsToSchedule(
     scheduledDates,
@@ -108,6 +113,7 @@ export function computeLoanAmortization(
       paymentAmount: terms.paymentAmount,
       paymentCount: terms.paymentCount,
       firstPaymentDate: terms.firstPaymentDate,
+      paymentFrequency: terms.paymentFrequency,
       principalOverride: terms.principalOverride,
       overrideAsOf: terms.overrideAsOf,
     },

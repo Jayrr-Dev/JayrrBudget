@@ -50,13 +50,16 @@ function pushPeek(
 
 function finalizePeeks(
   map: Map<string, AnalysisTxnPeek[]>,
-): Record<string, AnalysisTxnPeek[]> {
-  const out: Record<string, AnalysisTxnPeek[]> = {};
+): Array<{ key: string; peeks: AnalysisTxnPeek[] }> {
+  const out: Array<{ key: string; peeks: AnalysisTxnPeek[] }> = [];
   for (const [key, list] of map) {
-    out[key] = list
-      .slice()
-      .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
-      .slice(0, PEEK_LIMIT);
+    out.push({
+      key,
+      peeks: list
+        .slice()
+        .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
+        .slice(0, PEEK_LIMIT),
+    });
   }
   return out;
 }
@@ -792,7 +795,7 @@ function emptyAnalysis(
       inboundTransfersIgnored: 0,
     },
     monthly: [],
-    txnPeeks: {},
+    txnPeeks: [],
     sections: [],
     sectionMonthly: [],
     sectionSeries: [],

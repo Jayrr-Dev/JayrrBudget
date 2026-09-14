@@ -71,11 +71,17 @@ export const Sidebar = ({
   );
 };
 
-export const SidebarBody = (props: React.ComponentProps<typeof motion.div>) => {
+export const SidebarBody = ({
+  title,
+  ...props
+}: React.ComponentProps<typeof motion.div> & { title?: string }) => {
   return (
     <>
       <DesktopSidebar {...props} />
-      <MobileSidebar {...(props as React.ComponentProps<"div">)} />
+      <MobileSidebar
+        title={title}
+        {...(props as React.ComponentProps<"div">)}
+      />
     </>
   );
 };
@@ -117,8 +123,9 @@ export const DesktopSidebar = ({
 export const MobileSidebar = ({
   className,
   children,
+  title = "JayrrBudget",
   ...props
-}: React.ComponentProps<"div">) => {
+}: React.ComponentProps<"div"> & { title?: string }) => {
   const { open, setOpen } = useSidebar();
   return (
     <div
@@ -127,9 +134,7 @@ export const MobileSidebar = ({
       )}
       {...props}
     >
-      <p className="text-sm font-semibold text-[var(--foreground)]">
-        JayrrBudget
-      </p>
+      <p className="text-sm font-semibold text-[var(--foreground)]">{title}</p>
       <button
         type="button"
         aria-label="Open menu"

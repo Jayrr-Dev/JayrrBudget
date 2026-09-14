@@ -23,6 +23,22 @@ export const TABLE_HELP: Record<string, string> = {
     "Filter lookup for Type (Fee, Subscription, …).",
   app_modules:
     "Which app pages show in the sidebar.",
+  scratch_notes:
+    "Scratch pads on Analysis (tabs + vendor rows).",
+  users:
+    "Signed-in people. Role controls which modules they get.",
+  auth_sessions:
+    "Active login sessions for a user.",
+  auth_accounts:
+    "Password / OAuth provider link for a user.",
+  auth_refresh_tokens:
+    "Tokens used to renew a session.",
+  auth_verification_codes:
+    "One-time codes for email verify / magic link / OTP.",
+  auth_verifiers:
+    "PKCE verifiers for OAuth handshakes.",
+  auth_rate_limits:
+    "Sign-in attempt counters (stops brute force).",
 };
 
 export const COLUMN_HELP: Record<string, Record<string, string>> = {
@@ -235,6 +251,52 @@ export const COLUMN_HELP: Record<string, Record<string, string>> = {
     is_core: "Core modules cannot be turned off.",
     created_at: "When this module row was created.",
     updated_at: "When we last changed it.",
+  },
+  scratch_notes: {
+    tabs: "Note pads (name + vendor spend rows).",
+    activeId: "Which tab is open in the UI.",
+    receiveId: "Tab that receives dropped vendors.",
+    userId: "Who owns this scratch pad.",
+    updatedAt: "Last edit time.",
+  },
+  users: {
+    email: "Login email.",
+    name: "Display name.",
+    role: "admin, premium, or normal.",
+    image: "Avatar URL if set.",
+    emailVerificationTime: "When email was verified.",
+    phone: "Phone if used for auth.",
+    isAnonymous: "True for guest-style accounts.",
+  },
+  auth_sessions: {
+    userId: "Which user this session belongs to.",
+    expirationTime: "When the session dies.",
+  },
+  auth_accounts: {
+    userId: "Which user this provider link belongs to.",
+    provider: "password, google, etc.",
+    providerAccountId: "Provider's id for this account.",
+    secret: "Password hash (redacted in browse).",
+  },
+  auth_refresh_tokens: {
+    sessionId: "Session this token renews.",
+    expirationTime: "When the refresh token dies.",
+    parentRefreshTokenId: "Token that minted this one.",
+  },
+  auth_verification_codes: {
+    accountId: "Auth account waiting for verify.",
+    provider: "Which flow issued the code.",
+    code: "One-time code (redacted in browse).",
+    expirationTime: "When the code stops working.",
+  },
+  auth_verifiers: {
+    sessionId: "Session tied to this PKCE verifier.",
+    signature: "Verifier value (redacted in browse).",
+  },
+  auth_rate_limits: {
+    identifier: "Email or key being rate-limited.",
+    lastAttemptTime: "Last try timestamp.",
+    attemptsLeft: "Tries remaining before lockout.",
   },
   transaction_spreads: {
     id: "This Spread label's number.",

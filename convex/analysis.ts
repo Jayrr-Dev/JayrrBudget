@@ -9,7 +9,7 @@ import type {
   AnalysisRange,
   AnalysisSourceRow,
 } from "./lib/analysisTypes";
-import { requireUser } from "./lib/auth";
+import { requireRole } from "./lib/auth";
 
 const RANGE_VALUES = ["1w", "1m", "3m", "6m", "12m", "all"] as const;
 const PERIOD_VALUES = ["monthly", "biweekly", "weekly", "daily"] as const;
@@ -32,7 +32,7 @@ export const get = query({
     period: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const user = await requireUser(ctx);
+    const user = await requireRole(ctx, "premium");
     const range = parseRange(args.range ?? "12m");
     const period = parsePeriod(args.period ?? "monthly");
 

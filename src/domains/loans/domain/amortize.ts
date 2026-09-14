@@ -1,4 +1,11 @@
-/** Pure biweekly amortization for synthetic car loans. */
+/** Amortization schedule for custom lending accounts. */
+
+import {
+  frequencyMeta,
+  normalizePaymentFrequency,
+  periodRate,
+  type PaymentFrequency,
+} from "@/domains/loans/domain/paymentFrequency";
 
 export type LoanTermsInput = {
   principalStart: number;
@@ -6,6 +13,7 @@ export type LoanTermsInput = {
   paymentAmount: number;
   paymentCount: number;
   firstPaymentDate: string;
+  paymentFrequency?: PaymentFrequency | string;
   /** When set with overrideAsOf, restart balance from this principal after that date. */
   principalOverride?: number | null;
   overrideAsOf?: string | null;
@@ -58,18 +66,37 @@ export function daysBetweenIso(a: string, b: string): number {
   return Math.round((db - da) / 86_400_000);
 }
 
-/** Biweekly period rate: annual / 26. */
+/** @deprecated Prefer periodRate(annualRate, "biweekly"). */
 export function biweeklyRate(annualRate: number): number {
-  return annualRate / 26;
+  return periodRate(annualRate, "biweekly");
+}
+
+export function addMonthsIso(isoDate: string, months: number): string {
+  const [year, month, day] = isoDate.slice(0, 10).split("-").map(Number);
+  const cursor = new Date(Date.UTC(year!, month! - 1 + months, 1));
+  const lastDay = new Date(
+    Date.UTC(cursor.getUTCFullYear(), cursor.getUTCMonth() + 1, 0),
+  ).getUTCDate();
+  cursor.setUTCDate(Math.min(day!, lastDay));
+  return cursor.toISOString().slice(0, 10);
 }
 
 export function buildScheduledDates(
   firstPaymentDate: string,
   paymentCount: number,
+  frequency: PaymentFrequency | string = "biweekly",
 ): string[] {
+  const normalized = normalizePaymentFrequency(String(frequency));
   const dates: string[] = [];
+  if (normalized === "monthly") {
+    for (let n = 0; n < paymentCount; n += 1) {
+      dates.push(addMonthsIso(firstPaymentDate, n));
+    }
+    return dates;
+  }
+  const days = frequencyMeta(normalized).days ?? 14;
   for (let n = 0; n < paymentCount; n += 1) {
-    dates.push(addDaysIso(firstPaymentDate, n * 14));
+    dates.push(addDaysIso(firstPaymentDate, n * days));
   }
   return dates;
 }
@@ -124,10 +151,14 @@ export function amortizeLoan(
   matchedByPaymentNumber: Map<number, MatchedPad>,
 ): AmortizeResult {
   const asOf = asOfDate.slice(0, 10);
-  const r = biweeklyRate(terms.annualRate);
+  const frequency = normalizePaymentFrequency(
+    String(terms.paymentFrequency ?? "biweekly"),
+  );
+  const r = periodRate(terms.annualRate, frequency);
   const scheduledDates = buildScheduledDates(
     terms.firstPaymentDate,
     terms.paymentCount,
+    frequency,
   );
 
   const hasOverride =

@@ -1,0 +1,19 @@
+---
+description: Do not call Convex MCP status — it freezes the agent
+alwaysApply: true
+---
+
+# Convex MCP: never call `status`
+
+The Convex MCP **`status`** tool (`projectDir` → deployment selector) **hangs / freezes** this agent UI and often never returns.
+
+## Do instead
+
+- Read `CONVEX_DEPLOYMENT` and `NEXT_PUBLIC_CONVEX_URL` from `.env.local`
+- Use `npx convex` CLI (`convex data`, `convex run`, `convex env`, etc.)
+- Use other Convex MCP tools only when you already have a `deploymentSelector` from env/CLI — do not obtain it via `status`
+
+## Do not
+
+- Call `user-convex` / plugin Convex **`status`** to “find the deployment”
+- Wait on a frozen `Running Status in convex` panel — cancel and use CLI

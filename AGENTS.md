@@ -12,7 +12,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 **Source of truth:** Convex project `jayrr-budget` (team `jayrr-dev`). Env: `NEXT_PUBLIC_CONVEX_URL` (+ `CONVEX_DEPLOYMENT` for CLI) in `.env.local`.
 
-**Auth:** Convex Auth (email + password via `@convex-dev/auth`). `convex/auth.config.ts` validates tokens from this deployment (`CONVEX_SITE_URL`). Every private ledger row is scoped by `userId` (`convex/lib/auth.ts` → `requireUser` / `getAuthUserId`). Never trust a client-supplied user id.
+**Auth:** Convex Auth (email + password via `@convex-dev/auth`). Roles: `admin` | `premium` | `normal` (`convex/lib/roles.ts`). `convex/auth.config.ts` validates tokens from this deployment (`CONVEX_SITE_URL`). Every private ledger row is scoped by `userId` (`convex/lib/auth.ts` → `requireUser` / `getAuthUserId`). Never trust a client-supplied user id.
 
 **App entry:** Convex React hooks (`useQuery` / `useMutation`) with `ConvexAuthNextjsProvider`, and `getAuthenticatedConvexClient()` in `src/shared/convex/httpClient.server.ts` for Next API routes.
 
@@ -29,7 +29,7 @@ npx convex dev
 npm run dev
 ```
 
-**First login after import:** UI runs `migrations.reassignAllLedgersToCurrentUser` once (localStorage-guarded) so imported rows attach to the Password user.
+**First login after import:** UI runs `migrations.claimUnownedData` once (localStorage-guarded) to attach rows with null `userId`. Never auto-call `reassignAllLedgersToCurrentUser` on login (admin-only; steals other users' ledgers).
 
 ### Live Convex modules
 
@@ -41,9 +41,17 @@ npm run dev
 | Dashboard / loans | `convex/dashboard.ts` |
 | Analysis | `convex/analysis.ts` |
 | Modules / tags / statements | `convex/modules.ts`, `transactions.ts`, `statements.ts` |
+| Scratch notes / store sheet | `convex/scratchNotes.ts` |
+| Freeform notes | `convex/userNotes.ts` |
 
 ### AI security
 
 - `/api/canvas/chat` and statement upload require a Convex Auth session.
 - Budget context loaded via authenticated Convex client (owner-only).
 - OpenRouter/Mistral keys stay server-only; canvas route rate-limits per userId.
+
+### Client-side encryption (roadmap)
+
+- Phased TODO: [`docs/security/TODO-e2ee.md`](docs/security/TODO-e2ee.md)
+- Architecture / threat model: [`docs/security/e2ee-architecture.md`](docs/security/e2ee-architecture.md)
+- STRICT PRIVATE = ciphertext-only to Convex; Cloud Processing (OCR/AI) is **not** zero-knowledge. Do not implement all phases at once.
