@@ -12,9 +12,9 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 **Source of truth:** Convex project `jayrr-budget` (team `jayrr-dev`). Env: `NEXT_PUBLIC_CONVEX_URL` (+ `CONVEX_DEPLOYMENT` for CLI) in `.env.local`.
 
-**Auth:** Clerk (invite-only). Convex validates JWTs via `convex/auth.config.ts` + dashboard env `CLERK_JWT_ISSUER_DOMAIN`. Every private ledger row is scoped by `userId` (`convex/lib/auth.ts` → `requireUser` / `ensureUser`). Never trust a client-supplied user id.
+**Auth:** Convex Auth (email + password via `@convex-dev/auth`). `convex/auth.config.ts` validates tokens from this deployment (`CONVEX_SITE_URL`). Every private ledger row is scoped by `userId` (`convex/lib/auth.ts` → `requireUser` / `getAuthUserId`). Never trust a client-supplied user id.
 
-**App entry:** Convex React hooks (`useQuery` / `useMutation`) with `ConvexProviderWithClerk`, and `getAuthenticatedConvexClient()` in `src/shared/convex/httpClient.ts` for Next API routes.
+**App entry:** Convex React hooks (`useQuery` / `useMutation`) with `ConvexAuthNextjsProvider`, and `getAuthenticatedConvexClient()` in `src/shared/convex/httpClient.server.ts` for Next API routes.
 
 | Path | Agent rule |
 |------|------------|
@@ -29,14 +29,13 @@ npx convex dev
 npm run dev
 ```
 
-**First login after import:** UI calls `users.ensure` then `migrations.claimUnownedData` once (claims pre-auth rows to the signed-in user).
-
-**Invite users:** Clerk Dashboard → Users → Invite (keep public signup disabled).
+**First login after import:** UI runs `migrations.reassignAllLedgersToCurrentUser` once (localStorage-guarded) so imported rows attach to the Password user.
 
 ### Live Convex modules
 
 | Area | Convex file |
 |------|-------------|
+| Auth | `convex/auth.ts`, `convex/http.ts`, `convex/auth.config.ts` |
 | Auth helpers | `convex/lib/auth.ts`, `convex/users.ts` |
 | Backfill | `convex/migrations.ts` |
 | Dashboard / loans | `convex/dashboard.ts` |
@@ -45,6 +44,6 @@ npm run dev
 
 ### AI security
 
-- `/api/canvas/chat` and statement upload require Clerk session.
+- `/api/canvas/chat` and statement upload require a Convex Auth session.
 - Budget context loaded via authenticated Convex client (owner-only).
 - OpenRouter/Mistral keys stay server-only; canvas route rate-limits per userId.

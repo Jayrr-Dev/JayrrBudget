@@ -1,3 +1,4 @@
+import { authTables } from "@convex-dev/auth/server";
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 
@@ -8,19 +9,29 @@ import { v } from "convex/values";
  *
  * `userId` is optional only so legacy rows can be claimed by backfill;
  * live writes always set it via requireUser().
+ *
+ * `users` is Convex Auth shape, with optional legacy Clerk fields so the
+ * bootstrap row can be deleted during cutover.
  */
 const userId = v.optional(v.id("users"));
 
 export default defineSchema({
+  ...authTables,
   users: defineTable({
-    tokenIdentifier: v.string(),
-    clerkUserId: v.string(),
-    email: v.union(v.string(), v.null()),
-    name: v.union(v.string(), v.null()),
-    createdAt: v.number(),
+    name: v.optional(v.string()),
+    image: v.optional(v.string()),
+    email: v.optional(v.string()),
+    emailVerificationTime: v.optional(v.number()),
+    phone: v.optional(v.string()),
+    phoneVerificationTime: v.optional(v.number()),
+    isAnonymous: v.optional(v.boolean()),
+    // Legacy Clerk / bootstrap fields (remove after cutover clear)
+    tokenIdentifier: v.optional(v.string()),
+    clerkUserId: v.optional(v.string()),
+    createdAt: v.optional(v.number()),
   })
-    .index("by_tokenIdentifier", ["tokenIdentifier"])
-    .index("by_clerkUserId", ["clerkUserId"]),
+    .index("email", ["email"])
+    .index("phone", ["phone"]),
 
   institutions: defineTable({
     userId,

@@ -9,8 +9,10 @@
  */
 
 import type * as analysis from "../analysis.js";
+import type * as auth from "../auth.js";
 import type * as dashboard from "../dashboard.js";
 import type * as dbExplorer from "../dbExplorer.js";
+import type * as http from "../http.js";
 import type * as lib_amortize from "../lib/amortize.js";
 import type * as lib_analysisTypes from "../lib/analysisTypes.js";
 import type * as lib_auth from "../lib/auth.js";
@@ -38,8 +40,10 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   analysis: typeof analysis;
+  auth: typeof auth;
   dashboard: typeof dashboard;
   dbExplorer: typeof dbExplorer;
+  http: typeof http;
   "lib/amortize": typeof lib_amortize;
   "lib/analysisTypes": typeof lib_analysisTypes;
   "lib/auth": typeof lib_auth;

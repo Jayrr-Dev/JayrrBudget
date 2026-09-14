@@ -12,11 +12,11 @@ import type { AppModuleRecord } from "@/domains/modules/domain/types";
 import { resolveModuleIcon } from "@/domains/modules/ui/moduleIcons";
 import { cn } from "@/lib/utils";
 import { api } from "@convex/_generated/api";
-import { UserButton } from "@clerk/nextjs";
+import { useAuthActions } from "@convex-dev/auth/react";
 import { useQuery } from "convex/react";
 import { motion } from "motion/react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
 
 function Brand() {
@@ -140,20 +140,35 @@ function SidebarFooterLink() {
           !showLabel && "justify-center px-0",
         )}
       >
-        <UserButton
-          appearance={{
-            elements: {
-              avatarBox: "size-8",
-            },
-          }}
-        />
-        {showLabel ? (
-          <span className="truncate text-xs text-[var(--muted-foreground)]">
-            Account
-          </span>
-        ) : null}
+        <SignOutButton showLabel={showLabel} />
       </div>
     </div>
+  );
+}
+
+function SignOutButton({ showLabel }: { showLabel: boolean }) {
+  const { signOut } = useAuthActions();
+  const router = useRouter();
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        void signOut().then(() => {
+          router.replace("/sign-in");
+          router.refresh();
+        });
+      }}
+      className={cn(
+        "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-[var(--muted-foreground)] hover:bg-[var(--surface-2)] hover:text-[var(--foreground)]",
+        !showLabel && "justify-center px-0",
+      )}
+      title="Sign out"
+    >
+      <span className="flex size-8 items-center justify-center rounded-full border border-[var(--border)] text-xs font-medium">
+        Out
+      </span>
+      {showLabel ? <span className="truncate text-xs">Sign out</span> : null}
+    </button>
   );
 }
 

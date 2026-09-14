@@ -1,39 +1,43 @@
 "use client";
 
-import { useAuth } from "@clerk/nextjs";
-import { useMutation } from "convex/react";
+import { useAuthActions } from "@convex-dev/auth/react";
+import { useConvexAuth, useMutation } from "convex/react";
 import { api } from "@convex/_generated/api";
 import { useEffect, useRef, type ReactNode } from "react";
 
-const CLAIM_KEY = "jayrr-budget:claimed-unowned";
+const CLAIM_KEY = "jayrr-budget:ledgers-reassigned";
 
 /**
- * After Clerk sign-in: create Convex users row, then one-time claim of
- * pre-auth import rows (localStorage guards repeat runs per browser).
+ * After Convex Auth sign-in: one-time remap of imported ledger rows to this user.
  */
 export function EnsureUserBootstrap({ children }: { children: ReactNode }) {
-  const { isSignedIn, isLoaded } = useAuth();
-  const ensure = useMutation(api.users.ensure);
-  const claim = useMutation(api.migrations.claimUnownedData);
+  const { isAuthenticated, isLoading } = useConvexAuth();
+  const reassign = useMutation(api.migrations.reassignAllLedgersToCurrentUser);
   const ran = useRef(false);
 
   useEffect(() => {
-    if (!isLoaded || !isSignedIn || ran.current) return;
+    if (isLoading || !isAuthenticated || ran.current) return;
+    if (typeof window !== "undefined" && window.localStorage.getItem(CLAIM_KEY)) {
+      return;
+    }
     ran.current = true;
 
     void (async () => {
       try {
-        await ensure({});
-        if (typeof window === "undefined") return;
-        if (window.localStorage.getItem(CLAIM_KEY)) return;
-        await claim({});
+        await reassign({});
         window.localStorage.setItem(CLAIM_KEY, "1");
       } catch (error) {
-        console.warn("[auth] ensure/claim failed", error);
+        console.warn("[auth] ledger reassign failed", error);
         ran.current = false;
       }
     })();
-  }, [isLoaded, isSignedIn, ensure, claim]);
+  }, [isAuthenticated, isLoading, reassign]);
 
   return children;
+}
+
+/** Sign-out helper for shell UI. */
+export function useSignOut() {
+  const { signOut } = useAuthActions();
+  return signOut;
 }

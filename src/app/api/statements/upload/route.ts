@@ -1,18 +1,22 @@
-import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { importBankStatement } from "@/domains/statements/application/importBankStatement";
+import {
+  AuthRequiredError,
+  getAuthenticatedConvexClient,
+} from "@/shared/convex/httpClient.server";
 import { errorMessage } from "@/shared/lib/error-message";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
 
 export async function POST(request: Request) {
-  const session = await auth();
-  if (!session.userId) {
-    return NextResponse.json(
-      { error: "Authentication required" },
-      { status: 401 },
-    );
+  try {
+    await getAuthenticatedConvexClient();
+  } catch (error) {
+    if (error instanceof AuthRequiredError) {
+      return NextResponse.json({ error: error.message }, { status: 401 });
+    }
+    throw error;
   }
 
   let form: FormData;

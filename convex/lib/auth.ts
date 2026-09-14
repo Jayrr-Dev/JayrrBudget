@@ -1,3 +1,4 @@
+import { getAuthUserId } from "@convex-dev/auth/server";
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 
@@ -10,69 +11,28 @@ export class AuthError extends Error {
   }
 }
 
-/** Require a verified Clerk identity (JWT). Never trust client-supplied user ids. */
-export async function requireIdentity(ctx: AuthCtx) {
-  const identity = await ctx.auth.getUserIdentity();
-  if (!identity) {
+/** Require a signed-in Convex Auth user id. Never trust client-supplied ids. */
+export async function requireAuthUserId(ctx: AuthCtx): Promise<Id<"users">> {
+  const userId = await getAuthUserId(ctx);
+  if (userId === null) {
     throw new AuthError("Not authenticated");
   }
-  return identity;
+  return userId;
 }
 
-async function findUserByIdentity(ctx: AuthCtx, tokenIdentifier: string) {
-  return ctx.db
-    .query("users")
-    .withIndex("by_tokenIdentifier", (q) =>
-      q.eq("tokenIdentifier", tokenIdentifier),
-    )
-    .unique();
-}
-
-/** Load the users row; throws if missing (call users.ensure after sign-in). */
+/** Load the users row for the signed-in identity. */
 export async function requireUser(ctx: AuthCtx): Promise<Doc<"users">> {
-  const identity = await requireIdentity(ctx);
-  const existing = await findUserByIdentity(ctx, identity.tokenIdentifier);
-  if (!existing) {
-    throw new AuthError("User profile missing — call users.ensure after sign-in");
+  const userId = await requireAuthUserId(ctx);
+  const user = await ctx.db.get(userId);
+  if (!user) {
+    throw new AuthError("User profile missing");
   }
-  return existing;
+  return user;
 }
 
-/** Get or create the users row (mutations only). */
+/** Alias for mutations that previously created a profile (Auth creates users). */
 export async function ensureUser(ctx: MutationCtx): Promise<Doc<"users">> {
-  const identity = await requireIdentity(ctx);
-  const existing = await findUserByIdentity(ctx, identity.tokenIdentifier);
-  if (existing) return existing;
-
-  // Link one-time bootstrap owner (e.g. "Jayrr") on first Clerk sign-in.
-  const allUsers = await ctx.db.query("users").collect();
-  const bootstrap = allUsers.find((u) =>
-    u.tokenIdentifier.startsWith("bootstrap:"),
-  );
-  if (bootstrap && allUsers.length === 1) {
-    const subject = identity.subject ?? identity.tokenIdentifier;
-    await ctx.db.patch(bootstrap._id, {
-      tokenIdentifier: identity.tokenIdentifier,
-      clerkUserId: subject,
-      email: identity.email ?? bootstrap.email,
-      name: identity.name ?? bootstrap.name,
-    });
-    const linked = await ctx.db.get(bootstrap._id);
-    if (!linked) throw new AuthError("Failed to link bootstrap user");
-    return linked;
-  }
-
-  const subject = identity.subject ?? identity.tokenIdentifier;
-  const userId = await ctx.db.insert("users", {
-    tokenIdentifier: identity.tokenIdentifier,
-    clerkUserId: subject,
-    email: identity.email ?? null,
-    name: identity.name ?? null,
-    createdAt: Date.now(),
-  });
-  const created = await ctx.db.get(userId);
-  if (!created) throw new AuthError("Failed to create user profile");
-  return created;
+  return requireUser(ctx);
 }
 
 export type OwnedUserId = Id<"users">;

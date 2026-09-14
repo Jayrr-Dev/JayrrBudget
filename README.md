@@ -1,15 +1,12 @@
 # JayrrBudget
 
-Personal budgeting app: **Next.js** on **Vercel**, **Convex** for the live ledger, **Clerk** for invite-only sign-in, plus optional statement OCR (Mistral) and canvas AI (OpenRouter).
+Personal budgeting app: **Next.js** on **Vercel**, **Convex** for the live ledger, **Convex Auth** (email + password), plus optional statement OCR (Mistral) and canvas AI (OpenRouter).
 
-## Auth (invite-only)
+## Auth
 
-1. Create a Clerk application and enable the **Convex** integration / JWT template named `convex`.
-2. Set env (see `.env.example`):
-   - Next: `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`
-   - Convex dashboard: `CLERK_JWT_ISSUER_DOMAIN` = Clerk Frontend API URL
-3. In Clerk Dashboard, **disable public sign-up** and invite users by email.
-4. First sign-in creates your Convex `users` row and claims any pre-auth import rows (`migrations.claimUnownedData`).
+1. Install and init Convex Auth (`JWT_PRIVATE_KEY` + `JWKS` on the Convex dashboard). See [Convex Auth setup](https://labs.convex.dev/auth/setup).
+2. Set `NEXT_PUBLIC_CONVEX_URL` (see `.env.example`).
+3. Sign up once at `/sign-in`. The app remaps imported ledger rows to that user (`migrations.reassignAllLedgersToCurrentUser`).
 
 Each user gets a private ledger (`userId` on every row). There is no shared household model yet.
 
@@ -17,7 +14,7 @@ Each user gets a private ledger (`userId` on every row). There is no shared hous
 
 ```bash
 cp .env.example .env.local
-# fill Convex + Clerk keys
+# fill NEXT_PUBLIC_CONVEX_URL (+ AI keys as needed)
 npx convex dev
 npm run dev
 ```
@@ -26,11 +23,11 @@ npm run dev
 
 - Next.js App Router + TypeScript + Tailwind
 - Convex (`jayrr-budget` under jayrr-dev)
-- Clerk authentication
+- Convex Auth (Password provider)
 - tldraw canvas at `/canvas`
 
 ## Deploy
 
-- Vercel: `NEXT_PUBLIC_CONVEX_URL`, Clerk publishable + secret keys
-- `npx convex deploy` and set `CLERK_JWT_ISSUER_DOMAIN` on the production Convex deployment
+- Vercel: `NEXT_PUBLIC_CONVEX_URL` (no Clerk keys)
+- `npx convex deploy` and set `JWT_PRIVATE_KEY` + `JWKS` on the production Convex deployment
 - Do not require Turso `DATABASE_URL` for the live app

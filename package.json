@@ -16,9 +16,9 @@
   },
   "dependencies": {
     "@ai-sdk/react": "^4.0.100",
+    "@auth/core": "^0.41.1",
     "@base-ui/react": "^1.8.0",
-    "@clerk/nextjs": "^7.9.2",
-    "@clerk/ui": "^1.32.3",
+    "@convex-dev/auth": "^0.0.95",
     "@iconify/react": "^6.0.2",
     "@libsql/client": "^0.18.0",
     "@mistralai/mistralai": "^2.7.0",

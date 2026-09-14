@@ -1,6 +1,6 @@
 import "server-only";
 
-import { auth } from "@clerk/nextjs/server";
+import { convexAuthNextjsToken } from "@convex-dev/auth/nextjs/server";
 import { createConvexHttpClient } from "@/shared/convex/httpClient";
 
 export class AuthRequiredError extends Error {
@@ -11,20 +11,11 @@ export class AuthRequiredError extends Error {
   }
 }
 
-/**
- * Convex HTTP client authenticated as the current Clerk user.
- * Requires the Clerk JWT template named "convex".
- */
+/** Convex HTTP client authenticated as the current Convex Auth user. */
 export async function getAuthenticatedConvexClient() {
-  const session = await auth();
-  if (!session.userId) {
-    throw new AuthRequiredError();
-  }
-  const token = await session.getToken({ template: "convex" });
+  const token = await convexAuthNextjsToken();
   if (!token) {
-    throw new AuthRequiredError(
-      "Missing Convex JWT — enable the Clerk Convex integration / JWT template.",
-    );
+    throw new AuthRequiredError();
   }
   const client = createConvexHttpClient();
   client.setAuth(token);

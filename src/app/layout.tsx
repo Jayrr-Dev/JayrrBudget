@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
-import { ClerkProvider } from "@clerk/nextjs";
-import { shadcn } from "@clerk/ui/themes";
+import { ConvexAuthNextjsServerProvider } from "@convex-dev/auth/nextjs/server";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Providers } from "@/shared/query/Providers";
 import "./globals.css";
@@ -31,9 +30,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="flex min-h-full flex-col">
-        <ClerkProvider appearance={{ theme: shadcn }}>
+        <ConvexAuthNextjsServerProvider>
           <Providers>{children}</Providers>
-        </ClerkProvider>
+        </ConvexAuthNextjsServerProvider>
       </body>
     </html>
   );

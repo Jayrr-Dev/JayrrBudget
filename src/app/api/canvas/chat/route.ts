@@ -1,4 +1,3 @@
-import { auth } from "@clerk/nextjs/server";
 import {
   convertToModelMessages,
   stepCountIs,
@@ -13,7 +12,12 @@ import {
   getModelChain,
   isOpenRouterConfigured,
 } from "@/shared/ai/openRouter";
+import {
+  AuthRequiredError,
+  getAuthenticatedConvexClient,
+} from "@/shared/convex/httpClient.server";
 import { errorMessage } from "@/shared/lib/error-message";
+import { api } from "@convex/_generated/api";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -35,12 +39,19 @@ function allowRate(userId: string) {
 }
 
 export async function POST(request: Request) {
-  const session = await auth();
-  if (!session.userId) {
-    return Response.json({ error: "Authentication required" }, { status: 401 });
+  let userKey: string;
+  try {
+    const client = await getAuthenticatedConvexClient();
+    const me = await client.query(api.users.me, {});
+    userKey = me?.userId ?? "unknown";
+  } catch (error) {
+    if (error instanceof AuthRequiredError) {
+      return Response.json({ error: "Authentication required" }, { status: 401 });
+    }
+    throw error;
   }
 
-  if (!allowRate(session.userId)) {
+  if (!allowRate(userKey)) {
     return Response.json(
       { error: "Too many AI requests. Try again in a minute." },
       { status: 429 },
