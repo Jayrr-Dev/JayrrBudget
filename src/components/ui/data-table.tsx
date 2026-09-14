@@ -141,8 +141,11 @@ function formatRangeLabel(from?: string, to?: string): string {
 
 function readDateWindow(value: unknown): DateWindowFilter {
   if (!isDateWindowActive(value)) return {};
+  const legacy = value as DateWindowFilter & { month?: string };
+  const months =
+    value.months ?? (legacy.month ? [legacy.month] : undefined);
   return {
-    ...(value.month ? { month: value.month } : {}),
+    ...(months?.length ? { months } : {}),
     ...(value.from ? { from: value.from } : {}),
     ...(value.to ? { to: value.to } : {}),
   };
@@ -268,9 +271,9 @@ export function DataTable<TData extends RowData>({
   const patchDateWindow = (patch: Partial<DateWindowFilter>) => {
     if (!dateColumnId) return;
     const next: DateWindowFilter = { ...dateWindow };
-    if ("month" in patch) {
-      if (patch.month) next.month = patch.month;
-      else delete next.month;
+    if ("months" in patch) {
+      if (patch.months?.length) next.months = patch.months;
+      else delete next.months;
     }
     if ("from" in patch) {
       if (patch.from) next.from = patch.from;
@@ -285,6 +288,8 @@ export function DataTable<TData extends RowData>({
       ?.setFilterValue(isDateWindowActive(next) ? next : undefined);
     setPagination((prev) => ({ ...prev, pageIndex: 0 }));
   };
+
+  const selectedMonth = dateWindow.months?.[0];
 
   const exportFilteredCsv = () => {
     if (!csvFilename) return;
@@ -501,8 +506,8 @@ export function DataTable<TData extends RowData>({
                     className={toolbarTriggerClass}
                     aria-label="Filter by month"
                   >
-                    {dateWindow.month
-                      ? formatMonthLabel(dateWindow.month)
+                    {selectedMonth
+                      ? formatMonthLabel(selectedMonth)
                       : "Month"}
                   </DropdownMenuTrigger>
                   <DropdownMenuContent
@@ -510,10 +515,10 @@ export function DataTable<TData extends RowData>({
                     className="w-auto min-w-40"
                   >
                     <DropdownMenuRadioGroup
-                      value={dateWindow.month ?? "all"}
+                      value={selectedMonth ?? "all"}
                       onValueChange={(value) => {
                         patchDateWindow({
-                          month: value === "all" ? undefined : value,
+                          months: value === "all" ? undefined : [value],
                         });
                       }}
                     >
