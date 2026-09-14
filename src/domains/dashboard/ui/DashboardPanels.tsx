@@ -17,7 +17,7 @@ import { formatDisplayDate } from "@/shared/lib/format-date";
 export function useDashboard() {
   return useQuery({
     queryKey: queryKeys.dashboard,
-    queryFn: fetchDashboard,
+    queryFn: () => fetchDashboard(),
   });
 }
 

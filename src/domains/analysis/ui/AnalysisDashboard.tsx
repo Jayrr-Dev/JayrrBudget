@@ -1558,9 +1558,9 @@ function StackedMixChart({
 function stackedRowTooltip(
   props: {
     active?: boolean;
-    payload?: Array<{
+    payload?: ReadonlyArray<{
       value?: unknown;
-      dataKey?: string | number;
+      dataKey?: string | number | ((obj: unknown) => unknown);
       name?: unknown;
       payload?: unknown;
     }>;
@@ -1655,6 +1655,7 @@ function StackedRankedBarChart({
       rows
         .map((row) => ({
           ...row,
+          name: String(row.name ?? ""),
           spend: visibleSeries.reduce(
             (sum, item) => sum + Number(row[item.key] ?? 0),
             0,
