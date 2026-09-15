@@ -1,4 +1,4 @@
-import argon2 from "argon2-browser";
+import argon2 from "argon2-browser/dist/argon2-bundled.min.js";
 import { toArrayBuffer } from "./bytes";
 import type { Argon2Params } from "./types";
 

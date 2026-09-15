@@ -1,4 +1,4 @@
-declare module "argon2-browser" {
+declare module "argon2-browser/dist/argon2-bundled.min.js" {
   export const ArgonType: { Argon2d: 0; Argon2i: 1; Argon2id: 2 };
   export function hash(options: {
     pass: string | Uint8Array;
