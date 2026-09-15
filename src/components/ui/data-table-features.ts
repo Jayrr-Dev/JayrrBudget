@@ -19,6 +19,7 @@ import {
   type FilterFn,
   type RowData,
 } from "@tanstack/react-table";
+import { amountMatchesLogRange } from "@/domains/transactions/domain/amountLogRange";
 import fuzzysort from "fuzzysort";
 
 const filterFn_fuzzy: FilterFn<any, RowData> = (row, columnId, filterValue) => {
@@ -33,20 +34,18 @@ const filterFn_fuzzy: FilterFn<any, RowData> = (row, columnId, filterValue) => {
 
 filterFn_fuzzy.autoRemove = (value) => !String(value ?? "").trim();
 
-const filterFn_amountDirection: FilterFn<any, RowData> = (
+const filterFn_amountLogRange: FilterFn<any, RowData> = (
   row,
   columnId,
   filterValue,
 ) => {
-  const direction = String(filterValue ?? "");
-  if (!direction || direction === "all") return true;
+  const key = String(filterValue ?? "");
+  if (!key || key === "all") return true;
   const amount = Number(row.getValue(columnId));
-  if (direction === "spend") return amount > 0;
-  if (direction === "income") return amount < 0;
-  return true;
+  return amountMatchesLogRange(amount, key);
 };
 
-filterFn_amountDirection.autoRemove = (value) =>
+filterFn_amountLogRange.autoRemove = (value) =>
   !value || value === "all" || value === "";
 
 const filterFn_includesTag: FilterFn<any, RowData> = (
@@ -138,7 +137,7 @@ export const dataTableFeatures = tableFeatures({
     includesString: filterFn_includesString,
     equalsString: filterFn_equalsString,
     fuzzy: filterFn_fuzzy,
-    amountDirection: filterFn_amountDirection,
+    amountLogRange: filterFn_amountLogRange,
     includesTag: filterFn_includesTag,
     dateWindow: filterFn_dateWindow,
   },

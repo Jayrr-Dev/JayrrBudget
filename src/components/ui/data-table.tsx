@@ -32,6 +32,12 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { downloadCsv, toCsv } from "@/shared/lib/csv";
 import {
   useTable,
@@ -51,6 +57,35 @@ import {
 } from "lucide-react";
 import { useMemo, useState, type ReactNode } from "react";
 import type { DateRange } from "react-day-picker";
+
+type ColumnMeta = {
+  width?: string;
+  band?: "read" | "invent";
+  label?: string;
+  description?: string;
+};
+
+function HeaderLabel({
+  description,
+  children,
+}: {
+  description?: string;
+  children: ReactNode;
+}) {
+  if (!description) return children;
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className="cursor-help border-b border-dotted border-current/35">
+          {children}
+        </span>
+      </TooltipTrigger>
+      <TooltipContent side="top" sideOffset={6} className="max-w-56 text-left">
+        {description}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
 
 export type DataTableFilterOption = {
   label: string;
@@ -596,6 +631,7 @@ export function DataTable<TData extends RowData>({
         </div>
       ) : null}
       <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)]">
+        <TooltipProvider>
         <Table className="min-w-max table-fixed">
           <TableHeader>
             {table.getHeaderGroups().map((headerGroup) => (
@@ -610,16 +646,28 @@ export function DataTable<TData extends RowData>({
                   const filterActive = Boolean(
                     columnFilter && filterValue !== "all",
                   );
-                  const width = (
-                    header.column.columnDef.meta as
-                      | { width?: string }
-                      | undefined
-                  )?.width;
+                  const columnMeta = header.column.columnDef.meta as
+                    | ColumnMeta
+                    | undefined;
+                  const width = columnMeta?.width;
+                  const inventBand = columnMeta?.band === "invent";
+                  const description = columnMeta?.description;
                   const isAmount = header.column.id === "amount";
                   const headerDef = header.column.columnDef.header;
                   const customHeader = typeof headerDef === "function";
                   const sortLabel =
                     csvColumnLabel(header.column) ?? header.column.id;
+                  const labelNode = (
+                    <HeaderLabel description={description}>
+                      <span className="line-clamp-2 text-left leading-snug">
+                        {customHeader ? (
+                          sortLabel
+                        ) : (
+                          <table.FlexRender header={header} />
+                        )}
+                      </span>
+                    </HeaderLabel>
+                  );
                   return (
                     <TableHead
                       key={header.id}
@@ -628,11 +676,15 @@ export function DataTable<TData extends RowData>({
                           ? { width, minWidth: width, maxWidth: width }
                           : undefined
                       }
-                      className={
-                        width
-                          ? "h-auto min-h-10 overflow-hidden whitespace-normal"
-                          : "h-auto min-h-10 whitespace-normal"
-                      }
+                      className={[
+                        "h-auto min-h-10 whitespace-normal",
+                        width ? "overflow-hidden" : "",
+                        inventBand
+                          ? "border-l border-[var(--border)] bg-[var(--muted)]/35"
+                          : "",
+                      ]
+                        .filter(Boolean)
+                        .join(" ")}
                     >
                       {header.isPlaceholder ? null : canSort || columnFilter ? (
                         <div
@@ -646,13 +698,7 @@ export function DataTable<TData extends RowData>({
                               className="inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-md px-2 py-1 font-medium transition-colors hover:bg-[var(--muted)]"
                               onClick={header.column.getToggleSortingHandler()}
                             >
-                              <span className="line-clamp-2 text-left leading-snug">
-                                {customHeader ? (
-                                  sortLabel
-                                ) : (
-                                  <table.FlexRender header={header} />
-                                )}
-                              </span>
+                              {labelNode}
                               {sorted === "asc" ? (
                                 <ArrowUpIcon className="size-3.5 shrink-0 opacity-70" />
                               ) : sorted === "desc" ? (
@@ -663,13 +709,7 @@ export function DataTable<TData extends RowData>({
                             </button>
                           ) : (
                             <span className="px-2 py-1 font-medium">
-                              <span className="line-clamp-2 text-left leading-snug">
-                                {customHeader ? (
-                                  sortLabel
-                                ) : (
-                                  <table.FlexRender header={header} />
-                                )}
-                              </span>
+                              {labelNode}
                             </span>
                           )}
                           {customHeader ? (
@@ -725,7 +765,9 @@ export function DataTable<TData extends RowData>({
                           ) : null}
                         </div>
                       ) : (
-                        <table.FlexRender header={header} />
+                        <HeaderLabel description={description}>
+                          <table.FlexRender header={header} />
+                        </HeaderLabel>
                       )}
                     </TableHead>
                   );
@@ -741,11 +783,11 @@ export function DataTable<TData extends RowData>({
                   data-state={row.getIsSelected() && "selected"}
                 >
                   {row.getVisibleCells().map((cell) => {
-                    const width = (
-                      cell.column.columnDef.meta as
-                        | { width?: string }
-                        | undefined
-                    )?.width;
+                    const cellMeta = cell.column.columnDef.meta as
+                      | { width?: string; band?: "read" | "invent" }
+                      | undefined;
+                    const width = cellMeta?.width;
+                    const inventBand = cellMeta?.band === "invent";
                     return (
                       <TableCell
                         key={cell.id}
@@ -754,11 +796,15 @@ export function DataTable<TData extends RowData>({
                             ? { width, minWidth: width, maxWidth: width }
                             : undefined
                         }
-                        className={
-                          width
-                            ? "overflow-hidden whitespace-normal align-top"
-                            : "whitespace-normal align-top"
-                        }
+                        className={[
+                          "whitespace-normal align-top",
+                          width ? "overflow-hidden" : "",
+                          inventBand
+                            ? "border-l border-[var(--border)] bg-[var(--muted)]/20"
+                            : "",
+                        ]
+                          .filter(Boolean)
+                          .join(" ")}
                       >
                         <table.FlexRender cell={cell} />
                       </TableCell>
@@ -778,6 +824,7 @@ export function DataTable<TData extends RowData>({
             )}
           </TableBody>
         </Table>
+        </TooltipProvider>
       </div>
       <div className="flex items-center justify-between gap-2">
         <p className="text-sm text-[var(--muted-foreground)]">

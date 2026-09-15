@@ -18,9 +18,9 @@ export type AnalysisRankedItem = {
 };
 
 export type AnalysisSummary = {
-  /** Lifestyle / real outflow only — internal transfers excluded. */
+  /** Lifestyle / real outflow only - internal transfers excluded. */
   totalSpend: number;
-  /** Real inflows only — card payments / internal credits excluded. */
+  /** Real inflows only - card payments / internal credits excluded. */
   totalIncome: number;
   net: number;
   avgPeriodSpend: number;
@@ -96,6 +96,8 @@ export type AnalysisTypeBreakdown = {
 export type AnalysisMerchantBreakdown = {
   merchant: string;
   spend: number;
+  /** Categories this merchant hit, ranked by spend inside the merchant. */
+  categories: AnalysisRankedItem[];
   types: AnalysisRankedItem[];
   typeSeries: AnalysisCategorySeries[];
   typeMonthly: Array<Record<string, string | number>>;
@@ -111,7 +113,7 @@ export type AnalysisTxnPeek = {
 };
 
 /**
- * Flat entry list — Convex caps objects at 1024 fields, and peek keys
+ * Flat entry list - Convex caps objects at 1024 fields, and peek keys
  * (section/category/merchant combos) routinely exceed that as a Record.
  */
 export type AnalysisTxnPeekEntry = {
@@ -210,9 +212,9 @@ export type AnalysisData = {
   accounts: AnalysisRankedItem[];
   /** Weekday vs weekend lifestyle spend. */
   weekendSplit: AnalysisRankedItem[];
-  /** Purchase size buckets (Under $15, $15–50, …). */
+  /** Purchase size buckets (Under $15, $15-50, …). */
   ticketSizes: AnalysisRankedItem[];
-  /** Calendar day-of-month (1–31) lifestyle spend. */
+  /** Calendar day-of-month (1-31) lifestyle spend. */
   dayOfMonth: AnalysisRankedItem[];
   /** High-frequency merchants sorted by swipe count. */
   habitMerchants: AnalysisRankedItem[];

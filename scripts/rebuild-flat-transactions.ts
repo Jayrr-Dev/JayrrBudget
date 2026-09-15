@@ -187,9 +187,6 @@ async function main() {
       spread_id INTEGER REFERENCES transaction_spreads(id) ON DELETE SET NULL,
       transaction_type_id INTEGER REFERENCES transaction_types(id) ON DELETE SET NULL,
       kind_id INTEGER REFERENCES transaction_kinds(id) ON DELETE SET NULL,
-      category_primary TEXT,
-      category_detailed TEXT,
-      category_confidence TEXT,
       tags TEXT,
       channel TEXT,
       txn_code TEXT,
@@ -334,7 +331,7 @@ async function main() {
           original_description, merchant_clean, merchant_name, company, brand,
           section, category, subcategory, spread, transaction_type, kind,
           section_id, category_id, subcategory_id, spread_id, transaction_type_id, kind_id,
-          category_primary, category_detailed, category_confidence, tags, channel,
+          tags, channel,
           txn_code, bank_direction, cross_check, enrichment, source, pending,
           city, region, country, website, logo_url, currency, debit, credit, amount, updated_at
         ) VALUES (
@@ -342,7 +339,7 @@ async function main() {
           ?,?,?,?,?,
           ?,?,?,?,?,?,
           ?,?,?,?,?,?,
-          ?,?,?,?,?,
+          ?,?,
           ?,?,?,?,?,?,
           ?,?,?,?,?,?,?,?,?,?
         )`,
@@ -370,9 +367,6 @@ async function main() {
           spreadId,
           transactionTypeId,
           kindId,
-          emptyToNull(row.categoryPrimary),
-          emptyToNull(row.categoryDetailed),
-          emptyToNull(row.categoryConfidence),
           emptyToNull(row.Tags),
           emptyToNull(row.Channel),
           emptyToNull(row["Txn code"]),

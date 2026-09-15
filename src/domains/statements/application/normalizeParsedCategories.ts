@@ -4,7 +4,7 @@ import {
 } from "@/domains/statements/application/categoryVocabulary";
 import type { ParsedStatement } from "@/domains/statements/domain/parsedStatement";
 
-/** Map freshly parsed categories onto existing vocabulary before persist. */
+/** Map freshly parsed tree labels onto existing vocabulary before persist. */
 export function normalizeParsedCategories(
   parsed: ParsedStatement,
   vocabulary: CategoryVocabulary,
@@ -13,13 +13,11 @@ export function normalizeParsedCategories(
     ...parsed,
     transactions: parsed.transactions.map((txn) => ({
       ...txn,
-      categoryPrimary: resolveAgainstVocabulary(
-        txn.categoryPrimary,
-        vocabulary.categoryPrimary,
-      ),
-      categoryDetailed: resolveAgainstVocabulary(
-        txn.categoryDetailed,
-        vocabulary.categoryDetailed,
+      section: resolveAgainstVocabulary(txn.section, vocabulary.sections),
+      category: resolveAgainstVocabulary(txn.category, vocabulary.categories),
+      subcategory: resolveAgainstVocabulary(
+        txn.subcategory,
+        vocabulary.subcategories,
       ),
     })),
   };

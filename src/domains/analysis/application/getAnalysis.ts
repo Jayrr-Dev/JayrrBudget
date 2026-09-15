@@ -22,7 +22,7 @@ export async function getAnalysis(
 ): Promise<GetAnalysisResult> {
   try {
     const client = await getAuthenticatedConvexClient();
-    const result = await client.query(api.analysis.get, { range, period });
+    const result = await client.action(api.analysis.get, { range, period });
     return result as GetAnalysisResult;
   } catch (error) {
     if (error instanceof AuthRequiredError) {

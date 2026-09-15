@@ -1,5 +1,5 @@
 /**
- * Cash-flow Spread — Income plus 50/30/20 spend buckets.
+ * Cash-flow Spread - Income plus 50/30/20 spend buckets.
  * Needs 50% · Wants 30% · Savings 20% of net pay.
  */
 

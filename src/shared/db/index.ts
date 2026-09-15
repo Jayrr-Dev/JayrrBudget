@@ -1,5 +1,5 @@
 /**
- * Legacy Turso / Drizzle entry — **not** used by the live Next app.
+ * Legacy Turso / Drizzle entry - **not** used by the live Next app.
  * Live reads/writes go through Convex (`NEXT_PUBLIC_CONVEX_URL`).
  * Kept so one-off scripts under `scripts/` can still load `.env.local` Turso
  * credentials when intentionally auditing the archived remote.

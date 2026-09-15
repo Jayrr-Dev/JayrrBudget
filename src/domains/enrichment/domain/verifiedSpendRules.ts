@@ -4,8 +4,6 @@ import type { CategoryRule } from "@/domains/enrichment/application/categoryRule
 export const VERIFIED_SPEND_RULES: CategoryRule[] = [
   // --- Income ---
   {
-    categoryDetailed: "Salary & Wages",
-    categoryPrimary: "INCOME",
     tree: {
       section: "Income",
       category: "Employment",
@@ -19,8 +17,6 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
     ],
   },
   {
-    categoryDetailed: "Tax Credits & GST",
-    categoryPrimary: "INCOME",
     tree: {
       section: "Income",
       category: "Government & Tax",
@@ -35,8 +31,6 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
     ],
   },
   {
-    categoryDetailed: "Tax Refunds",
-    categoryPrimary: "INCOME",
     tree: {
       section: "Income",
       category: "Government & Tax",
@@ -45,8 +39,6 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
     patterns: [/tax\s*refund/i],
   },
   {
-    categoryDetailed: "Cashback Rewards",
-    categoryPrimary: "INCOME",
     tree: {
       section: "Income",
       category: "Cashback & Rebates",
@@ -57,8 +49,6 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
 
   // --- Transfers (description-first) ---
   {
-    categoryDetailed: "Credit Card Payoffs",
-    categoryPrimary: "TRANSFER",
     merchantClean: "Card Payment",
     tree: {
       section: "Transfers",
@@ -76,8 +66,6 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
     ],
   },
   {
-    categoryDetailed: "Self Transfers",
-    categoryPrimary: "TRANSFER",
     tree: {
       section: "Transfers",
       category: "Account Transfers",
@@ -86,8 +74,6 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
     patterns: [/^internet\s+transfer\b/i],
   },
   {
-    categoryDetailed: "Remittances",
-    categoryPrimary: "TRANSFER",
     tree: {
       section: "Transfers",
       category: "External Transfers",
@@ -96,8 +82,6 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
     patterns: [/global\s+money\s+transfer/i, /cibc\s+global\s+money/i],
   },
   {
-    categoryDetailed: "Interac e-Transfer",
-    categoryPrimary: "TRANSFER",
     tree: {
       section: "Transfers",
       category: "External Transfers",
@@ -108,8 +92,6 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
 
   // --- AI Services (before generic SaaS) ---
   {
-    categoryDetailed: "Model APIs & Inference",
-    categoryPrimary: "GENERAL_SERVICES",
     tags: ["AI", "Subscription", "Online"],
     tree: {
       section: "Technology",
@@ -126,8 +108,6 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
     ],
   },
   {
-    categoryDetailed: "AI Assistants & Chat",
-    categoryPrimary: "GENERAL_SERVICES",
     tags: ["AI", "Subscription", "Online"],
     tree: {
       section: "Technology",
@@ -144,8 +124,6 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
     ],
   },
   {
-    categoryDetailed: "AI Code Editors & IDEs",
-    categoryPrimary: "GENERAL_SERVICES",
     tags: ["AI", "Subscription", "Online"],
     tree: {
       section: "Technology",
@@ -157,8 +135,6 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
 
   // --- Cloud & Hosting ---
   {
-    categoryDetailed: "Infrastructure",
-    categoryPrimary: "GENERAL_SERVICES",
     tags: ["Dev Tools", "Online"],
     tree: {
       section: "Technology",
@@ -178,8 +154,6 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
     ],
   },
   {
-    categoryDetailed: "Domains & Registrars",
-    categoryPrimary: "GENERAL_SERVICES",
     tags: ["Dev Tools", "Online"],
     tree: {
       section: "Technology",
@@ -195,8 +169,6 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
     ],
   },
   {
-    categoryDetailed: "Developer & Payment Platforms",
-    categoryPrimary: "GENERAL_SERVICES",
     tags: ["Dev Tools", "Online"],
     tree: {
       section: "Technology",
@@ -216,8 +188,6 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
 
   // --- Creative tools with primary AI features ---
   {
-    categoryDetailed: "Productivity & Creative",
-    categoryPrimary: "GENERAL_SERVICES",
     tags: ["AI", "Subscription", "Online"],
     tree: {
       section: "Technology",
@@ -234,8 +204,6 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
 
   // --- Software & Subscriptions (non-AI) ---
   {
-    categoryDetailed: "Productivity & Creative",
-    categoryPrimary: "GENERAL_SERVICES",
     tags: ["Subscription", "Online"],
     tree: {
       section: "Technology",
@@ -251,8 +219,6 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
     ],
   },
   {
-    categoryDetailed: "Communication & Social",
-    categoryPrimary: "GENERAL_SERVICES",
     tags: ["Subscription", "Online"],
     tree: {
       section: "Technology",
@@ -268,8 +234,6 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
     ],
   },
   {
-    categoryDetailed: "Security & Utilities",
-    categoryPrimary: "GENERAL_SERVICES",
     tags: ["Subscription", "Online"],
     tree: {
       section: "Technology",
@@ -279,8 +243,6 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
     patterns: [/nord/i, /start\.me/i, /google\s*one/i],
   },
   {
-    categoryDetailed: "Streaming",
-    categoryPrimary: "ENTERTAINMENT",
     tags: ["Subscription", "Online"],
     tree: {
       section: "Lifestyle",
@@ -299,8 +261,6 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
 
   // --- Food ---
   {
-    categoryDetailed: "Food Delivery",
-    categoryPrimary: "FOOD_AND_DRINK",
     tags: ["Online"],
     tree: {
       section: "Lifestyle",
@@ -316,8 +276,6 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
     ],
   },
   {
-    categoryDetailed: "Board Game Cafes",
-    categoryPrimary: "FOOD_AND_DRINK",
     tags: ["In Store"],
     tree: {
       section: "Lifestyle",
@@ -327,8 +285,6 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
     patterns: [/hexagon\s*board\s*game/i],
   },
   {
-    categoryDetailed: "Fast Food",
-    categoryPrimary: "FOOD_AND_DRINK",
     tags: ["In Store"],
     tree: {
       section: "Lifestyle",
@@ -347,8 +303,6 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
     ],
   },
   {
-    categoryDetailed: "Supermarkets",
-    categoryPrimary: "FOOD_AND_DRINK",
     tags: ["In Store"],
     tree: {
       section: "Lifestyle",
@@ -370,8 +324,6 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
 
   // --- Transport ---
   {
-    categoryDetailed: "Gas Stations",
-    categoryPrimary: "TRANSPORTATION",
     tags: ["In Store"],
     tree: { section: "Transport", category: "Fuel", type: "Gas Stations" },
     patterns: [
@@ -385,8 +337,6 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
     ],
   },
   {
-    categoryDetailed: "Rideshare",
-    categoryPrimary: "TRANSPORTATION",
     tags: ["Online"],
     tree: {
       section: "Transport",
@@ -402,8 +352,6 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
     ],
   },
   {
-    categoryDetailed: "Public Transit",
-    categoryPrimary: "TRANSPORTATION",
     tags: ["In Store"],
     tree: {
       section: "Transport",
@@ -419,8 +367,6 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
     ],
   },
   {
-    categoryDetailed: "Parking",
-    categoryPrimary: "TRANSPORTATION",
     tags: ["In Store"],
     tree: {
       section: "Transport",
@@ -430,8 +376,6 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
     patterns: [/epark/i, /honk\s*(mobile|parking)/i, /nyc\s*parking\s*meter/i],
   },
   {
-    categoryDetailed: "Car Wash",
-    categoryPrimary: "TRANSPORTATION",
     tags: ["In Store"],
     tree: {
       section: "Transport",
@@ -441,8 +385,6 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
     patterns: [/uwash\s*carwash/i, /car\s*wash/i],
   },
   {
-    categoryDetailed: "Maintenance",
-    categoryPrimary: "TRANSPORTATION",
     tags: ["In Store"],
     tree: {
       section: "Transport",
@@ -452,8 +394,6 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
     patterns: [/kal\s*tire/i, /truckland/i],
   },
   {
-    categoryDetailed: "Service & Sales",
-    categoryPrimary: "TRANSPORTATION",
     tags: ["In Store"],
     tree: {
       section: "Transport",
@@ -465,8 +405,6 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
 
   // --- Travel ---
   {
-    categoryDetailed: "Hotels & Vacation Rentals",
-    categoryPrimary: "TRAVEL",
     tree: {
       section: "Travel",
       category: "Lodging",
@@ -475,8 +413,6 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
     patterns: [/airbnb/i, /hilton/i, /agoda/i, /the\s*crestmont/i],
   },
   {
-    categoryDetailed: "Airline Tickets",
-    categoryPrimary: "TRAVEL",
     tree: {
       section: "Travel",
       category: "Flights",
@@ -490,8 +426,6 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
     ],
   },
   {
-    categoryDetailed: "Car Rental",
-    categoryPrimary: "TRAVEL",
     tree: {
       section: "Travel",
       category: "Flights",
@@ -500,8 +434,6 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
     patterns: [/\bavis\b/i, /etoll\s*avis/i],
   },
   {
-    categoryDetailed: "In-Flight",
-    categoryPrimary: "TRAVEL",
     tree: {
       section: "Travel",
       category: "Flights",
@@ -510,8 +442,6 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
     patterns: [/inflight\s*internet/i],
   },
   {
-    categoryDetailed: "Attractions & Tours",
-    categoryPrimary: "ENTERTAINMENT",
     tree: {
       section: "Travel",
       category: "Sightseeing",
@@ -527,8 +457,6 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
 
   // --- Health & personal ---
   {
-    categoryDetailed: "Clinics & Telehealth",
-    categoryPrimary: "MEDICAL",
     tree: {
       section: "Health",
       category: "Medical",
@@ -545,8 +473,6 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
     ],
   },
   {
-    categoryDetailed: "Barbers & Salons",
-    categoryPrimary: "PERSONAL_CARE",
     tree: {
       section: "Lifestyle",
       category: "Personal Care",
@@ -555,8 +481,6 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
     patterns: [/barber/i, /salon/i, /natan\s*barber/i],
   },
   {
-    categoryDetailed: "Gym Memberships",
-    categoryPrimary: "PERSONAL_CARE",
     tags: ["Subscription"],
     tree: {
       section: "Lifestyle",
@@ -571,8 +495,6 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
     ],
   },
   {
-    categoryDetailed: "Cosmetics",
-    categoryPrimary: "PERSONAL_CARE",
     tree: {
       section: "Lifestyle",
       category: "Personal Care",
@@ -581,8 +503,6 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
     patterns: [/sunnies\s*face/i],
   },
   {
-    categoryDetailed: "Veterinary",
-    categoryPrimary: "MEDICAL",
     tree: {
       section: "Lifestyle",
       category: "Personal Care",
@@ -591,8 +511,6 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
     patterns: [/animal\s*hospital/i, /veterinar/i],
   },
   {
-    categoryDetailed: "Pet Supplies",
-    categoryPrimary: "GENERAL_MERCHANDISE",
     tree: {
       section: "Lifestyle",
       category: "Shopping",
@@ -603,8 +521,6 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
 
   // --- Entertainment & shopping ---
   {
-    categoryDetailed: "Education & Training",
-    categoryPrimary: "ENTERTAINMENT",
     tree: {
       section: "Lifestyle",
       category: "Entertainment",
@@ -613,8 +529,6 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
     patterns: [/\bnait\b/i],
   },
   {
-    categoryDetailed: "Video Games & Digital Goods",
-    categoryPrimary: "ENTERTAINMENT",
     tags: ["Online"],
     tree: {
       section: "Lifestyle",
@@ -624,8 +538,6 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
     patterns: [/steamgames/i, /steam\s*games/i, /\bsteam\b/i, /itch\.?\s*io/i],
   },
   {
-    categoryDetailed: "Cinemas",
-    categoryPrimary: "ENTERTAINMENT",
     tree: {
       section: "Lifestyle",
       category: "Entertainment",
@@ -634,8 +546,6 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
     patterns: [/cineplex/i, /ayala\s*malls\s*cinemas/i],
   },
   {
-    categoryDetailed: "Department & Online Stores",
-    categoryPrimary: "GENERAL_MERCHANDISE",
     tags: ["Online"],
     tree: {
       section: "Lifestyle",
@@ -655,8 +565,6 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
     ],
   },
   {
-    categoryDetailed: "Convenience",
-    categoryPrimary: "GENERAL_MERCHANDISE",
     tags: ["In Store"],
     tree: {
       section: "Lifestyle",
@@ -672,8 +580,6 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
     ],
   },
   {
-    categoryDetailed: "Hobbies",
-    categoryPrimary: "GENERAL_MERCHANDISE",
     tree: {
       section: "Lifestyle",
       category: "Shopping",
@@ -690,8 +596,6 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
 
   // --- Home ---
   {
-    categoryDetailed: "Mobile & Wireless",
-    categoryPrimary: "RENT_AND_UTILITIES",
     tags: ["Subscription", "Online"],
     tree: {
       section: "Home",
@@ -710,8 +614,6 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
     ],
   },
   {
-    categoryDetailed: "Hardware & Tools",
-    categoryPrimary: "HOME_IMPROVEMENT",
     tree: {
       section: "Home",
       category: "Home Maintenance",
@@ -722,8 +624,6 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
 
   // --- Finance ---
   {
-    categoryDetailed: "Student Loans",
-    categoryPrimary: "LOAN_PAYMENTS",
     tree: {
       section: "Finance",
       category: "Debt & Loans",
@@ -737,8 +637,6 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
     ],
   },
   {
-    categoryDetailed: "BNPL",
-    categoryPrimary: "LOAN_PAYMENTS",
     tree: {
       section: "Finance",
       category: "Debt & Loans",
@@ -747,8 +645,6 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
     patterns: [/affirm/i],
   },
   {
-    categoryDetailed: "Personal Financing",
-    categoryPrimary: "LOAN_PAYMENTS",
     tree: {
       section: "Finance",
       category: "Debt & Loans",
@@ -762,8 +658,6 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
     ],
   },
   {
-    categoryDetailed: "Monthly Fees",
-    categoryPrimary: "BANK_FEES",
     tree: {
       section: "Finance",
       category: "Banking Fees",
@@ -772,8 +666,6 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
     patterns: [/service\s*charge/i, /annual\s*fee/i, /account\s*fee/i],
   },
   {
-    categoryDetailed: "Overdraft & Interest",
-    categoryPrimary: "BANK_FEES",
     tree: {
       section: "Finance",
       category: "Banking Fees",
@@ -782,8 +674,6 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
     patterns: [/plc\s*interest/i, /\binterest\b/i, /interest\s*reversal/i],
   },
   {
-    categoryDetailed: "Transfer Fees",
-    categoryPrimary: "BANK_FEES",
     tree: {
       section: "Finance",
       category: "Banking Fees",
@@ -792,8 +682,6 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
     patterns: [/transfer\s*fee/i, /e-?transfer\s*network\s*fee/i],
   },
   {
-    categoryDetailed: "Property & Auto Insurance",
-    categoryPrimary: "LOAN_PAYMENTS",
     tree: {
       section: "Finance",
       category: "Insurance",
@@ -802,8 +690,6 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
     patterns: [/security\s*national/i, /meloche\s*monnex/i, /td\s*insurance/i],
   },
   {
-    categoryDetailed: "Payment Protection",
-    categoryPrimary: "LOAN_PAYMENTS",
     tags: ["Subscription"],
     tree: {
       section: "Finance",
@@ -813,8 +699,6 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
     patterns: [/payment\s*protector/i, /payment\s*protection/i],
   },
   {
-    categoryDetailed: "Brokerage & Crypto",
-    categoryPrimary: "INVESTMENTS",
     tree: {
       section: "Finance",
       category: "Investments",
@@ -825,8 +709,6 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
 
   // --- Cash & ATM ---
   {
-    categoryDetailed: "Cash Advances",
-    categoryPrimary: "TRANSFER",
     tree: {
       section: "Transfers",
       category: "Cash & ATM",
@@ -835,8 +717,6 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
     patterns: [/cash\s*advance/i, /avance\s*de\s*fonds/i],
   },
   {
-    categoryDetailed: "ATM Withdrawals",
-    categoryPrimary: "TRANSFER",
     tree: {
       section: "Transfers",
       category: "Cash & ATM",

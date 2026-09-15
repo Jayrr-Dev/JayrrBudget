@@ -19,11 +19,21 @@ export default function ModulesPage() {
       <div className="mx-auto max-w-md space-y-2 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-5 py-6 text-center">
         <h1 className="text-lg font-semibold tracking-tight">Admin only</h1>
         <p className="text-sm text-[var(--muted-foreground)]">
-          Module enable/disable is limited to admin accounts.
+          Only admins can turn features on or off.
         </p>
       </div>
     );
   }
 
-  return <ModuleManager />;
+  return (
+    <div className="space-y-8">
+      <header className="space-y-1 border-b border-[var(--border)] pb-6">
+        <h1 className="text-3xl font-semibold tracking-tight">Modules</h1>
+        <p className="text-[var(--muted-foreground)]">
+          Turn app features on or off for everyone.
+        </p>
+      </header>
+      <ModuleManager />
+    </div>
+  );
 }

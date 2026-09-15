@@ -5,10 +5,8 @@ export type TreeRef = {
 };
 
 export type CategoryRule = {
-  categoryDetailed: string;
-  categoryPrimary?: string;
   tags?: string[];
-  tree?: TreeRef;
+  tree: TreeRef;
   merchantClean?: string;
   patterns: RegExp[];
 };

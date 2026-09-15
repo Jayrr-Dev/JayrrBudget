@@ -19,11 +19,11 @@ export type LedgerLineInput = {
   paymentChannel?: string | null;
   foreignAmount?: number | null;
   foreignCurrency?: string | null;
-  categoryPrimary?: string | null;
-  categoryDetailed?: string | null;
-  categoryConfidence?: string | null;
   /** Parse-time cleaned merchant; seeds enrichment without full AI pass. */
   merchantClean?: string | null;
+  section?: string | null;
+  category?: string | null;
+  subcategory?: string | null;
 };
 
 const RETIRED =

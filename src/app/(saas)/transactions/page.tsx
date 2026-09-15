@@ -19,9 +19,10 @@ export default function TransactionsPage() {
             Transactions
           </h1>
           <p className="text-[var(--muted-foreground)]">
-            Flat ledger from CSV. Section / Spread / Category are real columns.
+            Browse purchases and deposits. Bank details on the left; category
+            and labels on the right.
             {data
-              ? ` Showing ${data.transactions.length} of ${data.transactionCount} stored.`
+              ? ` Showing ${data.transactions.length} of ${data.transactionCount}.`
               : ""}
           </p>
         </div>

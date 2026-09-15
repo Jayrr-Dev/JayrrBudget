@@ -30,9 +30,13 @@ import { splitTags } from "./tags";
 const TOP_STACKED_CATEGORY_ROWS = 15;
 const TOP_STACKED_SECTION_ROWS = 12;
 const TOP_STACKED_SPREAD_ROWS = 4;
+const TOP_STACKED_MERCHANT_ROWS = 40;
+const TOP_CATEGORY_BREAKDOWNS = 12;
+const TOP_FACET_BREAKDOWNS = 40;
 const NAMED_SHARE = 0.85;
 const UNCATEGORIZED = "Uncategorized";
-const PEEK_LIMIT = 120;
+/** Cap per facet key. Rows should arrive newest-first so early exit keeps recent txns. */
+const PEEK_LIMIT = 48;
 
 function peekKey(facet: string, ...parts: string[]) {
   return `${facet}:${parts.join("::")}`;
@@ -44,8 +48,13 @@ function pushPeek(
   peek: AnalysisTxnPeek,
 ) {
   const list = map.get(key);
-  if (list) list.push(peek);
-  else map.set(key, [peek]);
+  if (!list) {
+    map.set(key, [peek]);
+    return;
+  }
+  // Newest-first input: once full, later (older) peeks are discarded.
+  if (list.length >= PEEK_LIMIT) return;
+  list.push(peek);
 }
 
 function finalizePeeks(
@@ -53,12 +62,12 @@ function finalizePeeks(
 ): Array<{ key: string; peeks: AnalysisTxnPeek[] }> {
   const out: Array<{ key: string; peeks: AnalysisTxnPeek[] }> = [];
   for (const [key, list] of map) {
+    // Already capped during push; light sort keeps popover order stable.
     out.push({
       key,
       peeks: list
         .slice()
-        .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
-        .slice(0, PEEK_LIMIT),
+        .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0)),
     });
   }
   return out;
@@ -111,13 +120,11 @@ export function rangeStartDate(latestDate: string, range: AnalysisRange) {
 
 function resolveCategory(input: {
   taxonomyCategory: string | null;
-  categoryDetailed: string | null;
-  categoryPrimary: string | null;
+  typeName: string | null;
 }) {
   return (
     input.taxonomyCategory?.trim() ||
-    input.categoryDetailed?.trim() ||
-    input.categoryPrimary?.trim() ||
+    input.typeName?.trim() ||
     UNCATEGORIZED
   );
 }
@@ -228,19 +235,19 @@ function countryLabel(country: string | null) {
 
 const TICKET_SIZE_ORDER = [
   "Under $15",
-  "$15–50",
-  "$50–100",
-  "$100–250",
-  "$250–1,000",
+  "$15-50",
+  "$50-100",
+  "$100-250",
+  "$250-1,000",
   "$1,000+",
 ] as const;
 
 function ticketSizeLabel(amount: number) {
   if (amount < 15) return "Under $15";
-  if (amount < 50) return "$15–50";
-  if (amount < 100) return "$50–100";
-  if (amount < 250) return "$100–250";
-  if (amount < 1000) return "$250–1,000";
+  if (amount < 50) return "$15-50";
+  if (amount < 100) return "$50-100";
+  if (amount < 250) return "$100-250";
+  if (amount < 1000) return "$250-1,000";
   return "$1,000+";
 }
 
@@ -438,22 +445,7 @@ function typeKey(value: string) {
   return value.trim().toLowerCase().replace(/[_-]+/g, " ").replace(/\s+/g, " ");
 }
 
-function aliasTypeLabel(raw: string) {
-  const keyed = typeKey(raw);
-  const singular = singularCategoryKey(raw);
-  const direct = TYPE_ALIASES[keyed] ?? TYPE_ALIASES[singular];
-  if (direct) return direct;
-  for (const [from, to] of Object.entries(TYPE_ALIASES)) {
-    if (singularCategoryKey(from) === singular) return to;
-  }
-  return titleCase(singular || keyed);
-}
-
-function spendTypeLabel(
-  typeName: string | null,
-  categoryDetailed: string | null,
-  category: string,
-) {
+function spendTypeLabel(typeName: string | null, category: string) {
   if (typeName?.trim()) {
     const trimmed = typeName.trim();
     if (
@@ -463,16 +455,7 @@ function spendTypeLabel(
       return trimmed;
     }
   }
-  const raw = categoryDetailed?.trim();
-  if (!raw) return "Unspecified";
-  const mapped = aliasTypeLabel(raw);
-  if (
-    typeKey(mapped) !== typeKey(category) &&
-    singularCategoryKey(mapped) !== singularCategoryKey(category)
-  ) {
-    return mapped;
-  }
-  return titleCase(raw);
+  return "Unspecified";
 }
 
 function nestedAdd(
@@ -875,18 +858,25 @@ export function computeAnalysis(args: {
     return emptyAnalysis(range, period);
   }
 
+  // Newest posted first - peek caps keep recent txns when callers forget to order.
+  const orderedRows = filtered.slice().sort((a, b) =>
+    a.postedDate < b.postedDate ? 1 : a.postedDate > b.postedDate ? -1 : 0,
+  );
+
   const startDate =
     range !== "all" ? rangeStartDate(latestDate, range) : earliestDate;
 
 const currency =
-      filtered.find((row) => row.currencyCode)?.currencyCode ?? "CAD";
+      orderedRows.find((row) => row.currencyCode)?.currencyCode ?? "CAD";
 
-    const filteredDates = filtered
-      .map((row) => row.postedDate)
-      .filter(Boolean)
-      .sort();
-    const rangeEarliest = filteredDates[0] ?? null;
-    const rangeLatest = filteredDates[filteredDates.length - 1] ?? null;
+    let rangeEarliest: string | null = null;
+    let rangeLatest: string | null = null;
+    for (const row of orderedRows) {
+      const posted = row.postedDate;
+      if (!posted) continue;
+      if (!rangeEarliest || posted < rangeEarliest) rangeEarliest = posted;
+      if (!rangeLatest || posted > rangeLatest) rangeLatest = posted;
+    }
 
     const monthlyMap = new Map<
       string,
@@ -956,7 +946,19 @@ const currency =
       string,
       Map<string, Map<string, number>>
     >();
+    const categoryByMerchant = new Map<string, Map<string, RankBucket>>();
     const txnPeekMap = new Map<string, AnalysisTxnPeek[]>();
+    type PeekSource = {
+      peek: AnalysisTxnPeek;
+      section: string;
+      category: string;
+      subcategory: string;
+      merchant: string;
+      spread: string | null;
+      tags: string[];
+      typeLabels: string[];
+    };
+    const peekSources: PeekSource[] = [];
 
     let totalSpend = 0;
     let totalIncome = 0;
@@ -978,7 +980,7 @@ const currency =
       categoryMonthSpend.set(name, byMonth);
     }
 
-    for (const row of filtered) {
+    for (const row of orderedRows) {
       const major = row.amount;
       const amountMinor = Math.round(major * 100);
       const abs = Math.abs(major);
@@ -994,8 +996,6 @@ const currency =
         amountMinor,
         description: row.description,
         accountType: row.accountType,
-        categoryPrimary: row.categoryPrimary,
-        categoryDetailed: row.categoryDetailed,
         sectionName: row.sectionName,
         categoryName: row.categoryName,
         typeName: row.typeName,
@@ -1006,8 +1006,7 @@ const currency =
         signals,
         resolveCategory({
           taxonomyCategory: row.categoryName,
-          categoryDetailed: row.categoryDetailed,
-          categoryPrimary: row.categoryPrimary,
+          typeName: row.typeName,
         }),
       );
 
@@ -1044,11 +1043,7 @@ const currency =
           row.accountName?.trim() || "Unknown account",
           abs,
         );
-        const type = spendTypeLabel(
-          row.typeName,
-          row.categoryDetailed,
-          category,
-        );
+        const type = spendTypeLabel(row.typeName, category);
         const section = row.sectionName?.trim() || "Uncategorized";
         addRank(sectionSpend, section, abs);
         addMonthSpend(sectionMonthSpend, section, month, abs);
@@ -1088,6 +1083,7 @@ const currency =
           month,
           abs,
         );
+        nestedAdd(categoryByMerchant, cleanMerchant, category, abs);
         nestedAdd(typeByCategory, category, type, abs);
         nestedAdd(categoryBySection, section, category, abs);
         nestedAdd(merchantByCategory, category, merchant, abs);
@@ -1125,78 +1121,30 @@ const currency =
           nestedMonthAdd(categoryMonthByType, typeLabel, category, month, abs);
         }
         {
-          const peek: AnalysisTxnPeek = {
-            date: row.postedDate,
-            description:
-              row.description?.trim() ||
-              row.merchantClean?.trim() ||
-              cleanMerchant,
-            amount: abs,
-          };
-          pushPeek(txnPeekMap, peekKey("section", section), peek);
-          pushPeek(txnPeekMap, peekKey("category", category), peek);
-          pushPeek(txnPeekMap, peekKey("subcategory", type), peek);
-          pushPeek(txnPeekMap, peekKey("merchant", cleanMerchant), peek);
-          pushPeek(
-            txnPeekMap,
-            peekKey("section-category", section, category),
-            peek,
-          );
-          pushPeek(
-            txnPeekMap,
-            peekKey("section-merchant", section, cleanMerchant),
-            peek,
-          );
-          pushPeek(
-            txnPeekMap,
-            peekKey("category-merchant", category, cleanMerchant),
-            peek,
-          );
-          pushPeek(
-            txnPeekMap,
-            peekKey("subcategory-merchant", type, cleanMerchant),
-            peek,
-          );
-          if (spread) {
-            pushPeek(txnPeekMap, peekKey("spread", spread), peek);
-            pushPeek(
-              txnPeekMap,
-              peekKey("spread-category", spread, category),
-              peek,
-            );
-            pushPeek(
-              txnPeekMap,
-              peekKey("spread-merchant", spread, cleanMerchant),
-              peek,
-            );
-          }
-          for (const tag of splitTags(row.tags)) {
-            pushPeek(txnPeekMap, peekKey("tag", tag), peek);
-            pushPeek(
-              txnPeekMap,
-              peekKey("tag-merchant", tag, cleanMerchant),
-              peek,
-            );
-          }
-          for (const typeLabel of splitTags(row.kind)) {
-            pushPeek(txnPeekMap, peekKey("type", typeLabel), peek);
-            pushPeek(
-              txnPeekMap,
-              peekKey("type-merchant", typeLabel, cleanMerchant),
-              peek,
-            );
-          }
+          peekSources.push({
+            peek: {
+              date: row.postedDate,
+              description:
+                row.description?.trim() ||
+                row.merchantClean?.trim() ||
+                cleanMerchant,
+              amount: abs,
+            },
+            section,
+            category,
+            subcategory: type,
+            merchant: cleanMerchant,
+            spread,
+            tags: splitTags(row.tags),
+            typeLabels: splitTags(row.kind),
+          });
         }
       } else if (kind === "refund") {
         bucket.spend -= abs;
         totalSpend -= abs;
         refunds += abs;
         addCategory(category, month, -abs);
-        const type = spendTypeLabel(
-          row.typeName,
-          row.categoryDetailed,
-          category,
-        );
+        const type = spendTypeLabel(row.typeName, category);
         const section = row.sectionName?.trim() || "Uncategorized";
         const cleanMerchant = merchantCleanLabel({
           merchantClean: row.merchantClean,
@@ -1214,6 +1162,7 @@ const currency =
           month,
           -abs,
         );
+        nestedAdd(categoryByMerchant, cleanMerchant, category, -abs);
         addRank(sectionSpend, section, -abs);
         addMonthSpend(sectionMonthSpend, section, month, -abs);
         addRank(subcategorySpend, type, -abs);
@@ -1265,67 +1214,23 @@ const currency =
           nestedMonthAdd(categoryMonthByType, typeLabel, category, month, -abs);
         }
         {
-          const peek: AnalysisTxnPeek = {
-            date: row.postedDate,
-            description:
-              row.description?.trim() ||
-              row.merchantClean?.trim() ||
-              cleanMerchant,
-            amount: -abs,
-          };
-          pushPeek(txnPeekMap, peekKey("section", section), peek);
-          pushPeek(txnPeekMap, peekKey("category", category), peek);
-          pushPeek(txnPeekMap, peekKey("subcategory", type), peek);
-          pushPeek(txnPeekMap, peekKey("merchant", cleanMerchant), peek);
-          pushPeek(
-            txnPeekMap,
-            peekKey("section-category", section, category),
-            peek,
-          );
-          pushPeek(
-            txnPeekMap,
-            peekKey("section-merchant", section, cleanMerchant),
-            peek,
-          );
-          pushPeek(
-            txnPeekMap,
-            peekKey("category-merchant", category, cleanMerchant),
-            peek,
-          );
-          pushPeek(
-            txnPeekMap,
-            peekKey("subcategory-merchant", type, cleanMerchant),
-            peek,
-          );
-          if (spread) {
-            pushPeek(txnPeekMap, peekKey("spread", spread), peek);
-            pushPeek(
-              txnPeekMap,
-              peekKey("spread-category", spread, category),
-              peek,
-            );
-            pushPeek(
-              txnPeekMap,
-              peekKey("spread-merchant", spread, cleanMerchant),
-              peek,
-            );
-          }
-          for (const tag of splitTags(row.tags)) {
-            pushPeek(txnPeekMap, peekKey("tag", tag), peek);
-            pushPeek(
-              txnPeekMap,
-              peekKey("tag-merchant", tag, cleanMerchant),
-              peek,
-            );
-          }
-          for (const typeLabel of splitTags(row.kind)) {
-            pushPeek(txnPeekMap, peekKey("type", typeLabel), peek);
-            pushPeek(
-              txnPeekMap,
-              peekKey("type-merchant", typeLabel, cleanMerchant),
-              peek,
-            );
-          }
+          peekSources.push({
+            peek: {
+              date: row.postedDate,
+              description:
+                row.description?.trim() ||
+                row.merchantClean?.trim() ||
+                cleanMerchant,
+              amount: -abs,
+            },
+            section,
+            category,
+            subcategory: type,
+            merchant: cleanMerchant,
+            spread,
+            tags: splitTags(row.tags),
+            typeLabels: splitTags(row.kind),
+          });
         }
       } else {
         bucket.income += abs;
@@ -1348,25 +1253,23 @@ const currency =
         nestedAdd(categoryBySpread, spread, category, abs);
         nestedAdd(vendorBySpread, spread, cleanMerchant, abs);
         {
-          const peek: AnalysisTxnPeek = {
-            date: row.postedDate,
-            description:
-              row.description?.trim() ||
-              row.merchantClean?.trim() ||
-              cleanMerchant,
-            amount: -abs,
-          };
-          pushPeek(txnPeekMap, peekKey("spread", spread), peek);
-          pushPeek(
-            txnPeekMap,
-            peekKey("spread-category", spread, category),
-            peek,
-          );
-          pushPeek(
-            txnPeekMap,
-            peekKey("spread-merchant", spread, cleanMerchant),
-            peek,
-          );
+          peekSources.push({
+            peek: {
+              date: row.postedDate,
+              description:
+                row.description?.trim() ||
+                row.merchantClean?.trim() ||
+                cleanMerchant,
+              amount: -abs,
+            },
+            section: "Income",
+            category,
+            subcategory: "",
+            merchant: cleanMerchant,
+            spread,
+            tags: [],
+            typeLabels: [],
+          });
         }
       }
 
@@ -1491,9 +1394,13 @@ const currency =
     const subcategoryStacked = buildNestedStackedBars(
       subcategories,
       merchantBySubcategory,
-      subcategories.length,
+      TOP_FACET_BREAKDOWNS,
     );
-    const tagStacked = buildNestedStackedBars(tags, categoryByTag, tags.length);
+    const tagStacked = buildNestedStackedBars(
+      tags,
+      categoryByTag,
+      TOP_FACET_BREAKDOWNS,
+    );
     const tagKeyByName = new Map(
       tagSeries
         .filter((item) => item.key !== OTHER_KEY)
@@ -1507,7 +1414,7 @@ const currency =
     const typeStacked = buildNestedStackedBars(
       types,
       categoryByType,
-      types.length,
+      TOP_FACET_BREAKDOWNS,
     );
     const typeKeyByName = new Map(
       typeSeries
@@ -1522,7 +1429,7 @@ const currency =
     const merchantStacked = buildNestedStackedBars(
       merchants,
       subcategoryByMerchant,
-      merchants.length,
+      TOP_STACKED_MERCHANT_ROWS,
     );
 
     const {
@@ -1579,7 +1486,7 @@ const currency =
       .sort((a, b) => b.count - a.count || b.spend - a.spend)
       .slice(0, 12);
 
-    const breakdowns = categories.slice(0, 12).map((item) => {
+    const breakdowns = categories.slice(0, TOP_CATEGORY_BREAKDOWNS).map((item) => {
       const types = rankAll(typeByCategory.get(item.name) ?? new Map());
       const {
         series: typeSeries,
@@ -1604,7 +1511,9 @@ const currency =
       };
     });
 
-    const subcategoryBreakdowns = subcategories.map((item) => {
+    const subcategoryBreakdowns = subcategories
+      .slice(0, TOP_FACET_BREAKDOWNS)
+      .map((item) => {
       const merchants = rankAll(
         merchantBySubcategory.get(item.name) ?? new Map(),
       );
@@ -1630,7 +1539,7 @@ const currency =
       };
     });
 
-    const tagBreakdowns = tags.map((item) => {
+    const tagBreakdowns = tags.slice(0, TOP_FACET_BREAKDOWNS).map((item) => {
       const merchants = rankAll(merchantByTag.get(item.name) ?? new Map());
       const {
         series: merchantSeries,
@@ -1654,7 +1563,7 @@ const currency =
       };
     });
 
-    const typeBreakdowns = types.map((item) => {
+    const typeBreakdowns = types.slice(0, TOP_FACET_BREAKDOWNS).map((item) => {
       const merchants = rankAll(merchantByType.get(item.name) ?? new Map());
       const {
         series: merchantSeries,
@@ -1678,8 +1587,13 @@ const currency =
       };
     });
 
-    const merchantBreakdowns = merchants.map((item) => {
+    const merchantBreakdowns = merchants
+      .slice(0, TOP_FACET_BREAKDOWNS)
+      .map((item) => {
       const types = rankAll(subcategoryByMerchant.get(item.name) ?? new Map());
+      const categories = rankAll(
+        categoryByMerchant.get(item.name) ?? new Map(),
+      );
       const {
         series: typeSeries,
         monthly: typeMonthly,
@@ -1694,6 +1608,7 @@ const currency =
       return {
         merchant: item.name,
         spend: item.spend,
+        categories,
         types,
         typeSeries,
         typeMonthly,
@@ -1701,6 +1616,104 @@ const currency =
         otherByPeriod,
       };
     });
+
+    const topMerchantNames = new Set(
+      merchants.slice(0, TOP_FACET_BREAKDOWNS).map((item) => item.name),
+    );
+    const topSubcategoryNames = new Set(
+      subcategories.slice(0, TOP_FACET_BREAKDOWNS).map((item) => item.name),
+    );
+    const topCategoryNames = new Set(
+      categories.slice(0, TOP_CATEGORY_BREAKDOWNS).map((item) => item.name),
+    );
+    const topTagNames = new Set(
+      tags.slice(0, TOP_FACET_BREAKDOWNS).map((item) => item.name),
+    );
+    const topTypeNames = new Set(
+      types.slice(0, TOP_FACET_BREAKDOWNS).map((item) => item.name),
+    );
+    const sectionNames = new Set(sections.map((item) => item.name));
+    const spreadNames = new Set(spreads.map((item) => item.name));
+
+    for (const src of peekSources) {
+      const {
+        peek,
+        section,
+        category,
+        subcategory,
+        merchant,
+        spread,
+        tags: srcTags,
+        typeLabels,
+      } = src;
+      const keepSection = sectionNames.has(section);
+      const keepCategory = topCategoryNames.has(category);
+      const keepSubcategory = topSubcategoryNames.has(subcategory);
+      const keepMerchant = topMerchantNames.has(merchant);
+      const keepSpread = spread != null && spreadNames.has(spread);
+
+      if (keepSection) pushPeek(txnPeekMap, peekKey("section", section), peek);
+      if (keepCategory) pushPeek(txnPeekMap, peekKey("category", category), peek);
+      if (keepSubcategory)
+        pushPeek(txnPeekMap, peekKey("subcategory", subcategory), peek);
+      if (keepMerchant)
+        pushPeek(txnPeekMap, peekKey("merchant", merchant), peek);
+      if (keepSection && keepCategory)
+        pushPeek(
+          txnPeekMap,
+          peekKey("section-category", section, category),
+          peek,
+        );
+      if (keepSection && keepMerchant)
+        pushPeek(
+          txnPeekMap,
+          peekKey("section-merchant", section, merchant),
+          peek,
+        );
+      if (keepCategory && keepMerchant)
+        pushPeek(
+          txnPeekMap,
+          peekKey("category-merchant", category, merchant),
+          peek,
+        );
+      if (keepSubcategory && keepMerchant)
+        pushPeek(
+          txnPeekMap,
+          peekKey("subcategory-merchant", subcategory, merchant),
+          peek,
+        );
+      if (keepSpread) {
+        pushPeek(txnPeekMap, peekKey("spread", spread), peek);
+        if (keepCategory)
+          pushPeek(
+            txnPeekMap,
+            peekKey("spread-category", spread, category),
+            peek,
+          );
+        if (keepMerchant)
+          pushPeek(
+            txnPeekMap,
+            peekKey("spread-merchant", spread, merchant),
+            peek,
+          );
+      }
+      for (const tag of srcTags) {
+        if (!topTagNames.has(tag)) continue;
+        pushPeek(txnPeekMap, peekKey("tag", tag), peek);
+        if (keepMerchant)
+          pushPeek(txnPeekMap, peekKey("tag-merchant", tag, merchant), peek);
+      }
+      for (const typeLabel of typeLabels) {
+        if (!topTypeNames.has(typeLabel)) continue;
+        pushPeek(txnPeekMap, peekKey("type", typeLabel), peek);
+        if (keepMerchant)
+          pushPeek(
+            txnPeekMap,
+            peekKey("type-merchant", typeLabel, merchant),
+            peek,
+          );
+      }
+    }
 
     return {
         currency,

@@ -5,6 +5,7 @@ import { useState, type ReactNode } from "react";
 import { Toaster } from "@/components/ui/sonner";
 import { ConvexClientProvider } from "@/shared/convex/ConvexClientProvider";
 import { EnsureUserBootstrap } from "@/shared/convex/EnsureUserBootstrap";
+import { ErrorBoundary } from "@/shared/errors/ErrorBoundary";
 
 export function Providers({ children }: { children: ReactNode }) {
   const [queryClient] = useState(
@@ -28,7 +29,7 @@ export function Providers({ children }: { children: ReactNode }) {
     <ConvexClientProvider>
       <EnsureUserBootstrap>
         <QueryClientProvider client={queryClient}>
-          {children}
+          <ErrorBoundary>{children}</ErrorBoundary>
           <Toaster />
         </QueryClientProvider>
       </EnsureUserBootstrap>

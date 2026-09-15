@@ -7,7 +7,8 @@ import { ScrollTopX } from "@/components/ui/table";
 import { formatMoney } from "@/domains/dashboard/domain/money";
 import type { DashboardTransaction } from "@/domains/dashboard/domain/types";
 import { ledgerDebitCredit } from "@/domains/transactions/domain/debitCredit";
-import { format, isValid, parseISO, subMonths, subWeeks } from "date-fns";
+import { formatDisplayDate } from "@/shared/lib/format-date";
+import { isValid, parseISO, subMonths, subWeeks } from "date-fns";
 import { useMemo, useState } from "react";
 
 type RangeKey = "4w" | "3m" | "6m" | "12m";
@@ -31,12 +32,6 @@ const STATUS_OPTIONS: { key: StatusKey; label: string }[] = [
 function parseTxnDate(value: string) {
   const date = parseISO(value.trim());
   return isValid(date) ? date : null;
-}
-
-function formatTxnDate(value: string) {
-  const date = parseTxnDate(value);
-  if (!date) return value;
-  return format(date, "MMM d, yyyy");
 }
 
 function rangeStart(key: RangeKey, now: Date) {
@@ -218,8 +213,9 @@ export function AccountPastTransactions({
         txn.merchantClean,
         txn.originalDescription,
         txn.transactionCode,
-        txn.categoryDetailed,
-        txn.categoryPrimary,
+        txn.sectionName,
+        txn.categoryName,
+        txn.subcategoryName,
       ]
         .filter(Boolean)
         .join(" ")
@@ -231,8 +227,13 @@ export function AccountPastTransactions({
   }, [transactions, currentBalance, range, status, search, sortKey, sortDir]);
 
   const rangeLabel = useMemo(() => {
-    const end = format(new Date(), "MMMM d, yyyy");
-    const start = format(rangeStart(range, new Date()), "MMMM d, yyyy");
+    const fmt = new Intl.DateTimeFormat("en-US", {
+      month: "long",
+      day: "numeric",
+      year: "numeric",
+    });
+    const end = fmt.format(new Date());
+    const start = fmt.format(rangeStart(range, new Date()));
     return `${start} to ${end}`;
   }, [range]);
 
@@ -390,8 +391,8 @@ export function AccountPastTransactions({
                     key={txn.transactionId}
                     className="border-b border-[#e5e9ef]"
                   >
-                    <td className="whitespace-nowrap py-3.5 pr-3 text-[#1a2330]">
-                      {formatTxnDate(txn.date)}
+                    <td className="whitespace-nowrap py-3.5 pr-3 font-mono tabular-nums text-[#1a2330]">
+                      {formatDisplayDate(txn.date)}
                     </td>
                     <td className="min-w-0 py-3.5 pr-3 text-[#1a2330]">
                       <span className="line-clamp-2 break-words">

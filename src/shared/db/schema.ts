@@ -129,6 +129,7 @@ export const statementUploads = sqliteTable("statement_uploads", {
 export const transactionSections = sqliteTable("transaction_sections", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   name: text("name").notNull().unique(),
+  description: text("description"),
 });
 
 /** Filter lookup: Spread (Income + Needs / Wants / Savings) */
@@ -145,6 +146,7 @@ export const transactionSpreads = sqliteTable("transaction_spreads", {
 export const transactionCategories = sqliteTable("transaction_categories", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   name: text("name").notNull().unique(),
+  description: text("description"),
   sectionId: integer("section_id").references(() => transactionSections.id, {
     onDelete: "set null",
   }),
@@ -156,6 +158,7 @@ export const transactionSubcategories = sqliteTable(
   {
     id: integer("id").primaryKey({ autoIncrement: true }),
     name: text("name").notNull().unique(),
+    description: text("description"),
     categoryId: integer("category_id").references(
       () => transactionCategories.id,
       { onDelete: "set null" },
@@ -167,23 +170,25 @@ export const transactionSubcategories = sqliteTable(
 export const transactionTypes = sqliteTable("transaction_types", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   name: text("name").notNull().unique(),
+  description: text("description"),
 });
 
 /** Filter lookup: Type (Fee, Subscription, …) */
 export const transactionKinds = sqliteTable("transaction_kinds", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   name: text("name").notNull().unique(),
+  description: text("description"),
 });
 
 /**
- * One flat ledger row — columns match the transactions CSV export.
+ * One flat ledger row - columns match the transactions CSV export.
  * Filter dims also store FK ids when present.
  */
 export const transactions = sqliteTable(
   "transactions",
   {
     id: integer("id").primaryKey({ autoIncrement: true }),
-    /** Stable fingerprint (`stmt_…`) — CSV `transactionId` */
+    /** Stable fingerprint (`stmt_…`) - CSV `transactionId` */
     transactionId: text("transaction_id").notNull().unique(),
 
     posted: text("posted").notNull(),
@@ -228,9 +233,6 @@ export const transactions = sqliteTable(
       onDelete: "set null",
     }),
 
-    categoryPrimary: text("category_primary"),
-    categoryDetailed: text("category_detailed"),
-    categoryConfidence: text("category_confidence"),
     tags: text("tags"),
     channel: text("channel"),
     txnCode: text("txn_code"),

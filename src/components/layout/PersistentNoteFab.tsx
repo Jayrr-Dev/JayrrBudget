@@ -29,6 +29,7 @@ import {
   type UserNoteRecord,
 } from "@/domains/user-notes/userNotesStore";
 import { cn } from "@/lib/utils";
+import { downloadCsv, toCsv } from "@/shared/lib/csv";
 import {
   ChevronLeft,
   FileSpreadsheet,
@@ -45,6 +46,14 @@ import {
   type ReactElement,
 } from "react";
 
+function storeSheetCsvFilename(tabName: string) {
+  const slug = tabName
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
+  return `${slug || "store-sheet"}.csv`;
+}
+
 const FAB_COLLAPSED_PX = 32;
 const FAB_EXPANDED_ICON_ONLY_SEGMENT_PX = 28;
 const FAB_EXPANDED_PILL_INNER_PADDING_PX = 8;
@@ -55,7 +64,7 @@ const FAB_EXPANDED_MAX_PX = 88;
 const BADGE_CAP = 99;
 
 const CORNER_BADGE_CLASS =
-  "pointer-events-none absolute -top-0.5 -right-0.5 z-[1] flex min-h-3 min-w-3 items-center justify-center rounded-full border border-[var(--background)] bg-red-600 px-0.5 text-[9px] font-semibold leading-none text-white shadow-sm";
+  "pointer-events-none absolute -top-0.5 -right-0.5 z-[1] flex min-h-3 min-w-3 items-center justify-center rounded-full border border-[var(--background)] bg-[var(--muted-foreground)] px-0.5 text-[9px] font-semibold leading-none text-[var(--background)] shadow-sm";
 
 function formatBadge(value: number): string {
   const n = Math.max(0, Math.floor(value));
@@ -308,6 +317,8 @@ function StoreSheetPanel({
         sideOffset={8}
         className="pointer-events-auto w-[min(24rem,calc(100vw-1rem))] gap-0 overflow-hidden border border-[var(--border)] bg-[var(--background)] p-0 shadow-lg"
         onOpenAutoFocus={(event) => event.preventDefault()}
+        // Stay open while clicking Analysis + / page; close via Sheet FAB or Escape.
+        onInteractOutside={(event) => event.preventDefault()}
       >
         <div className="relative border-b border-[var(--border)] bg-[var(--muted)]/25">
           <div
@@ -408,7 +419,7 @@ function StoreSheetPanel({
           </div>
         )}
 
-        <div className="flex items-center justify-end border-t border-[var(--border)] px-2 py-1.5">
+        <div className="flex items-center justify-end gap-0.5 border-t border-[var(--border)] px-2 py-1.5">
           <Button
             type="button"
             variant="ghost"
@@ -418,6 +429,30 @@ function StoreSheetPanel({
             onClick={() => actions.clearActive()}
           >
             Clear
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="xs"
+            className="text-[var(--muted-foreground)]"
+            disabled={rows.length === 0}
+            onClick={() =>
+              downloadCsv(
+                storeSheetCsvFilename(activeTab?.name ?? "store-sheet"),
+                toCsv(
+                  ["Name", "Parent", "Spend", "Count", "Currency"],
+                  rows.map((row) => [
+                    row.name,
+                    row.parent ?? "",
+                    row.spend,
+                    row.count,
+                    row.currency,
+                  ]),
+                ),
+              )
+            }
+          >
+            Export CSV
           </Button>
         </div>
       </PopoverContent>

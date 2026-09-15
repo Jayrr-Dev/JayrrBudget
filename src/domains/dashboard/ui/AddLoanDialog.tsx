@@ -30,6 +30,13 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import {
+  LOAN_TYPES,
+  RATE_TYPES,
+  loanTypeMeta,
+  type LoanType,
+  type RateType,
+} from "@/domains/loans/domain/loanTypes";
+import {
   PAYMENT_FREQUENCIES,
   type PaymentFrequency,
 } from "@/domains/loans/domain/paymentFrequency";
@@ -41,6 +48,8 @@ type AddLoanDialogProps = {
 
 const emptyForm = {
   name: "",
+  loanType: "auto" as LoanType,
+  rateType: "fixed" as RateType,
   vehicleLabel: "",
   principalStart: "",
   annualRatePct: "",
@@ -56,9 +65,20 @@ export function AddLoanDialog({ open, onOpenChange }: AddLoanDialogProps) {
   const createCustomLoan = useMutation(api.dashboard.createCustomLoan);
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
+  const typeMeta = loanTypeMeta(form.loanType);
 
   function setField(key: keyof typeof emptyForm, value: string) {
     setForm((prev) => ({ ...prev, [key]: value }));
+  }
+
+  function onLoanTypeChange(next: LoanType) {
+    const meta = loanTypeMeta(next);
+    setForm((prev) => ({
+      ...prev,
+      loanType: next,
+      paymentFrequency: meta.defaultFrequency,
+      rateType: meta.defaultRateType,
+    }));
   }
 
   async function onSubmit(event: React.FormEvent) {
@@ -91,6 +111,8 @@ export function AddLoanDialog({ open, onOpenChange }: AddLoanDialogProps) {
     try {
       const { accountId } = await createCustomLoan({
         name: form.name.trim(),
+        loanType: form.loanType,
+        rateType: form.rateType,
         vehicleLabel: form.vehicleLabel.trim() || null,
         principalStart,
         annualRate: annualRatePct / 100,
@@ -124,36 +146,63 @@ export function AddLoanDialog({ open, onOpenChange }: AddLoanDialogProps) {
           <DialogHeader>
             <DialogTitle>Add loan</DialogTitle>
             <DialogDescription>
-              Create a custom lending account with amortization terms.
+              Track a mortgage, auto, student, personal, HELOC, or other loan
+              with amortization terms.
             </DialogDescription>
           </DialogHeader>
 
           <div className="grid gap-3">
+            <Field
+              label="Loan type"
+              htmlFor="loan-type"
+              info={{
+                title: "Loan type",
+                body: "Sets the account subtype and the optional collateral field (vehicle, property, school, etc.).",
+              }}
+            >
+              <NativeSelect
+                id="loan-type"
+                className="w-full"
+                value={form.loanType}
+                onChange={(e) => onLoanTypeChange(e.target.value as LoanType)}
+              >
+                {LOAN_TYPES.map((option) => (
+                  <NativeSelectOption key={option.value} value={option.value}>
+                    {option.label}
+                  </NativeSelectOption>
+                ))}
+              </NativeSelect>
+            </Field>
             <Field label="Name" htmlFor="loan-name">
               <Input
                 id="loan-name"
                 value={form.name}
                 onChange={(e) => setField("name", e.target.value)}
-                placeholder="e.g. Car loan"
+                placeholder={typeMeta.namePlaceholder}
                 required
                 autoFocus
               />
             </Field>
-            <Field label="Vehicle (optional)" htmlFor="loan-vehicle">
-              <Input
-                id="loan-vehicle"
-                value={form.vehicleLabel}
-                onChange={(e) => setField("vehicleLabel", e.target.value)}
-                placeholder="2021 Lexus IS"
-              />
-            </Field>
+            {typeMeta.showCollateral ? (
+              <Field
+                label={typeMeta.collateralLabel}
+                htmlFor="loan-collateral"
+              >
+                <Input
+                  id="loan-collateral"
+                  value={form.vehicleLabel}
+                  onChange={(e) => setField("vehicleLabel", e.target.value)}
+                  placeholder={typeMeta.collateralPlaceholder}
+                />
+              </Field>
+            ) : null}
             <div className="grid grid-cols-2 gap-3">
               <Field
                 label="Principal"
                 htmlFor="loan-principal"
                 info={{
                   title: "Principal",
-                  body: "Starting balance this schedule is built from — usually what you still owe, not the original loan amount.",
+                  body: "Starting balance this schedule is built from. Usually what you still owe, not the original loan amount.",
                 }}
               >
                 <Input
@@ -167,20 +216,43 @@ export function AddLoanDialog({ open, onOpenChange }: AddLoanDialogProps) {
                   required
                 />
               </Field>
-              <Field label="Annual rate %" htmlFor="loan-rate">
-                <Input
-                  id="loan-rate"
-                  type="number"
-                  inputMode="decimal"
-                  step="0.01"
-                  min="0"
-                  value={form.annualRatePct}
-                  onChange={(e) => setField("annualRatePct", e.target.value)}
-                  placeholder="7.99"
-                  required
-                />
+              <Field
+                label="Rate type"
+                htmlFor="loan-rate-type"
+                info={{
+                  title: "Rate type",
+                  body: "Fixed stays at the rate you enter. Variable can change; the schedule still uses your current rate as an estimate until you update it.",
+                }}
+              >
+                <NativeSelect
+                  id="loan-rate-type"
+                  className="w-full"
+                  value={form.rateType}
+                  onChange={(e) =>
+                    setField("rateType", e.target.value as RateType)
+                  }
+                >
+                  {RATE_TYPES.map((option) => (
+                    <NativeSelectOption key={option.value} value={option.value}>
+                      {option.label}
+                    </NativeSelectOption>
+                  ))}
+                </NativeSelect>
               </Field>
             </div>
+            <Field label="Annual rate %" htmlFor="loan-rate">
+              <Input
+                id="loan-rate"
+                type="number"
+                inputMode="decimal"
+                step="0.01"
+                min="0"
+                value={form.annualRatePct}
+                onChange={(e) => setField("annualRatePct", e.target.value)}
+                placeholder="7.99"
+                required
+              />
+            </Field>
             <div className="grid grid-cols-2 gap-3">
               <Field label="Payment" htmlFor="loan-payment">
                 <Input
@@ -220,7 +292,7 @@ export function AddLoanDialog({ open, onOpenChange }: AddLoanDialogProps) {
                 htmlFor="loan-frequency"
                 info={{
                   title: "Payment frequency",
-                  body: "How often the bank pulls the payment. This sets the payment calendar and the interest period rate.",
+                  body: "How often the bank pulls the payment. This sets the payment calendar and the interest period rate. Defaults change with loan type.",
                 }}
               >
                 <NativeSelect

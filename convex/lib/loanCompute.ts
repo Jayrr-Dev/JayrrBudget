@@ -24,6 +24,8 @@ export type LoanTermsRow = {
   matchAmount: number;
   principalOverride: number | null;
   overrideAsOf: string | null;
+  loanType: string;
+  rateType: string;
   vehicleLabel: string | null;
 };
 
@@ -39,6 +41,8 @@ export type LoanDashboardSummary = {
   remainingPayments: number;
   firstPaymentDate: string;
   maturityDate: string;
+  loanType: string;
+  rateType: string;
   vehicleLabel: string | null;
   paidInterest: number;
   paidPrincipal: number;
@@ -66,6 +70,8 @@ export function summaryFromAmortize(
     remainingPayments: result.remainingPayments,
     firstPaymentDate: terms.firstPaymentDate,
     maturityDate: terms.maturityDate,
+    loanType: terms.loanType,
+    rateType: terms.rateType,
     vehicleLabel: terms.vehicleLabel,
     paidInterest: result.paidInterest,
     paidPrincipal: result.paidPrincipal,

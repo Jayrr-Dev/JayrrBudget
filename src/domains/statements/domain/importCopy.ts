@@ -52,18 +52,6 @@ function extraLines(data: ImportBankStatementSuccess) {
     lines.push(`Balance mismatch (delta ${data.balanceDelta}).`);
   }
 
-  if (data.enrichment?.ok && data.enrichment.enriched > 0) {
-    lines.push(`Enriched ${data.enrichment.enriched} merchants.`);
-  } else if (data.enrichment?.error) {
-    lines.push(`Enrichment skipped: ${data.enrichment.error}`);
-  }
-
-  if (data.hygiene?.ok && data.hygiene.aiUpdated > 0) {
-    lines.push(`Cleaned ${data.hygiene.aiUpdated} categories.`);
-  } else if (data.hygiene?.error) {
-    lines.push(`Category cleanup skipped: ${data.hygiene.error}`);
-  }
-
   return lines;
 }
 
@@ -73,10 +61,7 @@ export function describeImportResult(
 ): ImportCopy {
   const title = OUTCOMES[outcomeKey(data)](data);
   const description = extraLines(data).join(" ") || undefined;
-  const tone: ToastTone =
-    data.balanceOk === false || data.hygiene?.error || data.enrichment?.error
-      ? "warning"
-      : "success";
+  const tone: ToastTone = data.balanceOk === false ? "warning" : "success";
 
   return { tone, title, description };
 }

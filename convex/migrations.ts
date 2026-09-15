@@ -7,6 +7,7 @@ import { action, internalMutation, mutation } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { requireRole, requireUser } from "./lib/auth";
 import { ensureModulesForUser } from "./lib/ensureModules";
+import { taxonomyDescription } from "./lib/taxonomyDescriptions";
 import type { Id } from "./_generated/dataModel";
 
 const LEDGER_TABLES = [
@@ -21,6 +22,7 @@ const LEDGER_TABLES = [
   "transactionSubcategories",
   "transactionTypes",
   "transactionKinds",
+  "merchants",
   "transactions",
   "appModules",
 ] as const;
@@ -77,7 +79,7 @@ export const claimUnownedData = mutation({
 
 /**
  * Admin-only cutover: point every ledger row at the signed-in admin.
- * Normal logins must never call this — it steals other users' data.
+ * Normal logins must never call this - it steals other users' data.
  */
 export const reassignAllLedgersToCurrentUser = mutation({
   args: {},
@@ -269,5 +271,103 @@ export const setRoleByEmailCli = mutation({
       await ensureModulesForUser(ctx, updated);
     }
     return { userId: target._id, email, role: args.role };
+  },
+});
+
+/**
+ * One-shot: fill description on taxonomy lookup rows (sections, categories, …).
+ * Safe to re-run; only patches rows missing description.
+ * CLI: npx convex run migrations:backfillTaxonomyDescriptions
+ */
+export const backfillTaxonomyDescriptions = internalMutation({
+  args: {
+    force: v.optional(v.boolean()),
+  },
+  returns: v.object({
+    sections: v.number(),
+    categories: v.number(),
+    subcategories: v.number(),
+    types: v.number(),
+    kinds: v.number(),
+  }),
+  handler: async (ctx, args) => {
+    const force = args.force === true;
+    const patchMissing = async (
+      table:
+        | "transactionSections"
+        | "transactionCategories"
+        | "transactionSubcategories"
+        | "transactionTypes"
+        | "transactionKinds",
+      facet: "section" | "category" | "subcategory" | "type" | "kind",
+    ) => {
+      const rows = await ctx.db.query(table).collect();
+      let count = 0;
+      for (const row of rows) {
+        const next = taxonomyDescription(facet, row.name);
+        const existing =
+          "description" in row && typeof row.description === "string"
+            ? row.description.trim()
+            : "";
+        if (!force && existing) continue;
+        if (existing === next) continue;
+        await ctx.db.patch(row._id, { description: next });
+        count += 1;
+      }
+      return count;
+    };
+
+    return {
+      sections: await patchMissing("transactionSections", "section"),
+      categories: await patchMissing("transactionCategories", "category"),
+      subcategories: await patchMissing(
+        "transactionSubcategories",
+        "subcategory",
+      ),
+      types: await patchMissing("transactionTypes", "type"),
+      kinds: await patchMissing("transactionKinds", "kind"),
+    };
+  },
+});
+
+/**
+ * Drop retired Plaid-style bank-pair fields from every transaction doc.
+ * Processes all pages in one call (ledger is small enough).
+ * Run before removing the fields from schema.ts.
+ */
+export const stripBankPairCategoryFields = internalMutation({
+  args: {},
+  returns: v.object({
+    patched: v.number(),
+    scanned: v.number(),
+  }),
+  handler: async (ctx) => {
+    // eslint-disable-next-line @convex-dev/no-query-collect -- one-shot migration
+    const rows = await ctx.db.query("transactions").collect();
+    let patched = 0;
+    for (const row of rows) {
+      const doc = row as Record<string, unknown> & {
+        _id: Id<"transactions">;
+        _creationTime: number;
+      };
+      if (
+        !("categoryPrimary" in doc) &&
+        !("categoryDetailed" in doc) &&
+        !("categoryConfidence" in doc)
+      ) {
+        continue;
+      }
+      const {
+        _id,
+        _creationTime,
+        categoryPrimary: _p,
+        categoryDetailed: _d,
+        categoryConfidence: _c,
+        ...rest
+      } = doc;
+      await ctx.db.replace(_id, rest as any);
+      patched += 1;
+    }
+    return { patched, scanned: rows.length };
   },
 });

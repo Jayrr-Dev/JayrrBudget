@@ -24,6 +24,7 @@ const TABLE_META = {
   },
   transaction_types: { convex: "transactionTypes", scope: "ledger" },
   transaction_kinds: { convex: "transactionKinds", scope: "ledger" },
+  merchants: { convex: "merchants", scope: "ledger" },
   transactions: { convex: "transactions", scope: "ledger" },
   app_modules: { convex: "appModules", scope: "ledger" },
   scratch_notes: { convex: "scratchNotes", scope: "ledger" },

@@ -50,9 +50,7 @@ export async function getBudgetContextForCanvas() {
         txn.subcategoryName ||
         txn.typeName ||
         txn.categoryName ||
-        txn.sectionName ||
-        txn.categoryDetailed ||
-        txn.categoryPrimary,
+        txn.sectionName,
     })),
   };
 }

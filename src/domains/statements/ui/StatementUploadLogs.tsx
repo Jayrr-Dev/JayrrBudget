@@ -2,24 +2,12 @@
 
 import { createColumnHelper } from "@tanstack/react-table";
 import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
 import { Icon } from "@iconify/react";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import type { DataTableFeatures } from "@/components/ui/data-table-features";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import type { StatementUploadLog } from "@/domains/statements/domain/types";
-import {
-  fetchStatementUpload,
-  fetchStatementUploads,
-} from "@/domains/statements/queries/fetchStatementUploads";
+import { fetchStatementUploads } from "@/domains/statements/queries/fetchStatementUploads";
 import { statementQueryKeys } from "@/domains/statements/queries/query-keys";
 import { StatementUploadRowActions } from "@/domains/statements/ui/StatementUploadRowActions";
 
@@ -38,58 +26,11 @@ function statusVariant(status: string) {
   return "outline" as const;
 }
 
-function OcrLogButton({ upload }: { upload: StatementUploadLog }) {
-  const [open, setOpen] = useState(false);
-  const detail = useQuery({
-    queryKey: statementQueryKeys.upload(upload.id),
-    queryFn: () => fetchStatementUpload(upload.id),
-    enabled: open && upload.hasOcr,
-  });
-
-  if (!upload.hasOcr) {
-    return (
-      <span className="text-xs text-[var(--muted-foreground)]">No OCR</span>
-    );
-  }
-
-  return (
-    <>
-      <Button
-        type="button"
-        variant="ghost"
-        size="sm"
-        onClick={() => setOpen(true)}
-      >
-        View OCR
-      </Button>
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="sm:max-w-3xl">
-          <DialogHeader>
-            <DialogTitle>{upload.filename}</DialogTitle>
-            <DialogDescription>
-              OCR markdown from Mistral for this upload.
-            </DialogDescription>
-          </DialogHeader>
-          {detail.isPending ? (
-            <p className="text-sm text-[var(--muted-foreground)]">Loading…</p>
-          ) : detail.isError ? (
-            <p className="text-sm text-red-700">{detail.error.message}</p>
-          ) : (
-            <pre className="max-h-[60vh] overflow-auto rounded-lg border border-[var(--border)] bg-[var(--background)] p-3 text-xs whitespace-pre-wrap">
-              {detail.data.upload.ocrMarkdown ?? "(empty)"}
-            </pre>
-          )}
-        </DialogContent>
-      </Dialog>
-    </>
-  );
-}
-
 const columns = columnHelper.columns([
   columnHelper.display({
     id: "actions",
     header: () => (
-      <span className="inline-flex items-center justify-center">
+      <span className="flex w-full items-center justify-center">
         <Icon
           icon="mynaui:mouse-pointer-click-solid"
           className="size-4 text-[var(--muted-foreground)]"
@@ -98,7 +39,11 @@ const columns = columnHelper.columns([
         <span className="sr-only">Actions</span>
       </span>
     ),
-    cell: ({ row }) => <StatementUploadRowActions upload={row.original} />,
+    cell: ({ row }) => (
+      <div className="flex w-full items-center justify-center">
+        <StatementUploadRowActions upload={row.original} />
+      </div>
+    ),
     enableSorting: false,
     enableHiding: true,
     meta: { label: "Actions", width: "3.25rem" },
@@ -121,7 +66,7 @@ const columns = columnHelper.columns([
         <p className="truncate text-xs text-[var(--muted-foreground)]">
           {[row.original.institutionName, row.original.accountMask]
             .filter(Boolean)
-            .join(" · ") || "—"}
+            .join(" · ") || "-"}
         </p>
       </div>
     ),
@@ -146,7 +91,7 @@ const columns = columnHelper.columns([
   columnHelper.accessor("pageCount", {
     header: "Pages",
     enableHiding: false,
-    cell: ({ getValue }) => String(getValue() ?? "—"),
+    cell: ({ getValue }) => String(getValue() ?? "-"),
   }),
   columnHelper.display({
     id: "counts",
@@ -187,8 +132,8 @@ const columns = columnHelper.columns([
             <p className="text-xs text-[var(--muted-foreground)]">{period}</p>
           ) : null}
           <p>
-            {openingBalance != null ? openingBalance.toFixed(2) : "—"} →{" "}
-            {closingBalance != null ? closingBalance.toFixed(2) : "—"}
+            {openingBalance != null ? openingBalance.toFixed(2) : "-"} →{" "}
+            {closingBalance != null ? closingBalance.toFixed(2) : "-"}
           </p>
           {balanceOk === true ? (
             <p className="text-xs text-emerald-700">Balanced</p>
@@ -202,12 +147,6 @@ const columns = columnHelper.columns([
         </div>
       );
     },
-  }),
-  columnHelper.display({
-    id: "ocr",
-    header: "Parse log",
-    enableHiding: false,
-    cell: ({ row }) => <OcrLogButton upload={row.original} />,
   }),
 ]);
 

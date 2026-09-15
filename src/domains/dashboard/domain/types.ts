@@ -36,6 +36,8 @@ export type DashboardLoanSummary = {
   remainingPayments: number;
   firstPaymentDate: string;
   maturityDate: string;
+  loanType: string;
+  rateType: string;
   vehicleLabel: string | null;
   paidInterest: number;
   paidPrincipal: number;
@@ -66,9 +68,6 @@ export type DashboardTransaction = {
   date: string;
   authorizedDate: string | null;
   pending: boolean;
-  categoryPrimary: string | null;
-  categoryDetailed: string | null;
-  categoryConfidence: string | null;
   paymentChannel: string | null;
   transactionCode: string | null;
   website: string | null;

@@ -33,7 +33,7 @@ function AccountsContent() {
       <header className="space-y-1 border-b border-[var(--border)] pb-6">
         <h1 className="text-3xl font-semibold tracking-tight">Accounts</h1>
         <p className="text-[var(--muted-foreground)]">
-          Balances from linked banks and uploaded statements.
+          Open an account to see its balance and recent activity.
         </p>
       </header>
       {dashboard.isPending && !data ? (
@@ -56,7 +56,7 @@ export default function AccountsPage() {
           <header className="space-y-1 border-b border-[var(--border)] pb-6">
             <h1 className="text-3xl font-semibold tracking-tight">Accounts</h1>
             <p className="text-[var(--muted-foreground)]">
-              Balances from linked banks and uploaded statements.
+              Open an account to see its balance and recent activity.
             </p>
           </header>
           <BankAccountsLoadingSkeleton />

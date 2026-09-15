@@ -123,7 +123,7 @@ export const DesktopSidebar = ({
 export const MobileSidebar = ({
   className,
   children,
-  title = "JayrrBudget",
+  title = "Jayrr's Budget",
   ...props
 }: React.ComponentProps<"div"> & { title?: string }) => {
   const { open, setOpen } = useSidebar();

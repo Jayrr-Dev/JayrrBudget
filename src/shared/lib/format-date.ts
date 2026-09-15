@@ -9,10 +9,10 @@ const DISPLAY_PATTERN = "EEE, MMM d, yy";
  * so UTC midnight does not shift the weekday/day.
  */
 export function formatDisplayDate(value: string | null | undefined): string {
-  if (!value) return "—";
+  if (!value) return "-";
 
   const trimmed = value.trim();
-  if (!trimmed) return "—";
+  if (!trimmed) return "-";
 
   const date = parseISO(trimmed);
   if (!isValid(date)) return trimmed;
@@ -26,10 +26,10 @@ export function formatDisplayDate(value: string | null | undefined): string {
 export function formatShortDisplayDate(
   value: string | null | undefined,
 ): string {
-  if (!value) return "—";
+  if (!value) return "-";
 
   const trimmed = value.trim();
-  if (!trimmed) return "—";
+  if (!trimmed) return "-";
 
   const date = parseISO(trimmed);
   if (!isValid(date)) return trimmed;

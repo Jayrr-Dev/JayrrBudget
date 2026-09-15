@@ -3,7 +3,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import {
   DashboardToolbar,
-  LoadingSkeleton,
+  OverviewBadgesSkeleton,
   OverviewPanel,
   useDashboard,
 } from "@/domains/dashboard/ui/DashboardPanels";
@@ -22,11 +22,13 @@ export default function StatementsPage() {
       <header className="flex flex-col gap-4 border-b border-[var(--border)] pb-6 sm:flex-row sm:items-end sm:justify-between">
         <div className="space-y-1">
           <p className="text-sm tracking-[0.18em] text-[var(--muted-foreground)] uppercase">
-            Overview
+            Statements
           </p>
-          <h1 className="text-3xl font-semibold tracking-tight">Dashboard</h1>
+          <h1 className="text-3xl font-semibold tracking-tight">
+            Statement imports
+          </h1>
           <p className="max-w-xl text-[var(--muted-foreground)]">
-            Import statement PDFs, enrich merchants, mine spend.
+            Upload bank PDFs, set upload rules, and check what got imported.
           </p>
         </div>
         <DashboardToolbar
@@ -50,7 +52,7 @@ export default function StatementsPage() {
       ) : null}
 
       {isInitialLoading ? (
-        <LoadingSkeleton />
+        <OverviewBadgesSkeleton />
       ) : data ? (
         <OverviewPanel data={data} />
       ) : null}
@@ -59,7 +61,7 @@ export default function StatementsPage() {
         <div>
           <h2 className="text-xl font-semibold tracking-tight">Parse logs</h2>
           <p className="text-sm text-[var(--muted-foreground)]">
-            Past PDF imports — status, counts, and OCR text.
+            Past PDF imports: status, counts, and OCR text.
           </p>
         </div>
         <StatementUploadLogs />

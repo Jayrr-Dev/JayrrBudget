@@ -103,8 +103,9 @@ function mergeTwin(keeper: ParsedTxn, drop: ParsedTxn): ParsedTxn {
   return {
     ...keeper,
     authorizedDate,
-    categoryPrimary: keeper.categoryPrimary ?? drop.categoryPrimary,
-    categoryDetailed: keeper.categoryDetailed ?? drop.categoryDetailed,
+    section: keeper.section ?? drop.section,
+    category: keeper.category ?? drop.category,
+    subcategory: keeper.subcategory ?? drop.subcategory,
     paymentChannel: keeper.paymentChannel ?? drop.paymentChannel,
     merchantName: keeper.merchantName ?? drop.merchantName,
     foreignAmount: keeper.foreignAmount ?? drop.foreignAmount,

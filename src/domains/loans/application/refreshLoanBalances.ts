@@ -137,7 +137,7 @@ export async function refreshAllLoans(asOfDate?: string) {
 
 export async function refreshLoanAccount() {
   throw new Error(
-    "refreshLoanAccount is retired — use refreshAllLoans / api.dashboard.refreshLoans",
+    "refreshLoanAccount is retired. Use refreshAllLoans / api.dashboard.refreshLoans",
   );
 }
 
@@ -145,7 +145,7 @@ export async function ensureCarLoanSchema() {}
 
 export async function seedCibcCarLoanAccount() {
   throw new Error(
-    "seedCibcCarLoanAccount is retired — seed loanTerms in Convex instead",
+    "seedCibcCarLoanAccount is retired. Seed loanTerms in Convex instead",
   );
 }
 

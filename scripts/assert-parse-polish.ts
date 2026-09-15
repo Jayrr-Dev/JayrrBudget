@@ -13,8 +13,19 @@ import type { ParsedStatement } from "../src/domains/statements/domain/parsedSta
 import type { CategoryVocabulary } from "../src/domains/statements/application/categoryVocabulary";
 
 const vocab: CategoryVocabulary = {
-  categoryPrimary: ["TRANSFER", "ENTERTAINMENT", "GENERAL_SERVICES"],
-  categoryDetailed: ["Credit Card Payment", "Gyms", "SaaS", "Payment Protection"],
+  sections: ["Transfers", "Lifestyle", "Technology"],
+  categories: [
+    "Account Transfers",
+    "Personal Care",
+    "AI Services",
+    "Software & Subscriptions",
+  ],
+  subcategories: [
+    "Credit Card Payoffs",
+    "Gym Memberships",
+    "AI Assistants & Chat",
+    "Productivity & Creative",
+  ],
   paymentChannels: [],
   transactionCodes: [],
 };
@@ -29,9 +40,9 @@ function txn(
   return {
     authorizedDate: null,
     merchantName: null,
-    categoryPrimary: null,
-    categoryDetailed: null,
-    categoryConfidence: "MEDIUM",
+    section: null,
+    category: null,
+    subcategory: null,
     paymentChannel: "other",
     transactionCode: "other",
     pending: false,
@@ -92,7 +103,7 @@ const chequingCash: ParsedStatement = {
       description: "PAD PREAUTHORIZED DEBIT MOVATI",
       merchantName: "Movati",
       amount: -64.97,
-      categoryDetailed: "Personal Care",
+      category: "Personal Care",
     }),
     txn({
       date: "2025-08-15",
@@ -126,20 +137,20 @@ const card: ParsedStatement = {
       date: "2025-03-25",
       description: "PAYMENT THANK YOU",
       amount: -367.86,
-      categoryDetailed: "Payment Protection",
+      subcategory: "Payment Protection",
     }),
     txn({
       date: "2025-03-25",
       description: "PAYMENT THANK YOU",
       amount: -367.86,
-      categoryDetailed: "Transfer",
+      subcategory: "Transfer",
     }),
     txn({
       date: "2025-03-26",
       description: "OPENAI CHATGPT",
       merchantName: "OpenAI",
       amount: 21.0,
-      categoryDetailed: "Software",
+      subcategory: "Software",
     }),
   ],
 };
@@ -156,14 +167,17 @@ const payment = polished.transactions.find((row) =>
   row.description.includes("PAYMENT"),
 );
 assert(
-  payment?.categoryDetailed === "Credit Card Payment",
-  `payment category was ${payment?.categoryDetailed}`,
+  payment?.subcategory === "Credit Card Payoffs",
+  `payment category was ${payment?.subcategory}`,
 );
 assert(payment?.transactionCode === "payment", "payment code");
 const openai = polished.transactions.find((row) =>
   (row.merchantName ?? "").includes("OpenAI"),
 );
-assert(openai?.categoryDetailed === "SaaS", `openai was ${openai?.categoryDetailed}`);
+assert(
+  openai?.subcategory === "AI Assistants & Chat",
+  `openai was ${openai?.subcategory}`,
+);
 
 const gymFix = applyParseCategoryFixes({
   ...chequingCash,
@@ -173,10 +187,13 @@ const gymFix = applyParseCategoryFixes({
       description: "PAD MOVATI ATHLETIC",
       merchantName: "Movati",
       amount: 64.97,
-      categoryDetailed: "Personal Care",
+      category: "Personal Care",
     }),
   ],
 });
-assert(gymFix.transactions[0].categoryDetailed === "Gyms", "movati -> Gyms");
+assert(
+  gymFix.transactions[0].subcategory === "Gym Memberships",
+  "movati -> Gym Memberships",
+);
 
 console.log("parse polish asserts ok");

@@ -17,8 +17,6 @@ export type CashFlowSignals = {
   amountMinor: number;
   description: string | null;
   accountType: string | null;
-  categoryPrimary: string | null;
-  categoryDetailed: string | null;
   sectionName: string | null;
   categoryName: string | null;
   typeName: string | null;
@@ -77,22 +75,11 @@ const INTERNAL_TRANSFER_TYPES = new Set([
   "investment transfer",
 ]);
 
-const INTERNAL_TRANSFER_DETAILED = new Set([
-  "credit card payment",
-  "credit card payoffs",
-  "self transfers",
-  "internal transfers",
-  "internal transfer",
-  "investment transfer",
-]);
-
 function isIncomeBucket(signals: CashFlowSignals) {
   const section = norm(signals.sectionName);
-  const primary = norm(signals.categoryPrimary);
   const category = norm(signals.categoryName);
   return (
     section === "income" ||
-    primary === "income" ||
     /employment|government.*tax|cashback|rebate|salary|wage|payroll|paycheck|tax refund|tax credit|gst|hst/i.test(
       category,
     )
@@ -111,9 +98,8 @@ function isRefundRow(signals: CashFlowSignals) {
 function isInternalMove(signals: CashFlowSignals) {
   const description = signals.description ?? "";
   const category = norm(signals.categoryName);
-  const detailed = norm(signals.categoryDetailed);
   const type = norm(signals.typeName);
-  const primary = norm(signals.categoryPrimary);
+  const section = norm(signals.sectionName);
 
   if (looksLikeNamedEtransfer(description) && !looksLikeCardPayment(description)) {
     return false;
@@ -130,22 +116,17 @@ function isInternalMove(signals: CashFlowSignals) {
     signals.amountMinor < 0 &&
     (looksLikeCardPayment(description) ||
       norm(signals.transactionCode) === "payment" ||
-      INTERNAL_TRANSFER_DETAILED.has(detailed))
+      INTERNAL_TRANSFER_TYPES.has(type))
   ) {
     return true;
   }
 
   if (looksLikeCardPayment(description)) return true;
-  if (INTERNAL_TRANSFER_DETAILED.has(detailed)) return true;
   if (INTERNAL_TRANSFER_TYPES.has(type)) return true;
   if (looksLikePlainInternetTransfer(description)) return true;
   if (category === "investments" && type === "investment transfer") return true;
   if (category === "account transfers") return true;
-  if (
-    primary === "transfer" &&
-    detailed === "transfer" &&
-    category !== "external transfers"
-  ) {
+  if (section === "transfers" && category !== "external transfers") {
     return true;
   }
   return false;
@@ -177,8 +158,5 @@ export function spendCategoryLabel(
   if (signals.categoryName?.trim()) {
     return signals.categoryName.trim();
   }
-  return canonicalCategoryName(
-    fallback,
-    signals.typeName ?? signals.categoryDetailed,
-  );
+  return canonicalCategoryName(fallback, signals.typeName);
 }

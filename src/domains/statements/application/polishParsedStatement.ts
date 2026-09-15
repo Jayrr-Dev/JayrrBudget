@@ -29,8 +29,9 @@ function blob(txn: Pick<ParsedTxn, "description" | "merchantName">) {
 
 type CategoryFix = {
   test: (text: string) => boolean;
-  categoryPrimary: string;
-  categoryDetailed: string;
+  section: string;
+  category: string;
+  subcategory: string;
   transactionCode?: ParsedTxn["transactionCode"];
 };
 
@@ -42,8 +43,9 @@ const CATEGORY_FIXES: CategoryFix[] = [
       /pad\s+payment.{0,40}card/i.test(text) ||
       /internet\s+bill\s*pay.{0,40}card/i.test(text) ||
       /cibc\s+card\s+payment/i.test(text),
-    categoryPrimary: "TRANSFER",
-    categoryDetailed: "Credit Card Payment",
+    section: "Transfers",
+    category: "Account Transfers",
+    subcategory: "Credit Card Payoffs",
     transactionCode: "payment",
   },
   {
@@ -52,8 +54,9 @@ const CATEGORY_FIXES: CategoryFix[] = [
       /goodlife/i.test(text) ||
       /anytime\s*fitness/i.test(text) ||
       /\bgym\b/i.test(text),
-    categoryPrimary: "PERSONAL_CARE",
-    categoryDetailed: "Gyms",
+    section: "Lifestyle",
+    category: "Personal Care",
+    subcategory: "Gym Memberships",
   },
   {
     test: (text) =>
@@ -62,21 +65,24 @@ const CATEGORY_FIXES: CategoryFix[] = [
       /\bt3\s*chat\b/i.test(text) ||
       /anthropic/i.test(text) ||
       /\bcursor\b/i.test(text),
-    categoryPrimary: "GENERAL_SERVICES",
-    categoryDetailed: "SaaS",
+    section: "Technology",
+    category: "AI Services",
+    subcategory: "AI Assistants & Chat",
   },
   {
     test: (text) => /wealthsimple\s*tax/i.test(text),
-    categoryPrimary: "GENERAL_SERVICES",
-    categoryDetailed: "SaaS",
+    section: "Technology",
+    category: "Software & Subscriptions",
+    subcategory: "Productivity & Creative",
   },
   {
     test: (text) =>
       /\besso\b/i.test(text) ||
       /\bshell\b/i.test(text) ||
       /petro[-\s]?canada/i.test(text),
-    categoryPrimary: "TRANSPORTATION",
-    categoryDetailed: "Gas Stations",
+    section: "Transport",
+    category: "Fuel",
+    subcategory: "Gas Stations",
   },
   {
     test: (text) =>
@@ -85,31 +91,36 @@ const CATEGORY_FIXES: CategoryFix[] = [
       /abdl\s*student/i.test(text) ||
       /buy\s*now\s*pay\s*later/i.test(text) ||
       /\bbnpl\b/i.test(text),
-    categoryPrimary: "LOAN_PAYMENTS",
-    categoryDetailed: "Loans",
+    section: "Finance",
+    category: "Debt & Loans",
+    subcategory: "Student Loans",
   },
   {
     test: (text) =>
       /global\s+money\s+transfer/i.test(text) ||
       /internet\s+global\s+money/i.test(text),
-    categoryPrimary: "TRANSFER",
-    categoryDetailed: "Money Transfers",
+    section: "Transfers",
+    category: "External Transfers",
+    subcategory: "Remittances",
   },
   {
     test: (text) => /e-?transfer/i.test(text),
-    categoryPrimary: "TRANSFER",
-    categoryDetailed: "Money Transfers",
+    section: "Transfers",
+    category: "External Transfers",
+    subcategory: "Interac e-Transfer",
   },
   {
     test: (text) => /^internet\s+transfer\b/i.test(text),
-    categoryPrimary: "TRANSFER",
-    categoryDetailed: "Account Transfers",
+    section: "Transfers",
+    category: "Account Transfers",
+    subcategory: "Self Transfers",
     transactionCode: "transfer",
   },
   {
     test: (text) => /uber\s*eats|ubereats/i.test(text),
-    categoryPrimary: "FOOD_AND_DRINK",
-    categoryDetailed: "Restaurants",
+    section: "Lifestyle",
+    category: "Delivery Services",
+    subcategory: "Food Delivery",
   },
 ];
 
@@ -122,8 +133,9 @@ export function applyParseCategoryFixes(parsed: ParsedStatement): ParsedStatemen
       if (!fix) return txn;
       return {
         ...txn,
-        categoryPrimary: fix.categoryPrimary,
-        categoryDetailed: fix.categoryDetailed,
+        section: fix.section,
+        category: fix.category,
+        subcategory: fix.subcategory,
         transactionCode: fix.transactionCode ?? txn.transactionCode,
       };
     }),
@@ -227,5 +239,33 @@ export function polishParsedStatement(
     normalizeParsedCategories(withMask, options.vocabulary),
   );
   const deduped = options.dedupe(categorized);
+  return alignParsedAmountSigns(deduped);
+}
+
+export type PolishPaperFactsOptions = {
+  ocrMarkdown?: string | null;
+  sourceHint?: string | null;
+  dedupe: (parsed: ParsedStatement) => ParsedStatement;
+};
+
+/**
+ * Paper-facts polish only: clean text, lock mask, dedupe twins, fix amount signs.
+ * Does not invent categories, channels, or merchant labels.
+ */
+export function polishPaperFactsStatement(
+  raw: ParsedStatement,
+  options: PolishPaperFactsOptions,
+): ParsedStatement {
+  const cleaned = cleanTransactionText(raw);
+  const withMask = {
+    ...cleaned,
+    accountMask: resolveAccountMask({
+      parsedMask: cleaned.accountMask,
+      accountType: cleaned.accountType,
+      sourceHint: options.sourceHint,
+      ocrMarkdown: options.ocrMarkdown,
+    }),
+  };
+  const deduped = options.dedupe(withMask);
   return alignParsedAmountSigns(deduped);
 }

@@ -5,9 +5,15 @@ import {
   type CategoryVocabulary,
 } from "@/domains/statements/application/categoryVocabulary";
 import {
+  paperFactsStatementSchema,
+  paperFactsToParsed,
+  type PaperFactsStatement,
+} from "@/domains/statements/domain/paperFactsStatement";
+import {
   parsedStatementSchema,
   type ParsedStatement,
 } from "@/domains/statements/domain/parsedStatement";
+import { formatUserAiRulesPromptBlock } from "@/domains/statements/domain/userAiRules";
 import { z } from "zod";
 
 export {
@@ -20,6 +26,14 @@ const statementMetaSchema = parsedStatementSchema.omit({ transactions: true });
 
 const transactionBatchSchema = z.object({
   transactions: parsedStatementSchema.shape.transactions,
+});
+
+const paperFactsMetaSchema = paperFactsStatementSchema.omit({
+  transactions: true,
+});
+
+const paperFactsBatchSchema = z.object({
+  transactions: paperFactsStatementSchema.shape.transactions,
 });
 
 function splitOcrPages(ocrMarkdown: string) {
@@ -42,16 +56,16 @@ const SIGN_AND_BALANCE_RULES = [
   "Negative = money arriving (payroll, deposit, refund, credit, card payment, e-Transfer in).",
   "Chequing/savings: a withdrawal that LOWERS cash is still POSITIVE. Do not copy the running-balance column sign.",
   "Credit card / LOC: a purchase that RAISES amount owing is POSITIVE. A payment is NEGATIVE.",
-  "BALANCE — cards/LOC: openingBalance + sum(amounts) = closingBalance (±0.02).",
-  "BALANCE — chequing/savings: openingBalance - sum(amounts) = closingBalance (±0.02).",
+  "BALANCE: cards/LOC: openingBalance + sum(amounts) = closingBalance (±0.02).",
+  "BALANCE: chequing/savings: openingBalance - sum(amounts) = closingBalance (±0.02).",
 ].join("\n");
 
 const DEDUP_AND_META_RULES = [
-  "CRITICAL — Canadian credit cards (CIBC Visa etc.) list TWO dates per line: Trans date and Post date.",
+  "CRITICAL: Canadian credit cards (CIBC Visa etc.) list TWO dates per line: Trans date and Post date.",
   "Emit ONE transaction per statement LINE. Never create two rows for the same line.",
   "Same amount + same description + same Post date = one row, even if OCR repeated it.",
   "date = Post date as YYYY-MM-DD. authorizedDate = Trans date as YYYY-MM-DD (null only if absent).",
-  "Never use month-day text like 'Jul 24' — always YYYY-MM-DD with the statement year.",
+  "Never use month-day text like 'Jul 24'. Always use YYYY-MM-DD with the statement year.",
   "Skip CreditSmart / spend-category summary tables, payment slips, ads, and page footers.",
   "Skip section total rows (Total payments, Total for card, etc.).",
   "openingBalance = Previous balance. closingBalance = Total balance / New balance.",
@@ -69,17 +83,18 @@ const MASK_RULES = [
 
 const CATEGORY_HARD_RULES = [
   canonicalCategoryAiRules(),
-  "PAYMENT THANK YOU / PAIEMENT MERCI / PAD to a CIBC card → categoryDetailed Credit Card Payment, categoryPrimary TRANSFER, transactionCode payment.",
-  "INTERNET TRANSFER (plain, no GLOBAL, no person name) → Account Transfers / Internal Transfers. Not spending.",
-  "INTERNET GLOBAL MONEY TRANSFER / remittance / PHP → Money Transfers. Real money out.",
-  "E-TRANSFER + a person's name → Money Transfers. Out is spend; in is income.",
-  "PREAUTHORIZED DEBIT student loan / ABDL / BNPL → Loans. Never a second Loan Payments bucket.",
-  "OpenAI, ChatGPT, T3 Chat, Cursor, Anthropic, Wealthsimple Tax → SaaS (type), category Software.",
-  "Movati, GoodLife, gym memberships → Gyms under Personal Care.",
-  "Uber Eats → Restaurants. Uber Holdings / Uber trip (no Eats) → Rideshare.",
-  "Esso / Shell / Petro-Canada, even with 7-Eleven on the same line → Gas Stations.",
-  "Plain 7-Eleven with no fuel brand → Convenience Store.",
-  "Purchase refunds (Amazon CREDIT, return) stay Shopping (or original category), transactionCode refund. Never Income.",
+  "PAYMENT THANK YOU / PAIEMENT MERCI / PAD to a CIBC card → section Transfers, category Account Transfers, subcategory Credit Card Payoffs, transactionCode payment.",
+  "INTERNET TRANSFER (plain, no GLOBAL, no person name) → Transfers / Account Transfers / Self Transfers. Not spending.",
+  "INTERNET GLOBAL MONEY TRANSFER / remittance / PHP → Transfers / External Transfers / Remittances. Real money out.",
+  "E-TRANSFER + a person's name → Transfers / External Transfers / Interac e-Transfer. Out is spend; in is income.",
+  "PREAUTHORIZED DEBIT student loan / ABDL / BNPL → Finance / Debt & Loans / Student Loans.",
+  "OpenAI, ChatGPT, T3 Chat, Cursor, Anthropic → Technology / AI Services / AI Assistants & Chat.",
+  "Wealthsimple Tax → Technology / Software & Subscriptions / Productivity & Creative.",
+  "Movati, GoodLife, gym memberships → Lifestyle / Personal Care / Gym Memberships.",
+  "Uber Eats → Lifestyle / Delivery Services / Food Delivery. Uber Holdings / Uber trip (no Eats) → Transport / Rideshare.",
+  "Esso / Shell / Petro-Canada, even with 7-Eleven on the same line → Transport / Fuel / Gas Stations.",
+  "Plain 7-Eleven with no fuel brand → Convenience under merchandise.",
+  "Purchase refunds (Amazon CREDIT, return) stay under the original tree, transactionCode refund. Never Income.",
 ].join("\n");
 
 const BALANCE_AND_DEDUP_RULES = [
@@ -89,17 +104,30 @@ const BALANCE_AND_DEDUP_RULES = [
   CATEGORY_HARD_RULES,
 ].join("\n");
 
+/** Paper-facts extract: ledger math + line text only (no categories / merchants). */
+const PAPER_FACTS_RULES = [
+  SIGN_AND_BALANCE_RULES,
+  DEDUP_AND_META_RULES,
+  MASK_RULES,
+  "Do NOT invent categories, subcategories, paymentChannel, merchantName, or transactionCode.",
+  "Fill date, authorizedDate, description, amount, pending, and locationCity/Region/Country when present.",
+  "Keep description as the full original statement line (minus OCR dingbats).",
+].join("\n");
+
 function sourceHintBlock(sourceHint?: string) {
   if (!sourceHint?.trim()) return [];
   return [
-    `SOURCE HINT (folder/filename — use this for accountType and accountMask when OCR is ambiguous): ${sourceHint.trim()}`,
+    `SOURCE HINT (folder/filename; use this for accountType and accountMask when OCR is ambiguous): ${sourceHint.trim()}`,
   ];
 }
 
 /** Fast rich parse with a reliable model chain and page batching for long PDFs. */
 export async function parseStatementWithOpenRouter(
   ocrMarkdown: string,
-  options?: { vocabulary?: CategoryVocabulary; sourceHint?: string },
+  options?: {
+    vocabulary?: CategoryVocabulary;
+    sourceHint?: string;
+  },
 ): Promise<ParsedStatement> {
   const pages = splitOcrPages(ocrMarkdown);
   const started = Date.now();
@@ -193,7 +221,10 @@ export async function rebalanceParsedStatement(
     computedClosing: number | null;
     delta: number | null;
   },
-  options?: { vocabulary?: CategoryVocabulary; sourceHint?: string },
+  options?: {
+    vocabulary?: CategoryVocabulary;
+    sourceHint?: string;
+  },
 ): Promise<ParsedStatement> {
   const categoryBlock = categoryPromptBlock(options?.vocabulary);
   const hintBlock = sourceHintBlock(options?.sourceHint);
@@ -225,4 +256,90 @@ export async function rebalanceParsedStatement(
   });
 
   return object;
+}
+
+/**
+ * Faster paper-facts parse: dates, description, amounts, locations, account meta.
+ * No categories, channels, merchant labels, hygiene, or enrichment.
+ * Optional owner preferences apply only to this PDF extract (never other AI paths).
+ */
+export async function parseStatementPaperFacts(
+  ocrMarkdown: string,
+  options?: { sourceHint?: string; userRules?: string[] },
+): Promise<ParsedStatement> {
+  const pages = splitOcrPages(ocrMarkdown);
+  const started = Date.now();
+  const hintBlock = sourceHintBlock(options?.sourceHint);
+  // After hard rules in each prompt - preferences are advisory for this PDF only.
+  const userBlock = formatUserAiRulesPromptBlock(options?.userRules);
+
+  if (pages.length <= 2) {
+    const { object } = await generateObjectWithFallback({
+      schema: paperFactsStatementSchema,
+      logLabel: "statements-paper",
+      prompt: [
+        "Extract paper facts from this Canadian bank/credit-card OCR.",
+        "Extract EVERY posted transaction line. Prefer CAD.",
+        "accountType (pick one): chequing|checking, savings, credit|credit_card (Visa/Mastercard/Amex), lending|line_of_credit (LOC/HELOC/loan), other (TFSA/business/unclear).",
+        ...hintBlock,
+        PAPER_FACTS_RULES,
+        ...userBlock,
+        ocrMarkdown.slice(0, 120_000),
+      ].join("\n"),
+    });
+
+    console.info(
+      `[statements] paper-facts single-pass ${object.transactions.length} txns in ${Date.now() - started}ms`,
+    );
+    return paperFactsToParsed(object);
+  }
+
+  const preview = ocrMarkdown.slice(0, 24_000);
+
+  const metaPromise = generateObjectWithFallback({
+    schema: paperFactsMetaSchema,
+    logLabel: "statements-paper-meta",
+    prompt: [
+      "Extract statement metadata only from this Canadian bank/credit-card OCR.",
+      "No transactions. Prefer CAD.",
+      "accountType (pick one): chequing|checking, savings, credit|credit_card, lending|line_of_credit, other.",
+      ...hintBlock,
+      MASK_RULES,
+      "openingBalance = Previous balance. closingBalance = Total balance / New balance.",
+      "Fill statementPeriodStart/End, totalDebits, totalCredits when present.",
+      ...userBlock,
+      "",
+      preview,
+    ].join("\n"),
+  });
+
+  const pageResults = await mapPool(pages, 2, async (pageText, index) => {
+    const { object } = await generateObjectWithFallback({
+      schema: paperFactsBatchSchema,
+      logLabel: "statements-paper-page",
+      prompt: [
+        "Extract EVERY posted transaction LINE on this statement page OCR.",
+        "Canadian bank/credit card statement (often CIBC Visa).",
+        ...hintBlock,
+        PAPER_FACTS_RULES,
+        ...userBlock,
+        `This is page ${index + 1} of ${pages.length}.`,
+        pageText.slice(0, 40_000),
+      ].join("\n"),
+    });
+
+    return object.transactions;
+  });
+
+  const { object: meta } = await metaPromise;
+  const paper: PaperFactsStatement = {
+    ...meta,
+    transactions: pageResults.flat(),
+  };
+
+  console.info(
+    `[statements] paper-facts ${paper.transactions.length} txns across ${pages.length} pages in ${Date.now() - started}ms`,
+  );
+
+  return paperFactsToParsed(paper);
 }

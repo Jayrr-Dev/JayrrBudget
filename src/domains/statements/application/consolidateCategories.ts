@@ -1,6 +1,6 @@
 import {
   categoryMatchKey,
-  countCategoryDetailedUsage,
+  countSubcategoryUsage,
   loadCategoryVocabulary,
   normalizeCategoryLabel,
 } from "@/domains/statements/application/categoryVocabulary";
@@ -37,7 +37,7 @@ export type CategoryConsolidateResult = {
 
 async function generateConsolidateMerges(labels: string[]) {
   const prompt = [
-    "You clean a personal-finance categoryDetailed vocabulary.",
+    "You clean a personal-finance subcategory vocabulary.",
     "Merge near-duplicates / synonyms / plural-singular / typos into ONE canonical label.",
     "Examples that MUST merge:",
     '- "gas" + "gas station" + "gas stations" → "Gas Stations"',
@@ -108,7 +108,7 @@ function resolveMergeChain(
   return resolveMergeChain(next, map, seen);
 }
 
-async function applyDetailedMerges(
+async function applySubcategoryMerges(
   merges: Array<{ from: string; to: string }>,
 ) {
   if (merges.length === 0) {
@@ -140,18 +140,18 @@ async function applyDetailedMerges(
     const matched = await db
       .select({
         id: transactions.id,
-        label: transactions.categoryDetailed,
+        label: transactions.subcategory,
       })
       .from(transactions)
       .where(
-        sql`lower(trim(coalesce(${transactions.categoryDetailed}, ''))) = ${normalizeCategoryLabel(merge.from)}`,
+        sql`lower(trim(coalesce(${transactions.subcategory}, ''))) = ${normalizeCategoryLabel(merge.from)}`,
       );
 
     for (const row of matched) {
       if (!row.label || row.label === merge.to) continue;
       await db
         .update(transactions)
-        .set({ categoryDetailed: merge.to })
+        .set({ subcategory: merge.to })
         .where(eq(transactions.id, row.id));
       rowsUpdated += 1;
     }
@@ -165,21 +165,21 @@ async function applyDetailedMerges(
 }
 
 /**
- * Cleaning pass: merge near-duplicate categoryDetailed labels across the ledger.
+ * Cleaning pass: merge near-duplicate subcategory labels across the ledger.
  * Deterministic plural/case first, then AI for semantic twins (gas vs gas stations).
  */
 export async function consolidateCategoryLabels(): Promise<CategoryConsolidateResult> {
-  const usage = await countCategoryDetailedUsage();
+  const usage = await countSubcategoryUsage();
   if (usage.length < 2) {
     return { mergesApplied: 0, rowsUpdated: 0, merges: [] };
   }
 
   const deterministic = buildDeterministicMerges(usage);
   let workingUsage = usage;
-  let total = await applyDetailedMerges(deterministic);
+  let total = await applySubcategoryMerges(deterministic);
 
   if (deterministic.length > 0) {
-    workingUsage = await countCategoryDetailedUsage();
+    workingUsage = await countSubcategoryUsage();
   }
 
   const vocabulary = await loadCategoryVocabulary();
@@ -193,7 +193,7 @@ export async function consolidateCategoryLabels(): Promise<CategoryConsolidateRe
   try {
     const aiMerges = await generateConsolidateMerges(labels);
     const allowed = new Set(labels);
-    const preferred = new Set(vocabulary.categoryDetailed);
+    const preferred = new Set(vocabulary.subcategories);
     const cleaned = aiMerges
       .map((merge) => ({
         from: merge.from.trim(),
@@ -204,7 +204,7 @@ export async function consolidateCategoryLabels(): Promise<CategoryConsolidateRe
         if (!allowed.has(merge.from)) return false;
         // Prefer mapping onto an existing preferred label when keys match
         if (!preferred.has(merge.to)) {
-          const match = vocabulary.categoryDetailed.find(
+          const match = vocabulary.subcategories.find(
             (label) => categoryMatchKey(label) === categoryMatchKey(merge.to),
           );
           if (match) merge.to = match;
@@ -212,7 +212,7 @@ export async function consolidateCategoryLabels(): Promise<CategoryConsolidateRe
         return true;
       });
 
-    const aiResult = await applyDetailedMerges(cleaned);
+    const aiResult = await applySubcategoryMerges(cleaned);
     return {
       mergesApplied: total.mergesApplied + aiResult.mergesApplied,
       rowsUpdated: total.rowsUpdated + aiResult.rowsUpdated,

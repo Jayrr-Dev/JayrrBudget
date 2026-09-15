@@ -17,22 +17,33 @@ export const DEFAULT_USER_ROLE: UserRole = "normal";
  * Admin includes everything.
  */
 const ROLE_MODULES: Record<UserRole, readonly string[]> = {
-  normal: ["overview", "accounts", "transactions", "statements"],
+  normal: [
+    "overview",
+    "accounts",
+    "transactions",
+    "merchants",
+    "statements",
+    "issues",
+  ],
   premium: [
     "overview",
     "accounts",
     "transactions",
+    "merchants",
     "statements",
     "analysis",
     "canvas",
+    "issues",
   ],
   admin: [
     "overview",
     "accounts",
     "transactions",
+    "merchants",
     "statements",
     "analysis",
     "canvas",
+    "issues",
     "database",
     "modules",
   ],

@@ -24,7 +24,7 @@ export type EnrichmentCatalog = {
 const RETIRED =
   "Retired: flat transactions schema. Re-import CSV via scripts/rebuild-flat-transactions.ts";
 
-/** No-op — flat schema has no taxonomy_nodes table. */
+/** No-op - flat schema has no taxonomy_nodes table. */
 export async function ensureSeedTaxonomy() {}
 
 export async function loadEnrichmentCatalog(): Promise<EnrichmentCatalog> {

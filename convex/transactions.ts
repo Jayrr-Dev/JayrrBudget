@@ -4,6 +4,7 @@ import type { Id } from "./_generated/dataModel";
 import { ensureUser, requireUser } from "./lib/auth";
 import { classifySpread } from "./lib/spreads";
 import { hasTag, joinTags, splitTags } from "./lib/tags";
+import { taxonomyDescription } from "./lib/taxonomyDescriptions";
 
 const TAXONOMY_FIELDS = ["section", "spread", "category", "subcategory"] as const;
 
@@ -45,17 +46,26 @@ export const taxonomy = query({
       sections: sections
         .slice()
         .sort((a, b) => a.name.localeCompare(b.name))
-        .map((row) => ({ id: row.legacyId, name: row.name })),
+        .map((row) => ({
+          id: row.legacyId,
+          name: row.name,
+          description: row.description,
+        })),
       spreads: spreads
         .slice()
         .sort((a, b) => a.sortOrder - b.sortOrder)
-        .map((row) => ({ id: row.legacyId, name: row.name })),
+        .map((row) => ({
+          id: row.legacyId,
+          name: row.name,
+          description: row.description,
+        })),
       categories: categories
         .slice()
         .sort((a, b) => a.name.localeCompare(b.name))
         .map((row) => ({
           id: row.legacyId,
           name: row.name,
+          description: row.description,
           sectionId: row.sectionLegacyId,
           sectionName:
             row.sectionLegacyId == null
@@ -68,6 +78,7 @@ export const taxonomy = query({
         .map((row) => ({
           id: row.legacyId,
           name: row.name,
+          description: row.description,
           categoryId: row.categoryLegacyId,
           categoryName:
             row.categoryLegacyId == null
@@ -132,6 +143,7 @@ export const tagByDateRange = mutation({
     tag: v.string(),
     startDate: v.string(),
     endDate: v.string(),
+    excludeTransactionIds: v.optional(v.array(v.string())),
   },
   handler: async (ctx, args) => {
     const user = await requireUser(ctx);
@@ -146,6 +158,12 @@ export const tagByDateRange = mutation({
       throw new Error("Start date must be on or before end date");
     }
 
+    const exclude = new Set(
+      (args.excludeTransactionIds ?? [])
+        .map((id) => id.trim())
+        .filter(Boolean),
+    );
+
     const matchedRows = await ctx.db
       .query("transactions")
       .withIndex("by_userId_posted", (q) =>
@@ -156,9 +174,13 @@ export const tagByDateRange = mutation({
       )
       .collect();
 
+    const candidates = matchedRows.filter(
+      (row) => !exclude.has(row.transactionId),
+    );
+
     let updated = 0;
     const now = Date.now();
-    for (const row of matchedRows) {
+    for (const row of candidates) {
       const tags = splitTags(row.tags);
       if (hasTag(tags, tag)) continue;
       tags.push(tag);
@@ -170,8 +192,9 @@ export const tagByDateRange = mutation({
     }
 
     return {
-      matched: matchedRows.length,
+      matched: candidates.length,
       updated,
+      excluded: exclude.size,
       tag,
       startDate,
       endDate,
@@ -225,12 +248,14 @@ export const updateTaxonomy = mutation({
       const existing = all.find((r) => norm(r.name) === norm(name));
       if (existing) return existing;
       const legacyId = await nextLegacyId(ctx, "transactionSections", user._id);
+      const trimmed = name.trim();
       const id = await ctx.db.insert("transactionSections", {
         userId: user._id,
         legacyId,
-        name: name.trim(),
+        name: trimmed,
+        description: taxonomyDescription("section", trimmed),
       });
-      return { _id: id, legacyId, name: name.trim() };
+      return { _id: id, legacyId, name: trimmed };
     };
 
     const ensureSpread = async (name: string) => {
@@ -273,16 +298,18 @@ export const updateTaxonomy = mutation({
         "transactionCategories",
         user._id,
       );
+      const trimmed = name.trim();
       const id = await ctx.db.insert("transactionCategories", {
         userId: user._id,
         legacyId,
-        name: name.trim(),
+        name: trimmed,
         sectionLegacyId: sectionId,
+        description: taxonomyDescription("category", trimmed),
       });
       return {
         _id: id,
         legacyId,
-        name: name.trim(),
+        name: trimmed,
         sectionLegacyId: sectionId,
       };
     };
@@ -308,16 +335,18 @@ export const updateTaxonomy = mutation({
         "transactionSubcategories",
         user._id,
       );
+      const trimmed = name.trim();
       const id = await ctx.db.insert("transactionSubcategories", {
         userId: user._id,
         legacyId,
-        name: name.trim(),
+        name: trimmed,
         categoryLegacyId: categoryId,
+        description: taxonomyDescription("subcategory", trimmed),
       });
       return {
         _id: id,
         legacyId,
-        name: name.trim(),
+        name: trimmed,
         categoryLegacyId: categoryId,
       };
     };

@@ -40,7 +40,7 @@ export default function ProfilePage() {
       <header className="space-y-1 border-b border-[var(--border)] pb-6">
         <h1 className="text-3xl font-semibold tracking-tight">Profile</h1>
         <p className="text-[var(--muted-foreground)]">
-          Your account details for this ledger.
+          Your name and sign-in details.
         </p>
       </header>
 

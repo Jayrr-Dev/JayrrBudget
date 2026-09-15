@@ -349,7 +349,7 @@ function seedLayout(tables: DbTableInfo[], fks: DbForeignKey[]): LayoutSeed[] {
 
 /**
  * Same-column cards only. Push lower cards down when one above grows.
- * Never pull up — keeps manual spacing on collapse.
+ * Never pull up - keeps manual spacing on collapse.
  */
 function pushDownColumnOverlaps(
   positions: Record<string, Point>,
@@ -1756,7 +1756,7 @@ export function SchemaDiagram({
             })}
           </svg>
 
-          <TooltipProvider delayDuration={150}>
+          <TooltipProvider>
             {foreignKeys.map((fk, index) => {
               const child = nodeByName.get(fk.fromTable);
               const parent = nodeByName.get(fk.toTable);

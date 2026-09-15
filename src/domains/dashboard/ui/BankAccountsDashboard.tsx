@@ -20,6 +20,8 @@ import type {
 } from "@/domains/dashboard/domain/types";
 import { AccountPastTransactions } from "@/domains/dashboard/ui/AccountPastTransactions";
 import { AddLoanDialog } from "@/domains/dashboard/ui/AddLoanDialog";
+import { LOAN_TYPES, formatLoanRate, normalizeRateType } from "@/domains/loans/domain/loanTypes";
+import { formatDisplayDate } from "@/shared/lib/format-date";
 import { PlusIcon } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -48,8 +50,11 @@ function accountSecondaryLine(account: DashboardAccount) {
   const category = resolveAccountCategory(account);
   const loan = account.loanSummary;
   if (loan) {
+    const typeLabel =
+      LOAN_TYPES.find((t) => t.value === loan.loanType)?.label ?? null;
     const bits = [
       loan.vehicleLabel,
+      typeLabel && !loan.vehicleLabel ? typeLabel : null,
       `${loan.paymentsApplied}/${loan.paymentCount} payments`,
     ].filter(Boolean);
     return bits.join(" · ");
@@ -60,10 +65,6 @@ function accountSecondaryLine(account: DashboardAccount) {
       ? NETWORK_LABEL[detectCardNetwork(account)]
       : CATEGORY_LABEL[category];
   return [number, extra].filter(Boolean).join(" · ");
-}
-
-function formatPct(rate: number) {
-  return `${(rate * 100).toFixed(2)}%`;
 }
 
 function AccountRow({
@@ -161,11 +162,13 @@ function LoanPaymentHistory({
                   <td className="px-3 py-2 tabular-nums">
                     {row.paymentNumber}
                   </td>
-                  <td className="px-3 py-2 tabular-nums">
-                    {row.scheduledDate}
+                  <td className="px-3 py-2 font-mono tabular-nums">
+                    {formatDisplayDate(row.scheduledDate)}
                   </td>
-                  <td className="px-3 py-2 tabular-nums text-[var(--muted-foreground)]">
-                    {row.assumed ? "assumed" : (row.postedDate ?? "—")}
+                  <td className="px-3 py-2 font-mono tabular-nums text-[var(--muted-foreground)]">
+                    {row.assumed
+                      ? "assumed"
+                      : formatDisplayDate(row.postedDate)}
                   </td>
                   <td className="px-3 py-2 text-right tabular-nums">
                     {formatMoney(row.paymentAmount, currency)}
@@ -215,7 +218,7 @@ function AccountDetailView({
     account.officialName?.trim() ||
     account.name ||
     [account.type, account.subtype].filter(Boolean).join(" · ") ||
-    "—";
+    "-";
 
   return (
     <div className="space-y-8">
@@ -295,12 +298,29 @@ function AccountDetailView({
             {loan ? (
               <>
                 <DetailRow
+                  label="Loan type"
+                  value={
+                    LOAN_TYPES.find((t) => t.value === loan.loanType)?.label ??
+                    account.subtype ??
+                    "Loan"
+                  }
+                />
+                {loan.vehicleLabel ? (
+                  <DetailRow
+                    label={
+                      LOAN_TYPES.find((t) => t.value === loan.loanType)
+                        ?.collateralLabel.replace(" (optional)", "") ?? "Note"
+                    }
+                    value={loan.vehicleLabel}
+                  />
+                ) : null}
+                <DetailRow
                   label="Rate"
-                  value={`${formatPct(loan.annualRate)}${
-                    loan.aprDisclosed != null
-                      ? ` (APR ${formatPct(loan.aprDisclosed)})`
-                      : ""
-                  }`}
+                  value={formatLoanRate(
+                    loan.annualRate,
+                    normalizeRateType(loan.rateType),
+                    loan.aprDisclosed,
+                  )}
                 />
                 <DetailRow
                   label="First payment"
@@ -316,7 +336,7 @@ function AccountDetailView({
               <>
                 <DetailRow
                   label="Account"
-                  value={account.mask ? `•••• ${account.mask}` : number || "—"}
+                  value={account.mask ? `•••• ${account.mask}` : number || "-"}
                 />
                 <DetailRow
                   label="Type"

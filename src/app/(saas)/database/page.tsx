@@ -19,7 +19,7 @@ export default function DatabasePage() {
       <div className="mx-auto max-w-md space-y-2 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-5 py-6 text-center">
         <h1 className="text-lg font-semibold tracking-tight">Admin only</h1>
         <p className="text-sm text-[var(--muted-foreground)]">
-          The database explorer is limited to admin accounts.
+          Only admins can browse the database.
         </p>
       </div>
     );

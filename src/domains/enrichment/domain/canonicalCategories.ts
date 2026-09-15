@@ -252,16 +252,16 @@ export function canonicalCategoryName(
 /** Prompt block for parse / enrich / QA models. */
 export function canonicalCategoryAiRules() {
   return [
-    "CANONICAL CATEGORIES — reuse these exact names. Do not invent a near-duplicate.",
+    "CANONICAL CATEGORIES: reuse these exact names. Do not invent a near-duplicate.",
     ...CANONICAL_CATEGORIES.map((name) => `- ${name}`),
     "",
     "SPLIT RULES (never keep 'X and Y' as one category):",
-    "- Food vs Drink — restaurants/groceries/delivery = Food; coffee/cafe/alcohol/bars = Drink.",
-    "- Software vs Subscriptions — SaaS/dev tools = Software; streaming/memberships = Subscriptions.",
-    "- Rent vs Housing — rent PAD = Rent; mortgage/condo/repairs = Housing.",
-    "- Rideshare vs Transit — Uber/Lyft/taxi = Rideshare; bus/metro/GO/parking fare = Transit.",
-    "- Cash & ATM — cash advance and ATM withdrawal share one Transfers category.",
-    "- Hair Salons vs Barbers — salon = Hair Salons type; barber = Barbers type. Both under Personal Care.",
+    "- Food vs Drink: restaurants/groceries/delivery = Food; coffee/cafe/alcohol/bars = Drink.",
+    "- Software vs Subscriptions: SaaS/dev tools = Software; streaming/memberships = Subscriptions.",
+    "- Rent vs Housing: rent PAD = Rent; mortgage/condo/repairs = Housing.",
+    "- Rideshare vs Transit: Uber/Lyft/taxi = Rideshare; bus/metro/GO/parking fare = Transit.",
+    "- Cash & ATM: cash advance and ATM withdrawal share one Transfers category.",
+    "- Hair Salons vs Barbers: salon = Hair Salons type; barber = Barbers type. Both under Personal Care.",
     "",
     "MERGE RULES (never split these):",
     "- Loans = Loan Payments, Student Loans, BNPL, LOC principal PAD. One bucket.",

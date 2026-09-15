@@ -107,8 +107,9 @@ export type EnrichmentTxnInput = {
   amount: number;
   date: string;
   authorizedDate: string | null;
-  categoryPrimary: string | null;
-  categoryDetailed: string | null;
+  categoryName: string | null;
+  subcategoryName: string | null;
+  sectionName: string | null;
   paymentChannel: string | null;
   transactionCode: string | null;
   locationCity: string | null;

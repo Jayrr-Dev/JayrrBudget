@@ -25,7 +25,7 @@ export default function OverviewPage() {
           </p>
           <h1 className="text-3xl font-semibold tracking-tight">Dashboard</h1>
           <p className="max-w-xl text-[var(--muted-foreground)]">
-            Balances by deposit, credit, and lending accounts.
+            See balances across chequing, credit, and loan accounts.
           </p>
         </div>
         <div className="shrink-0 text-right">

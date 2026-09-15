@@ -17,7 +17,7 @@ import { useMemo, useState } from "react";
 const PAGE_SIZE = 50;
 
 function formatCell(value: unknown): string {
-  if (value == null) return "—";
+  if (value == null) return "-";
   if (typeof value === "boolean") return value ? "true" : "false";
   if (value instanceof Date) return value.toISOString();
   if (typeof value === "object") return JSON.stringify(value);
@@ -42,7 +42,7 @@ function TableBrowser({ table }: { table: string }) {
         <p className="text-sm text-[var(--muted-foreground)]">
           {browse.isPending
             ? "Loading rows…"
-            : `${pageStart}–${pageEnd} of ${total}`}
+            : `${pageStart}-${pageEnd} of ${total}`}
         </p>
         <div className="flex gap-2">
           <Button
@@ -200,7 +200,7 @@ export function DbExplorer() {
         <div className="space-y-0.5">
           <h1 className="text-2xl font-semibold tracking-tight">Database</h1>
           <p className="text-sm text-[var(--muted-foreground)]">
-            Schema map plus live rows. Click a table name to open the browser.
+            Browse tables and their rows. Click a table name to open it.
           </p>
         </div>
         {activeMeta ? (
@@ -305,7 +305,7 @@ export function DbExplorer() {
                               {col.name}
                             </td>
                             <td className="max-w-xl px-3 py-2 align-top text-sm leading-snug">
-                              {col.description ?? "—"}
+                              {col.description ?? "-"}
                             </td>
                             <td className="px-3 py-2 align-top font-mono text-xs text-[var(--muted-foreground)]">
                               {col.columnType || col.dataType}

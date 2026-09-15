@@ -133,10 +133,7 @@ export const COLUMN_HELP: Record<string, Record<string, string>> = {
     foreign_currency: "Foreign currency code, if present.",
   },
   transaction_bank_categories: {
-    transaction_id: "Which ledger row these bank labels belong to.",
-    category_primary: "Big spend bucket from the parser (FOOD_AND_DRINK).",
-    category_detailed: "Finer bucket from the parser.",
-    category_confidence: "How sure the parser was about that bucket.",
+    transaction_id: "Which ledger row these bank labels belong to (retired table).",
   },
   entities: {
     id: "This merchant node's number.",

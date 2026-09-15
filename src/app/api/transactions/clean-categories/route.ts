@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 export const runtime = "nodejs";
 
-/** @deprecated Turso hygiene pipeline — not ported to Convex yet. */
+/** @deprecated Turso hygiene pipeline - not ported to Convex yet. */
 export async function POST() {
   return NextResponse.json(
     {

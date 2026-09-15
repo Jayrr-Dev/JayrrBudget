@@ -24,6 +24,8 @@ export type ChartConfig = Record<
 
 type ChartContextProps = {
   config: ChartConfig
+  /** True while the pointer is scrolling over the chart - hide hover tooltips so the page can move. */
+  tooltipSuppressed: boolean
 }
 
 const ChartContext = React.createContext<ChartContextProps | null>(null)
@@ -57,10 +59,44 @@ function ChartContainer({
 }) {
   const uniqueId = React.useId()
   const chartId = `chart-${id ?? uniqueId.replace(/:/g, "")}`
+  const rootRef = React.useRef<HTMLDivElement>(null)
+  const [tooltipSuppressed, setTooltipSuppressed] = React.useState(false)
+  const scrollGuardRef = React.useRef(false)
+  const scrollEndTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(
+    null
+  )
+
+  React.useEffect(() => {
+    const el = rootRef.current
+    if (!el) return
+
+    const onWheel = () => {
+      scrollGuardRef.current = true
+      setTooltipSuppressed(true)
+      if (scrollEndTimerRef.current) clearTimeout(scrollEndTimerRef.current)
+      scrollEndTimerRef.current = setTimeout(() => {
+        scrollGuardRef.current = false
+      }, 150)
+    }
+
+    const onMouseMove = () => {
+      if (scrollGuardRef.current) return
+      setTooltipSuppressed((prev) => (prev ? false : prev))
+    }
+
+    el.addEventListener("wheel", onWheel, { passive: true })
+    el.addEventListener("mousemove", onMouseMove)
+    return () => {
+      el.removeEventListener("wheel", onWheel)
+      el.removeEventListener("mousemove", onMouseMove)
+      if (scrollEndTimerRef.current) clearTimeout(scrollEndTimerRef.current)
+    }
+  }, [])
 
   return (
-    <ChartContext.Provider value={{ config }}>
+    <ChartContext.Provider value={{ config, tooltipSuppressed }}>
       <div
+        ref={rootRef}
         data-slot="chart"
         data-chart={chartId}
         className={cn(
@@ -113,7 +149,17 @@ ${colorConfig
   )
 }
 
-const ChartTooltip = RechartsPrimitive.Tooltip
+function ChartTooltip(
+  props: React.ComponentProps<typeof RechartsPrimitive.Tooltip>
+) {
+  const { tooltipSuppressed } = useChart()
+  return (
+    <RechartsPrimitive.Tooltip
+      {...props}
+      active={tooltipSuppressed ? false : props.active}
+    />
+  )
+}
 
 function ChartTooltipContent({
   active,

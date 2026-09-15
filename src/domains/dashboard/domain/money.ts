@@ -2,7 +2,7 @@ export function formatMoney(
   amount: number | null | undefined,
   currency = "USD",
 ) {
-  if (amount == null || Number.isNaN(amount)) return "—";
+  if (amount == null || Number.isNaN(amount)) return "-";
 
   return new Intl.NumberFormat("en-US", {
     style: "currency",

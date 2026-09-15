@@ -9,7 +9,7 @@ const DEFAULT_TTL_MS = 5 * 60_000;
 
 /**
  * Process-local TTL cache for expensive Turso reads.
- * Keeps Turso as source of truth — no second SQLite DB.
+ * Keeps Turso as source of truth - no second SQLite DB.
  */
 export async function cachedTursoRead<T>(options: {
   key: string;

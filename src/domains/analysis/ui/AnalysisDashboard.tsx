@@ -64,8 +64,8 @@ import {
   formatShortDisplayDate,
 } from "@/shared/lib/format-date";
 import { IconInfoCircle } from "@tabler/icons-react";
-import { useQuery as useConvexQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
+import { useAction } from "convex/react";
 import { ChevronDownIcon, PlusIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
@@ -80,6 +80,7 @@ import {
   Pie,
   PieChart,
   ReferenceLine,
+  Treemap,
   XAxis,
   YAxis,
   type PieLabelRenderProps,
@@ -151,11 +152,12 @@ const CATEGORY_COLORS = [
   "oklch(0.74 0.08 250)",
 ];
 
-type BreakdownView = "bar" | "pie";
+type BreakdownView = "bar" | "pie" | "area";
 
 const BREAKDOWN_VIEW_OPTIONS: { value: BreakdownView; label: string }[] = [
   { value: "bar", label: "Bar" },
   { value: "pie", label: "Pie" },
+  { value: "area", label: "Area" },
 ];
 
 /** Distance between cursor/active point and the tooltip card (Recharts default is 10). */
@@ -165,22 +167,55 @@ const CHART_TOOLTIP_OFFSET = 28;
 const CHART_TOOLTIP_ESCAPE = { x: false, y: false } as const;
 
 function useAnalysis(range: AnalysisRange, period: AnalysisPeriod) {
-  const result = useConvexQuery(api.analysis.get, { range, period });
+  const getAnalysis = useAction(api.analysis.get);
+  const [result, setResult] = useState<
+    | { ok: true; data: AnalysisData }
+    | { ok: false; error: string }
+    | undefined
+  >(undefined);
+  const [isPending, setIsPending] = useState(true);
+  const [fetchError, setFetchError] = useState<Error | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setIsPending(true);
+    setFetchError(null);
+    void getAnalysis({ range, period })
+      .then((res) => {
+        if (cancelled) return;
+        setResult(
+          res as
+            | { ok: true; data: AnalysisData }
+            | { ok: false; error: string },
+        );
+        setIsPending(false);
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        setResult(undefined);
+        setFetchError(err instanceof Error ? err : new Error(String(err)));
+        setIsPending(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [getAnalysis, period, range]);
+
   const failed =
-    result != null && "ok" in result && (result as { ok: boolean }).ok === false;
+    fetchError != null ||
+    (result != null && "ok" in result && result.ok === false);
   const data: AnalysisData | undefined =
-    result != null && "ok" in result && (result as { ok: boolean }).ok === true
-      ? ((result as { data: AnalysisData }).data as AnalysisData)
+    result != null && "ok" in result && result.ok === true
+      ? result.data
       : undefined;
   const errorMessage =
-    failed && result && "error" in result
-      ? String((result as { error: unknown }).error)
-      : null;
+    fetchError?.message ??
+    (failed && result && "error" in result ? String(result.error) : null);
   return {
     data,
-    isPending: result === undefined,
+    isPending,
     isError: failed,
-    isFetching: result === undefined,
+    isFetching: isPending,
     error: errorMessage ? new Error(errorMessage) : null,
   };
 }
@@ -415,6 +450,7 @@ function PieDonutLabel({
   percent = 0,
   name = "",
   index = 0,
+  fill,
 }: PieLabelRenderProps) {
   const share = Number(percent);
   if (!Number.isFinite(share) || share < 0.015) return null;
@@ -427,6 +463,10 @@ function PieDonutLabel({
   const inside = share >= 0.08;
   const showName =
     sliceName.length > 0 && (inside ? share >= 0.12 : share >= 0.04);
+  const sliceColor =
+    typeof fill === "string" && fill.length > 0
+      ? fill
+      : CATEGORY_COLORS[Number(index) % CATEGORY_COLORS.length];
 
   if (inside) {
     const x =
@@ -474,46 +514,99 @@ function PieDonutLabel({
     );
   }
 
-  const startX = Number(cx) + (Number(outerRadius) + 4) * cos;
-  const startY = Number(cy) + (Number(outerRadius) + 4) * sin;
-  const elbow = 14 + (Number(index) % 3) * 8;
-  const midX = Number(cx) + (Number(outerRadius) + elbow) * cos;
-  const midY = Number(cy) + (Number(outerRadius) + elbow) * sin;
-  const side = cos >= 0 ? 1 : -1;
-  const endX = midX + side * 12;
-  const endY = midY;
-  const textX = endX + side * 6;
-  const anchor = cos >= 0 ? "start" : "end";
+  // Same callout marker as category mix over time: dot + leader + frosted pill.
+  const startX = Number(cx) + Number(outerRadius) * cos;
+  const startY = Number(cy) + Number(outerRadius) * sin;
+  const side: 1 | -1 = cos >= 0 ? 1 : -1;
+  const calloutLabel = showName ? `${label} ${sliceName}` : label;
 
   return (
-    <g pointerEvents="none">
-      <path
-        d={`M${startX},${startY}L${midX},${midY}L${endX},${endY}`}
-        fill="none"
-        stroke={PIE_LABEL_INK}
-        strokeWidth={1}
+    <AreaCallout
+      x={startX}
+      y={startY - 7}
+      label={calloutLabel}
+      color={sliceColor}
+      side={side}
+      lift={(Number(index) % 3) * 10}
+    />
+  );
+}
+
+/** Squarified area blocks for breakdown "Area" view (treemap). */
+function AreaTreemapCell({
+  x = 0,
+  y = 0,
+  width = 0,
+  height = 0,
+  name,
+  value,
+  index = 0,
+  depth,
+  currency,
+  total,
+}: {
+  x?: number;
+  y?: number;
+  width?: number;
+  height?: number;
+  name?: string | number;
+  value?: number;
+  index?: number;
+  depth?: number;
+  currency: string;
+  total: number;
+}) {
+  if (depth !== 1 || width < 2 || height < 2) return null;
+
+  const fill = CATEGORY_COLORS[Number(index) % CATEGORY_COLORS.length];
+  const label = String(name ?? "");
+  const spend = Number(value ?? 0);
+  const share = total > 0 ? spend / total : 0;
+  const showValue = width >= 48 && height >= 28;
+  const showName = width >= 64 && height >= 44;
+  const showPct = width >= 72 && height >= 58 && share > 0;
+  const maxChars = Math.max(4, Math.floor((width - 12) / 6.2));
+  const displayName =
+    label.length > maxChars ? `${label.slice(0, Math.max(3, maxChars - 1))}…` : label;
+
+  return (
+    <g>
+      <rect
+        x={x}
+        y={y}
+        width={width}
+        height={height}
+        fill={fill}
+        stroke="var(--background)"
+        strokeWidth={2}
       />
-      <text
-        x={textX}
-        y={showName ? endY - 6 : endY}
-        fill={PIE_LABEL_INK}
-        textAnchor={anchor}
-        dominantBaseline="central"
-        className="text-[11px] font-semibold"
-      >
-        {label}
-      </text>
-      {showName ? (
-        <text
-          x={textX}
-          y={endY + 8}
-          fill={PIE_LABEL_INK}
-          textAnchor={anchor}
-          dominantBaseline="central"
-          className="text-[10px]"
+      {showValue || showName || showPct ? (
+        <foreignObject
+          x={x + 6}
+          y={y + 4}
+          width={Math.max(0, width - 10)}
+          height={Math.max(0, height - 8)}
+          pointerEvents="none"
         >
-          {sliceName}
-        </text>
+          <div
+            className="box-border flex h-full w-full flex-col overflow-hidden text-left text-black"
+            style={{ color: "#111", WebkitTextFillColor: "#111" }}
+          >
+            {showValue ? (
+              <div className="text-[11px] leading-tight font-semibold">
+                {moneyTick(spend, currency)}
+              </div>
+            ) : null}
+            {showName ? (
+              <div className="truncate text-[10px] leading-tight">{displayName}</div>
+            ) : null}
+            {showPct ? (
+              <div className="text-[10px] leading-tight opacity-70">
+                {formatPiePercent(share)}
+              </div>
+            ) : null}
+          </div>
+        </foreignObject>
       ) : null}
     </g>
   );
@@ -881,7 +974,7 @@ function MixTooltip({
   sourceRow?: Record<string, string | number>;
   shareOf?: number;
   shareBase?: number;
-  /** Tags (and similar) can mark the same row — do not sum series as unique spend. */
+  /** Tags (and similar) can mark the same row - do not sum series as unique spend. */
   overlapping?: boolean;
   interactive?: boolean;
 }) {
@@ -963,8 +1056,18 @@ function MixTooltip({
         {shareOf != null ? ` · ${formatPercent(shareOf)}` : ""}
       </div>
       <div
-        className={`${gridClass} max-h-64 overflow-y-auto overscroll-contain pr-0.5`}
-        onWheel={(event) => event.stopPropagation()}
+        className={`${gridClass} max-h-64 overflow-y-auto pr-0.5`}
+        onWheel={(event) => {
+          const el = event.currentTarget
+          if (el.scrollHeight <= el.clientHeight + 1) return
+          const delta = event.deltaY
+          const atTop = el.scrollTop <= 0
+          const atBottom =
+            el.scrollTop + el.clientHeight >= el.scrollHeight - 1
+          // Only trap wheel while the list can still scroll that way.
+          if ((delta < 0 && atTop) || (delta > 0 && atBottom)) return
+          event.stopPropagation()
+        }}
       >
         {lines.map((line) => (
           <MixTooltipRow
@@ -991,7 +1094,7 @@ function MixTooltip({
       </div>
       {overlapping && rows.length > 1 ? (
         <div className="border-t border-border/50 pt-1.5 text-[10px] leading-snug text-muted-foreground">
-          Tags can mark the same transactions — amounts are not additive.
+          Tags can mark the same transactions. Amounts are not additive.
         </div>
       ) : null}
     </div>
@@ -1078,6 +1181,17 @@ function SeriesLegend({
 }
 
 /** Prefer alternating sides, but keep text inside the plot (no left/right clip). */
+function calloutBoxWidth(label: string) {
+  const padX = 4;
+  const swatchGap = 4;
+  const swatchSize = 8;
+  // 11px medium + swatch; stay generous so short names ("Needs") never ellipsis.
+  return Math.min(
+    Math.max(label.length * 8.2 + padX * 2 + swatchSize + swatchGap + 8, 64),
+    220,
+  );
+}
+
 function calloutSide(
   x: number,
   itemIndex: number,
@@ -1085,7 +1199,7 @@ function calloutSide(
   peakIndex: number,
   pointCount: number,
 ): 1 | -1 {
-  const approxWidth = Math.min(Math.max(label.length * 6.2, 40), 160);
+  const approxWidth = calloutBoxWidth(label);
   const preferred: 1 | -1 = itemIndex % 2 === 0 ? 1 : -1;
   // Area LabelList has no parentViewBox; first points sit just right of the Y-axis.
   if (peakIndex <= 1 || x < approxWidth + 72) return 1;
@@ -1098,28 +1212,30 @@ function AreaCallout({
   x,
   y,
   label,
+  color,
   side,
   lift,
 }: {
   x: number;
   y: number;
   label: string;
+  color: string;
   side: 1 | -1;
   lift: number;
 }) {
   const anchorX = x;
   const anchorY = y + 7;
   const labelX = x + side * 32;
-  // Keep labels inside the SVG — peaks at 100% sit near y≈margin.top.
+  // Keep labels inside the SVG - peaks at 100% sit near y≈margin.top.
   const minLabelY = 12;
   const desiredLabelY = y - 10 - lift;
   const placeBelow = desiredLabelY < minLabelY && y < 40;
   const labelY = placeBelow
     ? Math.min(y + 18 + lift, y + 36)
     : Math.max(minLabelY, desiredLabelY);
-  const padX = 0;
+  const padX = 4;
   const boxH = 16;
-  const boxW = Math.min(Math.max(label.length * 6.4 + padX * 2, 40), 160);
+  const boxW = calloutBoxWidth(label);
   const textX = labelX + side * 5;
   const boxX = side === 1 ? textX - padX : textX - boxW + padX;
   const boxY = labelY - boxH / 2;
@@ -1136,8 +1252,15 @@ function AreaCallout({
       />
       <circle cx={anchorX} cy={anchorY} r={2.25} fill="#111" />
       <foreignObject x={boxX} y={boxY} width={boxW} height={boxH}>
-        <div className="flex h-full items-center justify-center rounded-md bg-[var(--background)]/55 text-center text-[11px] leading-none font-medium text-[#111] backdrop-blur-[3px]">
-          <span className="truncate">{label}</span>
+        <div className="flex h-full min-w-0 items-center justify-center gap-1 rounded-md bg-[var(--background)]/55 px-1 text-center text-[11px] leading-none font-medium whitespace-nowrap text-[#111] backdrop-blur-[3px]">
+          <span
+            aria-hidden
+            className="size-2 shrink-0 rounded-[2px] border border-black/15"
+            style={{ backgroundColor: color }}
+          />
+          <span className="min-w-0 overflow-hidden text-ellipsis">
+            {label}
+          </span>
         </div>
       </foreignObject>
     </g>
@@ -1209,7 +1332,7 @@ function OtherBreakdownTable({
                     {formatMoney(item.spend, currency)}
                   </TableCell>
                   <TableCell className="text-right font-mono tabular-nums text-[var(--muted-foreground)]">
-                    {on ? formatShare(item.spend, total) : "—"}
+                    {on ? formatShare(item.spend, total) : "-"}
                   </TableCell>
                 </TableRow>
               );
@@ -1271,26 +1394,32 @@ function StackedMixChart({
   const [tooltipForcedOff, setTooltipForcedOff] = useState(false);
 
   useEffect(() => {
+    const dismiss = () => {
+      if (!tooltipOpenRef.current) return
+      tooltipOpenRef.current = false
+      setTooltipForcedOff(true)
+    }
     const dismissIfOutside = (event: PointerEvent) => {
-      if (!tooltipOpenRef.current) return;
-      const target = event.target;
-      if (!(target instanceof Node)) return;
-      if (chartShellRef.current?.contains(target)) return;
-      tooltipOpenRef.current = false;
-      setTooltipForcedOff(true);
-    };
+      if (!tooltipOpenRef.current) return
+      const target = event.target
+      if (!(target instanceof Node)) return
+      if (chartShellRef.current?.contains(target)) return
+      dismiss()
+    }
     const dismissOnEscape = (event: KeyboardEvent) => {
-      if (event.key !== "Escape" || !tooltipOpenRef.current) return;
-      tooltipOpenRef.current = false;
-      setTooltipForcedOff(true);
-    };
-    document.addEventListener("pointerdown", dismissIfOutside);
-    document.addEventListener("keydown", dismissOnEscape);
+      if (event.key !== "Escape") return
+      dismiss()
+    }
+    document.addEventListener("pointerdown", dismissIfOutside)
+    document.addEventListener("keydown", dismissOnEscape)
+    // Page actually moved - drop the click tooltip so it does not chase the cursor.
+    window.addEventListener("scroll", dismiss, { passive: true, capture: true })
     return () => {
-      document.removeEventListener("pointerdown", dismissIfOutside);
-      document.removeEventListener("keydown", dismissOnEscape);
-    };
-  }, []);
+      document.removeEventListener("pointerdown", dismissIfOutside)
+      document.removeEventListener("keydown", dismissOnEscape)
+      window.removeEventListener("scroll", dismiss, true)
+    }
+  }, [])
 
   const markTooltipOpen = () => {
     tooltipOpenRef.current = true;
@@ -1491,6 +1620,7 @@ function StackedMixChart({
                           x={x}
                           y={y}
                           label={item.label}
+                          color={`var(--color-${item.key})`}
                           side={calloutSide(
                             x,
                             itemIndex,
@@ -1660,6 +1790,7 @@ function StackedRankedBarChart({
   }, [series]);
   const lastKey = visibleSeries[visibleSeries.length - 1]?.key ?? "";
   const isPie = showViewToggle && view === "pie";
+  const isArea = showViewToggle && view === "area";
   const pieRows = useMemo(
     () =>
       rows
@@ -1769,6 +1900,60 @@ function StackedRankedBarChart({
             </Pie>
           </PieChart>
         </ChartContainer>
+      ) : isArea ? (
+        <ChartContainer
+          config={config}
+          className="mx-auto aspect-[4/3] w-full max-w-5xl [&_foreignObject]:overflow-hidden"
+          initialDimension={{ width: 800, height: 600 }}
+        >
+          <Treemap
+            data={pieRows}
+            dataKey="spend"
+            nameKey="name"
+            stroke="var(--background)"
+            fill="transparent"
+            isAnimationActive={false}
+            style={onSelect ? { cursor: "pointer" } : undefined}
+            onClick={(node) => {
+              const name =
+                node && typeof node === "object" && "name" in node
+                  ? String((node as { name?: string }).name ?? "")
+                  : "";
+              if (onSelect && name) onSelect(name);
+            }}
+            content={(props) => (
+              <AreaTreemapCell
+                x={props.x}
+                y={props.y}
+                width={props.width}
+                height={props.height}
+                name={props.name}
+                value={props.value}
+                index={props.index}
+                depth={props.depth}
+                currency={currency}
+                total={pieTotal}
+              />
+            )}
+          >
+            <ChartTooltip
+              offset={CHART_TOOLTIP_OFFSET}
+              allowEscapeViewBox={CHART_TOOLTIP_ESCAPE}
+              wrapperStyle={{ pointerEvents: "none" }}
+              content={(props) =>
+                stackedRowTooltip(
+                  props,
+                  config,
+                  currency,
+                  otherByRow,
+                  visibleSeries,
+                  pieTotal,
+                  false,
+                )
+              }
+            />
+          </Treemap>
+        </ChartContainer>
       ) : (
         <ChartContainer
           config={config}
@@ -1839,7 +2024,7 @@ function StackedRankedBarChart({
 }
 
 function formatShare(spend: number, total: number) {
-  if (total <= 0) return "—";
+  if (total <= 0) return "-";
   return `${((spend / total) * 100).toFixed(1)}%`;
 }
 
@@ -1968,7 +2153,7 @@ function TaxonomyBreakdownTable({
                 </TableCell>
                 {nestedLabel ? (
                   <TableCell className="max-w-md whitespace-normal text-[var(--muted-foreground)]">
-                    {nested ?? "—"}
+                    {nested ?? "-"}
                   </TableCell>
                 ) : null}
                 <TableCell className="text-right font-mono tabular-nums">
@@ -1978,7 +2163,7 @@ function TaxonomyBreakdownTable({
                   {row.count ?? 0}
                 </TableCell>
                 <TableCell className="text-right font-mono tabular-nums text-[var(--muted-foreground)]">
-                  {on ? formatShare(row.spend, totalSpend) : "—"}
+                  {on ? formatShare(row.spend, totalSpend) : "-"}
                 </TableCell>
               </TableRow>
             );
@@ -2003,6 +2188,15 @@ function TaxonomyBreakdownTable({
   );
 }
 
+const RANKED_BAR_PREVIEW = 12;
+const RANKED_BAR_ROW_PX = 36;
+const RANKED_BAR_MAX_VIEWPORT_PX = 28 * 16;
+
+function truncateChartLabel(value: string, maxChars: number) {
+  if (value.length <= maxChars) return value;
+  return `${value.slice(0, Math.max(1, maxChars - 1))}…`;
+}
+
 function RankedBarChart({
   title,
   info,
@@ -2020,11 +2214,18 @@ function RankedBarChart({
   labelWidth?: number;
   onSelect?: (name: string) => void;
 }) {
+  const [showAll, setShowAll] = useState(false);
   const config = {
     spend: { label: "Spend", color },
   } satisfies ChartConfig;
 
   if (rows.length === 0) return null;
+
+  const hasMore = rows.length > RANKED_BAR_PREVIEW;
+  const visible = showAll ? rows : rows.slice(0, RANKED_BAR_PREVIEW);
+  const chartHeight = visible.length * RANKED_BAR_ROW_PX + 48;
+  const useScroll = chartHeight > RANKED_BAR_MAX_VIEWPORT_PX;
+  const nameMaxChars = labelWidth >= 140 ? 22 : 16;
 
   return (
     <section className="space-y-3 rounded-xl border border-[var(--border)] bg-[var(--background)] p-4 sm:p-5">
@@ -2036,60 +2237,112 @@ function RankedBarChart({
           rows: rows.map((row) => [row.name, row.spend, row.count ?? 0]),
         }}
       />
-      <ChartContainer
-        config={config}
-        className="aspect-auto h-[min(28rem,calc(2.2rem*var(--rows)+3rem))] w-full"
-        style={{ ["--rows" as string]: rows.length }}
-        initialDimension={{ width: 640, height: 360 }}
+      <div
+        className={useScroll ? "max-h-[28rem] overflow-y-auto pr-1" : undefined}
       >
-        <BarChart
-          data={rows}
-          layout="vertical"
-          margin={{ left: 8, right: 16, top: 8, bottom: 0 }}
-          accessibilityLayer
-          style={onSelect ? { cursor: "pointer" } : undefined}
+        <ChartContainer
+          config={config}
+          className="aspect-auto w-full"
+          style={{ height: chartHeight }}
+          initialDimension={{ width: 640, height: chartHeight }}
         >
-          <CartesianGrid horizontal={false} />
-          <YAxis
-            dataKey="name"
-            type="category"
-            width={labelWidth}
-            tickLine={false}
-            axisLine={false}
-            tickMargin={8}
-          />
-          <XAxis
-            type="number"
-            tickLine={false}
-            axisLine={false}
-            tickFormatter={(value) => moneyTick(Number(value), currency)}
-          />
-          <ChartTooltip
-            offset={CHART_TOOLTIP_OFFSET}
-            allowEscapeViewBox={CHART_TOOLTIP_ESCAPE}
-            content={
-              <ChartTooltipContent
-                hideLabel
-                formatter={(value) => formatMoney(Number(value), currency)}
+          <BarChart
+            data={visible}
+            layout="vertical"
+            margin={{ left: 8, right: 52, top: 8, bottom: 0 }}
+            accessibilityLayer
+            style={onSelect ? { cursor: "pointer" } : undefined}
+          >
+            <CartesianGrid horizontal={false} />
+            <YAxis
+              dataKey="name"
+              type="category"
+              width={labelWidth}
+              interval={0}
+              tickLine={false}
+              axisLine={false}
+              tickMargin={8}
+              tickFormatter={(value) =>
+                truncateChartLabel(String(value), nameMaxChars)
+              }
+            />
+            <XAxis
+              type="number"
+              tickLine={false}
+              axisLine={false}
+              domain={[0, (dataMax: number) => dataMax * 1.18]}
+              tickFormatter={(value) => moneyTick(Number(value), currency)}
+            />
+            <ChartTooltip
+              offset={CHART_TOOLTIP_OFFSET}
+              allowEscapeViewBox={CHART_TOOLTIP_ESCAPE}
+              content={
+                <ChartTooltipContent
+                  hideLabel
+                  formatter={(value, _name, item) => {
+                    const name = String(
+                      (item?.payload as AnalysisRankedItem | undefined)
+                        ?.name ?? "",
+                    );
+                    const count = Number(
+                      (item?.payload as AnalysisRankedItem | undefined)
+                        ?.count ?? 0,
+                    );
+                    return (
+                      <div className="flex w-full flex-col gap-0.5">
+                        {name ? (
+                          <span className="font-medium">{name}</span>
+                        ) : null}
+                        <span>{formatMoney(Number(value), currency)}</span>
+                        <span className="text-[var(--muted-foreground)]">
+                          {count} txn{count === 1 ? "" : "s"}
+                        </span>
+                      </div>
+                    );
+                  }}
+                />
+              }
+            />
+            <Bar
+              dataKey="spend"
+              fill="var(--color-spend)"
+              radius={[0, 4, 4, 0]}
+              name="spend"
+              onClick={(data) => {
+                const row = data as {
+                  name?: string;
+                  payload?: { name?: string };
+                };
+                const name = row.payload?.name ?? row.name;
+                if (onSelect && typeof name === "string") onSelect(name);
+              }}
+            >
+              <LabelList
+                dataKey="spend"
+                position="right"
+                className="fill-[var(--muted-foreground)] text-[10px] tabular-nums"
+                formatter={(value) => moneyTick(Number(value), currency)}
               />
-            }
+            </Bar>
+          </BarChart>
+        </ChartContainer>
+      </div>
+      {hasMore ? (
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="h-8 w-full text-[var(--muted-foreground)]"
+          onClick={() => setShowAll((current) => !current)}
+        >
+          {showAll
+            ? "Show less"
+            : `Show more (${rows.length - RANKED_BAR_PREVIEW} more)`}
+          <ChevronDownIcon
+            className={`size-4 transition-transform ${showAll ? "rotate-180" : ""}`}
           />
-          <Bar
-            dataKey="spend"
-            fill="var(--color-spend)"
-            radius={[0, 4, 4, 0]}
-            name="spend"
-            onClick={(data) => {
-              const row = data as {
-                name?: string;
-                payload?: { name?: string };
-              };
-              const name = row.payload?.name ?? row.name;
-              if (onSelect && typeof name === "string") onSelect(name);
-            }}
-          />
-        </BarChart>
-      </ChartContainer>
+        </Button>
+      ) : null}
     </section>
   );
 }
@@ -2172,7 +2425,7 @@ function DayOfMonthChart({ data }: { data: AnalysisData }) {
     <section className="space-y-3 rounded-xl border border-[var(--border)] bg-[var(--background)] p-4 sm:p-5">
       <ChartTitle
         title="Spend by day of month"
-        info="Calendar day (1–31) of the authorized date when present. Spikes often line up with rent, loans, or payday shopping."
+        info="Calendar day (1-31) of the authorized date when present. Spikes often line up with rent, loans, or payday shopping."
         csv={{
           headers: ["Day", "Spend", "Count"],
           rows: rows.map((row) => [row.name, row.spend, row.count ?? 0]),
@@ -2252,11 +2505,18 @@ function FrequencyBarChart({
   color?: string;
   labelWidth?: number;
 }) {
+  const [showAll, setShowAll] = useState(false);
   const config = {
     count: { label: "Trips", color },
   } satisfies ChartConfig;
 
   if (rows.length === 0) return null;
+
+  const hasMore = rows.length > RANKED_BAR_PREVIEW;
+  const visible = showAll ? rows : rows.slice(0, RANKED_BAR_PREVIEW);
+  const chartHeight = visible.length * RANKED_BAR_ROW_PX + 48;
+  const useScroll = chartHeight > RANKED_BAR_MAX_VIEWPORT_PX;
+  const nameMaxChars = labelWidth >= 140 ? 22 : 16;
 
   return (
     <section className="space-y-3 rounded-xl border border-[var(--border)] bg-[var(--background)] p-4 sm:p-5">
@@ -2268,65 +2528,104 @@ function FrequencyBarChart({
           rows: rows.map((row) => [row.name, row.count ?? 0, row.spend]),
         }}
       />
-      <ChartContainer
-        config={config}
-        className="aspect-auto h-[min(28rem,calc(2.2rem*var(--rows)+3rem))] w-full"
-        style={{ ["--rows" as string]: rows.length }}
-        initialDimension={{ width: 640, height: 360 }}
+      <div
+        className={useScroll ? "max-h-[28rem] overflow-y-auto pr-1" : undefined}
       >
-        <BarChart
-          data={rows}
-          layout="vertical"
-          margin={{ left: 8, right: 16, top: 8, bottom: 0 }}
-          accessibilityLayer
+        <ChartContainer
+          config={config}
+          className="aspect-auto w-full"
+          style={{ height: chartHeight }}
+          initialDimension={{ width: 640, height: chartHeight }}
         >
-          <CartesianGrid horizontal={false} />
-          <YAxis
-            dataKey="name"
-            type="category"
-            width={labelWidth}
-            tickLine={false}
-            axisLine={false}
-            tickMargin={8}
-          />
-          <XAxis
-            type="number"
-            tickLine={false}
-            axisLine={false}
-            allowDecimals={false}
-          />
-          <ChartTooltip
-            offset={CHART_TOOLTIP_OFFSET}
-            allowEscapeViewBox={CHART_TOOLTIP_ESCAPE}
-            content={
-              <ChartTooltipContent
-                formatter={(value, _name, item) => {
-                  const spend = Number(
-                    (item?.payload as AnalysisRankedItem | undefined)?.spend ??
-                      0,
-                  );
-                  return (
-                    <div className="flex w-full flex-col gap-0.5">
-                      <span>
-                        {Number(value)} trip{Number(value) === 1 ? "" : "s"}
-                      </span>
-                      <span className="text-[var(--muted-foreground)]">
-                        {formatMoney(spend, currency)}
-                      </span>
-                    </div>
-                  );
-                }}
+          <BarChart
+            data={visible}
+            layout="vertical"
+            margin={{ left: 8, right: 40, top: 8, bottom: 0 }}
+            accessibilityLayer
+          >
+            <CartesianGrid horizontal={false} />
+            <YAxis
+              dataKey="name"
+              type="category"
+              width={labelWidth}
+              interval={0}
+              tickLine={false}
+              axisLine={false}
+              tickMargin={8}
+              tickFormatter={(value) =>
+                truncateChartLabel(String(value), nameMaxChars)
+              }
+            />
+            <XAxis
+              type="number"
+              tickLine={false}
+              axisLine={false}
+              allowDecimals={false}
+              domain={[0, (dataMax: number) => Math.ceil(dataMax * 1.18)]}
+            />
+            <ChartTooltip
+              offset={CHART_TOOLTIP_OFFSET}
+              allowEscapeViewBox={CHART_TOOLTIP_ESCAPE}
+              content={
+                <ChartTooltipContent
+                  hideLabel
+                  formatter={(value, _name, item) => {
+                    const name = String(
+                      (item?.payload as AnalysisRankedItem | undefined)
+                        ?.name ?? "",
+                    );
+                    const spend = Number(
+                      (item?.payload as AnalysisRankedItem | undefined)
+                        ?.spend ?? 0,
+                    );
+                    return (
+                      <div className="flex w-full flex-col gap-0.5">
+                        {name ? (
+                          <span className="font-medium">{name}</span>
+                        ) : null}
+                        <span>
+                          {Number(value)} trip{Number(value) === 1 ? "" : "s"}
+                        </span>
+                        <span className="text-[var(--muted-foreground)]">
+                          {formatMoney(spend, currency)}
+                        </span>
+                      </div>
+                    );
+                  }}
+                />
+              }
+            />
+            <Bar
+              dataKey="count"
+              fill="var(--color-count)"
+              radius={[0, 4, 4, 0]}
+              name="count"
+            >
+              <LabelList
+                dataKey="count"
+                position="right"
+                className="fill-[var(--muted-foreground)] text-[10px] tabular-nums"
               />
-            }
+            </Bar>
+          </BarChart>
+        </ChartContainer>
+      </div>
+      {hasMore ? (
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="h-8 w-full text-[var(--muted-foreground)]"
+          onClick={() => setShowAll((current) => !current)}
+        >
+          {showAll
+            ? "Show less"
+            : `Show more (${rows.length - RANKED_BAR_PREVIEW} more)`}
+          <ChevronDownIcon
+            className={`size-4 transition-transform ${showAll ? "rotate-180" : ""}`}
           />
-          <Bar
-            dataKey="count"
-            fill="var(--color-count)"
-            radius={[0, 4, 4, 0]}
-            name="count"
-          />
-        </BarChart>
-      </ChartContainer>
+        </Button>
+      ) : null}
     </section>
   );
 }
@@ -2662,7 +2961,7 @@ function RowTxnsPopover({
           {label}
           <span className="ml-2 font-normal text-[var(--muted-foreground)]">
             {transactions.length}
-            {transactions.length === 120 ? "+" : ""} txn
+            {transactions.length >= 48 ? "+" : ""} txn
             {transactions.length === 1 ? "" : "s"}
           </span>
         </div>
@@ -2877,24 +3176,37 @@ function LeaderboardTable({
                             key={vendor.name}
                             className={`${grid} py-1 text-sm`}
                           >
-                            <button
-                              type="button"
-                              title={`Add ${vendor.name} to store sheet`}
-                              aria-label={`Add ${vendor.name} to store sheet`}
-                              className="inline-flex size-5 items-center justify-center rounded text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]"
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                void addRow({
-                                  name: vendor.name,
-                                  spend: vendor.spend,
-                                  count: vendor.count ?? 0,
-                                  currency,
-                                  parent: row.name,
-                                });
-                              }}
-                            >
-                              <PlusIcon className="size-3.5" strokeWidth={2} />
-                            </button>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <button
+                                  type="button"
+                                  aria-label={`Add ${vendor.name} to store sheet`}
+                                  className="inline-flex size-5 items-center justify-center rounded text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]"
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    void addRow({
+                                      name: vendor.name,
+                                      spend: vendor.spend,
+                                      count: vendor.count ?? 0,
+                                      currency,
+                                      parent: row.name,
+                                    });
+                                  }}
+                                >
+                                  <PlusIcon
+                                    className="size-3.5"
+                                    strokeWidth={2}
+                                  />
+                                </button>
+                              </TooltipTrigger>
+                              <TooltipContent
+                                side="top"
+                                sideOffset={6}
+                                className="z-[60] text-left leading-snug"
+                              >
+                                {`Add ${vendor.name} to store sheet`}
+                              </TooltipContent>
+                            </Tooltip>
                             <span className="min-w-0 truncate text-[var(--muted-foreground)]">
                               {vendor.name}
                             </span>
@@ -3258,24 +3570,37 @@ function AverageLeaderboardTable({
                             key={vendor.name}
                             className={`${grid} py-1 text-sm`}
                           >
-                            <button
-                              type="button"
-                              title={`Add ${vendor.name} to store sheet`}
-                              aria-label={`Add ${vendor.name} to store sheet`}
-                              className="inline-flex size-5 items-center justify-center rounded text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]"
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                void addRow({
-                                  name: vendor.name,
-                                  spend: vendor.spend / divisor,
-                                  count: vendor.count ?? 0,
-                                  currency,
-                                  parent: row.name,
-                                });
-                              }}
-                            >
-                              <PlusIcon className="size-3.5" strokeWidth={2} />
-                            </button>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <button
+                                  type="button"
+                                  aria-label={`Add ${vendor.name} to store sheet`}
+                                  className="inline-flex size-5 items-center justify-center rounded text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]"
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    void addRow({
+                                      name: vendor.name,
+                                      spend: vendor.spend / divisor,
+                                      count: vendor.count ?? 0,
+                                      currency,
+                                      parent: row.name,
+                                    });
+                                  }}
+                                >
+                                  <PlusIcon
+                                    className="size-3.5"
+                                    strokeWidth={2}
+                                  />
+                                </button>
+                              </TooltipTrigger>
+                              <TooltipContent
+                                side="top"
+                                sideOffset={6}
+                                className="z-[60] text-left leading-snug"
+                              >
+                                {`Add ${vendor.name} to store sheet`}
+                              </TooltipContent>
+                            </Tooltip>
                             <span className="min-w-0 truncate text-[var(--muted-foreground)]">
                               {vendor.name}
                             </span>
@@ -3400,7 +3725,7 @@ function MainTab({
           value={
             data.summary.peakSpendPeriod
               ? formatMoney(data.summary.peakSpendAmount, data.currency)
-              : "—"
+              : "-"
           }
           info={
             data.summary.peakSpendPeriod
@@ -4559,6 +4884,22 @@ function TypesTab({
   );
 }
 
+function merchantPrimaryCategory(item: AnalysisMerchantBreakdown) {
+  return item.categories?.[0]?.name?.trim() || "Uncategorized";
+}
+
+function merchantMatchesCategory(
+  item: AnalysisMerchantBreakdown,
+  category: string,
+) {
+  if (category === "all") return true;
+  const names = (item.categories ?? [])
+    .map((entry) => entry.name.trim())
+    .filter(Boolean);
+  if (names.length === 0) return category === "Uncategorized";
+  return names.includes(category);
+}
+
 function MerchantDrilldown({
   data,
   selected,
@@ -4572,32 +4913,176 @@ function MerchantDrilldown({
   period: AnalysisPeriod;
   onPeriodChange: (value: AnalysisPeriod) => void;
 }) {
+  const [categoryFilter, setCategoryFilter] = useState("all");
+  const breakdowns = data.merchantBreakdowns;
+
+  const categoryFilters = useMemo(() => {
+    const spendByCategory = new Map<string, number>();
+    for (const cat of data.categories) {
+      spendByCategory.set(cat.name, cat.spend);
+    }
+    const present = new Set<string>();
+    for (const item of breakdowns) {
+      const cats = (item.categories ?? [])
+        .map((entry) => entry.name.trim())
+        .filter(Boolean);
+      if (cats.length === 0) {
+        present.add("Uncategorized");
+        continue;
+      }
+      for (const name of cats) {
+        present.add(name);
+        if (!spendByCategory.has(name)) {
+          const hit = item.categories?.find((entry) => entry.name === name);
+          spendByCategory.set(name, hit?.spend ?? 0);
+        }
+      }
+    }
+    const ranked = data.categories
+      .map((item) => item.name)
+      .filter((name) => present.has(name));
+    const extras = [...present]
+      .filter((name) => !ranked.includes(name) && name !== "Uncategorized")
+      .sort((a, b) => a.localeCompare(b));
+    const ordered = [
+      ...ranked,
+      ...extras,
+      ...(present.has("Uncategorized") ? ["Uncategorized"] : []),
+    ];
+    return ordered.map((name) => ({
+      name,
+      count: breakdowns.filter((item) => merchantMatchesCategory(item, name))
+        .length,
+    }));
+  }, [breakdowns, data.categories]);
+
+  const visibleBreakdowns = useMemo(
+    () =>
+      breakdowns.filter((item) =>
+        merchantMatchesCategory(item, categoryFilter),
+      ),
+    [breakdowns, categoryFilter],
+  );
+
+  const merchantGroups = useMemo(() => {
+    if (categoryFilter !== "all") {
+      return [{ name: categoryFilter, items: visibleBreakdowns }];
+    }
+    const byCategory = new Map<string, AnalysisMerchantBreakdown[]>();
+    for (const item of breakdowns) {
+      const key = merchantPrimaryCategory(item);
+      const list = byCategory.get(key) ?? [];
+      list.push(item);
+      byCategory.set(key, list);
+    }
+    const order = categoryFilters.map((item) => item.name);
+    return order
+      .filter((name) => (byCategory.get(name)?.length ?? 0) > 0)
+      .map((name) => ({
+        name,
+        items: byCategory.get(name) ?? [],
+      }));
+  }, [breakdowns, categoryFilter, categoryFilters, visibleBreakdowns]);
+
   const breakdown: AnalysisMerchantBreakdown | undefined =
-    data.merchantBreakdowns.find((item) => item.merchant === selected) ??
-    data.merchantBreakdowns[0];
+    breakdowns.find((item) => item.merchant === selected) ?? breakdowns[0];
 
   if (!breakdown) return null;
+
+  const selectCategory = (next: string) => {
+    setCategoryFilter(next);
+    const nextVisible = breakdowns.filter((item) =>
+      merchantMatchesCategory(item, next),
+    );
+    if (
+      nextVisible.length > 0 &&
+      !nextVisible.some((item) => item.merchant === breakdown.merchant)
+    ) {
+      onSelect(nextVisible[0].merchant);
+    }
+  };
 
   return (
     <section className="space-y-4">
       <ChartTitle
         title="Merchant detail"
-        info="Pick a Merchant clean name. Subcategories come from transaction labels."
+        info="Filter by category, then pick a Merchant clean name. Subcategories come from transaction labels."
       />
-      <div className="flex flex-wrap gap-1">
-        {data.merchantBreakdowns.map((item) => (
+      <div className="space-y-3">
+        <div
+          role="group"
+          aria-label="Filter merchants by category"
+          className="flex flex-wrap items-center gap-1.5"
+        >
           <Button
-            key={item.merchant}
             type="button"
             size="sm"
-            variant={
-              item.merchant === breakdown.merchant ? "default" : "outline"
-            }
-            onClick={() => onSelect(item.merchant)}
+            variant={categoryFilter === "all" ? "default" : "outline"}
+            onClick={() => selectCategory("all")}
           >
-            {item.merchant}
+            All
+            <span className="ml-1 tabular-nums opacity-70">
+              {breakdowns.length}
+            </span>
           </Button>
-        ))}
+          {categoryFilters.length > 0 ? (
+            <span
+              aria-hidden
+              className="mx-0.5 hidden h-4 w-px shrink-0 bg-[var(--border)] sm:inline-block"
+            />
+          ) : null}
+          {categoryFilters.map((item) => (
+            <Button
+              key={item.name}
+              type="button"
+              size="sm"
+              variant={categoryFilter === item.name ? "default" : "outline"}
+              onClick={() => selectCategory(item.name)}
+            >
+              {item.name}
+              <span className="ml-1 tabular-nums opacity-70">{item.count}</span>
+            </Button>
+          ))}
+        </div>
+        <div className="max-h-[22rem] space-y-3 overflow-y-auto pr-1">
+          {merchantGroups.map((group) => (
+            <div key={group.name} className="space-y-2">
+              {categoryFilter === "all" ? (
+                <div className="flex items-center gap-2">
+                  <span className="shrink-0 text-xs font-medium tracking-wide text-[var(--muted-foreground)]">
+                    {group.name}
+                  </span>
+                  <div className="h-px min-w-8 flex-1 bg-[var(--border)]" />
+                  <span className="shrink-0 text-xs tabular-nums text-[var(--muted-foreground)]">
+                    {group.items.length}
+                  </span>
+                </div>
+              ) : null}
+              <div className="flex flex-wrap gap-1">
+                {group.items.map((item) => (
+                  <Button
+                    key={item.merchant}
+                    type="button"
+                    size="sm"
+                    variant={
+                      item.merchant === breakdown.merchant
+                        ? "default"
+                        : "outline"
+                    }
+                    onClick={() => onSelect(item.merchant)}
+                  >
+                    {item.merchant}
+                  </Button>
+                ))}
+              </div>
+            </div>
+          ))}
+          {visibleBreakdowns.length === 0 ? (
+            <p className="text-sm text-[var(--muted-foreground)]">
+              No merchants in this category.
+            </p>
+          ) : null}
+        </div>
       </div>
       <StackedMixChart
         title={`${breakdown.merchant} subcategory mix`}
@@ -4789,7 +5274,7 @@ function PatternsTab({ data }: { data: AnalysisData }) {
         <Stat
           label="Weekend share"
           value={`${weekendShare}%`}
-          info={`${formatMoney(weekendSpend, data.currency)} on Sat–Sun vs ${formatMoney(weekdaySpend, data.currency)} on weekdays.`}
+          info={`${formatMoney(weekendSpend, data.currency)} on Sat-Sun vs ${formatMoney(weekdaySpend, data.currency)} on weekdays.`}
         />
         <Stat
           label="Small swipes"
@@ -4818,7 +5303,7 @@ function PatternsTab({ data }: { data: AnalysisData }) {
         />
         <RankedBarChart
           title="Weekday vs weekend"
-          info="Lifestyle spend split into Mon–Fri and Sat–Sun using the authorized date when present."
+          info="Lifestyle spend split into Mon-Fri and Sat-Sun using the authorized date when present."
           rows={weekend}
           currency={data.currency}
           color="oklch(0.52 0.1 155)"
@@ -4969,7 +5454,7 @@ export function AnalysisDashboard() {
   }, [data, merchant]);
 
   return (
-    <TooltipProvider delayDuration={200}>
+    <TooltipProvider>
       <div className="space-y-8">
         <header className="flex flex-col gap-4 border-b border-[var(--border)] pb-6 sm:flex-row sm:items-end sm:justify-between">
           <div className="space-y-1">
@@ -4982,19 +5467,40 @@ export function AnalysisDashboard() {
               </h1>
               <InfoTip label="Analysis info">
                 {data
-                  ? `Range ${formatDisplayDate(data.earliestDate)} – ${formatDisplayDate(data.latestDate)}. Spend is purchases plus remittances, net of refunds. Paying a card from chequing counts once as an internal transfer.`
-                  : "Spending over time after internal transfers are pulled out."}
+                  ? `Covers ${formatDisplayDate(data.earliestDate)} to ${formatDisplayDate(data.latestDate)}. Spend = purchases and money sent out, minus refunds. Moving money between your own accounts (like paying a card from chequing) is not counted as spend.`
+                  : "See where money goes over time. Transfers between your own accounts are left out of spend."}
               </InfoTip>
             </div>
+            <p className="max-w-xl text-[var(--muted-foreground)]">
+              Charts and breakdowns of spending over time.
+            </p>
           </div>
-          <div className="flex flex-col items-stretch gap-2 sm:items-end">
-            <SegmentedControl
-              ariaLabel="Time range"
-              options={RANGE_OPTIONS}
-              value={range}
-              onChange={setRange}
+          <div className="grid grid-cols-[1fr_auto_auto] items-stretch gap-x-2 gap-y-2">
+            <div className="justify-self-end">
+              <SegmentedControl
+                ariaLabel="Timeline"
+                options={RANGE_OPTIONS}
+                value={range}
+                onChange={setRange}
+              />
+            </div>
+            <span
+              aria-hidden
+              className="w-px shrink-0 self-stretch bg-[var(--border)]"
             />
-            <PeriodViews value={period} onChange={setPeriod} />
+            <span className="flex items-center justify-end text-base font-medium leading-none tracking-wide text-[var(--muted-foreground)] uppercase">
+              Timeline
+            </span>
+            <div className="justify-self-end">
+              <PeriodViews value={period} onChange={setPeriod} />
+            </div>
+            <span
+              aria-hidden
+              className="w-px shrink-0 self-stretch bg-[var(--border)]"
+            />
+            <span className="flex items-center justify-end text-base font-medium leading-none tracking-wide text-[var(--muted-foreground)] uppercase">
+              Period
+            </span>
           </div>
         </header>
 

@@ -1,6 +1,8 @@
 import {
   IconArrowsExchange,
+  IconBug,
   IconBuildingBank,
+  IconBuildingStore,
   IconChartAreaLine,
   IconDatabase,
   IconFileUpload,
@@ -14,9 +16,11 @@ const ICON_MAP: Record<string, Icon> = {
   IconLayoutDashboard,
   IconBuildingBank,
   IconArrowsExchange,
+  IconBuildingStore,
   IconChartAreaLine,
   IconFileUpload,
   IconLayoutBoard,
+  IconBug,
   IconDatabase,
   IconPuzzle,
 };

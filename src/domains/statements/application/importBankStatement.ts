@@ -1,3 +1,38 @@
+import type { ConvexHttpClient } from "convex/browser";
+import {
+  normalizeStatementAccountType,
+  statementTypeToLedgerFields,
+} from "@/domains/dashboard/domain/accountCategory";
+import {
+  checkStatementBalance,
+  dedupeParsedTransactions,
+} from "@/domains/statements/application/balanceStatement";
+import { polishPaperFactsStatement } from "@/domains/statements/application/polishParsedStatement";
+import {
+  STATEMENT_IMPORT_STEPS,
+  type StatementImportProgress,
+} from "@/domains/statements/domain/importProgress";
+import {
+  isMistralConfigured,
+  ocrPdf,
+} from "@/domains/statements/infrastructure/mistralOcr";
+import {
+  isOpenRouterConfigured,
+  parseStatementPaperFacts,
+} from "@/domains/statements/infrastructure/openRouterParse";
+import {
+  manualAccountId,
+  statementFileHash,
+  statementOccurrenceKey,
+  statementTransactionId,
+} from "@/domains/statements/domain/parsedStatement";
+import type {
+  ImportBankStatementResult,
+  ImportBankStatementSuccess,
+} from "@/domains/statements/domain/importResult";
+import { api } from "@/shared/convex/httpClient";
+import { errorMessage } from "@/shared/lib/error-message";
+
 export type {
   ImportBankStatementResult,
   ImportBankStatementSuccess,
@@ -5,18 +40,192 @@ export type {
   ImportHygieneSummary,
 } from "@/domains/statements/domain/importResult";
 
-const RETIRED =
-  "Retired: flat transactions schema. Re-import CSV via scripts/rebuild-flat-transactions.ts";
+function emitProgress(
+  onProgress: ((progress: StatementImportProgress) => void) | undefined,
+  step: StatementImportProgress["step"],
+) {
+  const meta = STATEMENT_IMPORT_STEPS[step];
+  onProgress?.({ step, percent: meta.percent, label: meta.label });
+}
 
-export async function importBankStatement(_params: {
+/**
+ * Slim statement import:
+ * 0. SHA-256 of PDF bytes - skip OCR/parse if already imported
+ * 1. Mistral OCR
+ * 2. AI paper-facts parse (dates/amounts/description/locations + account meta)
+ * 3. Write transactions to Convex
+ *
+ * Skips categories, merchant clean, hygiene, and enrichment.
+ */
+export async function importBankStatement(params: {
   filename: string;
   bytes: Buffer;
-  /** Skip hygiene + enrichment. Use for bulk import, then run those once. */
-  skipPostProcess?: boolean;
-  /** Folder or product hint, e.g. visa1654 or loc52839. */
+  client: ConvexHttpClient;
   sourceHint?: string;
-}): Promise<
-  import("@/domains/statements/domain/importResult").ImportBankStatementResult
-> {
-  throw new Error(RETIRED);
+  onProgress?: (progress: StatementImportProgress) => void;
+}): Promise<ImportBankStatementResult> {
+  if (!isMistralConfigured()) {
+    return {
+      ok: false,
+      status: 503,
+      code: "MISTRAL_NOT_CONFIGURED",
+      error: "Missing MISTRAL_API_KEY. Add it to .env.local.",
+    };
+  }
+
+  if (!isOpenRouterConfigured()) {
+    return {
+      ok: false,
+      status: 503,
+      code: "OPENROUTER_NOT_CONFIGURED",
+      error: "Missing OPENROUTER_API_KEY. Add it to .env.local.",
+    };
+  }
+
+  if (!params.filename.toLowerCase().endsWith(".pdf")) {
+    return {
+      ok: false,
+      status: 400,
+      error: "Only PDF bank statements are supported.",
+    };
+  }
+
+  if (params.bytes.byteLength === 0) {
+    return { ok: false, status: 400, error: "Empty file." };
+  }
+
+  if (params.bytes.byteLength > 20 * 1024 * 1024) {
+    return {
+      ok: false,
+      status: 400,
+      error: "PDF must be 20MB or smaller.",
+    };
+  }
+
+  try {
+    emitProgress(params.onProgress, "receive");
+    const fileHash = statementFileHash(params.bytes);
+
+    // Same PDF bytes already imported → skip Mistral OCR + OpenRouter parse.
+    const existing = await params.client.query(
+      api.statements.findCompletedByFileHash,
+      { fileHash },
+    );
+    if (existing) {
+      emitProgress(params.onProgress, "done");
+      console.info(
+        `[statements] duplicate fileHash=${fileHash.slice(0, 12)}… skip OCR`,
+      );
+      return existing as ImportBankStatementSuccess;
+    }
+
+    emitProgress(params.onProgress, "ocr");
+    const ocrStarted = Date.now();
+    const ocr = await ocrPdf({
+      filename: params.filename,
+      bytes: params.bytes,
+    });
+    console.info(
+      `[statements] OCR pages=${ocr.pageCount} in ${Date.now() - ocrStarted}ms`,
+    );
+
+    if (!ocr.markdown.trim()) {
+      return {
+        ok: false,
+        status: 422,
+        error: "OCR returned no readable text from this PDF.",
+      };
+    }
+
+    emitProgress(params.onProgress, "parse");
+    const sourceHint = params.sourceHint?.trim() || params.filename;
+    // Owner-scoped rules: authenticated Convex client only returns this user's list.
+    // Injected only into paper-facts PDF parse below - not canvas/enrichment/other AI.
+    const aiRules = await params.client.query(api.aiRules.get, {});
+    const rawParsed = await parseStatementPaperFacts(ocr.markdown, {
+      sourceHint,
+      userRules: aiRules.rules,
+    });
+    const parsed = polishPaperFactsStatement(rawParsed, {
+      ocrMarkdown: ocr.markdown,
+      sourceHint,
+      dedupe: dedupeParsedTransactions,
+    });
+    const balance = checkStatementBalance(parsed);
+
+    const normalizedAccountType = normalizeStatementAccountType(
+      parsed.accountType,
+    );
+    const ledgerFields = statementTypeToLedgerFields(normalizedAccountType);
+    const accountId = manualAccountId({
+      institutionName: parsed.institutionName,
+      accountMask: parsed.accountMask,
+      accountType: normalizedAccountType,
+    });
+    const currency = parsed.currency || "CAD";
+
+    const occurrence = new Map<string, number>();
+    const transactions = parsed.transactions.map((txn) => {
+      const occKey = statementOccurrenceKey(
+        txn.date,
+        txn.description,
+        txn.amount,
+      );
+      const occurrenceIndex = occurrence.get(occKey) ?? 0;
+      occurrence.set(occKey, occurrenceIndex + 1);
+
+      return {
+        transactionId: statementTransactionId(
+          accountId,
+          txn.date,
+          txn.description,
+          txn.amount,
+          occurrenceIndex,
+        ),
+        posted: txn.date,
+        authorized: txn.authorizedDate,
+        description: txn.description,
+        amount: txn.amount,
+        pending: txn.pending,
+        city: txn.locationCity,
+        region: txn.locationRegion,
+        country: txn.locationCountry,
+      };
+    });
+
+    emitProgress(params.onProgress, "save");
+    const result = await params.client.mutation(api.statements.importPaperFacts, {
+      filename: params.filename,
+      fileHash,
+      pageCount: ocr.pageCount,
+      institutionName: parsed.institutionName,
+      accountName: parsed.accountName,
+      accountMask: parsed.accountMask,
+      currency,
+      accountId,
+      accountType: ledgerFields.type,
+      accountSubtype: ledgerFields.subtype,
+      statementPeriodStart: parsed.statementPeriodStart,
+      statementPeriodEnd: parsed.statementPeriodEnd,
+      openingBalance: balance.openingBalance,
+      closingBalance: balance.closingBalance,
+      totalDebits: parsed.totalDebits,
+      totalCredits: parsed.totalCredits,
+      transactionSum: balance.transactionSum,
+      computedClosing: balance.computedClosing,
+      balanceDelta: balance.delta,
+      balanceOk: balance.balanced,
+      ocrMarkdown: ocr.markdown,
+      transactions,
+    });
+
+    emitProgress(params.onProgress, "done");
+    return result as ImportBankStatementSuccess;
+  } catch (error) {
+    return {
+      ok: false,
+      status: 500,
+      error: errorMessage(error, "Statement import failed"),
+    };
+  }
 }

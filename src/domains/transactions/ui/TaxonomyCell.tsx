@@ -125,7 +125,7 @@ export function TaxonomyCell({
   value,
   sectionName,
   categoryName,
-  placeholder = "—",
+  placeholder = "-",
 }: TaxonomyCellProps) {
   const queryClient = useQueryClient();
   const taxonomy = useTaxonomy();
@@ -194,7 +194,7 @@ export function TaxonomyCell({
   const mutation = useMutation({
     mutationFn: postUpdateTaxonomy,
     onSuccess: (result) => {
-      // Mutation body is source of truth — patch caches, do not refetch.
+      // Mutation body is source of truth - patch caches, do not refetch.
       // Refetching can reintroduce stale process-local Turso read cache.
       patchDashboardCaches(queryClient, result);
     },
@@ -209,7 +209,7 @@ export function TaxonomyCell({
       items={options}
       value={selected}
       onValueChange={(next, details) => {
-        // Only persist real commits — ignore filter/typing/focus noise.
+        // Only persist real commits - ignore filter/typing/focus noise.
         const reason = details?.reason;
         if (
           reason === "input-change" ||

@@ -35,6 +35,7 @@ import {
   fetchStatementUpload,
 } from "@/domains/statements/queries/fetchStatementUploads";
 import { statementQueryKeys } from "@/domains/statements/queries/query-keys";
+import { OcrMarkdownView } from "@/domains/statements/ui/OcrMarkdownView";
 
 /**
  * Row menu for a parse log. Delete removes the upload and its ledger children.
@@ -120,9 +121,9 @@ export function StatementUploadRowActions({
           ) : detail.isError ? (
             <p className="text-sm text-red-700">{detail.error.message}</p>
           ) : (
-            <pre className="max-h-[60vh] overflow-auto rounded-lg border border-[var(--border)] bg-[var(--background)] p-3 text-xs whitespace-pre-wrap">
-              {detail.data?.upload.ocrMarkdown ?? "(empty)"}
-            </pre>
+            <OcrMarkdownView
+              markdown={detail.data?.upload.ocrMarkdown ?? ""}
+            />
           )}
         </DialogContent>
       </Dialog>

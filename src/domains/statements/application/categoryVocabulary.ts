@@ -5,8 +5,9 @@ import { getDb } from "@/shared/db";
 import { transactions } from "@/shared/db/schema";
 
 export type CategoryVocabulary = {
-  categoryPrimary: string[];
-  categoryDetailed: string[];
+  sections: string[];
+  categories: string[];
+  subcategories: string[];
   paymentChannels: string[];
   transactionCodes: string[];
 };
@@ -64,19 +65,19 @@ function uniquePreferExisting(values: Array<string | null | undefined>) {
   return [...byKey.values()].sort((a, b) => a.localeCompare(b));
 }
 
-/** Seed type/category names act as preferred detailed labels. */
-function seedDetailedLabels() {
-  return SEED_TAXONOMY.filter(
-    (node) => node.facet === "subcategory" || node.facet === "category",
-  ).map((node) => node.name);
+function seedLabels(facet: "section" | "category" | "subcategory") {
+  return SEED_TAXONOMY.filter((node) => node.facet === facet).map(
+    (node) => node.name,
+  );
 }
 
 export async function loadCategoryVocabulary(): Promise<CategoryVocabulary> {
   const db = getDb();
   const categoryRows = await db
     .select({
-      categoryPrimary: transactions.categoryPrimary,
-      categoryDetailed: transactions.categoryDetailed,
+      section: transactions.section,
+      category: transactions.category,
+      subcategory: transactions.subcategory,
     })
     .from(transactions);
 
@@ -88,12 +89,17 @@ export async function loadCategoryVocabulary(): Promise<CategoryVocabulary> {
     .from(transactions);
 
   return {
-    categoryPrimary: uniquePreferExisting(
-      categoryRows.map((row) => row.categoryPrimary),
-    ),
-    categoryDetailed: uniquePreferExisting([
-      ...seedDetailedLabels(),
-      ...categoryRows.map((row) => row.categoryDetailed),
+    sections: uniquePreferExisting([
+      ...seedLabels("section"),
+      ...categoryRows.map((row) => row.section),
+    ]),
+    categories: uniquePreferExisting([
+      ...seedLabels("category"),
+      ...categoryRows.map((row) => row.category),
+    ]),
+    subcategories: uniquePreferExisting([
+      ...seedLabels("subcategory"),
+      ...categoryRows.map((row) => row.subcategory),
     ]),
     paymentChannels: uniquePreferExisting(
       paymentRows.map((row) => row.paymentChannel),
@@ -107,26 +113,32 @@ export async function loadCategoryVocabulary(): Promise<CategoryVocabulary> {
 export function formatCategoryVocabularyForPrompt(
   vocabulary: CategoryVocabulary,
 ) {
-  const detailed = vocabulary.categoryDetailed.slice(0, 250);
-  const primary = vocabulary.categoryPrimary.slice(0, 80);
+  const subcategories = vocabulary.subcategories.slice(0, 250);
+  const categories = vocabulary.categories.slice(0, 120);
+  const sections = vocabulary.sections.slice(0, 40);
 
   return [
-    "EXISTING CATEGORY LABELS — reuse EXACTLY when the spend matches (do not invent near-duplicates):",
-    "categoryDetailed (preferred fine label):",
-    detailed.length
-      ? detailed.map((label) => `- ${label}`).join("\n")
-      : "- (none yet — invent carefully, singular Title Case preferred)",
+    "EXISTING SPEND TREE LABELS: reuse EXACTLY when the spend matches (do not invent near-duplicates):",
+    "section (top bucket):",
+    sections.length
+      ? sections.map((label) => `- ${label}`).join("\n")
+      : "- Lifestyle, Transport, Technology, Transfers, Income, Finance, Health, Home",
     "",
-    "categoryPrimary (broad bucket, SCREAMING_SNAKE preferred):",
-    primary.length
-      ? primary.map((label) => `- ${label}`).join("\n")
-      : "- FOOD_AND_DRINK, TRANSPORTATION, GENERAL_MERCHANDISE, TRANSFER, BANK_FEES, INCOME, …",
+    "category (mid node under section):",
+    categories.length
+      ? categories.map((label) => `- ${label}`).join("\n")
+      : "- (none yet; invent carefully, Title Case preferred)",
+    "",
+    "subcategory (preferred fine / leaf label):",
+    subcategories.length
+      ? subcategories.map((label) => `- ${label}`).join("\n")
+      : "- (none yet; invent carefully, singular Title Case preferred)",
     "",
     "Rules:",
-    '- Prefer an existing detailed label over a new synonym ("Gas Stations" not "Gas" / "gas station").',
+    '- Prefer an existing subcategory over a new synonym ("Gas Stations" not "Gas" / "gas station").',
     "- Do not emit both singular and plural variants of the same idea.",
     "- Do not emit typos or close paraphrases of an existing label.",
-    "- Only invent a NEW detailed label when nothing existing is a reasonable match.",
+    "- Only invent a NEW subcategory when nothing existing is a reasonable match.",
   ].join("\n");
 }
 
@@ -155,22 +167,25 @@ export function resolveAgainstVocabulary(
 
   if (contained.length === 1) return contained[0];
 
-  // Ambiguous extensions — leave for the AI consolidate pass
+  // Ambiguous extensions: leave for the AI consolidate pass
   return trimmed;
 }
 
-/** Count rows still using a label (for picking canonical forms). */
-export async function countCategoryDetailedUsage() {
+/** Count rows still using a subcategory label (for picking canonical forms). */
+export async function countSubcategoryUsage() {
   const db = getDb();
   const rows = await db
     .select({
-      label: transactions.categoryDetailed,
+      label: transactions.subcategory,
       count: sql<number>`count(*)`.mapWith(Number),
     })
     .from(transactions)
-    .groupBy(transactions.categoryDetailed);
+    .groupBy(transactions.subcategory);
 
   return rows
     .filter((row) => row.label)
     .map((row) => ({ label: row.label as string, count: row.count }));
 }
+
+/** @deprecated Use countSubcategoryUsage */
+export const countCategoryDetailedUsage = countSubcategoryUsage;

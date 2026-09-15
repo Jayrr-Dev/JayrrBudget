@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 export const runtime = "nodejs";
 
-/** @deprecated Prefer POST /api/transactions/clean-categories — both retired. */
+/** @deprecated Prefer POST /api/transactions/clean-categories - both retired. */
 export async function POST() {
   return NextResponse.json(
     {

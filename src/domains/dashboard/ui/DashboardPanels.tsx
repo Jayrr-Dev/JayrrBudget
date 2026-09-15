@@ -1,9 +1,7 @@
 "use client";
 
 import { useConvexAuth, useQuery } from "convex/react";
-import Link from "next/link";
 import { api } from "@convex/_generated/api";
-import { Button } from "@/components/ui/button";
 import { formatMoney, formatLedgerSpend } from "@/domains/dashboard/domain/money";
 import type {
   DashboardAccount,
@@ -40,45 +38,26 @@ export function DashboardToolbar({
           await onImported?.();
         }}
       />
-      <Button
-        variant="outline"
-        render={<Link href="/canvas" />}
-      >
-        Open canvas
-      </Button>
     </div>
   );
 }
 
 export function OverviewPanel({ data }: { data: DashboardData }) {
   return (
-    <div className="space-y-8">
-      <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Stat
-          label="Institutions"
-          value={String(data.institutions.length)}
-        />
-        <Stat label="Accounts" value={String(data.accounts.length)} />
-        <Stat
-          label="Total balance"
-          value={formatMoney(data.totalBalance)}
-        />
-        <Stat
-          label="Transactions stored"
-          value={String(data.transactionCount)}
-        />
-      </section>
-      <section className="grid gap-4 sm:grid-cols-2">
-        <Stat label="Earliest txn" value={formatDisplayDate(data.earliestDate)} />
-        <Stat label="Latest txn" value={formatDisplayDate(data.latestDate)} />
-      </section>
-      <AccountsPanel accounts={data.accounts.slice(0, 5)} compact />
-      <TransactionsList
-        transactions={data.transactions.slice(0, 8)}
-        compact
-        totalCount={data.transactionCount}
+    <section className="flex flex-wrap gap-2">
+      <StatBadge
+        label="Institutions"
+        value={String(data.institutions.length)}
       />
-    </div>
+      <StatBadge
+        label="Total balance"
+        value={formatMoney(data.totalBalance)}
+      />
+      <StatBadge
+        label="Latest statement"
+        value={formatDisplayDate(data.latestStatementDate)}
+      />
+    </section>
   );
 }
 
@@ -180,11 +159,7 @@ export function TransactionsList({
                       ? ` · ${[txn.sectionName, txn.categoryName, txn.subcategoryName]
                           .filter(Boolean)
                           .join(" · ")}`
-                      : txn.categoryDetailed
-                        ? ` · ${txn.categoryDetailed.replaceAll("_", " ").toLowerCase()}`
-                        : txn.categoryPrimary
-                          ? ` · ${txn.categoryPrimary.replaceAll("_", " ").toLowerCase()}`
-                          : ""}
+                      : ""}
                     {txn.transactionCode ? ` · ${txn.transactionCode}` : ""}
                     {txn.paymentChannel ? ` · ${txn.paymentChannel}` : ""}
                     {place ? ` · ${place}` : ""}
@@ -216,12 +191,14 @@ export function TransactionsList({
   );
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
+function StatBadge({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-5">
-      <p className="text-sm text-[var(--muted-foreground)]">{label}</p>
-      <p className="mt-2 text-2xl font-semibold tracking-tight">{value}</p>
-    </div>
+    <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1 text-xs">
+      <span className="text-[var(--muted-foreground)]">{label}</span>
+      <span className="font-semibold tracking-tight text-[var(--foreground)]">
+        {value}
+      </span>
+    </span>
   );
 }
 
@@ -236,15 +213,20 @@ function EmptyState({ text }: { text: string }) {
 export function LoadingSkeleton() {
   return (
     <div className="space-y-4">
-      <div className="grid gap-4 sm:grid-cols-3">
-        {[0, 1, 2].map((key) => (
-          <div
-            key={key}
-            className="h-24 animate-pulse rounded-xl bg-[var(--surface-2)]"
-          />
-        ))}
-      </div>
       <div className="h-48 animate-pulse rounded-xl bg-[var(--surface-2)]" />
+    </div>
+  );
+}
+
+export function OverviewBadgesSkeleton() {
+  return (
+    <div className="flex flex-wrap gap-2">
+      {[0, 1, 2].map((key) => (
+        <div
+          key={key}
+          className="h-7 w-28 animate-pulse rounded-full bg-[var(--surface-2)]"
+        />
+      ))}
     </div>
   );
 }

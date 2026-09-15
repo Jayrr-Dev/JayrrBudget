@@ -11,6 +11,14 @@ import {
 import {
   normalizePaymentFrequency,
 } from "./lib/paymentFrequency";
+import {
+  loanTypeMeta,
+  normalizeLoanType,
+  normalizeRateType,
+  officialLoanName,
+  type LoanType,
+  type RateType,
+} from "./lib/loanTypes";
 import { splitTags } from "./lib/tags";
 
 const MANUAL_INSTITUTION_ID = "manual";
@@ -20,6 +28,20 @@ const paymentFrequencyValidator = v.union(
   v.literal("biweekly"),
   v.literal("semimonthly"),
   v.literal("monthly"),
+);
+
+const loanTypeArgValidator = v.union(
+  v.literal("auto"),
+  v.literal("mortgage"),
+  v.literal("student"),
+  v.literal("personal"),
+  v.literal("heloc"),
+  v.literal("other"),
+);
+
+const rateTypeArgValidator = v.union(
+  v.literal("fixed"),
+  v.literal("variable"),
 );
 
 function mapLoanTerms(row: {
@@ -36,6 +58,8 @@ function mapLoanTerms(row: {
   matchAmount: number;
   principalOverride: number | null;
   overrideAsOf: string | null;
+  loanType?: string;
+  rateType?: string;
   vehicleLabel: string | null;
 }): LoanTermsRow {
   return {
@@ -52,6 +76,8 @@ function mapLoanTerms(row: {
     matchAmount: row.matchAmount,
     principalOverride: row.principalOverride,
     overrideAsOf: row.overrideAsOf,
+    loanType: normalizeLoanType(row.loanType),
+    rateType: normalizeRateType(row.rateType),
     vehicleLabel: row.vehicleLabel,
   };
 }
@@ -210,9 +236,6 @@ export const get = query({
             date: txn.posted,
             authorizedDate: txn.authorized,
             pending: Boolean(txn.pending),
-            categoryPrimary: txn.categoryPrimary,
-            categoryDetailed: txn.categoryDetailed,
-            categoryConfidence: txn.categoryConfidence,
             paymentChannel: txn.channel,
             transactionCode: txn.txnCode,
             website: txn.website,
@@ -255,6 +278,8 @@ export const get = query({
 export const createCustomLoan = mutation({
   args: {
     name: v.string(),
+    loanType: v.optional(loanTypeArgValidator),
+    rateType: v.optional(rateTypeArgValidator),
     vehicleLabel: v.optional(v.union(v.string(), v.null())),
     principalStart: v.number(),
     annualRate: v.number(),
@@ -283,6 +308,11 @@ export const createCustomLoan = mutation({
       throw new Error("Invalid loan terms");
     }
 
+    const loanType: LoanType = normalizeLoanType(args.loanType);
+    const typeMeta = loanTypeMeta(loanType);
+    const rateType: RateType = normalizeRateType(
+      args.rateType ?? typeMeta.defaultRateType,
+    );
     const frequency = normalizePaymentFrequency(args.paymentFrequency);
     const vehicleLabel = args.vehicleLabel?.trim() || null;
     const matchMerchantClean = args.matchMerchantClean?.trim() || name;
@@ -339,6 +369,8 @@ export const createCustomLoan = mutation({
       matchAmount,
       principalOverride: null,
       overrideAsOf: null,
+      loanType,
+      rateType,
       vehicleLabel,
     };
 
@@ -354,10 +386,10 @@ export const createCustomLoan = mutation({
       accountId,
       institutionId: MANUAL_INSTITUTION_ID,
       name,
-      officialName: vehicleLabel ? `${vehicleLabel} — Personal Loan` : name,
+      officialName: officialLoanName(name, loanType, vehicleLabel),
       mask: null,
-      type: "loan",
-      subtype: "auto loan",
+      type: loanType === "mortgage" ? "mortgage" : "loan",
+      subtype: typeMeta.subtype,
       currentBalance: amortize.currentBalance,
       availableBalance: amortize.currentBalance,
       isoCurrencyCode: "CAD",
@@ -379,6 +411,8 @@ export const createCustomLoan = mutation({
       matchAmount: terms.matchAmount,
       principalOverride: null,
       overrideAsOf: null,
+      loanType,
+      rateType,
       vehicleLabel,
       updatedAt: now,
     });

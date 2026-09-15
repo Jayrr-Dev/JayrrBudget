@@ -1,3 +1,9 @@
+import { api } from "@/shared/convex/httpClient";
+import {
+  AuthRequiredError,
+  getAuthenticatedConvexClient,
+} from "@/shared/convex/httpClient.server";
+
 export type DeleteStatementUploadResult =
   | {
       ok: true;
@@ -6,11 +12,26 @@ export type DeleteStatementUploadResult =
     }
   | { ok: false; status: number; error: string };
 
-const RETIRED =
-  "Retired: flat transactions schema. Re-import CSV via scripts/rebuild-flat-transactions.ts";
-
+/** Remove an owned statement upload and every transaction linked to it. */
 export async function deleteStatementUpload(
-  _id: number,
+  id: number,
 ): Promise<DeleteStatementUploadResult> {
-  throw new Error(RETIRED);
+  try {
+    const client = await getAuthenticatedConvexClient();
+    return (await client.mutation(api.statements.remove, {
+      uploadId: id,
+    })) as DeleteStatementUploadResult;
+  } catch (error) {
+    if (error instanceof AuthRequiredError) {
+      return { ok: false, status: 401, error: error.message };
+    }
+    return {
+      ok: false,
+      status: 500,
+      error:
+        error instanceof Error
+          ? error.message
+          : "Failed to delete statement upload",
+    };
+  }
 }

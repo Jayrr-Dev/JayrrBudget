@@ -85,6 +85,11 @@ export default defineSchema({
     matchAmount: v.number(),
     principalOverride: v.union(v.number(), v.null()),
     overrideAsOf: v.union(v.string(), v.null()),
+    /** auto | mortgage | student | personal | heloc | other - optional for legacy rows. */
+    loanType: v.optional(v.string()),
+    /** fixed | variable - optional for legacy rows (defaults to fixed). */
+    rateType: v.optional(v.string()),
+    /** Collateral / asset note (vehicle, property, school, etc.). */
     vehicleLabel: v.union(v.string(), v.null()),
     updatedAt: v.number(),
   })
@@ -113,7 +118,7 @@ export default defineSchema({
 
   statementUploads: defineTable({
     userId,
-    /** Turso integer PK — keeps statement detail URLs stable. */
+    /** Turso integer PK - keeps statement detail URLs stable. */
     uploadId: v.number(),
     filename: v.string(),
     fileHash: v.union(v.string(), v.null()),
@@ -153,6 +158,7 @@ export default defineSchema({
     userId,
     legacyId: v.number(),
     name: v.string(),
+    description: v.string(),
   })
     .index("by_userId", ["userId"])
     .index("by_userId_name", ["userId", "name"])
@@ -175,6 +181,7 @@ export default defineSchema({
     legacyId: v.number(),
     name: v.string(),
     sectionLegacyId: v.union(v.number(), v.null()),
+    description: v.string(),
   })
     .index("by_userId", ["userId"])
     .index("by_userId_name", ["userId", "name"])
@@ -185,6 +192,7 @@ export default defineSchema({
     legacyId: v.number(),
     name: v.string(),
     categoryLegacyId: v.union(v.number(), v.null()),
+    description: v.string(),
   })
     .index("by_userId", ["userId"])
     .index("by_userId_name", ["userId", "name"])
@@ -194,6 +202,7 @@ export default defineSchema({
     userId,
     legacyId: v.number(),
     name: v.string(),
+    description: v.string(),
   })
     .index("by_userId", ["userId"])
     .index("by_userId_name", ["userId", "name"])
@@ -203,10 +212,35 @@ export default defineSchema({
     userId,
     legacyId: v.number(),
     name: v.string(),
+    description: v.string(),
   })
     .index("by_userId", ["userId"])
     .index("by_userId_name", ["userId", "name"])
     .index("by_userId_legacyId", ["userId", "legacyId"]),
+
+  /**
+   * Normalized merchant entities per user.
+   * Transactions keep denormalized merchantClean/company/brand for reads,
+   * and optionally point here via merchantId.
+   */
+  merchants: defineTable({
+    userId,
+    /** Stable unique key per user (slug of canonical name). */
+    slug: v.string(),
+    /** Canonical display name (merchantClean). */
+    name: v.string(),
+    /** Last raw bank / OCR merchant label. */
+    rawName: v.union(v.string(), v.null()),
+    company: v.union(v.string(), v.null()),
+    brand: v.union(v.string(), v.null()),
+    website: v.union(v.string(), v.null()),
+    logoUrl: v.union(v.string(), v.null()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_userId", ["userId"])
+    .index("by_userId_slug", ["userId", "slug"])
+    .index("by_userId_name", ["userId", "name"]),
 
   transactions: defineTable({
     userId,
@@ -217,6 +251,8 @@ export default defineSchema({
     accountId: v.string(),
     description: v.string(),
     originalDescription: v.union(v.string(), v.null()),
+    /** Optional FK into merchants (denormalized strings remain for charts). */
+    merchantId: v.optional(v.union(v.id("merchants"), v.null())),
     merchantClean: v.union(v.string(), v.null()),
     merchantName: v.union(v.string(), v.null()),
     company: v.union(v.string(), v.null()),
@@ -233,9 +269,6 @@ export default defineSchema({
     spreadLegacyId: v.union(v.number(), v.null()),
     transactionTypeLegacyId: v.union(v.number(), v.null()),
     kindLegacyId: v.union(v.number(), v.null()),
-    categoryPrimary: v.union(v.string(), v.null()),
-    categoryDetailed: v.union(v.string(), v.null()),
-    categoryConfidence: v.union(v.string(), v.null()),
     tags: v.union(v.string(), v.null()),
     channel: v.union(v.string(), v.null()),
     txnCode: v.union(v.string(), v.null()),
@@ -243,6 +276,8 @@ export default defineSchema({
     crossCheck: v.union(v.string(), v.null()),
     enrichment: v.union(v.string(), v.null()),
     source: v.union(v.string(), v.null()),
+    /** Links statement-sourced rows to statementUploads.uploadId for safe delete. */
+    statementUploadId: v.optional(v.union(v.number(), v.null())),
     pending: v.boolean(),
     city: v.union(v.string(), v.null()),
     region: v.union(v.string(), v.null()),
@@ -258,7 +293,9 @@ export default defineSchema({
     .index("by_userId", ["userId"])
     .index("by_userId_transactionId", ["userId", "transactionId"])
     .index("by_userId_posted", ["userId", "posted"])
-    .index("by_userId_accountId_posted", ["userId", "accountId", "posted"]),
+    .index("by_userId_accountId_posted", ["userId", "accountId", "posted"])
+    .index("by_userId_merchantId", ["userId", "merchantId"])
+    .index("by_userId_statementUploadId", ["userId", "statementUploadId"]),
 
   appModules: defineTable({
     userId,
@@ -313,4 +350,32 @@ export default defineSchema({
   })
     .index("by_userId", ["userId"])
     .index("by_userId_tabId", ["userId", "tabId"]),
+
+  /** Per-user AI preferences for that owner's statement PDF imports only. */
+  userAiRules: defineTable({
+    userId,
+    rules: v.array(v.string()),
+    updatedAt: v.number(),
+  }).index("by_userId", ["userId"]),
+
+  /** Client-reported errors (Error Boundary + manual). */
+  issues: defineTable({
+    userId,
+    message: v.string(),
+    stack: v.union(v.string(), v.null()),
+    componentStack: v.union(v.string(), v.null()),
+    url: v.union(v.string(), v.null()),
+    userNote: v.union(v.string(), v.null()),
+    status: v.union(
+      v.literal("open"),
+      v.literal("resolved"),
+      v.literal("dismissed"),
+    ),
+    source: v.union(v.literal("error_boundary"), v.literal("manual")),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_userId", ["userId"])
+    .index("by_userId_status", ["userId", "status"])
+    .index("by_status", ["status"]),
 });

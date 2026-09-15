@@ -59,21 +59,24 @@ export const parsedStatementSchema = z.object({
         .describe(
           "Positive = money out (purchase/debit/fee/PAD), including chequing withdrawals. Negative = money in (payment/credit/refund/deposit).",
         ),
-      categoryPrimary: z
+      section: z
         .string()
         .nullable()
         .describe(
-          "Broad bucket. Prefer an EXISTING categoryPrimary from the prompt list. Else FOOD_AND_DRINK, TRANSPORTATION, TRAVEL, GENERAL_MERCHANDISE, RENT_AND_UTILITIES, TRANSFER, LOAN_PAYMENTS, BANK_FEES, INCOME, ENTERTAINMENT, MEDICAL, GOVERNMENT_AND_NON_PROFIT.",
+          "Top spend tree node. Prefer an EXISTING section from the prompt list (Lifestyle, Transport, Technology, Transfers, Income, Finance, Health, Home).",
         ),
-      categoryDetailed: z
+      category: z
         .string()
         .nullable()
         .describe(
-          "Fine spend label. MUST reuse an EXISTING categoryDetailed from the prompt list when it matches (e.g. Gas Stations, not Gas). Avoid plural/singular twins and paraphrases.",
+          "Mid spend tree node under section. Prefer an EXISTING category from the prompt list.",
         ),
-      categoryConfidence: z
-        .enum(["VERY_HIGH", "HIGH", "MEDIUM", "LOW", "UNKNOWN"])
-        .default("MEDIUM"),
+      subcategory: z
+        .string()
+        .nullable()
+        .describe(
+          "Fine spend label (leaf). MUST reuse an EXISTING subcategory from the prompt list when it matches (e.g. Gas Stations, not Gas). Avoid plural/singular twins and paraphrases.",
+        ),
       paymentChannel: z
         .enum(["online", "in store", "other"])
         .nullable()

@@ -8,11 +8,13 @@
  * @module
  */
 
+import type * as aiRules from "../aiRules.js";
 import type * as analysis from "../analysis.js";
 import type * as auth from "../auth.js";
 import type * as dashboard from "../dashboard.js";
 import type * as dbExplorer from "../dbExplorer.js";
 import type * as http from "../http.js";
+import type * as issues from "../issues.js";
 import type * as lib_amortize from "../lib/amortize.js";
 import type * as lib_analysisTypes from "../lib/analysisTypes.js";
 import type * as lib_auth from "../lib/auth.js";
@@ -21,14 +23,20 @@ import type * as lib_carLoanConstants from "../lib/carLoanConstants.js";
 import type * as lib_cashFlow from "../lib/cashFlow.js";
 import type * as lib_categoryKey from "../lib/categoryKey.js";
 import type * as lib_computeAnalysis from "../lib/computeAnalysis.js";
+import type * as lib_ensureMerchant from "../lib/ensureMerchant.js";
 import type * as lib_ensureModules from "../lib/ensureModules.js";
 import type * as lib_loanCompute from "../lib/loanCompute.js";
+import type * as lib_loanTypes from "../lib/loanTypes.js";
 import type * as lib_matchLoanPayments from "../lib/matchLoanPayments.js";
+import type * as lib_merchantSlug from "../lib/merchantSlug.js";
 import type * as lib_moduleCatalog from "../lib/moduleCatalog.js";
+import type * as lib_paymentFrequency from "../lib/paymentFrequency.js";
 import type * as lib_periods from "../lib/periods.js";
 import type * as lib_roles from "../lib/roles.js";
 import type * as lib_spreads from "../lib/spreads.js";
 import type * as lib_tags from "../lib/tags.js";
+import type * as lib_taxonomyDescriptions from "../lib/taxonomyDescriptions.js";
+import type * as merchants from "../merchants.js";
 import type * as migrations from "../migrations.js";
 import type * as modules from "../modules.js";
 import type * as scratchNotes from "../scratchNotes.js";
@@ -44,11 +52,13 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  aiRules: typeof aiRules;
   analysis: typeof analysis;
   auth: typeof auth;
   dashboard: typeof dashboard;
   dbExplorer: typeof dbExplorer;
   http: typeof http;
+  issues: typeof issues;
   "lib/amortize": typeof lib_amortize;
   "lib/analysisTypes": typeof lib_analysisTypes;
   "lib/auth": typeof lib_auth;
@@ -57,14 +67,20 @@ declare const fullApi: ApiFromModules<{
   "lib/cashFlow": typeof lib_cashFlow;
   "lib/categoryKey": typeof lib_categoryKey;
   "lib/computeAnalysis": typeof lib_computeAnalysis;
+  "lib/ensureMerchant": typeof lib_ensureMerchant;
   "lib/ensureModules": typeof lib_ensureModules;
   "lib/loanCompute": typeof lib_loanCompute;
+  "lib/loanTypes": typeof lib_loanTypes;
   "lib/matchLoanPayments": typeof lib_matchLoanPayments;
+  "lib/merchantSlug": typeof lib_merchantSlug;
   "lib/moduleCatalog": typeof lib_moduleCatalog;
+  "lib/paymentFrequency": typeof lib_paymentFrequency;
   "lib/periods": typeof lib_periods;
   "lib/roles": typeof lib_roles;
   "lib/spreads": typeof lib_spreads;
   "lib/tags": typeof lib_tags;
+  "lib/taxonomyDescriptions": typeof lib_taxonomyDescriptions;
+  merchants: typeof merchants;
   migrations: typeof migrations;
   modules: typeof modules;
   scratchNotes: typeof scratchNotes;

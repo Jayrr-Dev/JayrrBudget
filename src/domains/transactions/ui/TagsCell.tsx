@@ -48,7 +48,7 @@ export function TagsCell({ transactionId, tags }: TagsCellProps) {
       setTag("");
       setError(null);
       setOpen(false);
-      // Patch caches from the write response — avoid refetching stale Turso reads.
+      // Patch caches from the write response - avoid refetching stale Turso reads.
       queryClient.setQueriesData<DashboardData>(
         { queryKey: queryKeys.dashboard },
         (current) => {
@@ -78,7 +78,7 @@ export function TagsCell({ transactionId, tags }: TagsCellProps) {
   return (
     <div className="flex min-w-0 flex-wrap items-center gap-1">
       {tags.length === 0 ? (
-        <span className="text-sm text-[var(--muted-foreground)]">—</span>
+        <span className="text-sm text-[var(--muted-foreground)]">-</span>
       ) : (
         tags.map((value, index) => (
           <span

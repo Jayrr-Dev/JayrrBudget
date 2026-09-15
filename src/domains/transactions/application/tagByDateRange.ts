@@ -5,11 +5,13 @@ export type TagByDateRangeInput = {
   tag: string;
   startDate: string;
   endDate: string;
+  excludeTransactionIds?: string[];
 };
 
 export type TagByDateRangeResult = {
   matched: number;
   updated: number;
+  excluded?: number;
   tag: string;
   startDate: string;
   endDate: string;
@@ -23,5 +25,6 @@ export async function tagByDateRange(
     tag: input.tag,
     startDate: input.startDate,
     endDate: input.endDate,
+    excludeTransactionIds: input.excludeTransactionIds,
   });
 }

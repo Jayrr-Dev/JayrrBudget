@@ -10,11 +10,13 @@ export async function POST(request: Request) {
       tag?: string;
       startDate?: string;
       endDate?: string;
+      excludeTransactionIds?: string[];
     };
     const result = await tagByDateRange({
       tag: body.tag ?? "",
       startDate: body.startDate ?? "",
       endDate: body.endDate ?? "",
+      excludeTransactionIds: body.excludeTransactionIds,
     });
     return NextResponse.json({ ok: true, ...result });
   } catch (error) {

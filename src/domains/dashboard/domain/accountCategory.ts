@@ -97,11 +97,14 @@ export function resolveAccountCategory(
     subtype.includes("line of credit") ||
     subtype.includes("loan") ||
     subtype.includes("mortgage") ||
+    subtype.includes("heloc") ||
+    subtype.includes("home equity") ||
     includesAny(label, [
       "line of credit",
       "heloc",
       "home equity",
       "personal loan",
+      "student loan",
       "car loan",
       "auto loan",
       "mortgage",
