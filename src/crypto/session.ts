@@ -1,5 +1,4 @@
 let activeMasterKey: CryptoKey | null = null;
-let lockTimer: ReturnType<typeof setTimeout> | null = null;
 const listeners = new Set<() => void>();
 
 function notify() {
@@ -8,15 +7,11 @@ function notify() {
 
 export function unlockVault(masterKey: CryptoKey) {
   activeMasterKey = masterKey;
-  if (lockTimer) clearTimeout(lockTimer);
-  lockTimer = setTimeout(lockVault, 15 * 60 * 1000);
   notify();
 }
 
 export function lockVault() {
   activeMasterKey = null;
-  if (lockTimer) clearTimeout(lockTimer);
-  lockTimer = null;
   notify();
 }
 

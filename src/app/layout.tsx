@@ -22,7 +22,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   metadataBase: new URL("https://www.jayrrbudgets.com"),
   title: "JayrrBudget",
-  description: "Personal budgeting with statement imports and Convex",
+  description: "Personal budgeting with private statement imports",
   robots: {
     index: false,
     follow: false,

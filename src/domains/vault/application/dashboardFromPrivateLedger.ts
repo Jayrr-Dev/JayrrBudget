@@ -2,7 +2,15 @@ import type { DashboardAccount, DashboardData, DashboardTransaction } from "@/do
 import type { PrivateLedger } from "@/domains/vault/domain/privateLedger";
 
 export function dashboardFromPrivateLedger(ledger: PrivateLedger): DashboardData {
-  const accounts: DashboardAccount[] = ledger.accounts.map((account) => ({
+  const usedAccountIds = new Set(
+    ledger.transactions
+      .map((tx) => tx.accountId)
+      .filter((id): id is string => Boolean(id)),
+  );
+  const visibleAccounts = ledger.accounts.filter((account) =>
+    usedAccountIds.has(account.accountId),
+  );
+  const accounts: DashboardAccount[] = visibleAccounts.map((account) => ({
     accountId: account.accountId,
     name: account.name,
     officialName: account.officialName ?? null,
@@ -45,8 +53,8 @@ export function dashboardFromPrivateLedger(ledger: PrivateLedger): DashboardData
     sectionName: tx.sectionName ?? null,
     categoryName: tx.categoryName ?? null,
     spreadName: tx.spreadName ?? null,
-    transactionTypeName: null,
-    typeName: null,
+    transactionTypeName: tx.transactionTypeName ?? null,
+    typeName: tx.subcategoryName ?? null,
     typeNames: [],
     subcategoryName: tx.subcategoryName ?? null,
     tagNames: tx.tagNames ?? [],
@@ -54,26 +62,32 @@ export function dashboardFromPrivateLedger(ledger: PrivateLedger): DashboardData
     amount: tx.amount,
     isoCurrencyCode: tx.currency,
     date: tx.date,
-    authorizedDate: null,
+    authorizedDate: tx.authorizedDate ?? null,
     pending: Boolean(tx.pending),
-    paymentChannel: null,
-    transactionCode: null,
+    paymentChannel: tx.channel ?? null,
+    transactionCode: tx.txnCode ?? null,
     website: null,
     logoUrl: null,
-    locationCity: null,
-    locationRegion: null,
-    locationCountry: null,
+    locationCity: tx.city ?? null,
+    locationRegion: tx.region ?? null,
+    locationCountry: tx.country ?? null,
     originalDescription: tx.description,
-    source: "private-vault",
+    source: tx.source ?? "statement",
     bankDirection: null,
     historyMatch: null,
   }));
 
   const dates = transactions.map((tx) => tx.date).filter(Boolean).sort();
   const totalBalance = accounts.reduce((sum, account) => sum + (account.currentBalance ?? 0), 0);
+  const latestLog = ledger.statementLogs
+    .slice()
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
 
   return {
-    institutions: [{ institutionId: "private-vault", name: "Private vault" }],
+    institutions:
+      accounts.length || transactions.length
+        ? [{ institutionId: "accounts", name: "Accounts" }]
+        : [],
     accounts,
     transactions,
     totalBalance,
@@ -81,6 +95,6 @@ export function dashboardFromPrivateLedger(ledger: PrivateLedger): DashboardData
     hasMoreTransactions: false,
     earliestDate: dates[0] ?? null,
     latestDate: dates[dates.length - 1] ?? null,
-    latestStatementDate: null,
+    latestStatementDate: latestLog?.statementPeriodEnd ?? dates[dates.length - 1] ?? null,
   };
 }

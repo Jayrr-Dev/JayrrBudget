@@ -2,8 +2,9 @@
 
 import { api } from "@convex/_generated/api";
 import { useConvex, useConvexAuth, useQuery } from "convex/react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { getVaultMasterKey, subscribeVaultSession } from "@/crypto/session";
+import { hydrateVaultSession, type VaultClient } from "@/domains/vault/application/ensureVaultFromPasscode";
 import { useFeatureFlag } from "@/domains/feature-flags/ui/useFeatureFlag";
 import { loadPrivateLedger, type VaultListClient } from "@/domains/vault/application/loadPrivateLedger";
 import type { PrivateLedger } from "@/domains/vault/domain/privateLedger";
@@ -15,7 +16,16 @@ const EMPTY: PrivateLedger = {
   notes: [],
   scratchPads: [],
   loans: [],
+  statementLogs: [],
 };
+
+const ledgerListeners = new Set<() => void>();
+let ledgerEpoch = 0;
+
+function bumpLedgerEpoch() {
+  ledgerEpoch += 1;
+  for (const listener of ledgerListeners) listener();
+}
 
 export function usePrivateLedger() {
   const encryptedLedger = useFeatureFlag("encryptedLedger");
@@ -27,37 +37,58 @@ export function usePrivateLedger() {
   const [ledger, setLedger] = useState<PrivateLedger>(EMPTY);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [version, setVersion] = useState(0);
+  const [version, setVersion] = useState(ledgerEpoch);
+  const vaultUpdatedAt = vault?.updatedAt ?? 0;
+  const vaultId = vault?.vaultId ?? null;
+  const hasLedger = useRef(false);
+
+  useEffect(() => {
+    const onBump = () => setVersion(ledgerEpoch);
+    ledgerListeners.add(onBump);
+    return () => {
+      ledgerListeners.delete(onBump);
+    };
+  }, []);
 
   useEffect(() => {
     setUnlocked(Boolean(getVaultMasterKey()));
     return subscribeVaultSession(() => {
       setUnlocked(Boolean(getVaultMasterKey()));
-      setVersion((value) => value + 1);
+      bumpLedgerEpoch();
     });
   }, []);
 
   useEffect(() => {
+    if (!encryptedLedger || !isAuthenticated) return;
+    if (getVaultMasterKey()) return;
+    void hydrateVaultSession(client as unknown as VaultClient);
+  }, [client, encryptedLedger, isAuthenticated, vaultId]);
+
+  useEffect(() => {
     let cancelled = false;
     async function run() {
-      if (!encryptedLedger || !me || !vault || !unlocked) {
+      if (!encryptedLedger || !me || !vaultId || !unlocked) {
+        hasLedger.current = false;
         setLedger(EMPTY);
         setLoading(false);
         setError(null);
         return;
       }
-      setLoading(true);
+      if (!hasLedger.current) setLoading(true);
       setError(null);
       try {
         const next = await loadPrivateLedger(client as unknown as VaultListClient, {
           userId: String(me.userId),
-          vaultId: vault.vaultId,
+          vaultId,
         });
-        if (!cancelled) setLedger(next);
+        if (!cancelled) {
+          hasLedger.current = true;
+          setLedger(next);
+        }
       } catch (cause) {
         if (!cancelled) {
           setLedger(EMPTY);
-          setError(cause instanceof Error ? cause.message : "Could not decrypt private ledger.");
+          setError(cause instanceof Error ? cause.message : "Could not decrypt the ledger.");
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -67,7 +98,7 @@ export function usePrivateLedger() {
     return () => {
       cancelled = true;
     };
-  }, [client, encryptedLedger, me, unlocked, vault, version]);
+  }, [client, encryptedLedger, me, unlocked, vaultId, vaultUpdatedAt, version]);
 
   return {
     encryptedLedger,
@@ -79,6 +110,6 @@ export function usePrivateLedger() {
     loading: encryptedLedger && (me === undefined || vault === undefined || loading),
     error,
     ledger,
-    reload: () => setVersion((value) => value + 1),
+    reload: bumpLedgerEpoch,
   };
 }

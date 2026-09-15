@@ -62,7 +62,7 @@ export function CanvasAiChat() {
           const budget = useClientBudget
             ? privateLedger.unlocked
               ? buildBudgetContextFromDashboard(dashboardFromPrivateLedger(privateLedger.ledger))
-              : { error: "Unlock the private vault before using canvas AI." }
+              : { error: "Sign in again, then try chat." }
             : undefined;
           return {
             body: {
@@ -137,13 +137,13 @@ export function CanvasAiChat() {
         <PopoverHeader className="gap-1">
           <PopoverTitle>Canvas AI</PopoverTitle>
           <PopoverDescription>
-            Cloud Processing: readable budget text goes to the model. Not end-to-end encrypted.
+            Chat can see the budget numbers you send.
           </PopoverDescription>
         </PopoverHeader>
 
         {blocked ? (
           <p className="text-xs text-[var(--muted-foreground)]">
-            Turn on the Cloud Processing feature flag on Modules before sending ledger data to AI.
+            Turn on Cloud Processing in Modules before sending ledger data to AI.
           </p>
         ) : null}
 

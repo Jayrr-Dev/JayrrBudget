@@ -1,5 +1,6 @@
 "use client";
 
+import { Info } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   DashboardToolbar,
@@ -11,6 +12,14 @@ import { StatementUploadLogs } from "@/domains/statements/ui/StatementUploadLogs
 import { statementQueryKeys } from "@/domains/statements/queries/query-keys";
 import { analysisQueryKeys } from "@/domains/analysis/queries/query-keys";
 import { queryKeys } from "@/domains/dashboard/queries/query-keys";
+import {
+  Popover,
+  PopoverContent,
+  PopoverDescription,
+  PopoverHeader,
+  PopoverTitle,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 
 export default function StatementsPage() {
   const dashboard = useDashboard();
@@ -49,7 +58,7 @@ export default function StatementsPage() {
         />
       </header>
 
-      {dashboard.isError ? (
+      {dashboard.isError && !dashboard.locked ? (
         <div className="rounded-xl border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-800">
           {dashboard.error?.message ?? "Dashboard failed"}
         </div>
@@ -62,12 +71,33 @@ export default function StatementsPage() {
       ) : null}
 
       <section className="space-y-4">
-        <div>
-          <h2 className="text-xl font-semibold tracking-tight">Parse logs</h2>
-          <p className="text-sm text-[var(--muted-foreground)]">
-            Past PDF imports: status, counts, and OCR text.
-          </p>
-        </div>
+        <h2 className="flex items-center gap-2 text-xl font-semibold tracking-tight">
+          Parse logs
+          <Popover>
+            <PopoverTrigger asChild>
+              <button
+                type="button"
+                className="inline-flex size-6 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
+                aria-label="About parse logs"
+              >
+                <Info className="size-3.5" />
+              </button>
+            </PopoverTrigger>
+            <PopoverContent
+              align="start"
+              side="bottom"
+              sideOffset={8}
+              className="w-80 gap-0 p-3.5"
+            >
+              <PopoverHeader className="gap-1.5">
+                <PopoverTitle>Parse logs</PopoverTitle>
+                <PopoverDescription className="leading-relaxed">
+                  Past PDF imports: status, counts, and OCR text.
+                </PopoverDescription>
+              </PopoverHeader>
+            </PopoverContent>
+          </Popover>
+        </h2>
         <StatementUploadLogs />
       </section>
     </div>

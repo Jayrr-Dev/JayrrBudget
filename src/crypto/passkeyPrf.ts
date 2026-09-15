@@ -1,4 +1,5 @@
 import { base64ToBytes, bytesToBase64, randomBytes, toArrayBuffer } from "./bytes";
+import { MASTER_WRAP_ALG, MASTER_WRAP_USAGES } from "./masterKey";
 
 function toBase64Url(bytes: ArrayBuffer): string {
   return bytesToBase64(bytes).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
@@ -20,7 +21,7 @@ async function wrapWithPrf(masterKey: CryptoKey, prf: ArrayBuffer): Promise<Arra
 
 async function unwrapWithPrf(wrapped: ArrayBuffer, prf: ArrayBuffer): Promise<CryptoKey> {
   const key = await crypto.subtle.importKey("raw", prf, "AES-KW", false, ["unwrapKey"]);
-  return crypto.subtle.unwrapKey("raw", wrapped, key, "AES-KW", { name: "AES-GCM", length: 256 }, true, ["encrypt", "decrypt"]);
+  return crypto.subtle.unwrapKey("raw", wrapped, key, "AES-KW", MASTER_WRAP_ALG, true, MASTER_WRAP_USAGES);
 }
 
 function prfFromCredential(credential: Credential | null): ArrayBuffer {
@@ -36,7 +37,7 @@ export async function registerPasskey(masterKey: CryptoKey, vaultId: string) {
   const credential = await navigator.credentials.create({ publicKey: {
     challenge: toArrayBuffer(randomBytes(32)),
     rp: { name: "Jayrr's Budget", id: window.location.hostname },
-    user: { id: toArrayBuffer(randomBytes(16)), name: `vault-${vaultId}`, displayName: "Jayrr's private vault" },
+    user: { id: toArrayBuffer(randomBytes(16)), name: `vault-${vaultId}`, displayName: "Jayrr's Budget" },
     pubKeyCredParams: [{ type: "public-key", alg: -7 }, { type: "public-key", alg: -257 }],
     authenticatorSelection: { residentKey: "preferred", userVerification: "required" },
     timeout: 60_000,

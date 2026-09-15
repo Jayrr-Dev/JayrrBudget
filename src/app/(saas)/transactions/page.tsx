@@ -2,7 +2,6 @@
 
 import {
   DashboardToolbar,
-  EncryptedLedgerBanner,
   LoadingSkeleton,
   useDashboard,
 } from "@/domains/dashboard/ui/DashboardPanels";
@@ -31,7 +30,6 @@ export default function TransactionsPage() {
         </div>
         <DashboardToolbar onImported={() => dashboard.reload?.()} />
       </header>
-      <EncryptedLedgerBanner locked={dashboard.locked} />
       {dashboard.isPending && !data ? (
         <LoadingSkeleton />
       ) : data ? (

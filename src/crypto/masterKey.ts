@@ -2,12 +2,18 @@ import { base64ToBytes, bytesToBase64, randomBytes } from "./bytes";
 import { DEFAULT_ARGON2_PARAMS, deriveKey } from "./kdf";
 import type { Argon2Params } from "./types";
 
+export const MASTER_WRAP_ALG = { name: "AES-KW", length: 256 } as const;
+export const MASTER_WRAP_USAGES: KeyUsage[] = ["wrapKey", "unwrapKey"];
+
+/** Envelope wrap uses AES-KW. Older sessions imported the same bits as AES-GCM. */
+export async function asMasterWrapKey(key: CryptoKey): Promise<CryptoKey> {
+  if (key.algorithm.name === "AES-KW") return key;
+  const raw = await crypto.subtle.exportKey("raw", key);
+  return crypto.subtle.importKey("raw", raw, MASTER_WRAP_ALG, true, MASTER_WRAP_USAGES);
+}
+
 export async function generateMasterKey(): Promise<CryptoKey> {
-  return crypto.subtle.generateKey(
-    { name: "AES-GCM", length: 256 },
-    true,
-    ["encrypt", "decrypt"],
-  );
+  return crypto.subtle.generateKey(MASTER_WRAP_ALG, true, MASTER_WRAP_USAGES);
 }
 
 export async function wrapMasterKey(
@@ -30,9 +36,9 @@ export async function unwrapMasterKey(
     wrapped,
     await deriveKey(secret, salt, params),
     "AES-KW",
-    { name: "AES-GCM", length: 256 },
+    MASTER_WRAP_ALG,
     true,
-    ["encrypt", "decrypt"],
+    MASTER_WRAP_USAGES,
   );
 }
 
@@ -53,5 +59,5 @@ export async function exportRawKey(key: CryptoKey): Promise<string> {
 }
 
 export async function importRawKey(value: string): Promise<CryptoKey> {
-  return crypto.subtle.importKey("raw", base64ToBytes(value), { name: "AES-GCM", length: 256 }, true, ["encrypt", "decrypt"]);
+  return crypto.subtle.importKey("raw", base64ToBytes(value), MASTER_WRAP_ALG, true, MASTER_WRAP_USAGES);
 }

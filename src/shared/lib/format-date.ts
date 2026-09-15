@@ -21,7 +21,7 @@ export function formatDisplayDate(value: string | null | undefined): string {
 }
 
 /**
- * Compact calendar date for dense tables: "Mar 3, 26".
+ * Compact calendar date for dense tables: "Mar 03, 26".
  */
 export function formatShortDisplayDate(
   value: string | null | undefined,
@@ -34,5 +34,5 @@ export function formatShortDisplayDate(
   const date = parseISO(trimmed);
   if (!isValid(date)) return trimmed;
 
-  return format(date, "MMM d, yy", { locale: enUS });
+  return format(date, "MMM dd, yy", { locale: enUS });
 }

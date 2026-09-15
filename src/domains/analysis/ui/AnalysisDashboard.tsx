@@ -38,6 +38,7 @@ import type {
   AnalysisCategoryBreakdown,
   AnalysisCategorySeries,
   AnalysisData,
+  AnalysisIncomeSourceBreakdown,
   AnalysisMerchantBreakdown,
   AnalysisPeriod,
   AnalysisRange,
@@ -61,7 +62,6 @@ import { normalizeCurrencyCode } from "@/shared/lib/currency";
 import { useScratchNoteActions } from "@/domains/scratch-note/scratchNoteStore";
 import { analysisFromPrivateLedger } from "@/domains/vault/application/analysisFromPrivateLedger";
 import { usePrivateLedger } from "@/domains/vault/ui/usePrivateLedger";
-import { EncryptedLedgerBanner } from "@/domains/dashboard/ui/DashboardPanels";
 import { cn } from "@/lib/utils";
 import { downloadCsv, toCsv } from "@/shared/lib/csv";
 import {
@@ -110,6 +110,7 @@ const TAB_OPTIONS: { value: AnalysisTab; label: string }[] = [
   { value: "types", label: "Code" },
   { value: "spreads", label: "Spreads" },
   { value: "merchants", label: "Merchants" },
+  { value: "income", label: "Income" },
   { value: "patterns", label: "Patterns" },
 ];
 
@@ -187,7 +188,6 @@ function useAnalysis(range: AnalysisRange, period: AnalysisPeriod) {
     enabled: !privateLedger.encryptedLedger || (privateLedger.unlocked && !privateLedger.loading),
     queryFn: async () => {
       if (privateLedger.encryptedLedger) {
-        if (!privateLedger.unlocked) throw new Error("Unlock the private vault to run analysis.");
         return analysisFromPrivateLedger(privateLedger.ledger, range, period);
       }
       const res = await getAnalysis({ range, period });
@@ -201,14 +201,14 @@ function useAnalysis(range: AnalysisRange, period: AnalysisPeriod) {
   });
   return {
     data: query.data,
-    isPending: query.isPending || (privateLedger.encryptedLedger && privateLedger.loading),
+    isPending: query.isPending || (privateLedger.encryptedLedger && (privateLedger.loading || !privateLedger.unlocked)),
     isError: query.isError || Boolean(privateLedger.encryptedLedger && privateLedger.error),
     isFetching: query.isFetching,
-    error: privateLedger.encryptedLedger && !privateLedger.unlocked
-      ? new Error("Unlock the private vault on Profile to view analysis.")
-      : query.error instanceof Error
+    error: query.error instanceof Error
         ? query.error
-        : null,
+        : privateLedger.error
+          ? new Error(privateLedger.error)
+          : null,
     encryptedLedger: privateLedger.encryptedLedger,
     locked: privateLedger.encryptedLedger && !privateLedger.unlocked,
   };
@@ -5254,6 +5254,323 @@ function MerchantsTab({
   );
 }
 
+function IncomeSourceDrilldown({
+  data,
+  selected,
+  onSelect,
+  period,
+  onPeriodChange,
+}: {
+  data: AnalysisData;
+  selected: string;
+  onSelect: (source: string) => void;
+  period: AnalysisPeriod;
+  onPeriodChange: (value: AnalysisPeriod) => void;
+}) {
+  const breakdowns = data.incomeSourceBreakdowns ?? [];
+  const breakdown: AnalysisIncomeSourceBreakdown | undefined =
+    breakdowns.find((item) => item.source === selected) ?? breakdowns[0];
+
+  if (!breakdown) return null;
+
+  return (
+    <section className="space-y-4">
+      <ChartTitle
+        title="Income source detail"
+        info="Pick a payor. Categories come from the labels on those inflow rows."
+      />
+      <div className="flex flex-wrap gap-1">
+        {breakdowns.map((item) => (
+          <Button
+            key={item.source}
+            type="button"
+            size="sm"
+            variant={item.source === breakdown.source ? "default" : "outline"}
+            onClick={() => onSelect(item.source)}
+          >
+            {item.source}
+          </Button>
+        ))}
+      </div>
+      <StackedMixChart
+        title={`${breakdown.source} category mix`}
+        info={`How ${breakdown.source} splits by category over ${ANALYSIS_PERIOD_META[period].nounPlural}. ${formatMoney(breakdown.spend, data.currency)} in this range.`}
+        series={breakdown.categorySeries}
+        monthly={breakdown.categoryMonthly}
+        currency={data.currency}
+        period={period}
+        onPeriodChange={onPeriodChange}
+        other={breakdown.other}
+        otherByPeriod={breakdown.otherByPeriod}
+      />
+      <RankedBarChart
+        title={`${breakdown.source} categories`}
+        info="Category labels inside this income source."
+        rows={breakdown.categories}
+        currency={data.currency}
+        color="oklch(0.52 0.1 155)"
+        labelWidth={160}
+      />
+    </section>
+  );
+}
+
+function IncomeTab({
+  data,
+  source,
+  onSelectSource,
+  period,
+  onPeriodChange,
+  pane,
+  onPaneChange,
+}: {
+  data: AnalysisData;
+  source: string;
+  onSelectSource: (name: string) => void;
+  period: AnalysisPeriod;
+  onPeriodChange: (value: AnalysisPeriod) => void;
+  pane: FacetPane;
+  onPaneChange: (value: FacetPane) => void;
+}) {
+  const stacked = data.incomeSourceStacked ?? { rows: [], series: [] };
+  const categoryStacked = data.incomeCategoryStacked ?? { rows: [], series: [] };
+  const breakdowns = data.incomeSourceBreakdowns ?? [];
+  const sources = data.incomeSources ?? [];
+  const incomeCategories = data.incomeCategories ?? [];
+  const accounts = data.incomeAccounts ?? [];
+  const total = data.summary.totalIncome;
+  const periodMeta = ANALYSIS_PERIOD_META[period];
+  const periodCount = Math.max(data.monthly.length, 1);
+  const splitsBySource = vendorsRecord(
+    breakdowns.map((item) => ({
+      name: item.source,
+      vendors: item.categories,
+    })),
+  );
+  let peakIncomePeriod: string | null = null;
+  let peakIncomeAmount = 0;
+  for (const point of data.monthly) {
+    if (point.income > peakIncomeAmount) {
+      peakIncomeAmount = point.income;
+      peakIncomePeriod = point.label;
+    }
+  }
+  const incomeCount = sources.reduce((sum, row) => sum + (row.count ?? 0), 0);
+
+  if (sources.length === 0) {
+    return (
+      <div className="rounded-xl border border-dashed border-[var(--border)] px-6 py-16 text-center">
+        <p className="text-lg font-medium">No income in this range</p>
+        <p className="mt-1 text-sm text-[var(--muted-foreground)]">
+          Payroll, cashback, and e-transfers in show up here. Card payment
+          credits stay out.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <FacetPaneShell
+      pane={pane}
+      onPaneChange={onPaneChange}
+      visualizations={
+        <div className="space-y-6">
+          <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <Stat
+              label="Income"
+              value={formatMoney(total, data.currency)}
+              info={`${incomeCount} inflow rows. Payroll, cashback, and e-transfers in. Card payment credits on the visa are not income.`}
+            />
+            <Stat
+              label={periodMeta.incomeRateLabel}
+              value={formatMoney(data.summary.incomePerPeriod ?? 0, data.currency)}
+              info={`Income divided by ${periodMeta.nounPlural} in this range (same buckets as the ${periodMeta.label.toLowerCase()} charts).`}
+            />
+            <Stat
+              label={`Peak ${periodMeta.noun}`}
+              value={
+                peakIncomePeriod
+                  ? formatMoney(peakIncomeAmount, data.currency)
+                  : "-"
+              }
+              info={
+                peakIncomePeriod
+                  ? `Highest income: ${peakIncomePeriod}.`
+                  : "No income in this range."
+              }
+            />
+            <Stat
+              label="Sources"
+              value={String(sources.length)}
+              info="Distinct payor names (Merchant clean, falling back to the statement line)."
+            />
+          </section>
+          <StackedRankedBarChart
+            title="Income by source"
+            info="Every payor with real income, sliced by category. The last 15% inside each row rolls into Other. Click a bar to open its category detail."
+            rows={stacked.rows}
+            series={stacked.series}
+            currency={data.currency}
+            labelWidth={180}
+            onSelect={(name) => {
+              if (breakdowns.some((item) => item.source === name)) {
+                onSelectSource(name);
+              }
+            }}
+            otherByRow={stacked.otherByRow}
+            showViewToggle
+          />
+          <StackedMixChart
+            title="Income mix over time"
+            info={`${periodMeta.label} income by payor. Named bands are the first 85%. The last 15% is Other.`}
+            series={data.incomeSourceSeries ?? []}
+            monthly={data.incomeSourceMonthly ?? []}
+            currency={data.currency}
+            period={period}
+            onPeriodChange={onPeriodChange}
+            variant="area"
+            other={data.incomeSourceOther}
+            otherByPeriod={data.incomeSourceOtherByPeriod}
+          />
+          <StackedRankedBarChart
+            title="Income by category"
+            info="Income categories, sliced by payor. The last 15% inside each row rolls into Other."
+            rows={categoryStacked.rows}
+            series={categoryStacked.series}
+            currency={data.currency}
+            labelWidth={180}
+            otherByRow={categoryStacked.otherByRow}
+            showViewToggle
+          />
+          <StackedMixChart
+            title="Category mix over time"
+            info={`${periodMeta.label} income by category. Named bands are the first 85%. The last 15% is Other.`}
+            series={data.incomeCategorySeries ?? []}
+            monthly={data.incomeCategoryMonthly ?? []}
+            currency={data.currency}
+            period={period}
+            onPeriodChange={onPeriodChange}
+            variant="area"
+            other={data.incomeCategoryOther}
+            otherByPeriod={data.incomeCategoryOtherByPeriod}
+          />
+          <IncomeSourceDrilldown
+            data={data}
+            selected={source}
+            onSelect={onSelectSource}
+            period={period}
+            onPeriodChange={onPeriodChange}
+          />
+          <TaxonomyBreakdownTable
+            title="All income sources"
+            info="Every payor in this range with amount, share of total income, and top categories inside each source."
+            nameLabel="Source"
+            rows={sources}
+            currency={data.currency}
+            totalSpend={total}
+            nestedLabel="Top categories"
+            stacked={stacked}
+          />
+          <RankedBarChart
+            title="Income by account"
+            info="Which account received the inflow."
+            rows={accounts}
+            currency={data.currency}
+            color="oklch(0.52 0.1 155)"
+            labelWidth={150}
+          />
+        </div>
+      }
+      summary={
+        <div className="space-y-6">
+          <LeaderboardTable
+            title="Top income sources"
+            info="Biggest payors by real income. Click a row to see the categories inside."
+            nameLabel="Source"
+            rows={sources}
+            currency={data.currency}
+            totalSpend={total}
+            vendorsByRow={splitsBySource}
+            transactionsForRow={(name) => peeksFor(data, "income-source", name)}
+            transactionsForVendor={(row, vendor) =>
+              peeksFor(data, "income-source-category", row, vendor)
+            }
+          />
+          <LeaderboardTable
+            title="Top income categories"
+            info="Biggest income categories in this range."
+            nameLabel="Category"
+            rows={incomeCategories}
+            currency={data.currency}
+            totalSpend={total}
+            transactionsForRow={(name) =>
+              peeksFor(data, "income-category", name)
+            }
+          />
+        </div>
+      }
+      average={
+        <div className="space-y-6">
+          <AverageLeaderboardTable
+            title="Average by source"
+            info={`Total income and inflow count for each payor, divided by ${periodCount} ${periodMeta.nounPlural} in this range.`}
+            nameLabel="Source"
+            rows={sources}
+            currency={data.currency}
+            period={period}
+            periodCount={periodCount}
+            vendorsByRow={splitsBySource}
+            transactionsForRow={(name) => peeksFor(data, "income-source", name)}
+            transactionsForVendor={(row, vendor) =>
+              peeksFor(data, "income-source-category", row, vendor)
+            }
+          />
+          <AverageLeaderboardTable
+            title="Average by category"
+            info={`Total income and inflow count for each category, divided by ${periodCount} ${periodMeta.nounPlural} in this range.`}
+            nameLabel="Category"
+            rows={incomeCategories}
+            currency={data.currency}
+            period={period}
+            periodCount={periodCount}
+            transactionsForRow={(name) =>
+              peeksFor(data, "income-category", name)
+            }
+          />
+        </div>
+      }
+      range={
+        <div className="space-y-6">
+          <RangeLeaderboardTable
+            title="High Mid Low by source"
+            info={`Highest, median, and lowest ${periodMeta.label.toLowerCase()} income for each payor inside the selected header range. Zero buckets are skipped.`}
+            nameLabel="Source"
+            rows={sources}
+            series={data.incomeSourceSeries ?? []}
+            monthly={data.incomeSourceMonthly ?? []}
+            currency={data.currency}
+            otherByPeriod={data.incomeSourceOtherByPeriod}
+            transactionsForRow={(name) => peeksFor(data, "income-source", name)}
+          />
+          <RangeLeaderboardTable
+            title="High Mid Low by category"
+            info={`Highest, median, and lowest ${periodMeta.label.toLowerCase()} income for each category inside the selected header range. Zero buckets are skipped.`}
+            nameLabel="Category"
+            rows={incomeCategories}
+            series={data.incomeCategorySeries ?? []}
+            monthly={data.incomeCategoryMonthly ?? []}
+            currency={data.currency}
+            otherByPeriod={data.incomeCategoryOtherByPeriod}
+            transactionsForRow={(name) =>
+              peeksFor(data, "income-category", name)
+            }
+          />
+        </div>
+      }
+    />
+  );
+}
+
 function PatternsTab({ data }: { data: AnalysisData }) {
   const weekend = data.weekendSplit ?? [];
   const weekdaySpend =
@@ -5379,6 +5696,9 @@ export function AnalysisDashboard() {
   const [tag, setTag] = useState(DEFAULT_ANALYSIS_UI_PREFS.tag);
   const [type, setType] = useState(DEFAULT_ANALYSIS_UI_PREFS.type);
   const [merchant, setMerchant] = useState(DEFAULT_ANALYSIS_UI_PREFS.merchant);
+  const [incomeSource, setIncomeSource] = useState(
+    DEFAULT_ANALYSIS_UI_PREFS.incomeSource,
+  );
   const [prefsReady, setPrefsReady] = useState(false);
   const query = useAnalysis(range, period);
   const data = query.data;
@@ -5394,6 +5714,7 @@ export function AnalysisDashboard() {
     setTag(prefs.tag);
     setType(prefs.type);
     setMerchant(prefs.merchant);
+    setIncomeSource(prefs.incomeSource);
     setPrefsReady(true);
   }, []);
 
@@ -5409,6 +5730,7 @@ export function AnalysisDashboard() {
       tag,
       type,
       merchant,
+      incomeSource,
     });
   }, [
     prefsReady,
@@ -5421,6 +5743,7 @@ export function AnalysisDashboard() {
     tag,
     type,
     merchant,
+    incomeSource,
   ]);
 
   useEffect(() => {
@@ -5453,6 +5776,13 @@ export function AnalysisDashboard() {
     if (names.length === 0) return;
     if (!names.includes(merchant)) setMerchant(names[0] ?? "");
   }, [data, merchant]);
+
+  useEffect(() => {
+    const names =
+      data?.incomeSourceBreakdowns?.map((item) => item.source) ?? [];
+    if (names.length === 0) return;
+    if (!names.includes(incomeSource)) setIncomeSource(names[0] ?? "");
+  }, [data, incomeSource]);
 
   return (
     <TooltipProvider>
@@ -5518,7 +5848,6 @@ export function AnalysisDashboard() {
               {query.error?.message ?? "Analysis failed"}
             </div>
           ) : null}
-          <EncryptedLedgerBanner locked={query.locked} />
 
           {query.isPending && !data ? (
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -5617,6 +5946,17 @@ export function AnalysisDashboard() {
                   data={data}
                   merchant={merchant}
                   onSelectMerchant={setMerchant}
+                  period={period}
+                  onPeriodChange={setPeriod}
+                  pane={pane}
+                  onPaneChange={setPane}
+                />
+              ) : null}
+              {tab === "income" ? (
+                <IncomeTab
+                  data={data}
+                  source={incomeSource}
+                  onSelectSource={setIncomeSource}
                   period={period}
                   onPeriodChange={setPeriod}
                   pane={pane}

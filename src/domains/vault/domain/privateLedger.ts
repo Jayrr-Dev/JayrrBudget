@@ -6,12 +6,21 @@ export type PrivateTransaction = {
   amount: number;
   currency: string;
   accountId?: string | null;
+  authorizedDate?: string | null;
+  city?: string | null;
+  region?: string | null;
+  country?: string | null;
   merchantName?: string | null;
   merchantClean?: string | null;
   sectionName?: string | null;
   categoryName?: string | null;
   subcategoryName?: string | null;
   spreadName?: string | null;
+  transactionTypeName?: string | null;
+  txnCode?: string | null;
+  channel?: string | null;
+  statementRecordId?: string | null;
+  source?: string | null;
   tagNames?: string[];
   pending?: boolean;
 };
@@ -39,6 +48,9 @@ export type PrivateMerchant = {
   company?: string | null;
   brand?: string | null;
   website?: string | null;
+  /** Envelope timestamps from encryptedRecords (ms since epoch). */
+  createdAt?: number;
+  updatedAt?: number;
 };
 
 export type PrivateNote = {
@@ -74,6 +86,36 @@ export type PrivateLoanTerms = {
   matchAmount?: number | null;
 };
 
+export type PrivateStatementLog = {
+  recordId: string;
+  revision: number;
+  filename: string;
+  fileHash: string;
+  status: string;
+  institutionName: string | null;
+  accountName: string | null;
+  accountMask: string | null;
+  currency: string | null;
+  pageCount: number | null;
+  transactionCount: number | null;
+  insertedCount: number | null;
+  updatedCount: number | null;
+  skippedCount: number | null;
+  statementPeriodStart: string | null;
+  statementPeriodEnd: string | null;
+  openingBalance: number | null;
+  closingBalance: number | null;
+  transactionSum: number | null;
+  computedClosing: number | null;
+  balanceDelta: number | null;
+  balanceOk: boolean | null;
+  createdAt: string;
+  ocrMarkdown?: string | null;
+  ocrRecordId?: string | null;
+  ocrRevision?: number | null;
+  transactionIds?: string[];
+};
+
 export type PrivateLedger = {
   transactions: PrivateTransaction[];
   accounts: PrivateAccount[];
@@ -81,4 +123,5 @@ export type PrivateLedger = {
   notes: PrivateNote[];
   scratchPads: PrivateScratchPad[];
   loans: PrivateLoanTerms[];
+  statementLogs: PrivateStatementLog[];
 };

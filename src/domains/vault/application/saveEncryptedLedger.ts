@@ -13,7 +13,7 @@ export type VaultWriteContext = {
 
 function requireMasterKey() {
   const key = getVaultMasterKey();
-  if (!key) throw new Error("Unlock the private vault before editing encrypted rows.");
+  if (!key) throw new Error("Sign in again so this browser can save encrypted rows.");
   return key;
 }
 
@@ -39,18 +39,27 @@ export async function patchEncryptedTransaction(
     kind: "tx",
     value: {
       date: value.date,
+      authorizedDate: value.authorizedDate ?? null,
       description: value.description,
       amount: value.amount,
       currency: value.currency,
       accountId: value.accountId ?? null,
+      pending: Boolean(value.pending),
+      city: value.city ?? null,
+      region: value.region ?? null,
+      country: value.country ?? null,
       merchantName: value.merchantName ?? null,
       merchantClean: value.merchantClean ?? null,
       sectionName: value.sectionName ?? null,
       categoryName: value.categoryName ?? null,
       subcategoryName: value.subcategoryName ?? null,
       spreadName: value.spreadName ?? null,
+      transactionTypeName: value.transactionTypeName ?? null,
+      txnCode: value.txnCode ?? null,
+      channel: value.channel ?? null,
+      statementRecordId: value.statementRecordId ?? null,
+      source: value.source ?? "statement",
       tagNames: value.tagNames ?? [],
-      pending: Boolean(value.pending),
     },
     expectedRevision: revision,
   }]);

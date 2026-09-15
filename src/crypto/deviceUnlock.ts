@@ -1,4 +1,5 @@
 import { base64ToBytes, bytesToBase64, randomBytes, toArrayBuffer } from "./bytes";
+import { MASTER_WRAP_ALG, MASTER_WRAP_USAGES } from "./masterKey";
 
 const DB_NAME = "jayrr-budget-vault";
 const STORE = "deviceUnlock";
@@ -75,9 +76,9 @@ export async function unlockMasterKeyFromDevice(vaultId: string): Promise<Crypto
       toArrayBuffer(base64ToBytes(record.wrappedMasterKey)),
       await wrapKeyFromRaw(toArrayBuffer(base64ToBytes(record.deviceKey))),
       "AES-KW",
-      { name: "AES-GCM", length: 256 },
+      MASTER_WRAP_ALG,
       true,
-      ["encrypt", "decrypt"],
+      MASTER_WRAP_USAGES,
     );
   } catch {
     return null;

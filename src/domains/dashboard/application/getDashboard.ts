@@ -40,7 +40,7 @@ export async function getDashboard(options?: {
       error:
         error instanceof Error
           ? error.message
-          : "Convex dashboard unavailable",
+          : "Dashboard unavailable",
     };
   }
 }

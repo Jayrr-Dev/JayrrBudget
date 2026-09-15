@@ -4,7 +4,7 @@ import { randomBytes, toArrayBuffer } from "@/crypto/bytes";
 import { DEFAULT_ARGON2_PARAMS } from "@/crypto/kdf";
 import { createVaultKeyMaterial, unwrapMasterKey, wrapMasterKey } from "@/crypto/masterKey";
 import { createRecoveryFile, downloadRecoveryFile } from "@/crypto/recovery";
-import { unlockVault } from "@/crypto/session";
+import { getVaultMasterKey, unlockVault } from "@/crypto/session";
 
 export const MIN_PASSCODE_LENGTH = 8;
 
@@ -115,10 +115,28 @@ export async function createVaultWithPasscode(client: VaultClient, passcode: str
   }
 
   const existing = await client.query(api.vaults.get, {});
-  if (!existing) throw new Error("Private vault was not created.");
+  if (!existing) throw new Error("Encryption was not set up.");
   const unlocked = await unlockVaultWithPasscode(existing, passcode);
-  if (!unlocked) throw new Error("Could not unlock the existing private vault with this password.");
+  if (!unlocked) throw new Error("Could not open the ledger with this password.");
   return "unlocked" as const;
+}
+
+export type HydratedVault = {
+  vaultId: string;
+  keyId: string;
+};
+
+/** Opens the vault from this browser's device wrap. No extra password prompt. */
+export async function hydrateVaultSession(client: VaultClient): Promise<HydratedVault | null> {
+  const vault = await client.query(api.vaults.get, {}) as (VaultUnlockRecord & { currentKeyId?: string }) | null;
+  if (!vault) return null;
+  if (!getVaultMasterKey()) {
+    const deviceKey = await unlockMasterKeyFromDevice(vault.vaultId);
+    if (!deviceKey) return null;
+    unlockVault(deviceKey);
+  }
+  if (!vault.currentKeyId) return null;
+  return { vaultId: vault.vaultId, keyId: vault.currentKeyId };
 }
 
 /** Creates a vault on first sign-in, or unlocks with the same password used to sign in. */

@@ -41,7 +41,7 @@ export default function ProfilePage() {
       <header className="space-y-1 border-b border-[var(--border)] pb-6">
         <h1 className="text-3xl font-semibold tracking-tight">Profile</h1>
         <p className="text-[var(--muted-foreground)]">
-          Your name, sign-in, and private vault. The same password unlocks encrypted data on this device.
+          Your name, sign-in, and encryption settings. The same password protects ledger data on this device.
         </p>
       </header>
 

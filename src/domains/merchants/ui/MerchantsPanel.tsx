@@ -5,7 +5,6 @@ import { useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
 import { DataTable } from "@/components/ui/data-table";
 import type { DataTableFeatures } from "@/components/ui/data-table-features";
-import { EncryptedLedgerBanner } from "@/domains/dashboard/ui/DashboardPanels";
 import { usePrivateLedger } from "@/domains/vault/ui/usePrivateLedger";
 import { useMemo } from "react";
 
@@ -36,6 +35,7 @@ function textOrDash(value: string | null | undefined) {
 }
 
 function formatWhen(ms: number) {
+  if (!Number.isFinite(ms) || ms <= 0) return null;
   return new Date(ms).toLocaleString(undefined, {
     dateStyle: "medium",
     timeStyle: "short",
@@ -106,9 +106,11 @@ const columns = columnHelper.columns([
   }),
   columnHelper.accessor("updatedAt", {
     header: "Updated",
-    cell: ({ getValue }) => (
-      <span className="whitespace-nowrap text-sm">{formatWhen(getValue())}</span>
-    ),
+    cell: ({ getValue }) => {
+      const label = formatWhen(getValue());
+      if (!label) return textOrDash(null);
+      return <span className="whitespace-nowrap text-sm">{label}</span>;
+    },
     sortFn: "basic",
     meta: { width: "10rem" },
   }),
@@ -132,8 +134,8 @@ export function MerchantsPanel() {
       brand: merchant.brand ?? null,
       website: merchant.website ?? null,
       logoUrl: null as string | null,
-      createdAt: 0,
-      updatedAt: 0,
+      createdAt: merchant.createdAt ?? 0,
+      updatedAt: merchant.updatedAt ?? merchant.createdAt ?? 0,
     }));
     if (fromRecords.length) return fromRecords;
     const names = new Map<string, MerchantRow>();
@@ -162,13 +164,14 @@ export function MerchantsPanel() {
     }
     return (
       <div className="space-y-4">
-        <EncryptedLedgerBanner locked={!privateLedger.unlocked} />
-        {!privateLedger.unlocked ? null : (
+        {privateLedger.loading || !privateLedger.unlocked ? (
+          <p className="text-sm text-[var(--muted-foreground)]">Loading merchants…</p>
+        ) : (
           <>
             <p className="text-sm text-[var(--muted-foreground)]">
               {encryptedRows.length === 0
-                ? "No merchants in the encrypted ledger yet."
-                : `${encryptedRows.length} merchant${encryptedRows.length === 1 ? "" : "s"} (from vault)`}
+                ? "No merchants yet."
+                : `${encryptedRows.length} merchant${encryptedRows.length === 1 ? "" : "s"}`}
             </p>
             {encryptedRows.length === 0 ? null : (
               <DataTable

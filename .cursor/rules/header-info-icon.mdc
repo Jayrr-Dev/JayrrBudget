@@ -1,0 +1,14 @@
+---
+description: Put long helper copy in an info icon immediately to the right of the header title
+alwaysApply: true
+---
+
+# Header helper copy → info icon
+
+Do not put long explanatory paragraphs under dialog, page, or section titles.
+
+Put that copy in an info icon **directly to the right of the title** (same row, after the title text). Use the existing title + `Popover` + `Info` pattern in `StatementAiRulesDialog` and `StatementUpload`.
+
+Keep a `sr-only` description when the dialog still needs an accessible description.
+
+Do this for new UI and when editing existing headers with helper text.

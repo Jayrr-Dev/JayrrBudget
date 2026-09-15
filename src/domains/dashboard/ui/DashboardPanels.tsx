@@ -13,7 +13,6 @@ import { StatementUpload } from "@/domains/statements/ui/StatementUpload";
 import { dashboardFromPrivateLedger } from "@/domains/vault/application/dashboardFromPrivateLedger";
 import { usePrivateLedger } from "@/domains/vault/ui/usePrivateLedger";
 import { formatDisplayDate } from "@/shared/lib/format-date";
-import Link from "next/link";
 
 export function useDashboard(transactionLimit: number | null = 250) {
   const { isAuthenticated } = useConvexAuth();
@@ -40,13 +39,9 @@ export function useDashboard(transactionLimit: number | null = 250) {
     const locked = !privateLedger.vaultReady || !privateLedger.unlocked;
     return {
       data: locked ? undefined : encryptedData,
-      error: privateLedger.error
-        ? new Error(privateLedger.error)
-        : locked
-          ? new Error("Unlock the private vault on Profile to view the encrypted ledger.")
-          : null,
+      error: privateLedger.error ? new Error(privateLedger.error) : null,
       isPending: privateLedger.loading,
-      isError: Boolean(privateLedger.error) || (locked && !privateLedger.loading),
+      isError: Boolean(privateLedger.error),
       isSuccess: Boolean(encryptedData) && !locked,
       encryptedLedger: true as const,
       locked,
@@ -64,17 +59,6 @@ export function useDashboard(transactionLimit: number | null = 250) {
     locked: false,
     reload: undefined as undefined | (() => void),
   };
-}
-
-export function EncryptedLedgerBanner({ locked }: { locked?: boolean }) {
-  if (!locked) return null;
-  return (
-    <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-sm text-[var(--muted-foreground)]">
-      Encrypted ledger is on. Unlock the private vault on the{" "}
-      <Link href="/profile" className="text-[var(--accent)] underline">profile page</Link>
-      {" "}to load balances and transactions.
-    </div>
-  );
 }
 
 export function DashboardToolbar({

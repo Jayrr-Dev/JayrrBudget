@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { requireUser } from "./lib/auth";
+import { isCategorized } from "./lib/categorization";
 
 const MANUAL_INSTITUTION_ID = "manual-statements";
 
@@ -32,7 +33,7 @@ function toLog(row: {
   ocrStorageId?: unknown;
   createdAt: number;
   completedAt: number | null;
-}) {
+}, categorization?: { categorized: boolean; categorizedCount: number }) {
   return {
     id: row.uploadId,
     filename: row.filename,
@@ -58,12 +59,57 @@ function toLog(row: {
     balanceOk: row.balanceOk,
     error: row.error,
     hasOcr: Boolean(row.ocrStorageId || row.ocrMarkdown?.trim()),
+    categorized: categorization?.categorized ?? false,
+    categorizedCount: categorization?.categorizedCount ?? 0,
     createdAt: new Date(row.createdAt).toISOString(),
     completedAt: row.completedAt
       ? new Date(row.completedAt).toISOString()
       : null,
   };
 }
+
+const statementLogValidator = v.object({
+  id: v.number(),
+  filename: v.string(),
+  status: v.string(),
+  institutionName: v.union(v.string(), v.null()),
+  accountName: v.union(v.string(), v.null()),
+  accountMask: v.union(v.string(), v.null()),
+  currency: v.union(v.string(), v.null()),
+  pageCount: v.union(v.number(), v.null()),
+  transactionCount: v.union(v.number(), v.null()),
+  insertedCount: v.union(v.number(), v.null()),
+  updatedCount: v.union(v.number(), v.null()),
+  skippedCount: v.union(v.number(), v.null()),
+  statementPeriodStart: v.union(v.string(), v.null()),
+  statementPeriodEnd: v.union(v.string(), v.null()),
+  openingBalance: v.union(v.number(), v.null()),
+  closingBalance: v.union(v.number(), v.null()),
+  totalDebits: v.union(v.number(), v.null()),
+  totalCredits: v.union(v.number(), v.null()),
+  transactionSum: v.union(v.number(), v.null()),
+  computedClosing: v.union(v.number(), v.null()),
+  balanceDelta: v.union(v.number(), v.null()),
+  balanceOk: v.union(v.boolean(), v.null()),
+  error: v.union(v.string(), v.null()),
+  hasOcr: v.boolean(),
+  categorized: v.boolean(),
+  categorizedCount: v.number(),
+  createdAt: v.string(),
+  completedAt: v.union(v.string(), v.null()),
+});
+
+const listResultValidator = v.union(
+  v.object({
+    ok: v.literal(true),
+    uploads: v.array(statementLogValidator),
+  }),
+  v.object({
+    ok: v.literal(false),
+    status: v.number(),
+    error: v.string(),
+  }),
+);
 
 function splitDebitCredit(amount: number) {
   if (amount > 0) return { debit: amount, credit: null as number | null };
@@ -192,6 +238,7 @@ export const findCompletedByFileHash = query({
 
 export const list = query({
   args: {},
+  returns: listResultValidator,
   handler: async (ctx) => {
     const user = await requireUser(ctx);
     try {
@@ -199,10 +246,23 @@ export const list = query({
         .query("statementUploads")
         .withIndex("by_userId", (q) => q.eq("userId", user._id))
         .collect();
-      const uploads = rows
-        .slice()
-        .sort((a, b) => b.createdAt - a.createdAt)
-        .map(toLog);
+      const uploads = [];
+      for (const row of rows.slice().sort((a, b) => b.createdAt - a.createdAt)) {
+        const txs = await ctx.db
+          .query("transactions")
+          .withIndex("by_userId_statementUploadId", (q) =>
+            q.eq("userId", user._id).eq("statementUploadId", row.uploadId),
+          )
+          .collect();
+        const categorizedCount = txs.filter((tx) => isCategorized(tx)).length;
+        const total = txs.length;
+        uploads.push(
+          toLog(row, {
+            categorized: total > 0 && categorizedCount === total,
+            categorizedCount,
+          }),
+        );
+      }
       return { ok: true as const, uploads };
     } catch (error) {
       return {
@@ -235,10 +295,21 @@ export const get = query({
           error: "Statement upload not found.",
         };
       }
+      const txs = await ctx.db
+        .query("transactions")
+        .withIndex("by_userId_statementUploadId", (q) =>
+          q.eq("userId", user._id).eq("statementUploadId", args.uploadId),
+        )
+        .collect();
+      const categorizedCount = txs.filter((tx) => isCategorized(tx)).length;
+      const total = txs.length;
       return {
         ok: true as const,
         upload: {
-          ...toLog(row),
+          ...toLog(row, {
+            categorized: total > 0 && categorizedCount === total,
+            categorizedCount,
+          }),
           ocrMarkdown: row.ocrMarkdown ?? null,
         },
       };
@@ -631,11 +702,21 @@ export const remove = mutation({
 
       if (account) {
         const latest = sameAccount[0];
-        await ctx.db.patch(account._id, {
-          currentBalance: latest?.closingBalance ?? null,
-          availableBalance: latest?.closingBalance ?? null,
-          updatedAt: Date.now(),
-        });
+        const leftoverTx = await ctx.db
+          .query("transactions")
+          .withIndex("by_userId_accountId_posted", (q) =>
+            q.eq("userId", user._id).eq("accountId", row.accountId!),
+          )
+          .first();
+        if (!latest && !leftoverTx) {
+          await ctx.db.delete(account._id);
+        } else {
+          await ctx.db.patch(account._id, {
+            currentBalance: latest?.closingBalance ?? null,
+            availableBalance: latest?.closingBalance ?? null,
+            updatedAt: Date.now(),
+          });
+        }
       }
     }
 

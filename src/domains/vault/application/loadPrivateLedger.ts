@@ -9,6 +9,7 @@ import type {
   PrivateMerchant,
   PrivateNote,
   PrivateScratchPad,
+  PrivateStatementLog,
   PrivateTransaction,
 } from "@/domains/vault/domain/privateLedger";
 
@@ -27,6 +28,7 @@ const EMPTY: PrivateLedger = {
   notes: [],
   scratchPads: [],
   loans: [],
+  statementLogs: [],
 };
 
 function asTx(value: unknown, recordId: string, revision: number): PrivateTransaction | null {
@@ -52,6 +54,15 @@ function asTx(value: unknown, recordId: string, revision: number): PrivateTransa
     spreadName: row.spreadName == null ? null : String(row.spreadName),
     tagNames: Array.isArray(row.tagNames) ? row.tagNames.map(String) : [],
     pending: Boolean(row.pending),
+    authorizedDate: row.authorizedDate == null ? null : String(row.authorizedDate),
+    city: row.city == null ? null : String(row.city),
+    region: row.region == null ? null : String(row.region),
+    country: row.country == null ? null : String(row.country),
+    transactionTypeName: row.transactionTypeName == null ? null : String(row.transactionTypeName),
+    txnCode: row.txnCode == null ? null : String(row.txnCode),
+    channel: row.channel == null ? null : String(row.channel),
+    statementRecordId: row.statementRecordId == null ? null : String(row.statementRecordId),
+    source: row.source == null ? null : String(row.source),
   };
 }
 
@@ -76,7 +87,12 @@ function asAccount(value: unknown, recordId: string, revision: number): PrivateA
   };
 }
 
-function asMerchant(value: unknown, recordId: string, revision: number): PrivateMerchant | null {
+function asMerchant(
+  value: unknown,
+  recordId: string,
+  revision: number,
+  timestamps?: { createdAt?: number; updatedAt?: number },
+): PrivateMerchant | null {
   if (!value || typeof value !== "object") return null;
   const row = value as Record<string, unknown>;
   const name = String(row.name ?? "");
@@ -90,6 +106,8 @@ function asMerchant(value: unknown, recordId: string, revision: number): Private
     company: row.company == null ? null : String(row.company),
     brand: row.brand == null ? null : String(row.brand),
     website: row.website == null ? null : String(row.website),
+    createdAt: timestamps?.createdAt,
+    updatedAt: timestamps?.updatedAt,
   };
 }
 
@@ -115,6 +133,61 @@ function asScratch(value: unknown, recordId: string, revision: number): PrivateS
     tabs: row.tabs as PrivateScratchPad["tabs"],
     activeId: String(row.activeId ?? ""),
     receiveId: String(row.receiveId ?? ""),
+  };
+}
+
+function asNumber(value: unknown): number | null {
+  if (value == null || value === "") return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+function asStatementLog(value: unknown, recordId: string, revision: number): PrivateStatementLog | null {
+  if (!value || typeof value !== "object") return null;
+  const row = value as Record<string, unknown>;
+  if (row.type != null && row.type !== "statement_import") return null;
+  const filename = String(row.filename ?? "").trim();
+  if (!filename) return null;
+  return {
+    recordId,
+    revision,
+    filename,
+    fileHash: String(row.fileHash ?? ""),
+    status: String(row.status ?? "completed"),
+    institutionName: row.institutionName == null ? null : String(row.institutionName),
+    accountName: row.accountName == null ? null : String(row.accountName),
+    accountMask: row.accountMask == null ? null : String(row.accountMask),
+    currency: row.currency == null ? null : String(row.currency),
+    pageCount: asNumber(row.pageCount),
+    transactionCount: asNumber(row.transactionCount),
+    insertedCount: asNumber(row.insertedCount),
+    updatedCount: asNumber(row.updatedCount),
+    skippedCount: asNumber(row.skippedCount),
+    statementPeriodStart: row.statementPeriodStart == null ? null : String(row.statementPeriodStart),
+    statementPeriodEnd: row.statementPeriodEnd == null ? null : String(row.statementPeriodEnd),
+    openingBalance: asNumber(row.openingBalance),
+    closingBalance: asNumber(row.closingBalance),
+    transactionSum: asNumber(row.transactionSum),
+    computedClosing: asNumber(row.computedClosing),
+    balanceDelta: asNumber(row.balanceDelta),
+    balanceOk: typeof row.balanceOk === "boolean" ? row.balanceOk : null,
+    createdAt: String(row.createdAt ?? new Date().toISOString()),
+    ocrMarkdown: row.ocrMarkdown == null ? null : String(row.ocrMarkdown),
+    ocrRecordId: row.ocrRecordId == null ? null : String(row.ocrRecordId),
+    ocrRevision: null,
+    transactionIds: Array.isArray(row.transactionIds) ? row.transactionIds.map(String) : [],
+  };
+}
+
+function asOcrDoc(value: unknown, recordId: string, revision: number) {
+  if (!value || typeof value !== "object") return null;
+  const row = value as Record<string, unknown>;
+  if (row.type !== "statement_ocr") return null;
+  return {
+    recordId,
+    revision,
+    statementRecordId: String(row.statementRecordId ?? ""),
+    ocrMarkdown: String(row.ocrMarkdown ?? ""),
   };
 }
 
@@ -157,7 +230,9 @@ export async function loadPrivateLedger(
     notes: [],
     scratchPads: [],
     loans: [],
+    statementLogs: [],
   };
+  const ocrDocs: Array<NonNullable<ReturnType<typeof asOcrDoc>>> = [];
 
   let cursor: string | null = null;
   for (let pageIndex = 0; pageIndex < 40; pageIndex += 1) {
@@ -193,14 +268,23 @@ export async function loadPrivateLedger(
             const loan = asLoan(value, recordId, revision);
             if (loan) ledger.loans.push(loan);
           } else if (recordId.startsWith("merchant-")) {
-            const merchant = asMerchant(value, recordId, revision);
+            const merchant = asMerchant(value, recordId, revision, {
+              createdAt: Number(row.createdAt ?? 0) || undefined,
+              updatedAt: Number(row.updatedAt ?? 0) || undefined,
+            });
             if (merchant) ledger.merchants.push(merchant);
           } else {
             const note = asNote(value, recordId, revision);
             if (note) ledger.notes.push(note);
           }
         } else if (kind === "document") {
-          // documents stay opaque for now
+          const ocr = asOcrDoc(value, recordId, revision);
+          if (ocr) {
+            ocrDocs.push(ocr);
+          } else {
+            const log = asStatementLog(value, recordId, revision);
+            if (log) ledger.statementLogs.push(log);
+          }
         }
       } catch {
         // Stale key or corrupt row must not break the whole ledger.
@@ -211,6 +295,51 @@ export async function loadPrivateLedger(
     if (!cursor) break;
   }
 
+  for (const ocr of ocrDocs) {
+    const log = ledger.statementLogs.find(
+      (row) =>
+        row.recordId === ocr.statementRecordId ||
+        (row.fileHash && `ocr-${row.fileHash}` === ocr.recordId),
+    );
+    if (!log) continue;
+    log.ocrMarkdown = ocr.ocrMarkdown;
+    log.ocrRecordId = ocr.recordId;
+    log.ocrRevision = ocr.revision;
+  }
+
   ledger.transactions.sort((a, b) => b.date.localeCompare(a.date));
+  ledger.statementLogs.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  if (!ledger.statementLogs.length && ledger.transactions.length) {
+    const account = ledger.accounts[0];
+    ledger.statementLogs.push({
+      recordId: "statement-inferred",
+      revision: 0,
+      filename: account?.name ? `${account.name} statement` : "Encrypted statement",
+      fileHash: "",
+      status: "completed",
+      institutionName: account?.officialName ?? account?.name ?? null,
+      accountName: account?.name ?? null,
+      accountMask: account?.mask ?? null,
+      currency: account?.isoCurrencyCode ?? null,
+      pageCount: null,
+      transactionCount: ledger.transactions.length,
+      insertedCount: ledger.transactions.length,
+      updatedCount: 0,
+      skippedCount: 0,
+      statementPeriodStart: null,
+      statementPeriodEnd: null,
+      openingBalance: null,
+      closingBalance: account?.currentBalance ?? null,
+      transactionSum: null,
+      computedClosing: null,
+      balanceDelta: null,
+      balanceOk: null,
+      createdAt: ledger.transactions[0]?.date
+        ? `${ledger.transactions[0].date}T00:00:00.000Z`
+        : new Date().toISOString(),
+      ocrMarkdown: null,
+      transactionIds: ledger.transactions.map((tx) => tx.recordId),
+    });
+  }
   return ledger;
 }

@@ -1,5 +1,6 @@
 "use client";
 
+import { Icon } from "@iconify/react";
 import { DataTable } from "@/components/ui/data-table";
 import type { DataTableFeatures } from "@/components/ui/data-table-features";
 import { formatMoney } from "@/domains/dashboard/domain/money";
@@ -14,8 +15,9 @@ import {
 } from "@/domains/transactions/domain/debitCredit";
 import { LOG_MONEY_RANGE_OPTIONS } from "@/domains/transactions/domain/amountLogRange";
 import { TagsCell } from "@/domains/transactions/ui/TagsCell";
-import { TagsColumnHeader } from "@/domains/transactions/ui/TagsColumnHeader";
+import { CreateTagButton } from "@/domains/transactions/ui/TagsColumnHeader";
 import { TaxonomyCell } from "@/domains/transactions/ui/TaxonomyCell";
+import { TransactionRowActions } from "@/domains/transactions/ui/TransactionRowActions";
 import { formatDisplayDate } from "@/shared/lib/format-date";
 import { useIsFetching, useQueryClient } from "@tanstack/react-query";
 import { createColumnHelper } from "@tanstack/react-table";
@@ -90,6 +92,27 @@ function buildColumns(
 
   // Left = paper facts (AI read from statement). Right = AI invent / labels.
   return columnHelper.columns([
+    columnHelper.display({
+      id: "actions",
+      header: () => (
+        <span className="flex w-full items-center justify-center">
+          <Icon
+            icon="mynaui:mouse-pointer-click-solid"
+            className="size-4 text-[var(--muted-foreground)]"
+            aria-hidden
+          />
+          <span className="sr-only">Actions</span>
+        </span>
+      ),
+      cell: ({ row }) => (
+        <div className="flex w-full items-center justify-center">
+          <TransactionRowActions transaction={row.original} />
+        </div>
+      ),
+      enableSorting: false,
+      enableHiding: true,
+      meta: { label: "Actions", width: "3.25rem" },
+    }),
     columnHelper.accessor("date", {
       header: "Posted",
       meta: bandMeta("9.5rem", "read", "Date the bank posted this line."),
@@ -357,7 +380,7 @@ function buildColumns(
     }),
     columnHelper.accessor((row) => row.tagNames ?? [], {
       id: "tags",
-      header: () => <TagsColumnHeader transactions={transactions} />,
+      header: "Tags",
       meta: bandMeta("18rem", "invent", "Manual tags you add to rows.", "Tags"),
       cell: ({ row, getValue }) => (
         <TagsCell
@@ -514,6 +537,7 @@ export function TransactionsDataTable({
       enableColumnToggle
       dateColumnId="date"
       csvFilename="transactions.csv"
+      toolbar={<CreateTagButton transactions={transactions} />}
       isRefreshing={dashboardFetches > 0}
       onRefresh={() =>
         queryClient.refetchQueries({ queryKey: queryKeys.dashboard })

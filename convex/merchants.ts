@@ -23,6 +23,7 @@ const merchantDoc = v.object({
 
 function toMerchantDoc(row: {
   _id: Id<"merchants">;
+  _creationTime?: number;
   slug: string;
   name: string;
   rawName: string | null;
@@ -33,6 +34,8 @@ function toMerchantDoc(row: {
   createdAt: number;
   updatedAt: number;
 }) {
+  const createdAt = row.createdAt > 0 ? row.createdAt : (row._creationTime ?? 0);
+  const updatedAt = row.updatedAt > 0 ? row.updatedAt : createdAt;
   return {
     id: row._id,
     slug: row.slug,
@@ -42,8 +45,8 @@ function toMerchantDoc(row: {
     brand: row.brand,
     website: row.website,
     logoUrl: row.logoUrl,
-    createdAt: row.createdAt,
-    updatedAt: row.updatedAt,
+    createdAt,
+    updatedAt,
   };
 }
 

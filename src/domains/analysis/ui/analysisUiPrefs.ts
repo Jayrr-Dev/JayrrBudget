@@ -16,6 +16,7 @@ export type AnalysisTab =
   | "tags"
   | "types"
   | "merchants"
+  | "income"
   | "patterns";
 
 export type FacetPane = "visualizations" | "summary" | "average" | "range";
@@ -30,6 +31,7 @@ export type AnalysisUiPrefs = {
   tag: string;
   type: string;
   merchant: string;
+  incomeSource: string;
 };
 
 export const DEFAULT_ANALYSIS_UI_PREFS: AnalysisUiPrefs = {
@@ -42,6 +44,7 @@ export const DEFAULT_ANALYSIS_UI_PREFS: AnalysisUiPrefs = {
   tag: "",
   type: "",
   merchant: "",
+  incomeSource: "",
 };
 
 const TABS = new Set<AnalysisTab>([
@@ -53,6 +56,7 @@ const TABS = new Set<AnalysisTab>([
   "tags",
   "types",
   "merchants",
+  "income",
   "patterns",
 ]);
 
@@ -99,6 +103,7 @@ export function readAnalysisUiPrefs(): AnalysisUiPrefs {
       tag: asString(parsed.tag),
       type: asString(parsed.type),
       merchant: asString(parsed.merchant),
+      incomeSource: asString(parsed.incomeSource),
     };
   } catch {
     return { ...DEFAULT_ANALYSIS_UI_PREFS };

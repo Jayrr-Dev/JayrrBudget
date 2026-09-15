@@ -55,8 +55,11 @@ import {
 import { uploadBankStatement, isUploadAbortError } from "@/domains/statements/queries/uploadBankStatement";
 import { StatementAiRulesDialog } from "@/domains/statements/ui/StatementAiRulesDialog";
 import { getVaultMasterKey } from "@/crypto/session";
+import { hydrateVaultSession, type VaultClient } from "@/domains/vault/application/ensureVaultFromPasscode";
 import { useFeatureFlags } from "@/domains/feature-flags/ui/useFeatureFlag";
 import { encryptStatementImportToVault } from "@/domains/vault/application/encryptStatementImport";
+import { loadPrivateLedger, type VaultListClient } from "@/domains/vault/application/loadPrivateLedger";
+import { ImportLedgerCsv } from "@/domains/vault/ui/ImportLedgerCsv";
 import { usePrivateLedger } from "@/domains/vault/ui/usePrivateLedger";
 import { useConvex } from "convex/react";
 import { cn } from "@/lib/utils";
@@ -177,10 +180,19 @@ export function StatementUpload({ onImported }: Props) {
 
   const fingerprints = useQuery(
     api.statements.listCompletedFingerprints,
-    dialogOpen ? {} : "skip",
+    dialogOpen && !vaultPersist ? {} : "skip",
   );
   const backfillMerchants = useMutation(api.merchants.backfillFromTransactions);
-  fingerprintsRef.current = fingerprints;
+  const vaultFingerprints: Fingerprint[] = privateLedger.ledger.statementLogs
+    .filter((log) => log.fileHash)
+    .map((log) => ({
+      fileHash: log.fileHash,
+      filename: log.filename,
+      pageCount: log.pageCount,
+      statementPeriodStart: log.statementPeriodStart,
+      statementPeriodEnd: log.statementPeriodEnd,
+    }));
+  fingerprintsRef.current = vaultPersist ? vaultFingerprints : fingerprints;
 
   useEffect(() => {
     if (dialogOpen) return;
@@ -426,19 +438,27 @@ export function StatementUpload({ onImported }: Props) {
 
         if (vaultPersist) {
           if (!flags.cloudProcessing) {
-            throw new Error("Turn on Cloud Processing on Modules before OCR imports.");
+            throw new Error("Turn on Cloud Processing in Modules before uploading a PDF.");
           }
+          const opened = await hydrateVaultSession(client as unknown as VaultClient);
           const masterKey = getVaultMasterKey();
-          if (!privateLedger.userId || !privateLedger.vaultId || !privateLedger.keyId || !masterKey) {
-            throw new Error("Unlock the private vault before importing into the encrypted ledger.");
+          const vaultId = privateLedger.vaultId ?? opened?.vaultId ?? null;
+          const keyId = privateLedger.keyId ?? opened?.keyId ?? null;
+          if (!privateLedger.userId || !vaultId || !keyId || !masterKey) {
+            throw new Error("Sign in again, then retry the upload.");
           }
+          const ledger = await loadPrivateLedger(client as unknown as VaultListClient, {
+            userId: privateLedger.userId,
+            vaultId,
+          });
           await encryptStatementImportToVault({
             client: client as unknown as MutationClient,
             userId: privateLedger.userId,
-            vaultId: privateLedger.vaultId,
-            keyId: privateLedger.keyId,
+            vaultId,
+            keyId,
             masterKey,
             result,
+            ledger,
           });
           privateLedger.reload();
         }
@@ -555,39 +575,38 @@ export function StatementUpload({ onImported }: Props) {
 
   return (
     <div className="flex flex-col items-start gap-1.5">
-      <div className="flex flex-wrap items-center gap-2">
-        <ButtonGroup>
-          <Button
-            type="button"
-            variant="outline"
-            disabled={busy}
-            onClick={() => setDialogOpen(true)}
-          >
-            {triggerLabel}
-          </Button>
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button
-                type="button"
-                variant="outline"
-                size="icon"
-                aria-label="How statement upload works"
-              >
-                <Info />
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent align="end" className="w-80">
-              <PopoverHeader>
-                <PopoverTitle>Manual import path</PopoverTitle>
-                <PopoverDescription>
-                  Opens a picker for up to 24 PDFs. Duplicates are marked in the
-                  list before OCR. Your upload rules apply only to your own
-                  statements.
-                </PopoverDescription>
-              </PopoverHeader>
-            </PopoverContent>
-          </Popover>
-        </ButtonGroup>
+      <ButtonGroup>
+        <ImportLedgerCsv onImported={onImported} />
+        <Button
+          type="button"
+          variant="outline"
+          disabled={busy}
+          onClick={() => setDialogOpen(true)}
+        >
+          {triggerLabel}
+        </Button>
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              aria-label="How statement upload works"
+            >
+              <Info />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent align="end" className="w-80">
+            <PopoverHeader>
+              <PopoverTitle>Manual import path</PopoverTitle>
+              <PopoverDescription>
+                Opens a picker for up to 24 PDFs. Duplicates are marked in the
+                list before scan. Your upload rules apply only to your own
+                statements. CSV import is encrypted.
+              </PopoverDescription>
+            </PopoverHeader>
+          </PopoverContent>
+        </Popover>
         <Button
           type="button"
           variant="outline"
@@ -597,7 +616,7 @@ export function StatementUpload({ onImported }: Props) {
           <ListChecks data-icon="inline-start" />
           Upload Rules
         </Button>
-      </div>
+      </ButtonGroup>
 
       <Dialog
         open={dialogOpen}
@@ -610,13 +629,53 @@ export function StatementUpload({ onImported }: Props) {
         }}
       >
         <DialogContent className="sm:max-w-md" showCloseButton>
-          <DialogHeader>
-            <DialogTitle>Upload statements</DialogTitle>
-            <DialogDescription>
+          <DialogHeader className="gap-0 pr-8">
+            <DialogTitle className="flex items-center gap-2">
+              Upload statements
+              <Popover>
+                <PopoverTrigger asChild>
+                  <button
+                    type="button"
+                    className="inline-flex size-6 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
+                    aria-label="About statement upload"
+                  >
+                    <Info className="size-3.5" />
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent
+                  align="start"
+                  side="bottom"
+                  sideOffset={8}
+                  className="w-80 gap-0 p-3.5"
+                >
+                  <PopoverHeader className="gap-1.5">
+                    <PopoverTitle>How upload works</PopoverTitle>
+                    <PopoverDescription className="sr-only">
+                      Drag PDFs here or choose files. Up to {MAX_FILES} · 20MB
+                      each. Already-imported files are marked before scan.
+                      {vaultPersist
+                        ? " The scan is encrypted. Only you can read it."
+                        : ""}
+                    </PopoverDescription>
+                    <ul className="mt-1 list-disc space-y-1 pl-4 text-sm leading-relaxed text-muted-foreground">
+                      <li>Drag PDFs here or choose files.</li>
+                      <li>Up to {MAX_FILES} · 20MB each.</li>
+                      <li>Already-imported files are marked before scan.</li>
+                      {vaultPersist ? (
+                        <li>
+                          The scan is encrypted. Only you can read it.
+                        </li>
+                      ) : null}
+                    </ul>
+                  </PopoverHeader>
+                </PopoverContent>
+              </Popover>
+            </DialogTitle>
+            <DialogDescription className="sr-only">
               Drag PDFs here or choose files. Up to {MAX_FILES} · 20MB each.
               Already-imported files are marked before scan.
               {vaultPersist
-                ? " Cloud Processing: OCR sends readable PDF text to providers, then this browser encrypts the result into your vault. Not end-to-end encrypted during OCR."
+                ? " The scan is encrypted. Only you can read it."
                 : ""}
             </DialogDescription>
           </DialogHeader>

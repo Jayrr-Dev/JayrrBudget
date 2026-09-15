@@ -834,6 +834,20 @@ function emptyAnalysis(
     merchantOtherByPeriod: {},
     merchantStacked: { rows: [], series: [] },
     merchantBreakdowns: [],
+    incomeSources: [],
+    incomeSourceMonthly: [],
+    incomeSourceSeries: [],
+    incomeSourceOther: [],
+    incomeSourceOtherByPeriod: {},
+    incomeSourceStacked: { rows: [], series: [] },
+    incomeSourceBreakdowns: [],
+    incomeCategories: [],
+    incomeCategoryMonthly: [],
+    incomeCategorySeries: [],
+    incomeCategoryOther: [],
+    incomeCategoryOtherByPeriod: {},
+    incomeCategoryStacked: { rows: [], series: [] },
+    incomeAccounts: [],
     places: [],
     channels: [],
     weekdays: [],
@@ -942,6 +956,17 @@ const currency =
       Map<string, Map<string, number>>
     >();
     const merchantMonthSpend = new Map<string, Map<string, number>>();
+    const incomeSourceSpend = new Map<string, RankBucket>();
+    const incomeSourceMonthSpend = new Map<string, Map<string, number>>();
+    const incomeCategorySpend = new Map<string, RankBucket>();
+    const incomeCategoryMonthSpend = new Map<string, Map<string, number>>();
+    const incomeAccountSpend = new Map<string, RankBucket>();
+    const categoryByIncomeSource = new Map<string, Map<string, RankBucket>>();
+    const categoryMonthByIncomeSource = new Map<
+      string,
+      Map<string, Map<string, number>>
+    >();
+    const sourceByIncomeCategory = new Map<string, Map<string, RankBucket>>();
     const subcategoryByMerchant = new Map<string, Map<string, RankBucket>>();
     const subcategoryMonthByMerchant = new Map<
       string,
@@ -1253,6 +1278,22 @@ const currency =
         addMonthSpend(spreadMonthSpend, spread, month, abs);
         nestedAdd(categoryBySpread, spread, category, abs);
         nestedAdd(vendorBySpread, spread, cleanMerchant, abs);
+        const incomeCategory = row.categoryName?.trim() || category || "Income";
+        const incomeAccount = row.accountName?.trim() || "Unknown account";
+        addRank(incomeSourceSpend, cleanMerchant, abs);
+        addMonthSpend(incomeSourceMonthSpend, cleanMerchant, month, abs);
+        addRank(incomeCategorySpend, incomeCategory, abs);
+        addMonthSpend(incomeCategoryMonthSpend, incomeCategory, month, abs);
+        addRank(incomeAccountSpend, incomeAccount, abs);
+        nestedAdd(categoryByIncomeSource, cleanMerchant, incomeCategory, abs);
+        nestedMonthAdd(
+          categoryMonthByIncomeSource,
+          cleanMerchant,
+          incomeCategory,
+          month,
+          abs,
+        );
+        nestedAdd(sourceByIncomeCategory, incomeCategory, cleanMerchant, abs);
         {
           peekSources.push({
             peek: {
@@ -1264,7 +1305,7 @@ const currency =
               amount: -abs,
             },
             section: "Income",
-            category,
+            category: incomeCategory,
             subcategory: "",
             merchant: cleanMerchant,
             spread,
@@ -1432,6 +1473,42 @@ const currency =
       subcategoryByMerchant,
       TOP_STACKED_MERCHANT_ROWS,
     );
+
+    const incomeSources = rankAll(incomeSourceSpend);
+    const {
+      series: incomeSourceSeries,
+      monthly: incomeSourceMonthly,
+      other: incomeSourceOther,
+      otherByPeriod: incomeSourceOtherByPeriod,
+    } = buildStackedSeries(
+      monthKeys,
+      incomeSourceMonthSpend,
+      incomeSources,
+      period,
+    );
+    const incomeSourceStacked = buildNestedStackedBars(
+      incomeSources,
+      categoryByIncomeSource,
+      TOP_STACKED_MERCHANT_ROWS,
+    );
+    const incomeCategories = rankAll(incomeCategorySpend);
+    const {
+      series: incomeCategorySeries,
+      monthly: incomeCategoryMonthly,
+      other: incomeCategoryOther,
+      otherByPeriod: incomeCategoryOtherByPeriod,
+    } = buildStackedSeries(
+      monthKeys,
+      incomeCategoryMonthSpend,
+      incomeCategories,
+      period,
+    );
+    const incomeCategoryStacked = buildNestedStackedBars(
+      incomeCategories,
+      sourceByIncomeCategory,
+      TOP_STACKED_CATEGORY_ROWS,
+    );
+    const incomeAccounts = rankAll(incomeAccountSpend);
 
     const {
       series: categorySeries,
@@ -1618,6 +1695,34 @@ const currency =
       };
     });
 
+    const incomeSourceBreakdowns = incomeSources
+      .slice(0, TOP_FACET_BREAKDOWNS)
+      .map((item) => {
+        const categories = rankAll(
+          categoryByIncomeSource.get(item.name) ?? new Map(),
+        );
+        const {
+          series: categorySeries,
+          monthly: categoryMonthly,
+          other,
+          otherByPeriod,
+        } = buildStackedSeries(
+          monthKeys,
+          categoryMonthByIncomeSource.get(item.name) ?? new Map(),
+          categories,
+          period,
+        );
+        return {
+          source: item.name,
+          spend: item.spend,
+          categories,
+          categorySeries,
+          categoryMonthly,
+          other,
+          otherByPeriod,
+        };
+      });
+
     const topMerchantNames = new Set(
       merchants.slice(0, TOP_FACET_BREAKDOWNS).map((item) => item.name),
     );
@@ -1635,6 +1740,12 @@ const currency =
     );
     const sectionNames = new Set(sections.map((item) => item.name));
     const spreadNames = new Set(spreads.map((item) => item.name));
+    const topIncomeSourceNames = new Set(
+      incomeSources.slice(0, TOP_FACET_BREAKDOWNS).map((item) => item.name),
+    );
+    const topIncomeCategoryNames = new Set(
+      incomeCategories.slice(0, TOP_FACET_BREAKDOWNS).map((item) => item.name),
+    );
 
     for (const src of peekSources) {
       const {
@@ -1713,6 +1824,21 @@ const currency =
             peekKey("type-merchant", typeLabel, merchant),
             peek,
           );
+      }
+      const keepIncomeSource = topIncomeSourceNames.has(merchant);
+      const keepIncomeCategory = topIncomeCategoryNames.has(category);
+      if (keepIncomeSource) {
+        pushPeek(txnPeekMap, peekKey("income-source", merchant), peek);
+      }
+      if (keepIncomeCategory) {
+        pushPeek(txnPeekMap, peekKey("income-category", category), peek);
+      }
+      if (keepIncomeSource && keepIncomeCategory) {
+        pushPeek(
+          txnPeekMap,
+          peekKey("income-source-category", merchant, category),
+          peek,
+        );
       }
     }
 
@@ -1810,6 +1936,20 @@ const currency =
         merchantOtherByPeriod,
         merchantStacked,
         merchantBreakdowns,
+        incomeSources,
+        incomeSourceMonthly,
+        incomeSourceSeries,
+        incomeSourceOther,
+        incomeSourceOtherByPeriod,
+        incomeSourceStacked,
+        incomeSourceBreakdowns,
+        incomeCategories,
+        incomeCategoryMonthly,
+        incomeCategorySeries,
+        incomeCategoryOther,
+        incomeCategoryOtherByPeriod,
+        incomeCategoryStacked,
+        incomeAccounts,
         places: rankMap(placeSpend, 8),
         channels: rankMap(channelSpend, 6),
         weekdays,

@@ -1,5 +1,9 @@
 export type StatementUploadLog = {
   id: number;
+  source?: "convex" | "vault";
+  recordId?: string;
+  transactionIds?: string[];
+  ocrMarkdown?: string | null;
   filename: string;
   status: string;
   institutionName: string | null;
@@ -23,6 +27,9 @@ export type StatementUploadLog = {
   balanceOk: boolean | null;
   error: string | null;
   hasOcr: boolean;
+  /** True when every transaction from this upload has a category label. */
+  categorized: boolean;
+  categorizedCount: number;
   createdAt: string;
   completedAt: string | null;
 };

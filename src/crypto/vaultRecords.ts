@@ -27,3 +27,14 @@ export async function savePrivateRecords(
   }));
   return client.mutation(api.vaults.saveRecords, { vaultId: input.vaultId, records: encrypted });
 }
+
+/** Removes vault rows by id. Also sweeps leftover deleted tombstones in that vault. */
+export async function deletePrivateRecords(
+  client: MutationClient,
+  input: { vaultId: string; recordIds: string[] },
+) {
+  return client.mutation(api.vaults.deleteRecords, {
+    vaultId: input.vaultId,
+    recordIds: input.recordIds,
+  }) as Promise<{ removed: number }>;
+}

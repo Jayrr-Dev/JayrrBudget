@@ -12,7 +12,8 @@
     "db:export-turso": "tsx scripts/export-turso-to-jsonl.ts",
     "db:generate": "drizzle-kit generate",
     "db:push": "drizzle-kit push",
-    "db:studio": "drizzle-kit studio"
+    "db:studio": "drizzle-kit studio",
+    "postinstall": "patch-package"
   },
   "dependencies": {
     "@ai-sdk/react": "^4.0.100",
@@ -74,6 +75,7 @@
     "drizzle-kit": "^0.31.10",
     "eslint": "^9",
     "eslint-config-next": "16.3.4",
+    "patch-package": "^8.0.1",
     "tailwindcss": "^4",
     "typescript": "^5"
   }

@@ -389,7 +389,7 @@ export default defineSchema({
     .index("by_userId", ["userId"])
     .index("by_userId_slug", ["userId", "slug"]),
 
-  /** Per-user dual-run toggles (encrypted ledger, cloud processing consent). */
+  /** Per-user flags (encrypted ledger, cloud processing consent). */
   featureFlags: defineTable({
     userId: v.id("users"),
     key: v.string(),

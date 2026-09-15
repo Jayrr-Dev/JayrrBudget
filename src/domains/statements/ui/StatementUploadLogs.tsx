@@ -1,15 +1,16 @@
 "use client";
 
 import { createColumnHelper } from "@tanstack/react-table";
-import { useQuery } from "@tanstack/react-query";
+import { useConvexAuth, useQuery } from "convex/react";
 import { Icon } from "@iconify/react";
+import { api } from "@convex/_generated/api";
 import { Badge } from "@/components/ui/badge";
 import { DataTable } from "@/components/ui/data-table";
 import type { DataTableFeatures } from "@/components/ui/data-table-features";
 import type { StatementUploadLog } from "@/domains/statements/domain/types";
-import { fetchStatementUploads } from "@/domains/statements/queries/fetchStatementUploads";
-import { statementQueryKeys } from "@/domains/statements/queries/query-keys";
 import { StatementUploadRowActions } from "@/domains/statements/ui/StatementUploadRowActions";
+import type { PrivateStatementLog } from "@/domains/vault/domain/privateLedger";
+import { usePrivateLedger } from "@/domains/vault/ui/usePrivateLedger";
 
 const columnHelper = createColumnHelper<DataTableFeatures, StatementUploadLog>();
 
@@ -91,6 +92,31 @@ const columns = columnHelper.columns([
       </div>
     ),
   }),
+  columnHelper.display({
+    id: "categorized",
+    header: "Categories",
+    enableHiding: false,
+    meta: { width: "8rem" },
+    cell: ({ row }) => {
+      const { categorized, categorizedCount, transactionCount } = row.original;
+      const total = transactionCount ?? 0;
+      if (total === 0) {
+        return (
+          <span className="text-xs text-[var(--muted-foreground)]">No txns</span>
+        );
+      }
+      return (
+        <div className="space-y-1">
+          <Badge variant={categorized ? "secondary" : "outline"}>
+            {categorized ? "Categorized" : "Not categorized"}
+          </Badge>
+          <p className="text-xs text-[var(--muted-foreground)]">
+            {categorizedCount}/{total}
+          </p>
+        </div>
+      );
+    },
+  }),
   columnHelper.accessor("pageCount", {
     header: "Pages",
     enableHiding: false,
@@ -156,13 +182,132 @@ const columns = columnHelper.columns([
   }),
 ]);
 
-export function StatementUploadLogs() {
-  const uploads = useQuery({
-    queryKey: statementQueryKeys.uploads,
-    queryFn: fetchStatementUploads,
-  });
+function vaultLogId(recordId: string, createdAt: string) {
+  const parsed = Date.parse(createdAt);
+  if (Number.isFinite(parsed) && parsed > 0) return parsed;
+  let hash = 0;
+  for (let index = 0; index < recordId.length; index += 1) {
+    hash = (hash * 31 + recordId.charCodeAt(index)) >>> 0;
+  }
+  return hash || 1;
+}
 
-  if (uploads.isPending) {
+function isVaultTxCategorized(tx: {
+  merchantClean?: string | null;
+  sectionName?: string | null;
+  categoryName?: string | null;
+  spreadName?: string | null;
+  transactionTypeName?: string | null;
+  txnCode?: string | null;
+  channel?: string | null;
+}) {
+  return Boolean(
+    tx.merchantClean &&
+      tx.sectionName &&
+      tx.categoryName &&
+      tx.spreadName &&
+      tx.transactionTypeName &&
+      tx.txnCode &&
+      tx.channel,
+  );
+}
+
+function fromVaultLog(
+  log: PrivateStatementLog,
+  ledgerTxs: Array<{
+    recordId: string;
+    statementRecordId?: string | null;
+    merchantClean?: string | null;
+    sectionName?: string | null;
+    categoryName?: string | null;
+    spreadName?: string | null;
+    transactionTypeName?: string | null;
+    txnCode?: string | null;
+    channel?: string | null;
+  }>,
+): StatementUploadLog {
+  const txs = ledgerTxs.filter((tx) =>
+    log.transactionIds?.length
+      ? log.transactionIds.includes(tx.recordId)
+      : tx.statementRecordId === log.recordId,
+  );
+  const categorizedCount = txs.filter(isVaultTxCategorized).length;
+  const total = txs.length;
+  return {
+    id: vaultLogId(log.recordId, log.createdAt),
+    source: "vault",
+    recordId: log.recordId,
+    transactionIds: log.transactionIds ?? [],
+    ocrMarkdown: log.ocrMarkdown ?? null,
+    filename: log.filename,
+    status: log.status,
+    institutionName: log.institutionName,
+    accountName: log.accountName,
+    accountMask: log.accountMask,
+    currency: log.currency,
+    pageCount: log.pageCount,
+    transactionCount: log.transactionCount,
+    insertedCount: log.insertedCount,
+    updatedCount: log.updatedCount,
+    skippedCount: log.skippedCount,
+    statementPeriodStart: log.statementPeriodStart,
+    statementPeriodEnd: log.statementPeriodEnd,
+    openingBalance: log.openingBalance,
+    closingBalance: log.closingBalance,
+    totalDebits: null,
+    totalCredits: null,
+    transactionSum: log.transactionSum,
+    computedClosing: log.computedClosing,
+    balanceDelta: log.balanceDelta,
+    balanceOk: log.balanceOk,
+    error: null,
+    hasOcr: Boolean(log.ocrMarkdown?.trim()),
+    categorized: total > 0 && categorizedCount === total,
+    categorizedCount,
+    createdAt: log.createdAt,
+    completedAt: log.createdAt,
+  };
+}
+
+export function StatementUploadLogs() {
+  const { isAuthenticated } = useConvexAuth();
+  const privateLedger = usePrivateLedger();
+  const result = useQuery(
+    api.statements.list,
+    isAuthenticated && !privateLedger.encryptedLedger ? {} : "skip",
+  );
+
+  if (privateLedger.encryptedLedger) {
+    if (privateLedger.loading || !privateLedger.unlocked) {
+      return (
+        <p className="text-sm text-[var(--muted-foreground)]">
+          {privateLedger.unlocked ? "Loading parse logs…" : "Loading encrypted parse logs…"}
+        </p>
+      );
+    }
+    const uploads = privateLedger.ledger.statementLogs.map((log) =>
+      fromVaultLog(log, privateLedger.ledger.transactions),
+    );
+    if (uploads.length === 0) {
+      return (
+        <p className="text-sm text-[var(--muted-foreground)]">
+          No parsed PDFs yet. Upload a statement above.
+        </p>
+      );
+    }
+    return (
+      <DataTable
+        columns={columns}
+        data={uploads}
+        searchKey="filename"
+        searchPlaceholder="Filter files…"
+        pageSize={10}
+        enableColumnToggle
+      />
+    );
+  }
+
+  if (result === undefined) {
     return (
       <p className="text-sm text-[var(--muted-foreground)]">
         Loading parse logs…
@@ -170,15 +315,15 @@ export function StatementUploadLogs() {
     );
   }
 
-  if (uploads.isError) {
+  if (!result.ok) {
     return (
       <div className="rounded-xl border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-800">
-        {uploads.error.message}
+        {result.error}
       </div>
     );
   }
 
-  if (uploads.data.uploads.length === 0) {
+  if (result.uploads.length === 0) {
     return (
       <p className="text-sm text-[var(--muted-foreground)]">
         No parsed PDFs yet. Upload a statement above.
@@ -189,7 +334,7 @@ export function StatementUploadLogs() {
   return (
     <DataTable
       columns={columns}
-      data={uploads.data.uploads}
+      data={result.uploads as StatementUploadLog[]}
       searchKey="filename"
       searchPlaceholder="Filter files…"
       pageSize={10}

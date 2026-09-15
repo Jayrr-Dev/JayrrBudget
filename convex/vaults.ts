@@ -1,7 +1,26 @@
 import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { internalMutation, mutation, query, type MutationCtx } from "./_generated/server";
 import { requireUser } from "./lib/auth";
+import type { Id } from "./_generated/dataModel";
+
+async function sweepDeletedRecords(
+  ctx: MutationCtx,
+  userId: Id<"users">,
+  vaultId: string,
+) {
+  const leftovers = await ctx.db
+    .query("encryptedRecords")
+    .withIndex("by_userId_vaultId", (q) => q.eq("userId", userId).eq("vaultId", vaultId))
+    .take(500);
+  let removed = 0;
+  for (const row of leftovers) {
+    if (!row.deleted) continue;
+    await ctx.db.delete(row._id);
+    removed += 1;
+  }
+  return removed;
+}
 
 const modeValidator = v.union(v.literal("STRICT_PRIVATE"), v.literal("CLOUD_PROCESSING"));
 const statusValidator = v.union(v.literal("active"), v.literal("migrating"), v.literal("locked"));
@@ -58,7 +77,7 @@ export const setPasskeyPackage = mutation({
   handler: async (ctx, args) => {
     const user = await requireUser(ctx);
     const vault = await ctx.db.query("vaults").withIndex("by_userId", (q) => q.eq("userId", user._id)).first();
-    if (!vault) throw new Error("Private vault has not been created");
+    if (!vault) throw new Error("Encryption is not set up");
     await ctx.db.patch(vault._id, { passkeyCredentialId: args.credentialId, passkeyWrappedMasterKey: args.wrappedMasterKey, updatedAt: Date.now() });
     return null;
   },
@@ -72,7 +91,7 @@ export const setPassphrasePackage = mutation({
   handler: async (ctx, args) => {
     const user = await requireUser(ctx);
     const vault = await ctx.db.query("vaults").withIndex("by_userId", (q) => q.eq("userId", user._id)).first();
-    if (!vault) throw new Error("Private vault has not been created");
+    if (!vault) throw new Error("Encryption is not set up");
     await ctx.db.patch(vault._id, {
       passphraseWrappedMasterKey: args.passphraseWrappedMasterKey,
       passphraseSalt: args.passphraseSalt,
@@ -95,7 +114,7 @@ export const rotateUnlockPackages = mutation({
   handler: async (ctx, args) => {
     const user = await requireUser(ctx);
     const vault = await ctx.db.query("vaults").withIndex("by_userId", (q) => q.eq("userId", user._id)).first();
-    if (!vault) throw new Error("Private vault has not been created");
+    if (!vault) throw new Error("Encryption is not set up");
     await ctx.db.patch(vault._id, {
       passphraseWrappedMasterKey: args.passphraseWrappedMasterKey,
       passphraseSalt: args.passphraseSalt,
@@ -121,16 +140,44 @@ export const saveRecords = mutation({
   handler: async (ctx, args) => {
     const user = await requireUser(ctx);
     const vault = await ctx.db.query("vaults").withIndex("by_userId_vaultId", (q) => q.eq("userId", user._id).eq("vaultId", args.vaultId)).unique();
-    if (!vault) throw new Error("Private vault not found");
+    if (!vault) throw new Error("Encryption is not set up");
     const now = Date.now();
     for (const record of args.records) {
       const existing = await ctx.db.query("encryptedRecords").withIndex("by_userId_vaultId_recordId", (q) => q.eq("userId", user._id).eq("vaultId", args.vaultId).eq("recordId", record.recordId)).unique();
-      if (existing && record.expectedRevision !== existing.revision) throw new Error(`Encrypted record conflict: ${record.recordId}`);
+      if (record.deleted) {
+        if (existing) await ctx.db.delete(existing._id);
+        continue;
+      }
+      if (existing && record.expectedRevision !== null && record.expectedRevision !== existing.revision) {
+        throw new Error(`Encrypted record conflict: ${record.recordId}`);
+      }
       if (!existing && record.expectedRevision !== null) throw new Error(`Encrypted record missing: ${record.recordId}`);
-      const next = { userId: user._id, vaultId: args.vaultId, recordId: record.recordId, kind: record.kind, v: record.v, alg: record.alg, keyId: record.keyId, iv: record.iv, wrappedDek: record.wrappedDek, ciphertext: record.ciphertext, revision: (existing?.revision ?? 0) + 1, deleted: record.deleted, createdAt: existing?.createdAt ?? now, updatedAt: now };
+      const next = { userId: user._id, vaultId: args.vaultId, recordId: record.recordId, kind: record.kind, v: record.v, alg: record.alg, keyId: record.keyId, iv: record.iv, wrappedDek: record.wrappedDek, ciphertext: record.ciphertext, revision: (existing?.revision ?? 0) + 1, deleted: false, createdAt: existing?.createdAt ?? now, updatedAt: now };
       if (existing) await ctx.db.patch(existing._id, next); else await ctx.db.insert("encryptedRecords", next);
     }
+    await sweepDeletedRecords(ctx, user._id, args.vaultId);
+    await ctx.db.patch(vault._id, { updatedAt: now });
     return { saved: args.records.length };
+  },
+});
+
+export const deleteRecords = mutation({
+  args: { vaultId: v.string(), recordIds: v.array(v.string()) },
+  returns: v.object({ removed: v.number() }),
+  handler: async (ctx, args) => {
+    const user = await requireUser(ctx);
+    const vault = await ctx.db.query("vaults").withIndex("by_userId_vaultId", (q) => q.eq("userId", user._id).eq("vaultId", args.vaultId)).unique();
+    if (!vault) throw new Error("Encryption is not set up");
+    let removed = 0;
+    for (const recordId of args.recordIds) {
+      const existing = await ctx.db.query("encryptedRecords").withIndex("by_userId_vaultId_recordId", (q) => q.eq("userId", user._id).eq("vaultId", args.vaultId).eq("recordId", recordId)).unique();
+      if (!existing) continue;
+      await ctx.db.delete(existing._id);
+      removed += 1;
+    }
+    removed += await sweepDeletedRecords(ctx, user._id, args.vaultId);
+    await ctx.db.patch(vault._id, { updatedAt: Date.now() });
+    return { removed };
   },
 });
 
@@ -140,5 +187,21 @@ export const listRecords = query({
   handler: async (ctx, args) => {
     const user = await requireUser(ctx);
     return ctx.db.query("encryptedRecords").withIndex("by_userId_vaultId_updatedAt", (q) => q.eq("userId", user._id).eq("vaultId", args.vaultId)).order("desc").paginate(args.paginationOpts);
+  },
+});
+
+/** Hard-delete tombstones so a later import can reuse the same recordIds. */
+export const purgeDeletedRecords = internalMutation({
+  args: {},
+  returns: v.object({ removed: v.number() }),
+  handler: async (ctx) => {
+    const rows = await ctx.db.query("encryptedRecords").take(500);
+    let removed = 0;
+    for (const row of rows) {
+      if (!row.deleted) continue;
+      await ctx.db.delete(row._id);
+      removed += 1;
+    }
+    return { removed };
   },
 });

@@ -38,7 +38,7 @@ export default function SignInPage() {
               {flow === "signIn"
                 ? "Sign in to your ledger"
                 : flow === "signUp"
-                  ? "This password also unlocks your private vault"
+                  ? "This password protects your ledger"
                   : flow === "reset"
                     ? "Request a password reset"
                     : "Choose a new password"}
@@ -203,17 +203,17 @@ export default function SignInPage() {
           ) : null}
           {flow === "signUp" ? (
             <p className="text-xs text-[var(--muted-foreground)]">
-              This is also your private vault passcode. Convex stores a wrapped key, not the password itself.
+              This password also encrypts your ledger. Only you can read it.
             </p>
           ) : null}
           {flow === "reset" ? (
             <p className="text-xs text-[var(--muted-foreground)]">
-              Resetting login on this browser updates the vault passcode after you have unlocked here once. A new device still needs the recovery file.
+              Resetting login on this browser updates encryption for this device. A new device still needs the recovery file.
             </p>
           ) : null}
           {flow === "resetVerification" ? (
             <p className="text-xs text-[var(--muted-foreground)]">
-              The code expires in 10 minutes. On this browser the vault passcode becomes this new password automatically.
+              The code expires in 10 minutes. On this browser, encryption uses this new password.
             </p>
           ) : null}
           <input name="flow" type="hidden" value={flow} />

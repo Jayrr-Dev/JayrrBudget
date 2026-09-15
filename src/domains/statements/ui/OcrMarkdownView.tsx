@@ -4,7 +4,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
 /**
- * Renders Mistral OCR markdown (headings, tables, lists) in the View OCR dialog.
+ * Renders statement OCR markdown (headings, tables, lists) in the View OCR dialog.
  */
 export function OcrMarkdownView({ markdown }: { markdown: string }) {
   const source = markdown.trim() || "(empty)";

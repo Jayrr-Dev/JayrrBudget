@@ -24,6 +24,8 @@ export type ImportEnrichmentSummary = {
 export type ImportBankStatementSuccess = {
   ok: true;
   uploadId: number;
+  filename?: string;
+  fileHash?: string;
   transactionCount: number;
   insertedCount: number;
   updatedCount: number;
@@ -54,12 +56,25 @@ export type ImportBankStatementSuccess = {
     currency: string;
     openingBalance: number | null;
     closingBalance: number | null;
+    ocrMarkdown: string | null;
     transactions: Array<{
       transactionId: string;
       posted: string;
+      authorized: string | null;
       description: string;
       amount: number;
       pending: boolean;
+      city: string | null;
+      region: string | null;
+      country: string | null;
+      merchantClean?: string | null;
+      sectionName?: string | null;
+      categoryName?: string | null;
+      subcategoryName?: string | null;
+      spreadName?: string | null;
+      transactionTypeName?: string | null;
+      txnCode?: string | null;
+      channel?: string | null;
     }>;
   };
 };

@@ -1,5 +1,5 @@
 import type { ConvexHttpClient } from "convex/browser";
-import { categorizeStatement } from "./categorizeStatement";
+import { categorizeStatement, labelDescriptionGroups } from "./categorizeStatement";
 import {
   normalizeStatementAccountType,
   statementTypeToLedgerFields,
@@ -31,6 +31,7 @@ import type {
   ImportBankStatementResult,
   ImportBankStatementSuccess,
 } from "@/domains/statements/domain/importResult";
+import { invalidateConvexUserCache } from "@/shared/convex/cachedRead";
 import { api } from "@/shared/convex/httpClient";
 import { errorMessage } from "@/shared/lib/error-message";
 import { normalizeCurrencyCode } from "@/shared/lib/currency";
@@ -111,10 +112,13 @@ export async function importBankStatement(params: {
     const fileHash = statementFileHash(params.bytes);
 
     // Same PDF bytes already imported → skip Mistral OCR + OpenRouter parse.
-    const existing = await params.client.query(
-      api.statements.findCompletedByFileHash,
-      { fileHash },
-    );
+    const persistMode = params.persistMode ?? "convex";
+    const existing = persistMode === "vault"
+      ? null
+      : await params.client.query(
+          api.statements.findCompletedByFileHash,
+          { fileHash },
+        );
     if (existing) {
       emitProgress(params.onProgress, "done");
       console.info(
@@ -198,12 +202,44 @@ export async function importBankStatement(params: {
     });
 
     emitProgress(params.onProgress, "save");
-    const persistMode = params.persistMode ?? "convex";
     if (persistMode === "vault") {
+      emitProgress(params.onProgress, "categorize");
+      let categorization;
+      let labeledTxns = transactions;
+      try {
+        const labeled = await labelDescriptionGroups(params.client, transactions);
+        categorization = labeled.summary;
+        const byId = new Map(labeled.labeled.map((row) => [row.transactionId, row]));
+        labeledTxns = transactions.map((txn) => {
+          const hit = byId.get(txn.transactionId);
+          if (!hit) return txn;
+          return {
+            ...txn,
+            merchantClean: hit.profile.merchant,
+            sectionName: hit.section,
+            categoryName: hit.category,
+            subcategoryName: hit.subcategory,
+            spreadName: hit.profile.spread,
+            transactionTypeName: hit.profile.transactionType,
+            txnCode: hit.profile.txnCode,
+            channel: hit.profile.channel,
+          };
+        });
+      } catch (error) {
+        categorization = {
+          ok: false,
+          cached: 0,
+          ai: 0,
+          pending: transactions.length,
+          error: errorMessage(error, "Categorization failed"),
+        };
+      }
       emitProgress(params.onProgress, "done");
       return {
         ok: true,
         uploadId: 0,
+        filename: params.filename,
+        fileHash,
         transactionCount: transactions.length,
         insertedCount: transactions.length,
         updatedCount: 0,
@@ -221,6 +257,7 @@ export async function importBankStatement(params: {
         computedClosing: balance.computedClosing,
         balanceDelta: balance.delta,
         balanceOk: balance.balanced,
+        categorization,
         vaultPayload: {
           accountId,
           accountName: parsed.accountName,
@@ -230,7 +267,8 @@ export async function importBankStatement(params: {
           currency,
           openingBalance: balance.openingBalance,
           closingBalance: balance.closingBalance,
-          transactions,
+          ocrMarkdown: ocr.markdown,
+          transactions: labeledTxns,
         },
       };
     }
@@ -259,6 +297,7 @@ export async function importBankStatement(params: {
       ocrMarkdown: ocr.markdown,
       transactions,
     });
+    await invalidateConvexUserCache();
 
     emitProgress(params.onProgress, "categorize");
     let categorization;

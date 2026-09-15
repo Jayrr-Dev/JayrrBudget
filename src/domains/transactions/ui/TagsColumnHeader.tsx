@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { PlusIcon } from "lucide-react";
+import { Info } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -29,6 +29,7 @@ import {
 import { formatMoney } from "@/domains/dashboard/domain/money";
 import type { DashboardTransaction } from "@/domains/dashboard/domain/types";
 import { queryKeys } from "@/domains/dashboard/queries/query-keys";
+import { formatShortDisplayDate } from "@/shared/lib/format-date";
 
 type TagByDateRangeResponse =
   | {
@@ -44,7 +45,14 @@ type TagByDateRangeResponse =
 type ExcludeOption = {
   value: string;
   label: string;
+  date: string;
+  postedDate: string;
+  name: string;
+  amount: string;
+  amountValue: number;
 };
+
+type ExcludeSortKey = "Date" | "Description" | "Amount";
 
 async function postTagByDateRange(input: {
   tag: string;
@@ -77,20 +85,44 @@ function buildExcludeOptions(
   for (const txn of transactions) {
     if (txn.date < startDate || txn.date > endDate) continue;
     if (byId.has(txn.transactionId)) continue;
+    const date = formatShortDisplayDate(txn.date);
+    const amount = formatMoney(
+      txn.amount,
+      txn.isoCurrencyCode ?? "CAD",
+    );
     byId.set(txn.transactionId, {
       value: txn.transactionId,
-      label: `${txn.date} · ${txn.name} · ${formatMoney(
-        txn.amount,
-        txn.isoCurrencyCode ?? "CAD",
-      )}`,
+      date,
+      postedDate: txn.date,
+      name: txn.name,
+      amount,
+      amountValue: Number(txn.amount),
+      label: `${date} ${txn.name} ${amount}`,
     });
   }
 
-  return [...byId.values()].sort((a, b) => a.label.localeCompare(b.label));
+  return [...byId.values()];
 }
 
-/** Tags column header with + popover to tag a posted-date window. */
-export function TagsColumnHeader({
+function sortExcludeOptions(
+  options: ExcludeOption[],
+  column: ExcludeSortKey,
+  direction: "asc" | "desc",
+) {
+  const sign = direction === "asc" ? 1 : -1;
+  return [...options].sort((a, b) => {
+    if (column === "Date") {
+      return a.postedDate.localeCompare(b.postedDate) * sign;
+    }
+    if (column === "Amount") {
+      return (a.amountValue - b.amountValue) * sign;
+    }
+    return a.name.localeCompare(b.name) * sign;
+  });
+}
+
+/** Toolbar control to create a tag on every row in a posted-date window. */
+export function CreateTagButton({
   transactions,
 }: {
   transactions: DashboardTransaction[];
@@ -103,10 +135,17 @@ export function TagsColumnHeader({
   const [endDate, setEndDate] = useState("");
   const [excludeIds, setExcludeIds] = useState<string[]>([]);
   const [message, setMessage] = useState<string | null>(null);
+  const [sortColumn, setSortColumn] = useState<ExcludeSortKey>("Date");
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
 
   const excludeOptions = useMemo(
-    () => buildExcludeOptions(transactions, startDate, endDate),
-    [transactions, startDate, endDate],
+    () =>
+      sortExcludeOptions(
+        buildExcludeOptions(transactions, startDate, endDate),
+        sortColumn,
+        sortDirection,
+      ),
+    [transactions, startDate, endDate, sortColumn, sortDirection],
   );
 
   const excludeById = useMemo(() => {
@@ -148,13 +187,9 @@ export function TagsColumnHeader({
       }}
     >
       <PopoverTrigger asChild>
-        <button
-          type="button"
-          className="inline-flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-md text-[var(--muted-foreground)] opacity-60 transition-colors hover:bg-[var(--muted)] hover:opacity-100"
-          aria-label="Add tag by date range"
-        >
-          <PlusIcon className="size-3.5" />
-        </button>
+        <Button type="button" variant="outline">
+          Create Tag
+        </Button>
       </PopoverTrigger>
       <PopoverContent
         align="start"
@@ -163,8 +198,35 @@ export function TagsColumnHeader({
         onPointerDown={(event) => event.stopPropagation()}
       >
         <PopoverHeader>
-          <PopoverTitle>Tag by date range</PopoverTitle>
-          <PopoverDescription>
+          <PopoverTitle className="flex items-center gap-1.5">
+            Create Tag
+            <Popover>
+              <PopoverTrigger asChild>
+                <button
+                  type="button"
+                  className="inline-flex size-6 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
+                  aria-label="About Create Tag"
+                >
+                  <Info className="size-3.5" />
+                </button>
+              </PopoverTrigger>
+              <PopoverContent
+                align="start"
+                side="bottom"
+                sideOffset={8}
+                className="w-72 gap-0 p-3.5"
+              >
+                <PopoverHeader className="gap-1.5">
+                  <PopoverTitle>How Create Tag works</PopoverTitle>
+                  <PopoverDescription>
+                    Adds the tag to every row whose posted date falls in the
+                    range. Use But Not to skip specific rows.
+                  </PopoverDescription>
+                </PopoverHeader>
+              </PopoverContent>
+            </Popover>
+          </PopoverTitle>
+          <PopoverDescription className="sr-only">
             Adds the tag to every row whose posted date falls in the range.
           </PopoverDescription>
         </PopoverHeader>
@@ -225,7 +287,15 @@ export function TagsColumnHeader({
               >
                 <ComboboxValue>
                   {selectedExclude.map((item) => (
-                    <ComboboxChip key={item.value}>{item.label}</ComboboxChip>
+                    <ComboboxChip
+                      key={item.value}
+                      className="max-w-[14rem] min-w-0 overflow-hidden"
+                      title={`${item.date} · ${item.name}`}
+                    >
+                      <span className="min-w-0 truncate">
+                        {item.date} · {item.name}
+                      </span>
+                    </ComboboxChip>
                   ))}
                 </ComboboxValue>
                 <ComboboxChipsInput
@@ -242,13 +312,35 @@ export function TagsColumnHeader({
               </ComboboxChips>
               <ComboboxContent
                 anchor={excludeAnchor}
-                className="z-[60] min-w-[18rem]"
+                className="z-[60]"
+                layout="table"
+                columns={["Date", "Description", "Amount"]}
+                sort={{ column: sortColumn, direction: sortDirection }}
+                onSort={(column) => {
+                  const next = column as ExcludeSortKey;
+                  if (next === sortColumn) {
+                    setSortDirection((current) =>
+                      current === "asc" ? "desc" : "asc",
+                    );
+                    return;
+                  }
+                  setSortColumn(next);
+                  setSortDirection(next === "Description" ? "asc" : "desc");
+                }}
               >
                 <ComboboxEmpty>No transactions found.</ComboboxEmpty>
                 <ComboboxList>
                   {(item) => (
                     <ComboboxItem key={item.value} value={item}>
-                      <span className="line-clamp-2 text-left">{item.label}</span>
+                      <span className="whitespace-nowrap font-mono text-sm tabular-nums">
+                        {item.date}
+                      </span>
+                      <span className="min-w-0 truncate text-left">
+                        {item.name}
+                      </span>
+                      <span className="whitespace-nowrap text-right font-mono text-xs tabular-nums">
+                        {item.amount}
+                      </span>
                     </ComboboxItem>
                   )}
                 </ComboboxList>

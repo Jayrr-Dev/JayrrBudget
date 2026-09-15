@@ -43,7 +43,7 @@ export async function getAnalysis(
       error:
         error instanceof Error
           ? error.message
-          : "Convex analysis unavailable",
+          : "Analysis unavailable",
     };
   }
 }

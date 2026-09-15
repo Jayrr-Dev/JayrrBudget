@@ -117,7 +117,7 @@ function openNotePopover() {
   }
 }
 
-/** Live note pad from Convex (or encrypted vault when dual-run flag is on). */
+/** Live note pad from Convex, or encrypted rows when the ledger flag is on. */
 export function useScratchNote(): ScratchNoteState {
   const privateLedger = usePrivateLedger();
   const data = useQuery(api.scratchNotes.get, privateLedger.encryptedLedger ? "skip" : {});
@@ -181,7 +181,7 @@ export function useScratchNoteActions() {
       keyId: privateLedger.keyId,
       client,
     });
-    if (!write) throw new Error("Unlock the private vault before editing scratch notes.");
+    if (!write) throw new Error("Sign in again so this browser can save scratch notes.");
     const existing = privateLedger.ledger.scratchPads[0];
     await saveEncryptedScratchPad(write, {
       tabs: next.tabs,

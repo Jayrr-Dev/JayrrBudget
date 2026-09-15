@@ -446,9 +446,6 @@ export function DataTable<TData extends RowData>({
     table.getColumn(columnId)?.toggleVisibility(false);
   };
 
-  const toolbarTriggerClass =
-    "inline-flex h-8 cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--background)] px-2.5 text-sm font-medium hover:bg-[var(--muted)]";
-
   return (
     <div className="space-y-4">
       {showToolbar ? (
@@ -477,7 +474,6 @@ export function DataTable<TData extends RowData>({
               <Button
                 type="button"
                 variant="outline"
-                size="sm"
                 onClick={() => {
                   void onRefresh();
                 }}
@@ -490,7 +486,6 @@ export function DataTable<TData extends RowData>({
               <Button
                 type="button"
                 variant="outline"
-                size="sm"
                 onClick={exportFilteredCsv}
                 disabled={filteredCount === 0}
               >
@@ -500,8 +495,8 @@ export function DataTable<TData extends RowData>({
             {enableColumnToggle ? (
               <DropdownMenu>
                 <DropdownMenuTrigger
-                  className={toolbarTriggerClass}
                   aria-label="Toggle columns"
+                  render={<Button type="button" variant="outline" />}
                 >
                   Columns
                 </DropdownMenuTrigger>
@@ -538,8 +533,8 @@ export function DataTable<TData extends RowData>({
               <>
                 <DropdownMenu>
                   <DropdownMenuTrigger
-                    className={toolbarTriggerClass}
                     aria-label="Filter by month"
+                    render={<Button type="button" variant="outline" />}
                   >
                     {selectedMonth
                       ? formatMonthLabel(selectedMonth)
@@ -571,12 +566,15 @@ export function DataTable<TData extends RowData>({
                   </DropdownMenuContent>
                 </DropdownMenu>
                 <Popover>
-                  <PopoverTrigger
-                    className={toolbarTriggerClass}
-                    aria-label="Filter by date range"
-                  >
-                    <CalendarIcon className="size-3.5 opacity-70" />
-                    {formatRangeLabel(dateWindow.from, dateWindow.to)}
+                  <PopoverTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      aria-label="Filter by date range"
+                    >
+                      <CalendarIcon data-icon="inline-start" className="opacity-70" />
+                      {formatRangeLabel(dateWindow.from, dateWindow.to)}
+                    </Button>
                   </PopoverTrigger>
                   <PopoverContent align="start" className="w-auto gap-3 p-3">
                     <Calendar
@@ -617,7 +615,6 @@ export function DataTable<TData extends RowData>({
               <Button
                 type="button"
                 variant="outline"
-                size="sm"
                 onClick={clearFilters}
               >
                 Clear filters

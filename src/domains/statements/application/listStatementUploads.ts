@@ -14,15 +14,10 @@ export async function listStatementUploads(): Promise<
   | { ok: false; status: number; error: string }
 > {
   try {
-    return await cachedConvexRead({
-      name: "statements.list",
-      load: async () => {
-        const client = await getAuthenticatedConvexClient();
-        return (await client.query(api.statements.list, {})) as
-          | { ok: true; uploads: StatementUploadLog[] }
-          | { ok: false; status: number; error: string };
-      },
-    });
+    const client = await getAuthenticatedConvexClient();
+    return (await client.query(api.statements.list, {})) as
+      | { ok: true; uploads: StatementUploadLog[] }
+      | { ok: false; status: number; error: string };
   } catch (error) {
     if (error instanceof AuthRequiredError) {
       return { ok: false, status: 401, error: error.message };

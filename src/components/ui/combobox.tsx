@@ -11,7 +11,21 @@ import {
   InputGroupButton,
   InputGroupInput,
 } from "@/components/ui/input-group";
-import { CheckIcon, ChevronDownIcon, XIcon } from "lucide-react";
+import {
+  ArrowDownIcon,
+  ArrowUpDownIcon,
+  ArrowUpIcon,
+  CheckIcon,
+  ChevronDownIcon,
+  XIcon,
+} from "lucide-react";
+
+type ComboboxLayout = "list" | "table";
+
+const ComboboxLayoutContext = React.createContext<{
+  layout: ComboboxLayout;
+  columns: string[];
+}>({ layout: "list", columns: [] });
 
 const Combobox = ComboboxPrimitive.Root;
 
@@ -95,12 +109,25 @@ function ComboboxContent({
   align = "start",
   alignOffset = 0,
   anchor,
+  layout = "list",
+  columns,
+  sort,
+  onSort,
+  children,
   ...props
 }: ComboboxPrimitive.Popup.Props &
   Pick<
     ComboboxPrimitive.Positioner.Props,
     "side" | "align" | "sideOffset" | "alignOffset" | "anchor"
-  >) {
+  > & {
+    layout?: ComboboxLayout;
+    columns?: string[];
+    sort?: { column: string; direction: "asc" | "desc" };
+    onSort?: (column: string) => void;
+  }) {
+  const tableColumns = columns ?? [];
+  const table = layout === "table" && tableColumns.length > 0;
+
   return (
     <ComboboxPrimitive.Portal>
       <ComboboxPrimitive.Positioner
@@ -111,26 +138,94 @@ function ComboboxContent({
         anchor={anchor}
         className="isolate z-50"
       >
-        <ComboboxPrimitive.Popup
-          data-slot="combobox-content"
-          data-chips={!!anchor}
-          className={cn(
-            "group/combobox-content relative max-h-(--available-height) w-(--anchor-width) max-w-(--available-width) min-w-[calc(var(--anchor-width)+--spacing(7))] origin-(--transform-origin) overflow-hidden rounded-lg bg-popover text-popover-foreground shadow-md ring-1 ring-foreground/10 duration-100 data-[chips=true]:min-w-(--anchor-width) data-[side=bottom]:slide-in-from-top-2 data-[side=inline-end]:slide-in-from-left-2 data-[side=inline-start]:slide-in-from-right-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 *:data-[slot=input-group]:m-1 *:data-[slot=input-group]:mb-0 *:data-[slot=input-group]:h-8 *:data-[slot=input-group]:border-input/30 *:data-[slot=input-group]:bg-input/30 *:data-[slot=input-group]:shadow-none data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
-            className,
-          )}
-          {...props}
-        />
+        <ComboboxLayoutContext.Provider
+          value={{ layout: table ? "table" : "list", columns: tableColumns }}
+        >
+          <ComboboxPrimitive.Popup
+            data-slot="combobox-content"
+            data-chips={!!anchor}
+            data-layout={table ? "table" : "list"}
+            className={cn(
+              "group/combobox-content relative max-h-(--available-height) w-(--anchor-width) max-w-(--available-width) min-w-[calc(var(--anchor-width)+--spacing(7))] origin-(--transform-origin) overflow-hidden rounded-lg bg-popover text-popover-foreground shadow-md ring-1 ring-foreground/10 duration-100 data-[chips=true]:min-w-(--anchor-width) data-[side=bottom]:slide-in-from-top-2 data-[side=inline-end]:slide-in-from-left-2 data-[side=inline-start]:slide-in-from-right-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 *:data-[slot=input-group]:m-1 *:data-[slot=input-group]:mb-0 *:data-[slot=input-group]:h-8 *:data-[slot=input-group]:border-input/30 *:data-[slot=input-group]:bg-input/30 *:data-[slot=input-group]:shadow-none data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
+              table
+                ? "w-[40rem] min-w-[40rem] max-w-[min(40rem,calc(100vw-1.5rem))]"
+                : null,
+              className,
+            )}
+            {...props}
+          >
+            {table ? (
+              <div
+                role="row"
+                className="grid grid-cols-[5.75rem_minmax(0,1fr)_7.25rem] items-center gap-3 border-b border-border px-2 py-1.5 pr-8 text-xs font-medium text-muted-foreground"
+              >
+                {tableColumns.map((column) => {
+                  const amount = column.toLowerCase() === "amount";
+                  const date = column.toLowerCase() === "date";
+                  const active = sort?.column === column;
+                  if (!onSort) {
+                    return (
+                      <span
+                        key={column}
+                        className={cn(
+                          "min-w-0 truncate",
+                          amount ? "text-right" : null,
+                          date ? "font-mono tabular-nums" : null,
+                        )}
+                      >
+                        {column}
+                      </span>
+                    );
+                  }
+                  return (
+                    <button
+                      key={column}
+                      type="button"
+                      className={cn(
+                        "inline-flex min-w-0 items-center gap-1 truncate rounded-sm text-left hover:text-foreground",
+                        amount ? "justify-end text-right" : null,
+                        date ? "font-mono tabular-nums" : null,
+                        active ? "text-foreground" : null,
+                      )}
+                      onPointerDown={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                      }}
+                      onClick={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        onSort(column);
+                      }}
+                    >
+                      <span className="truncate">{column}</span>
+                      {active && sort?.direction === "asc" ? (
+                        <ArrowUpIcon className="size-3 shrink-0" />
+                      ) : active && sort?.direction === "desc" ? (
+                        <ArrowDownIcon className="size-3 shrink-0" />
+                      ) : (
+                        <ArrowUpDownIcon className="size-3 shrink-0 opacity-40" />
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            ) : null}
+            {children}
+          </ComboboxPrimitive.Popup>
+        </ComboboxLayoutContext.Provider>
       </ComboboxPrimitive.Positioner>
     </ComboboxPrimitive.Portal>
   );
 }
 
 function ComboboxList({ className, ...props }: ComboboxPrimitive.List.Props) {
+  const { layout } = React.useContext(ComboboxLayoutContext);
   return (
     <ComboboxPrimitive.List
       data-slot="combobox-list"
       className={cn(
         "no-scrollbar max-h-[min(calc(--spacing(72)---spacing(9)),calc(var(--available-height)---spacing(9)))] scroll-py-1 overflow-y-auto overscroll-contain p-1 data-empty:p-0",
+        layout === "table" ? "p-0" : null,
         className,
       )}
       {...props}
@@ -143,11 +238,15 @@ function ComboboxItem({
   children,
   ...props
 }: ComboboxPrimitive.Item.Props) {
+  const { layout } = React.useContext(ComboboxLayoutContext);
   return (
     <ComboboxPrimitive.Item
       data-slot="combobox-item"
       className={cn(
         "relative flex w-full cursor-pointer items-center gap-2 rounded-md py-1 pr-8 pl-1.5 text-sm outline-hidden select-none data-highlighted:bg-accent data-highlighted:text-accent-foreground not-data-[variant=destructive]:data-highlighted:**:text-accent-foreground data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+        layout === "table"
+          ? "grid grid-cols-[5.75rem_minmax(0,1fr)_7.25rem] items-center gap-3 rounded-none border-b border-border/70 py-1.5 pr-8 pl-2 last:border-b-0"
+          : null,
         className,
       )}
       {...props}

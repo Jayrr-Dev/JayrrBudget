@@ -38,6 +38,7 @@ import type * as lib_moduleCatalog from "../lib/moduleCatalog.js";
 import type * as lib_paymentFrequency from "../lib/paymentFrequency.js";
 import type * as lib_periods from "../lib/periods.js";
 import type * as lib_roles from "../lib/roles.js";
+import type * as lib_seedCategoryPaths from "../lib/seedCategoryPaths.js";
 import type * as lib_spreads from "../lib/spreads.js";
 import type * as lib_tags from "../lib/tags.js";
 import type * as lib_taxonomyDescriptions from "../lib/taxonomyDescriptions.js";
@@ -89,6 +90,7 @@ declare const fullApi: ApiFromModules<{
   "lib/paymentFrequency": typeof lib_paymentFrequency;
   "lib/periods": typeof lib_periods;
   "lib/roles": typeof lib_roles;
+  "lib/seedCategoryPaths": typeof lib_seedCategoryPaths;
   "lib/spreads": typeof lib_spreads;
   "lib/tags": typeof lib_tags;
   "lib/taxonomyDescriptions": typeof lib_taxonomyDescriptions;

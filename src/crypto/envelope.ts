@@ -1,4 +1,5 @@
 import { randomBytes, toArrayBuffer } from "./bytes";
+import { asMasterWrapKey } from "./masterKey";
 import type { EncryptedEnvelopeV1, EnvelopeKind } from "./types";
 
 function aadFor(input: { userId: string; recordId: string; kind: EnvelopeKind; keyId: string }): Uint8Array {
@@ -19,12 +20,14 @@ export async function encryptJson(
     dek,
     new TextEncoder().encode(JSON.stringify(value)).buffer,
   );
-  const wrappedDek = await crypto.subtle.wrapKey("raw", dek, masterKey, "AES-KW");
+  const wrapKey = await asMasterWrapKey(masterKey);
+  const wrappedDek = await crypto.subtle.wrapKey("raw", dek, wrapKey, "AES-KW");
   return { v: 1, alg: "AES-256-GCM", ...input, iv: ivBuffer, wrappedDek, ciphertext };
 }
 
 export async function decryptJson<T>(envelope: EncryptedEnvelopeV1, input: { userId: string; recordId: string; kind: EnvelopeKind; keyId: string }, masterKey: CryptoKey): Promise<T> {
-  const dek = await crypto.subtle.unwrapKey("raw", envelope.wrappedDek, masterKey, "AES-KW", { name: "AES-GCM", length: 256 }, false, ["decrypt"]);
+  const wrapKey = await asMasterWrapKey(masterKey);
+  const dek = await crypto.subtle.unwrapKey("raw", envelope.wrappedDek, wrapKey, "AES-KW", { name: "AES-GCM", length: 256 }, false, ["decrypt"]);
   const plaintext = await crypto.subtle.decrypt({ name: "AES-GCM", iv: envelope.iv, additionalData: toArrayBuffer(aadFor(input)) }, dek, envelope.ciphertext);
   return JSON.parse(new TextDecoder().decode(plaintext)) as T;
 }

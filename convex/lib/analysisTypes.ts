@@ -105,6 +105,17 @@ export type AnalysisMerchantBreakdown = {
   otherByPeriod: Record<string, AnalysisRankedItem[]>;
 };
 
+/** Payor / merchant clean name for real inflows only. */
+export type AnalysisIncomeSourceBreakdown = {
+  source: string;
+  spend: number;
+  categories: AnalysisRankedItem[];
+  categorySeries: AnalysisCategorySeries[];
+  categoryMonthly: Array<Record<string, string | number>>;
+  other: AnalysisRankedItem[];
+  otherByPeriod: Record<string, AnalysisRankedItem[]>;
+};
+
 export type AnalysisTxnPeek = {
   date: string;
   description: string;
@@ -206,6 +217,21 @@ export type AnalysisData = {
   /** Merchant clean bars split by subcategory. */
   merchantStacked: AnalysisStackedRankedBreakdown;
   merchantBreakdowns: AnalysisMerchantBreakdown[];
+  /** Real inflows by payor (Merchant clean / description). */
+  incomeSources: AnalysisRankedItem[];
+  incomeSourceMonthly: Array<Record<string, string | number>>;
+  incomeSourceSeries: AnalysisCategorySeries[];
+  incomeSourceOther: AnalysisRankedItem[];
+  incomeSourceOtherByPeriod: Record<string, AnalysisRankedItem[]>;
+  incomeSourceStacked: AnalysisStackedRankedBreakdown;
+  incomeSourceBreakdowns: AnalysisIncomeSourceBreakdown[];
+  incomeCategories: AnalysisRankedItem[];
+  incomeCategoryMonthly: Array<Record<string, string | number>>;
+  incomeCategorySeries: AnalysisCategorySeries[];
+  incomeCategoryOther: AnalysisRankedItem[];
+  incomeCategoryOtherByPeriod: Record<string, AnalysisRankedItem[]>;
+  incomeCategoryStacked: AnalysisStackedRankedBreakdown;
+  incomeAccounts: AnalysisRankedItem[];
   places: AnalysisRankedItem[];
   channels: AnalysisRankedItem[];
   weekdays: AnalysisRankedItem[];

@@ -1,0 +1,80 @@
+diff --git a/node_modules/convex/dist/cjs/cli/lib/utils/mutex.js b/node_modules/convex/dist/cjs/cli/lib/utils/mutex.js
+index d80e9e6..b4fedbd 100644
+--- a/node_modules/convex/dist/cjs/cli/lib/utils/mutex.js
++++ b/node_modules/convex/dist/cjs/cli/lib/utils/mutex.js
+@@ -41,13 +41,11 @@ class Mutex {
+     if (this.currentlyRunning === null) {
+       this.currentlyRunning = callback().finally(() => {
+         const nextCb = this.waiting.shift();
+-        if (nextCb === void 0) {
+-          this.currentlyRunning = null;
+-        } else {
++        this.currentlyRunning = null;
++        if (nextCb !== void 0) {
+           this.enqueueCallbackForMutex(nextCb);
+         }
+       });
+-      this.waiting.length = 0;
+     } else {
+       this.waiting.push(callback);
+     }
+diff --git a/node_modules/convex/dist/cli.bundle.cjs b/node_modules/convex/dist/cli.bundle.cjs
+index b657ca4..daaadf2 100644
+--- a/node_modules/convex/dist/cli.bundle.cjs
++++ b/node_modules/convex/dist/cli.bundle.cjs
+@@ -154510,13 +154510,11 @@ var Mutex = class {
+     if (this.currentlyRunning === null) {
+       this.currentlyRunning = callback().finally(() => {
+         const nextCb = this.waiting.shift();
+-        if (nextCb === void 0) {
+-          this.currentlyRunning = null;
+-        } else {
++        this.currentlyRunning = null;
++        if (nextCb !== void 0) {
+           this.enqueueCallbackForMutex(nextCb);
+         }
+       });
+-      this.waiting.length = 0;
+     } else {
+       this.waiting.push(callback);
+     }
+diff --git a/node_modules/convex/dist/esm/cli/lib/utils/mutex.js b/node_modules/convex/dist/esm/cli/lib/utils/mutex.js
+index 61d13d4..8f83403 100644
+--- a/node_modules/convex/dist/esm/cli/lib/utils/mutex.js
++++ b/node_modules/convex/dist/esm/cli/lib/utils/mutex.js
+@@ -20,13 +20,11 @@ export class Mutex {
+     if (this.currentlyRunning === null) {
+       this.currentlyRunning = callback().finally(() => {
+         const nextCb = this.waiting.shift();
+-        if (nextCb === void 0) {
+-          this.currentlyRunning = null;
+-        } else {
++        this.currentlyRunning = null;
++        if (nextCb !== void 0) {
+           this.enqueueCallbackForMutex(nextCb);
+         }
+       });
+-      this.waiting.length = 0;
+     } else {
+       this.waiting.push(callback);
+     }
+diff --git a/node_modules/convex/src/cli/lib/utils/mutex.ts b/node_modules/convex/src/cli/lib/utils/mutex.ts
+index e170f20..d260625 100644
+--- a/node_modules/convex/src/cli/lib/utils/mutex.ts
++++ b/node_modules/convex/src/cli/lib/utils/mutex.ts
+@@ -18,13 +18,11 @@ export class Mutex {
+     if (this.currentlyRunning === null) {
+       this.currentlyRunning = callback().finally(() => {
+         const nextCb = this.waiting.shift();
+-        if (nextCb === undefined) {
+-          this.currentlyRunning = null;
+-        } else {
++        this.currentlyRunning = null;
++        if (nextCb !== undefined) {
+           this.enqueueCallbackForMutex(nextCb);
+         }
+       });
+-      this.waiting.length = 0;
+     } else {
+       this.waiting.push(callback);
+     }
