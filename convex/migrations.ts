@@ -95,7 +95,7 @@ export const reassignAllLedgersToCurrentUser = mutation({
 /** Remap all ledger rows to a specific user (internal / cutover). */
 export const reassignAllLedgersToUserId = internalMutation({
   args: { userId: v.id("users") },
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<any> => {
     const user = await ctx.db.get(args.userId);
     if (!user) throw new Error("User not found");
     const unowned = await claimUnownedToUser(ctx, args.userId);
@@ -206,7 +206,7 @@ export const bootstrapOwnerAccount = action({
         name: args.name?.trim() || "Jayrr",
       },
     });
-    const assigned = await ctx.runMutation(
+    const assigned: any = await ctx.runMutation(
       internal.migrations.reassignAllLedgersToUserId,
       { userId: user._id },
     );

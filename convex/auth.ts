@@ -16,9 +16,7 @@ export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
         }
 
         const flow = String(params.flow ?? "");
-        if (flow !== "signUp") {
-          return { email };
-        }
+        if (flow !== "signUp") return { email, name: null };
 
         const firstName = String(params.firstName ?? "").trim();
         const lastName = String(params.lastName ?? "").trim();
@@ -26,10 +24,7 @@ export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
           throw new ConvexError("First and last name are required");
         }
 
-        return {
-          email,
-          name: `${firstName} ${lastName}`,
-        };
+        return { email, name: `${firstName} ${lastName}` };
       },
     }),
   ],

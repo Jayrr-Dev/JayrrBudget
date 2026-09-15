@@ -279,7 +279,7 @@ function buildColumns(uiName: string, sampleKeys: string[]): DbColumnInfo[] {
 export async function getSchemaGraph(): Promise<DbSchemaGraph> {
   const client = await getAuthenticatedConvexClient();
   const overview = await client.query(api.dbExplorer.schemaOverview, {});
-  const tables: DbTableInfo[] = overview.tables.map((table) => {
+  const tables: DbTableInfo[] = overview.tables.map((table: (typeof overview.tables)[number]) => {
     const uiName = table.uiName ?? CONVEX_TO_UI[table.name] ?? table.name;
     return {
       name: uiName,

@@ -124,7 +124,7 @@ export const loadPage = internalQuery({
     startDate: v.union(v.string(), v.null()),
     paginationOpts: paginationOptsValidator,
   },
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<any> => {
     const user = await requireUser(ctx);
 
     const page = await ctx.db
@@ -182,9 +182,9 @@ export const get = action({
     const range = (args.range ?? "12m") as AnalysisRange;
     const period = (args.period ?? "monthly") as AnalysisPeriod;
 
-    const meta = await ctx.runQuery(internal.analysis.loadMeta, {});
+    const meta: any = await ctx.runQuery(internal.analysis.loadMeta, {});
     const latestDate = meta.latestDate;
-    const earliestDate = meta.earliestDate;
+    const earliestDate: string | null = meta.earliestDate;
 
     if (!latestDate) {
       return {
@@ -202,8 +202,8 @@ export const get = action({
     const startDate =
       range !== "all" ? rangeStartDate(latestDate, range) : null;
 
-    const accountById = new Map(
-      meta.accounts.map((account) => [
+    const accountById = new Map<string, { name: string; type: string }>(
+      meta.accounts.map((account: { accountId: string; name: string; type: string }) => [
         account.accountId,
         { name: account.name, type: account.type },
       ]),
@@ -214,7 +214,7 @@ export const get = action({
     let isDone = false;
 
     while (!isDone) {
-      const page = await ctx.runQuery(internal.analysis.loadPage, {
+      const page: any = await ctx.runQuery(internal.analysis.loadPage, {
         startDate,
         paginationOpts: {
           numItems: PAGE_SIZE,

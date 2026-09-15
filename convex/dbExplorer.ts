@@ -132,7 +132,7 @@ export const browseTable = query({
     return {
       table: args.table,
       columns,
-      rows: page.map((row) =>
+      rows: page.map((row: unknown) =>
         serializeRow(row as Record<string, unknown>, meta.scope === "auth"),
       ),
       total: all.length,

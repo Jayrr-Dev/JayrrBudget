@@ -152,7 +152,7 @@ export function MerchantsPanel() {
   return (
     <div className="space-y-4">
       <p className="text-sm text-[var(--muted-foreground)]">
-        {syncing || backfill.isPending
+        {syncing
           ? "Syncing merchants from ledger…"
           : merchants.length === 0
             ? "No merchants yet. They appear after ledger rows have merchant labels."
