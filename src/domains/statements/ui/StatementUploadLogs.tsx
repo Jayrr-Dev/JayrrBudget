@@ -51,6 +51,7 @@ const columns = columnHelper.columns([
   columnHelper.accessor("createdAt", {
     header: "When",
     enableHiding: false,
+    meta: { width: "12rem" },
     cell: ({ getValue }) => (
       <span className="whitespace-nowrap text-sm">
         {formatWhen(String(getValue()))}
@@ -60,6 +61,7 @@ const columns = columnHelper.columns([
   columnHelper.accessor("filename", {
     header: "File",
     enableHiding: false,
+    meta: { width: "14rem" },
     cell: ({ row }) => (
       <div className="min-w-0">
         <p className="truncate font-medium">{row.original.filename}</p>
@@ -75,6 +77,7 @@ const columns = columnHelper.columns([
   columnHelper.accessor("status", {
     header: "Status",
     enableHiding: false,
+    meta: { width: "8rem" },
     cell: ({ row }) => (
       <div className="space-y-1">
         <Badge variant={statusVariant(row.original.status)}>
@@ -91,12 +94,14 @@ const columns = columnHelper.columns([
   columnHelper.accessor("pageCount", {
     header: "Pages",
     enableHiding: false,
+    meta: { width: "5rem" },
     cell: ({ getValue }) => String(getValue() ?? "-"),
   }),
   columnHelper.display({
     id: "counts",
     header: "Txns",
     enableHiding: false,
+    meta: { width: "7rem" },
     cell: ({ row }) => {
       const { transactionCount, insertedCount, updatedCount } = row.original;
       return (
@@ -113,6 +118,7 @@ const columns = columnHelper.columns([
     id: "balance",
     header: "Statement",
     enableHiding: false,
+    meta: { width: "12rem" },
     cell: ({ row }) => {
       const {
         openingBalance,
