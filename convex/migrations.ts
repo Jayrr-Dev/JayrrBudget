@@ -8,6 +8,7 @@ import { internal } from "./_generated/api";
 import { requireRole, requireUser } from "./lib/auth";
 import { ensureModulesForUser } from "./lib/ensureModules";
 import { taxonomyDescription } from "./lib/taxonomyDescriptions";
+import { mergeKindIntoTxnCode } from "./lib/txnCodes";
 import type { Id } from "./_generated/dataModel";
 
 const LEDGER_TABLES = [
@@ -369,5 +370,38 @@ export const stripBankPairCategoryFields = internalMutation({
       patched += 1;
     }
     return { patched, scanned: rows.length };
+  },
+});
+
+/**
+ * Fold transactions.kind (Fee / Subscription / …) into transactions.txnCode,
+ * then clear kind. Safe to re-run.
+ * CLI: npx convex run migrations:consolidateTxnCodeAndKind
+ */
+export const consolidateTxnCodeAndKind = internalMutation({
+  args: {},
+  returns: v.object({
+    scanned: v.number(),
+    patched: v.number(),
+    clearedKind: v.number(),
+  }),
+  handler: async (ctx) => {
+    // eslint-disable-next-line @convex-dev/no-query-collect -- one-shot migration
+    const rows = await ctx.db.query("transactions").collect();
+    let patched = 0;
+    let clearedKind = 0;
+    for (const row of rows) {
+      const nextCode = mergeKindIntoTxnCode(row.txnCode, row.kind);
+      const clearKind = row.kind != null || row.kindLegacyId != null;
+      if (nextCode === (row.txnCode ?? null) && !clearKind) continue;
+      await ctx.db.patch(row._id, {
+        txnCode: nextCode,
+        kind: null,
+        kindLegacyId: null,
+      });
+      patched += 1;
+      if (clearKind) clearedKind += 1;
+    }
+    return { scanned: rows.length, patched, clearedKind };
   },
 });

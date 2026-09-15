@@ -2,7 +2,7 @@
 
 import { createColumnHelper } from "@tanstack/react-table";
 import { useMutation, useQuery } from "convex/react";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { toast } from "sonner";
@@ -118,13 +118,27 @@ export function MerchantsPanel() {
   const merchants = useQuery(api.merchants.list, {});
   const backfill = useMutation(api.merchants.backfillFromTransactions);
   const syncedRef = useRef(false);
+  const [syncing, setSyncing] = useState(false);
 
   useEffect(() => {
     if (merchants === undefined || syncedRef.current) return;
     syncedRef.current = true;
-    void backfill({ limit: 1000 }).catch((error: unknown) => {
-      toast.error(error instanceof Error ? error.message : "Merchant sync failed");
-    });
+    setSyncing(true);
+    void (async () => {
+      try {
+        for (let i = 0; i < 20; i += 1) {
+          const result = await backfill({ limit: 500 });
+          if (result.isDone) break;
+        }
+      } catch (error: unknown) {
+        syncedRef.current = false;
+        toast.error(
+          error instanceof Error ? error.message : "Merchant sync failed",
+        );
+      } finally {
+        setSyncing(false);
+      }
+    })();
   }, [merchants, backfill]);
 
   if (merchants === undefined) {
@@ -138,7 +152,7 @@ export function MerchantsPanel() {
   return (
     <div className="space-y-4">
       <p className="text-sm text-[var(--muted-foreground)]">
-        {backfill.isPending
+        {syncing || backfill.isPending
           ? "Syncing merchants from ledger…"
           : merchants.length === 0
             ? "No merchants yet. They appear after ledger rows have merchant labels."

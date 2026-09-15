@@ -3,8 +3,10 @@ import { mutation, query } from "./_generated/server";
 import { requireUser } from "./lib/auth";
 import {
   ensureMerchant,
+  linkTxnsToMerchant,
   merchantLabelFromTxn,
 } from "./lib/ensureMerchant";
+import type { Id } from "./_generated/dataModel";
 
 const merchantDoc = v.object({
   id: v.id("merchants"),
@@ -19,6 +21,32 @@ const merchantDoc = v.object({
   updatedAt: v.number(),
 });
 
+function toMerchantDoc(row: {
+  _id: Id<"merchants">;
+  slug: string;
+  name: string;
+  rawName: string | null;
+  company: string | null;
+  brand: string | null;
+  website: string | null;
+  logoUrl: string | null;
+  createdAt: number;
+  updatedAt: number;
+}) {
+  return {
+    id: row._id,
+    slug: row.slug,
+    name: row.name,
+    rawName: row.rawName,
+    company: row.company,
+    brand: row.brand,
+    website: row.website,
+    logoUrl: row.logoUrl,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
+}
+
 /** List merchants for the signed-in user (A-Z by name). */
 export const list = query({
   args: {},
@@ -31,18 +59,102 @@ export const list = query({
       .collect();
     return rows
       .sort((a, b) => a.name.localeCompare(b.name))
-      .map((row) => ({
-        id: row._id,
-        slug: row.slug,
-        name: row.name,
-        rawName: row.rawName,
-        company: row.company,
-        brand: row.brand,
-        website: row.website,
-        logoUrl: row.logoUrl,
-        createdAt: row.createdAt,
-        updatedAt: row.updatedAt,
-      }));
+      .map(toMerchantDoc);
+  },
+});
+
+/**
+ * Bundle for Next-side fuzzy resolve: unlabeled rows + labeled description
+ * samples + merchant name probes.
+ */
+export const resolveCorpus = query({
+  args: {
+    transactionIds: v.optional(v.array(v.string())),
+    unlabeledLimit: v.optional(v.number()),
+    corpusLimit: v.optional(v.number()),
+  },
+  returns: v.object({
+    unlabeled: v.array(
+      v.object({
+        transactionId: v.string(),
+        description: v.string(),
+        merchantClean: v.union(v.string(), v.null()),
+      }),
+    ),
+    samples: v.array(
+      v.object({
+        description: v.string(),
+        merchantId: v.id("merchants"),
+        merchantClean: v.string(),
+      }),
+    ),
+    merchants: v.array(merchantDoc),
+  }),
+  handler: async (ctx, args) => {
+    const user = await requireUser(ctx);
+    const unlabeledLimit = Math.min(
+      Math.max(args.unlabeledLimit ?? 200, 1),
+      1000,
+    );
+    const corpusLimit = Math.min(Math.max(args.corpusLimit ?? 2000, 1), 5000);
+
+    const merchants = await ctx.db
+      .query("merchants")
+      .withIndex("by_userId", (q) => q.eq("userId", user._id))
+      .collect();
+
+    const allTxns = await ctx.db
+      .query("transactions")
+      .withIndex("by_userId_posted", (q) => q.eq("userId", user._id))
+      .order("desc")
+      .collect();
+
+    const idFilter =
+      args.transactionIds && args.transactionIds.length > 0
+        ? new Set(args.transactionIds)
+        : null;
+
+    const unlabeled: Array<{
+      transactionId: string;
+      description: string;
+      merchantClean: string | null;
+    }> = [];
+    const samples: Array<{
+      description: string;
+      merchantId: Id<"merchants">;
+      merchantClean: string;
+    }> = [];
+
+    for (const txn of allTxns) {
+      if (
+        txn.merchantId != null &&
+        txn.merchantClean?.trim() &&
+        samples.length < corpusLimit
+      ) {
+        samples.push({
+          description: txn.description,
+          merchantId: txn.merchantId,
+          merchantClean: txn.merchantClean.trim(),
+        });
+      }
+
+      if (txn.merchantId != null) continue;
+      if (idFilter && !idFilter.has(txn.transactionId)) continue;
+      if (unlabeled.length >= unlabeledLimit) continue;
+      unlabeled.push({
+        transactionId: txn.transactionId,
+        description: txn.description,
+        merchantClean: txn.merchantClean ?? null,
+      });
+    }
+
+    return {
+      unlabeled,
+      samples,
+      merchants: merchants
+        .sort((a, b) => a.name.localeCompare(b.name))
+        .map(toMerchantDoc),
+    };
   },
 });
 
@@ -67,24 +179,76 @@ export const upsert = mutation({
       website: args.website,
       logoUrl: args.logoUrl,
     });
-    return {
-      id: row._id,
-      slug: row.slug,
-      name: row.name,
-      rawName: row.rawName,
-      company: row.company,
-      brand: row.brand,
-      website: row.website,
-      logoUrl: row.logoUrl,
-      createdAt: row.createdAt,
-      updatedAt: row.updatedAt,
-    };
+    return toMerchantDoc(row);
+  },
+});
+
+/** Patch many owned transactions onto one merchant (denormalize clean name). */
+export const linkTransactionsToMerchant = mutation({
+  args: {
+    merchantId: v.id("merchants"),
+    transactionIds: v.array(v.string()),
+  },
+  returns: v.object({ linked: v.number() }),
+  handler: async (ctx, args) => {
+    const user = await requireUser(ctx);
+    if (args.transactionIds.length === 0) {
+      return { linked: 0 };
+    }
+    if (args.transactionIds.length > 500) {
+      throw new Error("Can link at most 500 transactions at once");
+    }
+
+    const merchant = await ctx.db.get(args.merchantId);
+    if (!merchant || merchant.userId !== user._id) {
+      throw new Error("Merchant not found");
+    }
+
+    const linked = await linkTxnsToMerchant(
+      ctx,
+      user._id,
+      merchant,
+      args.transactionIds,
+    );
+    return { linked };
+  },
+});
+
+/** Upsert merchant by name, then link transactions (AI invent path). */
+export const upsertAndLink = mutation({
+  args: {
+    name: v.string(),
+    rawName: v.optional(v.union(v.string(), v.null())),
+    transactionIds: v.array(v.string()),
+  },
+  returns: v.object({
+    merchant: merchantDoc,
+    linked: v.number(),
+  }),
+  handler: async (ctx, args) => {
+    const user = await requireUser(ctx);
+    if (args.transactionIds.length > 500) {
+      throw new Error("Can link at most 500 transactions at once");
+    }
+
+    const merchant = await ensureMerchant(ctx, user._id, {
+      name: args.name,
+      rawName: args.rawName ?? null,
+    });
+    const linked = await linkTxnsToMerchant(
+      ctx,
+      user._id,
+      merchant,
+      args.transactionIds,
+    );
+    return { merchant: toMerchantDoc(merchant), linked };
   },
 });
 
 /**
  * Build merchant rows from existing transaction merchant strings and link them.
- * Safe to re-run. Processes up to `limit` transactions per call.
+ * Safe to re-run. Prefers rows still missing merchantId so batches drain the queue.
+ * Only links rows that already have a label (no AI).
  */
 export const backfillFromTransactions = mutation({
   args: {
@@ -95,31 +259,43 @@ export const backfillFromTransactions = mutation({
     merchantsUpserted: v.number(),
     transactionsLinked: v.number(),
     skippedNoLabel: v.number(),
+    remaining: v.number(),
+    isDone: v.boolean(),
   }),
   handler: async (ctx, args) => {
     const user = await requireUser(ctx);
     const limit = Math.min(Math.max(args.limit ?? 500, 1), 2000);
 
-    const txns = await ctx.db
+    const all = await ctx.db
       .query("transactions")
       .withIndex("by_userId", (q) => q.eq("userId", user._id))
-      .take(limit);
+      .collect();
 
-    let merchantsUpserted = 0;
-    let transactionsLinked = 0;
+    const needing: typeof all = [];
     let skippedNoLabel = 0;
-    const upsertedSlugs = new Set<string>();
-
-    for (const txn of txns) {
+    for (const txn of all) {
       const label = merchantLabelFromTxn(txn);
       if (!label) {
         skippedNoLabel += 1;
         continue;
       }
+      if (txn.merchantId == null) {
+        needing.push(txn);
+      }
+    }
+
+    const batch = needing.slice(0, limit);
+    let merchantsUpserted = 0;
+    let transactionsLinked = 0;
+    const upsertedSlugs = new Set<string>();
+
+    for (const txn of batch) {
+      const label = merchantLabelFromTxn(txn);
+      if (!label) continue;
 
       const merchant = await ensureMerchant(ctx, user._id, {
         name: label,
-        rawName: txn.merchantName,
+        rawName: null,
         company: txn.company,
         brand: txn.brand,
         website: txn.website,
@@ -131,30 +307,25 @@ export const backfillFromTransactions = mutation({
         merchantsUpserted += 1;
       }
 
-      const needsLink = txn.merchantId !== merchant._id;
-      const needsSync =
-        txn.merchantClean !== merchant.name ||
-        (merchant.company != null && txn.company !== merchant.company) ||
-        (merchant.brand != null && txn.brand !== merchant.brand);
-
-      if (needsLink || needsSync) {
-        await ctx.db.patch(txn._id, {
-          merchantId: merchant._id,
-          merchantClean: merchant.name,
-          company: merchant.company ?? txn.company,
-          brand: merchant.brand ?? txn.brand,
-          website: merchant.website ?? txn.website,
-          logoUrl: merchant.logoUrl ?? txn.logoUrl,
-        });
-        transactionsLinked += 1;
-      }
+      await ctx.db.patch(txn._id, {
+        merchantId: merchant._id,
+        merchantClean: merchant.name,
+        company: merchant.company ?? txn.company,
+        brand: merchant.brand ?? txn.brand,
+        website: merchant.website ?? txn.website,
+        logoUrl: merchant.logoUrl ?? txn.logoUrl,
+      });
+      transactionsLinked += 1;
     }
 
+    const remaining = Math.max(0, needing.length - batch.length);
     return {
-      scanned: txns.length,
+      scanned: batch.length,
       merchantsUpserted,
       transactionsLinked,
       skippedNoLabel,
+      remaining,
+      isDone: remaining === 0,
     };
   },
 });

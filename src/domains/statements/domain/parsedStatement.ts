@@ -90,6 +90,8 @@ export const parsedStatementSchema = z.object({
           "interest",
           "cash_advance",
           "transfer",
+          "subscription",
+          "statement",
           "other",
         ])
         .default("other"),

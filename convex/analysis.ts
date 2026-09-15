@@ -11,7 +11,7 @@ import type {
   AnalysisRange,
   AnalysisSourceRow,
 } from "./lib/analysisTypes";
-import { requireRole } from "./lib/auth";
+import { requireUser } from "./lib/auth";
 
 const rangeValidator = v.union(
   v.literal("1w"),
@@ -80,7 +80,7 @@ function toSourceRow(
     companyName: txn.company ?? null,
     brandName: txn.brand ?? null,
     tags: txn.tags ?? null,
-    kind: txn.kind ?? null,
+    kind: null,
   };
 }
 
@@ -88,7 +88,7 @@ function toSourceRow(
 export const loadMeta = internalQuery({
   args: {},
   handler: async (ctx) => {
-    const user = await requireRole(ctx, "premium");
+    const user = await requireUser(ctx);
     const [latestTxn, earliestTxn, accounts] = await Promise.all([
       ctx.db
         .query("transactions")
@@ -125,7 +125,7 @@ export const loadPage = internalQuery({
     paginationOpts: paginationOptsValidator,
   },
   handler: async (ctx, args) => {
-    const user = await requireRole(ctx, "premium");
+    const user = await requireUser(ctx);
 
     const page = await ctx.db
       .query("transactions")
@@ -160,7 +160,7 @@ export const loadPage = internalQuery({
         company: txn.company ?? null,
         brand: txn.brand ?? null,
         tags: txn.tags ?? null,
-        kind: txn.kind ?? null,
+        kind: null,
       })),
       isDone: page.isDone,
       continueCursor: page.continueCursor,

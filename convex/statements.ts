@@ -92,6 +92,7 @@ const importResultValidator = v.object({
   skippedCount: v.number(),
   removedTwinCount: v.number(),
   duplicateFile: v.boolean(),
+  transactionIds: v.array(v.string()),
   institutionName: v.union(v.string(), v.null()),
   accountName: v.union(v.string(), v.null()),
   pageCount: v.number(),
@@ -304,6 +305,7 @@ export const importPaperFacts = mutation({
         skippedCount: completed.transactionCount ?? 0,
         removedTwinCount: 0,
         duplicateFile: true,
+        transactionIds: [],
         institutionName: completed.institutionName,
         accountName: completed.accountName,
         pageCount: completed.pageCount ?? 0,
@@ -418,6 +420,8 @@ export const importPaperFacts = mutation({
         await ctx.db.patch(existing._id, paperFields);
         updatedCount += 1;
       } else {
+        // merchantClean + merchantId filled later by resolve (fuzzy cache / AI).
+        // merchantName is legacy-only; do not invent it on import.
         await ctx.db.insert("transactions", {
           userId: user._id,
           transactionId: txn.transactionId,
@@ -497,6 +501,7 @@ export const importPaperFacts = mutation({
       skippedCount: updatedCount,
       removedTwinCount: 0,
       duplicateFile: false,
+      transactionIds: args.transactions.map((txn) => txn.transactionId),
       institutionName: args.institutionName,
       accountName: args.accountName,
       pageCount: args.pageCount,

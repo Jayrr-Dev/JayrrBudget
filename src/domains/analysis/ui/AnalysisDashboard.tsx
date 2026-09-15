@@ -101,7 +101,7 @@ const TAB_OPTIONS: { value: AnalysisTab; label: string }[] = [
   { value: "categories", label: "Categories" },
   { value: "subcategories", label: "Subcategories" },
   { value: "tags", label: "Tags" },
-  { value: "types", label: "Types" },
+  { value: "types", label: "Code" },
   { value: "spreads", label: "Spreads" },
   { value: "merchants", label: "Merchants" },
   { value: "patterns", label: "Patterns" },
@@ -4703,8 +4703,8 @@ function TypeDrilldown({
   return (
     <section className="space-y-4">
       <ChartTitle
-        title="Type detail"
-        info="Pick a type (Fee, Subscription, …). Merchants come from Merchant clean on each typed transaction."
+        title="Code detail"
+        info="Pick a code (purchase, subscription, fee, …). Merchants come from Merchant clean on each matching line."
       />
       <div className="flex flex-wrap gap-1">
         {data.typeBreakdowns.map((item) => (
@@ -4773,10 +4773,9 @@ function TypesTab({
   if (types.length === 0) {
     return (
       <div className="rounded-xl border border-dashed border-[var(--border)] px-6 py-16 text-center">
-        <p className="text-lg font-medium">No types in this range</p>
+        <p className="text-lg font-medium">No codes in this range</p>
         <p className="mt-1 text-sm text-[var(--muted-foreground)]">
-          Type labels on transactions (Fee, Subscription, …) show up here the
-          same way tags do.
+          Lines need a code (purchase, payment, fee, subscription, …).
         </p>
       </div>
     );
@@ -4789,8 +4788,8 @@ function TypesTab({
       visualizations={
         <div className="space-y-6">
           <StackedRankedBarChart
-            title="Type breakdown"
-            info="Every type with spend, sliced by category. The last 15% inside each row rolls into Other. A transaction can carry more than one type, so rows can overlap. Click a bar to open its merchant detail."
+            title="Code breakdown"
+            info="Spend by code, sliced by category. The last 15% inside each row rolls into Other. Click a bar to open its merchant detail."
             rows={stacked.rows}
             series={stacked.series}
             currency={data.currency}
@@ -4804,7 +4803,7 @@ function TypesTab({
             showViewToggle
           />
           <StackedMixChart
-            title="Type mix over time"
+            title="Code mix over time"
             info={`${ANALYSIS_PERIOD_META[period].label} spend by type. Standard draws each type from zero so shared types are not stacked twice. Relative is share of the type-sum (can exceed unique spend). Named bands are the first 85%. The last 15% is Other.`}
             series={data.typeSeries}
             monthly={data.typeMonthly}
@@ -4825,7 +4824,7 @@ function TypesTab({
             onPeriodChange={onPeriodChange}
           />
           <TaxonomyBreakdownTable
-            title="All types"
+            title="All codes"
             info="Every type in this range with spend, share of lifestyle outflow, and top categories. Shares can add up past 100% because one row can have several types."
             nameLabel="Type"
             rows={types}

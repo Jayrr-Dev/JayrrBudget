@@ -20,6 +20,7 @@ export const taxonomyFacetSchema = z.enum([
 
 export const channelSchema = z.enum(["online", "in_store", "other"]);
 
+/** Unified line nature (was txnCode + kind). */
 export const txnKindSchema = z.enum([
   "purchase",
   "payment",
@@ -29,6 +30,7 @@ export const txnKindSchema = z.enum([
   "cash_advance",
   "transfer",
   "subscription",
+  "statement",
   "other",
 ]);
 

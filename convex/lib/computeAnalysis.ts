@@ -25,6 +25,7 @@ import {
   type SpreadName,
 } from "./spreads";
 import { splitTags } from "./tags";
+import { typeLabelsFromTxnCode } from "./txnCodes";
 
 
 const TOP_STACKED_CATEGORY_ROWS = 15;
@@ -1106,7 +1107,7 @@ const currency =
           nestedAdd(categoryByTag, tag, category, abs);
           nestedMonthAdd(categoryMonthByTag, tag, category, month, abs);
         }
-        for (const typeLabel of splitTags(row.kind)) {
+        for (const typeLabel of typeLabelsFromTxnCode(row.transactionCode)) {
           addRank(typeSpend, typeLabel, abs);
           addMonthSpend(typeMonthSpend, typeLabel, month, abs);
           nestedAdd(merchantByType, typeLabel, cleanMerchant, abs);
@@ -1136,7 +1137,7 @@ const currency =
             merchant: cleanMerchant,
             spread,
             tags: splitTags(row.tags),
-            typeLabels: splitTags(row.kind),
+            typeLabels: typeLabelsFromTxnCode(row.transactionCode),
           });
         }
       } else if (kind === "refund") {
@@ -1199,7 +1200,7 @@ const currency =
           nestedAdd(categoryByTag, tag, category, -abs);
           nestedMonthAdd(categoryMonthByTag, tag, category, month, -abs);
         }
-        for (const typeLabel of splitTags(row.kind)) {
+        for (const typeLabel of typeLabelsFromTxnCode(row.transactionCode)) {
           addRank(typeSpend, typeLabel, -abs);
           addMonthSpend(typeMonthSpend, typeLabel, month, -abs);
           nestedAdd(merchantByType, typeLabel, cleanMerchant, -abs);
@@ -1229,7 +1230,7 @@ const currency =
             merchant: cleanMerchant,
             spread,
             tags: splitTags(row.tags),
-            typeLabels: splitTags(row.kind),
+            typeLabels: typeLabelsFromTxnCode(row.transactionCode),
           });
         }
       } else {

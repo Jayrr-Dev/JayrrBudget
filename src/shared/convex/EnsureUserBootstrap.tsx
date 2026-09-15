@@ -12,11 +12,13 @@ const CLAIM_UNOWNED_KEY = "jayrr-budget.claimed-unowned-ledgers";
  * After Convex Auth sign-in:
  * - ensure role-based modules exist for this user
  * - optionally claim ledger rows that still have no userId
+ * - sync merchant phone-book rows from transaction labels
  */
 export function EnsureUserBootstrap({ children }: { children: ReactNode }) {
   const { isAuthenticated, isLoading } = useConvexAuth();
   const claimUnowned = useMutation(api.migrations.claimUnownedData);
   const ensureModules = useMutation(api.modules.ensure);
+  const backfillMerchants = useMutation(api.merchants.backfillFromTransactions);
   const ranForSession = useRef(false);
 
   useEffect(() => {
@@ -38,20 +40,36 @@ export function EnsureUserBootstrap({ children }: { children: ReactNode }) {
       } catch {
         // ignore
       }
-      if (alreadyClaimed) return;
-
-      try {
-        await claimUnowned({});
+      if (!alreadyClaimed) {
         try {
-          localStorage.setItem(CLAIM_UNOWNED_KEY, "1");
-        } catch {
-          // ignore
+          await claimUnowned({});
+          try {
+            localStorage.setItem(CLAIM_UNOWNED_KEY, "1");
+          } catch {
+            // ignore
+          }
+        } catch (error) {
+          console.warn("[auth] claim unowned ledgers failed", error);
+        }
+      }
+
+      // Drain unlinked ledger rows into merchants (safe to re-run).
+      try {
+        for (let i = 0; i < 20; i += 1) {
+          const result = await backfillMerchants({ limit: 500 });
+          if (result.isDone) break;
         }
       } catch (error) {
-        console.warn("[auth] claim unowned ledgers failed", error);
+        console.warn("[auth] merchant backfill failed", error);
       }
     })();
-  }, [isAuthenticated, isLoading, claimUnowned, ensureModules]);
+  }, [
+    isAuthenticated,
+    isLoading,
+    claimUnowned,
+    ensureModules,
+    backfillMerchants,
+  ]);
 
   useEffect(() => {
     if (!isAuthenticated) {

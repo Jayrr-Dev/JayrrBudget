@@ -36,6 +36,7 @@ import type * as lib_roles from "../lib/roles.js";
 import type * as lib_spreads from "../lib/spreads.js";
 import type * as lib_tags from "../lib/tags.js";
 import type * as lib_taxonomyDescriptions from "../lib/taxonomyDescriptions.js";
+import type * as lib_txnCodes from "../lib/txnCodes.js";
 import type * as merchants from "../merchants.js";
 import type * as migrations from "../migrations.js";
 import type * as modules from "../modules.js";
@@ -80,6 +81,7 @@ declare const fullApi: ApiFromModules<{
   "lib/spreads": typeof lib_spreads;
   "lib/tags": typeof lib_tags;
   "lib/taxonomyDescriptions": typeof lib_taxonomyDescriptions;
+  "lib/txnCodes": typeof lib_txnCodes;
   merchants: typeof merchants;
   migrations: typeof migrations;
   modules: typeof modules;

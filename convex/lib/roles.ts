@@ -23,6 +23,7 @@ const ROLE_MODULES: Record<UserRole, readonly string[]> = {
     "transactions",
     "merchants",
     "statements",
+    "analysis",
     "issues",
   ],
   premium: [

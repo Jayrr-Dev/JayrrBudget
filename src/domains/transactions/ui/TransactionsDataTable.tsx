@@ -50,24 +50,6 @@ function textOrDash(value: string | number | boolean | null | undefined) {
   );
 }
 
-function chipList(values: string[]) {
-  if (!values.length) {
-    return <span className="text-sm text-[var(--muted-foreground)]">-</span>;
-  }
-  return (
-    <div className="flex min-w-0 flex-wrap gap-1">
-      {values.map((value, index) => (
-        <span
-          key={`${index}-${value}`}
-          className="max-w-full rounded-md bg-[var(--muted)] px-1.5 py-0.5 text-[11px] leading-snug font-medium break-words text-[var(--foreground)]"
-        >
-          {value}
-        </span>
-      ))}
-    </div>
-  );
-}
-
 function uniqueSorted(values: Array<string | null | undefined>) {
   return [...new Set(values.filter((value): value is string => Boolean(value)))]
     .sort((a, b) => a.localeCompare(b))
@@ -287,6 +269,38 @@ function buildColumns(
     }),
 
     // -- AI invent / labels (right) --
+    columnHelper.accessor(
+      (row) =>
+        row.merchantClean ||
+        row.brandName ||
+        row.companyName ||
+        row.merchantName ||
+        null,
+      {
+        id: "merchant",
+        header: "Merchant",
+        meta: bandMeta(
+          "16rem",
+          "invent",
+          "Clean store name from enrichment (falls back to brand / company).",
+        ),
+        cell: ({ getValue }) => {
+          const value = getValue();
+          if (!value) {
+            return (
+              <span className="text-sm text-[var(--muted-foreground)]">-</span>
+            );
+          }
+          return (
+            <span className="line-clamp-2 block text-sm leading-snug font-medium break-words">
+              {String(value)}
+            </span>
+          );
+        },
+        filterFn: "fuzzy",
+        sortFn: "text",
+      },
+    ),
     columnHelper.accessor("sectionName", {
       header: "Section",
       meta: bandMeta("14rem", "invent", "Top spend bucket (Lifestyle, Transport)."),
@@ -361,24 +375,20 @@ function buildColumns(
       filterFn: "equalsString",
       sortFn: "text",
     }),
-    columnHelper.accessor((row) => row.typeNames ?? [], {
-      id: "typeNames",
-      header: "Type",
-      meta: bandMeta("18rem", "invent", "Dimensional type chips (Fee, Subscription)."),
-      cell: ({ getValue }) => chipList([...(getValue() as string[])]),
-      filterFn: "includesTag",
-      sortFn: "textList",
-    }),
-    columnHelper.accessor("paymentChannel", {
-      header: "Channel",
-      meta: bandMeta("9rem", "invent", "Online, in store, or other."),
+    columnHelper.accessor("transactionCode", {
+      header: "Code",
+      meta: bandMeta(
+        "10rem",
+        "invent",
+        "Line nature: purchase / payment / refund / fee / interest / subscription / transfer / …",
+      ),
       cell: ({ getValue }) => textOrDash(getValue()),
       filterFn: "equalsString",
       sortFn: "text",
     }),
-    columnHelper.accessor("transactionCode", {
-      header: "Txn code",
-      meta: bandMeta("9rem", "invent", "purchase / payment / fee / refund."),
+    columnHelper.accessor("paymentChannel", {
+      header: "Channel",
+      meta: bandMeta("9rem", "invent", "Online, in store, or other."),
       cell: ({ getValue }) => textOrDash(getValue()),
       filterFn: "equalsString",
       sortFn: "text",
@@ -410,7 +420,11 @@ function buildColumns(
     }),
     columnHelper.accessor("enrichmentStatus", {
       header: "Enrichment",
-      meta: bandMeta("10rem", "invent", "Merchant enrichment status."),
+      meta: bandMeta(
+        "10rem",
+        "invent",
+        "pending = not cleaned yet. done = messy bank text cleaned into a normal store name. failed = cleanup didn't finish.",
+      ),
       cell: ({ getValue }) => textOrDash(getValue()),
       filterFn: "equalsString",
       sortFn: "text",
@@ -469,8 +483,8 @@ export function TransactionsDataTable({
     () => uniqueSorted(transactions.map((txn) => txn.transactionTypeName)),
     [transactions],
   );
-  const typeOptions = useMemo(
-    () => uniqueSorted(transactions.flatMap((txn) => txn.typeNames ?? [])),
+  const txnCodeOptions = useMemo(
+    () => uniqueSorted(transactions.map((txn) => txn.transactionCode)),
     [transactions],
   );
   const channelOptions = useMemo(
@@ -544,10 +558,9 @@ export function TransactionsDataTable({
           options: transactionTypeOptions,
         },
         {
-          columnId: "typeNames",
-          label: "Type",
-          allLabel: "All types",
-          options: typeOptions,
+          columnId: "transactionCode",
+          label: "Code",
+          options: txnCodeOptions,
         },
         {
           columnId: "tags",

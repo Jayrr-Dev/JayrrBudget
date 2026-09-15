@@ -3,7 +3,16 @@ import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { ensureUser, requireRole, userRole } from "./lib/auth";
 import { ensureModulesForUser } from "./lib/ensureModules";
+import { MODULE_CATALOG } from "./lib/moduleCatalog";
 import { roleAllowsModule } from "./lib/roles";
+
+const catalogSortOrder = new Map(
+  MODULE_CATALOG.map((entry) => [entry.slug, entry.sortOrder]),
+);
+
+function sortOrderForSlug(slug: string, fallback: number) {
+  return catalogSortOrder.get(slug) ?? fallback;
+}
 
 export const list = query({
   args: {
@@ -32,7 +41,11 @@ export const list = query({
         args.enabledOnly ? roleAllowsModule(role, row.slug) : true,
       )
       .filter((row) => (args.enabledOnly ? row.enabled : true))
-      .sort((a, b) => a.sortOrder - b.sortOrder)
+      .sort(
+        (a, b) =>
+          sortOrderForSlug(a.slug, a.sortOrder) -
+          sortOrderForSlug(b.slug, b.sortOrder),
+      )
       .map((row) => ({
         id: row.legacyId,
         slug: row.slug,
@@ -42,7 +55,7 @@ export const list = query({
         icon: row.icon,
         category: row.category,
         enabled: Boolean(row.enabled),
-        sortOrder: row.sortOrder,
+        sortOrder: sortOrderForSlug(row.slug, row.sortOrder),
         isCore: Boolean(row.isCore),
       }));
   },

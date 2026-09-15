@@ -211,7 +211,6 @@ export const get = query({
           };
         }),
         transactions: txnRows.map((txn) => {
-          const kindNames = txn.kind ? [txn.kind] : [];
           return {
             transactionId: txn.transactionId,
             accountId: txn.accountId,
@@ -224,8 +223,8 @@ export const get = query({
             categoryName: txn.category,
             spreadName: txn.spread,
             transactionTypeName: txn.transactionType,
-            typeName: txn.kind,
-            typeNames: kindNames,
+            typeName: null,
+            typeNames: [],
             subcategoryName: txn.subcategory,
             tagNames: [...new Set(splitTags(txn.tags))].sort((a, b) =>
               a.localeCompare(b),

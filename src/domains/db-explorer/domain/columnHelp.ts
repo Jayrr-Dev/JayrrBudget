@@ -20,7 +20,7 @@ export const TABLE_HELP: Record<string, string> = {
   transaction_types:
     "Filter lookup for cash-flow Transaction type (income / transfers / expenses).",
   transaction_kinds:
-    "Filter lookup for Type (Fee, Subscription, …).",
+    "Retired lookup for Type chips. Folded into txn_code (fee / subscription / …).",
   app_modules:
     "Which app pages show in the sidebar.",
   scratch_notes:
@@ -127,7 +127,7 @@ export const COLUMN_HELP: Record<string, Record<string, string>> = {
     transaction_id: "Which ledger row these payment refs belong to.",
     check_number: "Check number, if it was a check.",
     reference_number: "Bank reference number on the line.",
-    transaction_code: "Bank code: purchase, payment, fee, and so on.",
+    transaction_code: "Line nature: purchase, payment, fee, subscription, …",
     payment_channel: "In store, online, or other.",
     foreign_amount_minor: "Foreign charge size in cents, if present.",
     foreign_currency: "Foreign currency code, if present.",
@@ -172,7 +172,7 @@ export const COLUMN_HELP: Record<string, Record<string, string>> = {
     merchant_raw: "Text we started from (bank memo).",
     merchant_clean: "Readable store name after cleanup.",
     channel: "online, in_store, or other.",
-    txn_kind: "What happened: purchase, refund, fee, payment…",
+    txn_kind: "Line nature: purchase, refund, fee, subscription, payment…",
     store_number: "Chain store number we parsed out.",
     legal_suffix: "Inc, Ltd, etc. stripped off the name.",
     enrichment_status: "pending, done, or failed.",

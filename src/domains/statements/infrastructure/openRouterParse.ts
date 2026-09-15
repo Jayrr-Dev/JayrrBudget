@@ -90,10 +90,11 @@ const CATEGORY_HARD_RULES = [
   "PREAUTHORIZED DEBIT student loan / ABDL / BNPL → Finance / Debt & Loans / Student Loans.",
   "OpenAI, ChatGPT, T3 Chat, Cursor, Anthropic → Technology / AI Services / AI Assistants & Chat.",
   "Wealthsimple Tax → Technology / Software & Subscriptions / Productivity & Creative.",
-  "Movati, GoodLife, gym memberships → Lifestyle / Personal Care / Gym Memberships.",
+  "Movati, GoodLife, gym memberships → Lifestyle / Personal Care / Gym Memberships. Recurring gym PAD → transactionCode subscription.",
   "Uber Eats → Lifestyle / Delivery Services / Food Delivery. Uber Holdings / Uber trip (no Eats) → Transport / Rideshare.",
   "Esso / Shell / Petro-Canada, even with 7-Eleven on the same line → Transport / Fuel / Gas Stations.",
   "Plain 7-Eleven with no fuel brand → Convenience under merchandise.",
+  "Netflix, Spotify, Disney+, Crave, and similar recurring digital charges → transactionCode subscription.",
   "Purchase refunds (Amazon CREDIT, return) stay under the original tree, transactionCode refund. Never Income.",
 ].join("\n");
 

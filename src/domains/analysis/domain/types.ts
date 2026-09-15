@@ -82,7 +82,7 @@ export type AnalysisTagBreakdown = {
   otherByPeriod: Record<string, AnalysisRankedItem[]>;
 };
 
-/** Dimensional Type (Fee / Subscription / …) from transactions.kind. */
+/** Dimensional Type (Fee / Subscription / …) from txnCode. */
 export type AnalysisTypeBreakdown = {
   type: string;
   spend: number;
@@ -180,7 +180,7 @@ export type AnalysisData = {
   /** Tag bars split by category. */
   tagStacked: AnalysisStackedRankedBreakdown;
   tagBreakdowns: AnalysisTagBreakdown[];
-  /** Dimensional Type labels from transactions.kind (Fee, Subscription, …). */
+  /** Dimensional Type labels from txnCode (Fee, Subscription, …). */
   types: AnalysisRankedItem[];
   typeMonthly: Array<Record<string, string | number>>;
   typeSeries: AnalysisCategorySeries[];

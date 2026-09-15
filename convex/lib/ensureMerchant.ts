@@ -16,7 +16,10 @@ function trimOrNull(value: string | null | undefined): string | null {
   return trimmed ? trimmed : null;
 }
 
-/** Pick the best display label from a ledger row. */
+/**
+ * Canonical display label for a ledger row.
+ * Prefer merchantClean; legacy merchantName only as last resort.
+ */
 export function merchantLabelFromTxn(txn: {
   merchantClean?: string | null;
   merchantName?: string | null;
@@ -93,4 +96,33 @@ export async function ensureMerchant(
   const row = await ctx.db.get(id);
   if (!row) throw new Error("Merchant insert failed");
   return row;
+}
+
+/** Link owned transactions to a merchant; denormalize merchantClean (+ optional entity fields). */
+export async function linkTxnsToMerchant(
+  ctx: MutationCtx,
+  userId: Id<"users">,
+  merchant: Doc<"merchants">,
+  transactionIds: string[],
+): Promise<number> {
+  let linked = 0;
+  for (const transactionId of transactionIds) {
+    const txn = await ctx.db
+      .query("transactions")
+      .withIndex("by_userId_transactionId", (q) =>
+        q.eq("userId", userId).eq("transactionId", transactionId),
+      )
+      .unique();
+    if (!txn) continue;
+    await ctx.db.patch(txn._id, {
+      merchantId: merchant._id,
+      merchantClean: merchant.name,
+      company: merchant.company ?? txn.company,
+      brand: merchant.brand ?? txn.brand,
+      website: merchant.website ?? txn.website,
+      logoUrl: merchant.logoUrl ?? txn.logoUrl,
+    });
+    linked += 1;
+  }
+  return linked;
 }

@@ -173,7 +173,7 @@ export const transactionTypes = sqliteTable("transaction_types", {
   description: text("description"),
 });
 
-/** Filter lookup: Type (Fee, Subscription, …) */
+/** Retired filter lookup: Type chips (Fee, Subscription). Use txn_code instead. */
 export const transactionKinds = sqliteTable("transaction_kinds", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   name: text("name").notNull().unique(),
@@ -208,7 +208,7 @@ export const transactions = sqliteTable(
     /** 50/30/20 bucket: Needs / Wants / Savings */
     spread: text("spread"),
     transactionType: text("transaction_type"),
-    /** CSV `Type` column */
+    /** @deprecated Folded into txnCode */
     kind: text("kind"),
 
     sectionId: integer("section_id").references(() => transactionSections.id, {
@@ -235,6 +235,7 @@ export const transactions = sqliteTable(
 
     tags: text("tags"),
     channel: text("channel"),
+    /** Line nature: purchase / payment / fee / subscription / … */
     txnCode: text("txn_code"),
     bankDirection: text("bank_direction"),
     crossCheck: text("cross_check"),

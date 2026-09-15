@@ -723,7 +723,7 @@ export function StatementUpload({ onImported }: Props) {
             ) : null}
           </div>
 
-          <DialogFooter>
+          <DialogFooter className="items-center sm:justify-center">
             <Button type="button" variant="outline" onClick={onCancelClick}>
               {busy
                 ? "Cancel upload"

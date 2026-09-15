@@ -262,6 +262,7 @@ export default defineSchema({
     subcategory: v.union(v.string(), v.null()),
     spread: v.union(v.string(), v.null()),
     transactionType: v.union(v.string(), v.null()),
+    /** @deprecated Folded into txnCode. Kept null for old docs. */
     kind: v.union(v.string(), v.null()),
     sectionLegacyId: v.union(v.number(), v.null()),
     categoryLegacyId: v.union(v.number(), v.null()),
@@ -271,6 +272,7 @@ export default defineSchema({
     kindLegacyId: v.union(v.number(), v.null()),
     tags: v.union(v.string(), v.null()),
     channel: v.union(v.string(), v.null()),
+    /** Line nature: purchase / payment / fee / subscription / … */
     txnCode: v.union(v.string(), v.null()),
     bankDirection: v.union(v.string(), v.null()),
     crossCheck: v.union(v.string(), v.null()),
