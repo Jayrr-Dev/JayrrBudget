@@ -135,6 +135,7 @@ function SortHeader({
   sortKey,
   sortDir,
   align = "left",
+  inset = false,
   onSort,
 }: {
   label: string;
@@ -142,12 +143,13 @@ function SortHeader({
   sortKey: SortKey;
   sortDir: SortDir;
   align?: "left" | "right";
+  inset?: boolean;
   onSort: (column: SortKey) => void;
 }) {
   const active = sortKey === column;
   return (
     <th
-      className={`overflow-hidden py-3 font-semibold ${align === "right" ? "pl-3 text-right" : "pr-3 text-left"}`}
+      className={`overflow-hidden py-3 font-semibold ${align === "right" ? "pl-3 text-right" : `${inset ? "pl-3" : ""} pr-3 text-left`}`}
       aria-sort={
         active ? (sortDir === "asc" ? "ascending" : "descending") : "none"
       }
@@ -159,7 +161,7 @@ function SortHeader({
         onClick={() => onSort(column)}
         className={`h-7 max-w-full gap-1 px-1.5 uppercase tracking-wide ${
           active ? "text-[#1a2330]" : "text-[#4b5563]"
-        } ${align === "right" ? "ml-auto pr-0" : "-ml-1.5"}`}
+        } ${align === "right" ? "ml-auto pr-0" : inset ? "ml-0" : "-ml-1.5"}`}
       >
         {label}
         <span
@@ -328,7 +330,7 @@ export function AccountPastTransactions({
       <ScrollTopX>
         <table className="w-full table-fixed border-collapse text-sm">
           <colgroup>
-            <col className="w-[7.5rem]" />
+            <col className="w-[10rem]" />
             <col />
             <col className="w-[6.75rem]" />
             <col className="w-[6.75rem]" />
@@ -349,6 +351,7 @@ export function AccountPastTransactions({
                 sortKey={sortKey}
                 sortDir={sortDir}
                 onSort={handleSort}
+                inset
               />
               <SortHeader
                 label="Debit"
@@ -394,7 +397,7 @@ export function AccountPastTransactions({
                     <td className="whitespace-nowrap py-3.5 pr-3 font-mono tabular-nums text-[#1a2330]">
                       {formatDisplayDate(txn.date)}
                     </td>
-                    <td className="min-w-0 py-3.5 pr-3 text-[#1a2330]">
+                    <td className="min-w-0 py-3.5 pr-3 pl-3 text-[#1a2330]">
                       <span className="line-clamp-2 break-words">
                         {txnLabel(txn)}
                       </span>
