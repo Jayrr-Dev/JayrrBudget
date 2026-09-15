@@ -1,6 +1,7 @@
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
 import { merchantSlug } from "./merchantSlug";
+import { rememberCategorization } from "./categorizationMemory";
 
 export type MerchantFields = {
   name: string;
@@ -121,7 +122,10 @@ export async function linkTxnsToMerchant(
       brand: merchant.brand ?? txn.brand,
       website: merchant.website ?? txn.website,
       logoUrl: merchant.logoUrl ?? txn.logoUrl,
+      updatedAt: Date.now(),
     });
+    const updated = await ctx.db.get(txn._id);
+    if (updated) await rememberCategorization(ctx, updated);
     linked += 1;
   }
   return linked;

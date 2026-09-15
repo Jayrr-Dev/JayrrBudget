@@ -1,4 +1,5 @@
 import type { ConvexHttpClient } from "convex/browser";
+import { categorizeStatement } from "./categorizeStatement";
 import {
   normalizeStatementAccountType,
   statementTypeToLedgerFields,
@@ -55,7 +56,7 @@ function emitProgress(
  * 2. AI paper-facts parse (dates/amounts/description/locations + account meta)
  * 3. Write transactions to Convex
  *
- * Skips categories, merchant clean, hygiene, and enrichment.
+ * 4. Reuse saved categorization, then classify unfamiliar descriptions.
  */
 export async function importBankStatement(params: {
   filename: string;
@@ -219,8 +220,16 @@ export async function importBankStatement(params: {
       transactions,
     });
 
+    emitProgress(params.onProgress, "categorize");
+    let categorization;
+    try {
+      categorization = await categorizeStatement(params.client, result.uploadId);
+    } catch (error) {
+      categorization = { ok: false, cached: 0, ai: 0, pending: result.transactionCount,
+        error: errorMessage(error, "Categorization failed") };
+    }
     emitProgress(params.onProgress, "done");
-    return result as ImportBankStatementSuccess;
+    return { ...result, categorization } as ImportBankStatementSuccess;
   } catch (error) {
     return {
       ok: false,

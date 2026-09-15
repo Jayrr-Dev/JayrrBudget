@@ -1,6 +1,7 @@
 import { authTables } from "@convex-dev/auth/server";
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
+import { profileValidator } from "./lib/categorization";
 
 /**
  * Personal ledgers: every private row is scoped by `userId`.
@@ -17,6 +18,15 @@ const userId = v.optional(v.id("users"));
 
 export default defineSchema({
   ...authTables,
+  // Shared vocabulary contains labels only, never ledger rows or owner IDs.
+  sharedCategoryPaths: defineTable({
+    key: v.string(), section: v.string(), category: v.string(),
+    subcategory: v.union(v.string(), v.null()),
+  }).index("by_key", ["key"]),
+  categorizationRules: defineTable({
+    userId: v.id("users"), key: v.string(), profile: profileValidator,
+    updatedAt: v.number(),
+  }).index("by_userId_key", ["userId", "key"]),
   users: defineTable({
     name: v.optional(v.string()),
     image: v.optional(v.string()),

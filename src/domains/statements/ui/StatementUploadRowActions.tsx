@@ -48,6 +48,24 @@ export function StatementUploadRowActions({
   const queryClient = useQueryClient();
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [ocrOpen, setOcrOpen] = useState(false);
+  const categorize = useMutation({
+    mutationFn: async () => {
+      const response = await fetch(`/api/statements/${upload.id}/categorize`, { method: "POST" });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error ?? "Categorization failed");
+      return result as import("../domain/importResult").CategorizationSummary;
+    },
+    onSuccess: async result => {
+      const description = `${result.cached} reused, ${result.ai} categorized, ${result.pending} pending.`;
+      if (result.ok) toast.success("Categorization complete", { description });
+      else toast.warning("Categorization needs attention", { description: result.error ?? description });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.dashboard }),
+        queryClient.invalidateQueries({ queryKey: dbExplorerQueryKeys.all }),
+      ]);
+    },
+    onError: error => toast.error("Categorization failed", { description: error.message }),
+  });
   const detail = useQuery({
     queryKey: statementQueryKeys.upload(upload.id),
     queryFn: () => fetchStatementUpload(upload.id),
@@ -88,6 +106,9 @@ export function StatementUploadRowActions({
           <Icon icon="basil:menu-outline" className="size-4" />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-auto min-w-36">
+          <DropdownMenuItem disabled={categorize.isPending || remove.isPending} onClick={() => categorize.mutate()}>
+            {categorize.isPending ? "Categorizing..." : "Categorize transactions"}
+          </DropdownMenuItem>
           <DropdownMenuItem
             className="cursor-pointer"
             disabled={!upload.hasOcr}

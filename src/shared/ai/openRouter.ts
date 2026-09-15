@@ -98,9 +98,10 @@ async function withTimeout<T>(
   label: string,
   modelId: string,
   fn: (signal: AbortSignal) => Promise<T>,
+  timeoutMs = GENERATE_TIMEOUT_MS,
 ): Promise<T> {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), GENERATE_TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   const beat = setInterval(() => {
     console.info(`[${label}] waiting on ${modelId}…`);
   }, 15_000);
@@ -109,7 +110,7 @@ async function withTimeout<T>(
   } catch (error) {
     if (controller.signal.aborted) {
       throw new Error(
-        `${label} timed out after ${GENERATE_TIMEOUT_MS}ms on ${modelId}`,
+        `${label} timed out after ${timeoutMs}ms on ${modelId}`,
       );
     }
     throw error;
@@ -128,8 +129,10 @@ export async function generateObjectWithFallback<SCHEMA extends z.ZodType>(param
   prompt: string;
   logLabel: string;
   temperature?: number;
+  timeoutMs?: number;
+  maxModelAttempts?: number;
 }): Promise<{ object: z.infer<SCHEMA>; modelId: string }> {
-  const models = getModelChain();
+  const models = getModelChain().slice(0, params.maxModelAttempts);
   let lastError: unknown;
 
   for (const [index, modelId] of models.entries()) {
@@ -147,6 +150,7 @@ export async function generateObjectWithFallback<SCHEMA extends z.ZodType>(param
             prompt: params.prompt,
             abortSignal,
           }),
+        params.timeoutMs,
       );
       console.info(
         `[${params.logLabel}] model=${modelId} ok in ${Date.now() - started}ms`,

@@ -174,6 +174,7 @@ export const findCompletedByFileHash = query({
       skippedCount: completed.transactionCount ?? 0,
       removedTwinCount: 0,
       duplicateFile: true,
+      transactionIds: [],
       institutionName: completed.institutionName,
       accountName: completed.accountName,
       pageCount: completed.pageCount ?? 0,

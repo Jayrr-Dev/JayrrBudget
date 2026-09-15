@@ -11,6 +11,7 @@
 import type * as aiRules from "../aiRules.js";
 import type * as analysis from "../analysis.js";
 import type * as auth from "../auth.js";
+import type * as categorization from "../categorization.js";
 import type * as dashboard from "../dashboard.js";
 import type * as dbExplorer from "../dbExplorer.js";
 import type * as http from "../http.js";
@@ -21,6 +22,8 @@ import type * as lib_auth from "../lib/auth.js";
 import type * as lib_canonicalCategories from "../lib/canonicalCategories.js";
 import type * as lib_carLoanConstants from "../lib/carLoanConstants.js";
 import type * as lib_cashFlow from "../lib/cashFlow.js";
+import type * as lib_categorization from "../lib/categorization.js";
+import type * as lib_categorizationMemory from "../lib/categorizationMemory.js";
 import type * as lib_categoryKey from "../lib/categoryKey.js";
 import type * as lib_computeAnalysis from "../lib/computeAnalysis.js";
 import type * as lib_ensureMerchant from "../lib/ensureMerchant.js";
@@ -56,6 +59,7 @@ declare const fullApi: ApiFromModules<{
   aiRules: typeof aiRules;
   analysis: typeof analysis;
   auth: typeof auth;
+  categorization: typeof categorization;
   dashboard: typeof dashboard;
   dbExplorer: typeof dbExplorer;
   http: typeof http;
@@ -66,6 +70,8 @@ declare const fullApi: ApiFromModules<{
   "lib/canonicalCategories": typeof lib_canonicalCategories;
   "lib/carLoanConstants": typeof lib_carLoanConstants;
   "lib/cashFlow": typeof lib_cashFlow;
+  "lib/categorization": typeof lib_categorization;
+  "lib/categorizationMemory": typeof lib_categorizationMemory;
   "lib/categoryKey": typeof lib_categoryKey;
   "lib/computeAnalysis": typeof lib_computeAnalysis;
   "lib/ensureMerchant": typeof lib_ensureMerchant;

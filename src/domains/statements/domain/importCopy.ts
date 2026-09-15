@@ -35,6 +35,11 @@ function outcomeKey(data: ImportBankStatementSuccess) {
 
 function extraLines(data: ImportBankStatementSuccess) {
   const lines: string[] = [];
+  if (data.categorization) {
+    const c = data.categorization;
+    lines.push(`${c.cached} reused, ${c.ai} categorized, ${c.pending} pending.`);
+    if (c.error) lines.push(c.error);
+  }
 
   if (data.removedTwinCount > 0) {
     lines.push(`Removed ${data.removedTwinCount} duplicate twins.`);
@@ -61,7 +66,7 @@ export function describeImportResult(
 ): ImportCopy {
   const title = OUTCOMES[outcomeKey(data)](data);
   const description = extraLines(data).join(" ") || undefined;
-  const tone: ToastTone = data.balanceOk === false ? "warning" : "success";
+  const tone: ToastTone = data.balanceOk === false || data.categorization?.ok === false ? "warning" : "success";
 
   return { tone, title, description };
 }

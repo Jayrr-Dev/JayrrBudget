@@ -3,6 +3,7 @@ export type StatementImportStep =
   | "ocr"
   | "parse"
   | "save"
+  | "categorize"
   | "done";
 
 export type StatementImportProgress = {
@@ -20,6 +21,7 @@ export const STATEMENT_IMPORT_STEPS: Record<
   ocr: { percent: 15, label: "Scanning pages (OCR)…" },
   parse: { percent: 50, label: "Reading lines (paper-facts)…" },
   save: { percent: 85, label: "Saving to ledger…" },
+  categorize: { percent: 90, label: "Categorizing transactions…" },
   done: { percent: 100, label: "Done" },
 };
 

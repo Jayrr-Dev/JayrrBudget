@@ -5,6 +5,7 @@ import { ensureUser, requireUser } from "./lib/auth";
 import { classifySpread } from "./lib/spreads";
 import { hasTag, joinTags, splitTags } from "./lib/tags";
 import { taxonomyDescription } from "./lib/taxonomyDescriptions";
+import { rememberCategorization } from "./lib/categorizationMemory";
 
 const TAXONOMY_FIELDS = ["section", "spread", "category", "subcategory"] as const;
 
@@ -523,6 +524,9 @@ export const updateTaxonomy = mutation({
       spreadLegacyId,
       updatedAt: Date.now(),
     });
+
+    const updated = await ctx.db.get(row._id);
+    if (updated) await rememberCategorization(ctx, updated);
 
     return {
       transactionId,

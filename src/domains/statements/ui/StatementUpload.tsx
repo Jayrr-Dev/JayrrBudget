@@ -397,7 +397,7 @@ export function StatementUpload({ onImported }: Props) {
           signal: controller.signal,
           onProgress: (progress) => {
             const state: ItemState =
-              progress.step === "parse" || progress.step === "save"
+              progress.step === "parse" || progress.step === "save" || progress.step === "categorize"
                 ? "processing"
                 : "uploading";
             patchItem(item.id, { state, progress });
@@ -412,6 +412,9 @@ export function StatementUpload({ onImported }: Props) {
         });
 
         const copy = describeImportResult(result);
+        if (result.categorization?.ok === false) {
+          toast.warning("Imported; categorization needs attention", { description: copy.description });
+        }
         if (copy.tone === "warning") warningCount += 1;
         else okCount += 1;
 
@@ -463,7 +466,7 @@ export function StatementUpload({ onImported }: Props) {
 
     if (failCount === 0) {
       toast.warning(
-        `${okCount} imported · ${warningCount} with balance warnings`,
+        `${okCount} imported · ${warningCount} with warnings`,
         { id: UPLOAD_TOAST },
       );
       return;

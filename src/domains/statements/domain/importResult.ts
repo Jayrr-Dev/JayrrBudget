@@ -1,3 +1,11 @@
+export type CategorizationSummary = {
+  ok: boolean;
+  cached: number;
+  ai: number;
+  pending: number;
+  error?: string;
+};
+
 export type ImportHygieneSummary = {
   ok: boolean;
   consolidateMerges: number;
@@ -35,6 +43,7 @@ export type ImportBankStatementSuccess = {
   balanceOk: boolean | null;
   hygiene?: ImportHygieneSummary;
   enrichment?: ImportEnrichmentSummary;
+  categorization?: CategorizationSummary;
 };
 
 export type ImportBankStatementResult =
