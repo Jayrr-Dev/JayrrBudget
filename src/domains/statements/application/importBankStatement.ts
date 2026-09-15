@@ -33,6 +33,7 @@ import type {
 } from "@/domains/statements/domain/importResult";
 import { api } from "@/shared/convex/httpClient";
 import { errorMessage } from "@/shared/lib/error-message";
+import { normalizeCurrencyCode } from "@/shared/lib/currency";
 
 export type {
   ImportBankStatementResult,
@@ -163,7 +164,7 @@ export async function importBankStatement(params: {
       accountMask: parsed.accountMask,
       accountType: normalizedAccountType,
     });
-    const currency = parsed.currency || "CAD";
+    const currency = normalizeCurrencyCode(parsed.currency);
 
     const occurrence = new Map<string, number>();
     const transactions = parsed.transactions.map((txn) => {

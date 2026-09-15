@@ -14,6 +14,7 @@ import type * as auth from "../auth.js";
 import type * as categorization from "../categorization.js";
 import type * as dashboard from "../dashboard.js";
 import type * as dbExplorer from "../dbExplorer.js";
+import type * as email from "../email.js";
 import type * as http from "../http.js";
 import type * as issues from "../issues.js";
 import type * as lib_amortize from "../lib/amortize.js";
@@ -62,6 +63,7 @@ declare const fullApi: ApiFromModules<{
   categorization: typeof categorization;
   dashboard: typeof dashboard;
   dbExplorer: typeof dbExplorer;
+  email: typeof email;
   http: typeof http;
   issues: typeof issues;
   "lib/amortize": typeof lib_amortize;

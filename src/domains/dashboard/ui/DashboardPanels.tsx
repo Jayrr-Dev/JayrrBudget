@@ -99,7 +99,7 @@ export function AccountsPanel({
               <p className="font-mono text-sm">
                 {formatMoney(
                   account.currentBalance,
-                  account.isoCurrencyCode ?? "USD",
+                  account.isoCurrencyCode ?? "CAD",
                 )}
               </p>
             </li>
@@ -179,7 +179,7 @@ export function TransactionsList({
                 >
                   {formatLedgerSpend(
                     txn.amount,
-                    txn.isoCurrencyCode ?? "USD",
+                    txn.isoCurrencyCode ?? "CAD",
                   )}
                 </p>
               </li>

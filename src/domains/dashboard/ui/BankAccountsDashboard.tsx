@@ -21,6 +21,7 @@ import type {
 import { AccountPastTransactions } from "@/domains/dashboard/ui/AccountPastTransactions";
 import { AddLoanDialog } from "@/domains/dashboard/ui/AddLoanDialog";
 import { LOAN_TYPES, formatLoanRate, normalizeRateType } from "@/domains/loans/domain/loanTypes";
+import { StatementUpload } from "@/domains/statements/ui/StatementUpload";
 import { formatDisplayDate } from "@/shared/lib/format-date";
 import { PlusIcon } from "lucide-react";
 import Link from "next/link";
@@ -443,9 +444,17 @@ export function BankAccountsDashboard({
   return (
     <div className="space-y-8">
       {!hasNonLending && accounts.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-[var(--border)] bg-[var(--surface)]/70 px-4 py-10 text-sm text-[var(--muted-foreground)]">
-          No deposit or credit accounts yet. Import a statement PDF from
-          Statements, or add a custom loan below.
+        <div className="flex flex-col gap-4 rounded-xl border border-dashed border-[var(--border)] bg-[var(--surface)]/70 px-5 py-8 sm:flex-row sm:items-center sm:justify-between">
+          <div className="space-y-1">
+            <h2 className="font-medium text-[var(--foreground)]">
+              Start by importing a statement
+            </h2>
+            <p className="max-w-lg text-sm text-[var(--muted-foreground)]">
+              Upload a bank statement PDF to create your accounts and import
+              the transactions automatically.
+            </p>
+          </div>
+          <StatementUpload />
         </div>
       ) : null}
 

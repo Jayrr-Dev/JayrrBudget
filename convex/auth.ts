@@ -1,8 +1,22 @@
 import { Password } from "@convex-dev/auth/providers/Password";
+import { Email } from "@convex-dev/auth/providers/Email";
 import { convexAuth } from "@convex-dev/auth/server";
 import { ConvexError } from "convex/values";
+import { internal } from "./_generated/api";
 import { ensureModulesForUser } from "./lib/ensureModules";
 import { DEFAULT_USER_ROLE, isUserRole } from "./lib/roles";
+
+const passwordResetEmail = Email({
+  maxAge: 10 * 60,
+  async sendVerificationRequest(...args: any[]) {
+    const [{ identifier, token, expires }, ctx] = args;
+    await ctx.runAction(internal.email.sendPasswordReset, {
+      to: identifier,
+      token,
+      expires: expires.toISOString(),
+    });
+  },
+});
 
 export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
   providers: [
@@ -26,6 +40,7 @@ export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
 
         return { email, name: `${firstName} ${lastName}` };
       },
+      reset: passwordResetEmail,
     }),
   ],
   callbacks: {

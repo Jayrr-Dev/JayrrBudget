@@ -27,7 +27,12 @@ export const parsedStatementSchema = z.object({
     .describe(
       "Dashboard category: chequing/checking, savings, credit/credit_card, lending/line_of_credit, or other (TFSA/business/etc).",
     ),
-  currency: z.string().default("CAD"),
+  currency: z
+    .string()
+    .trim()
+    .min(1)
+    .default("CAD")
+    .describe("Statement currency as its ISO 4217 three-letter code, for example CAD, USD, EUR, GBP, JPY, or AUD."),
   statementPeriodStart: z
     .string()
     .nullable()

@@ -5,10 +5,12 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { authErrorMessage } from "@/shared/lib/auth-error-message";
 
+type AuthFlow = "signIn" | "signUp" | "reset" | "resetVerification";
+
 export default function SignInPage() {
   const { signIn } = useAuthActions();
   const router = useRouter();
-  const [flow, setFlow] = useState<"signIn" | "signUp">("signIn");
+  const [flow, setFlow] = useState<AuthFlow>("signIn");
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   // Defer password autofill attrs until focus so iCloud / managers
@@ -33,7 +35,11 @@ export default function SignInPage() {
             <p className="text-sm text-[var(--muted-foreground)]">
               {flow === "signIn"
                 ? "Sign in to your ledger"
-                : "Create your account"}
+                : flow === "signUp"
+                  ? "Create your account"
+                  : flow === "reset"
+                    ? "Request a password reset"
+                    : "Choose a new password"}
             </p>
           </div>
         </div>
@@ -56,9 +62,15 @@ export default function SignInPage() {
               const lastName = String(formData.get("lastName") ?? "").trim();
               formData.set("firstName", firstName);
               formData.set("lastName", lastName);
-            } else {
+            } else if (flow === "signIn") {
               formData.delete("firstName");
               formData.delete("lastName");
+            }
+
+            if (flow === "reset") {
+              formData.delete("password");
+              formData.delete("newPassword");
+              formData.delete("code");
             }
 
             void signIn("password", formData)
@@ -68,12 +80,15 @@ export default function SignInPage() {
                   router.refresh();
                   return;
                 }
-                setError(
-                  "Sign-in needs another step. Check your email if you were sent a code.",
-                );
+                if (flow === "reset") {
+                  setError(null);
+                  setFlow("resetVerification");
+                  return;
+                }
+                setError("Check your email if you were sent a code.");
               })
               .catch((err: unknown) => {
-                setError(authErrorMessage(err, flow));
+                setError(authErrorMessage(err, flow === "signUp" ? "signUp" : "signIn"));
               })
               .finally(() => setPending(false));
           }}
@@ -112,10 +127,25 @@ export default function SignInPage() {
               className="w-full rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-[var(--foreground)] outline-none focus:border-[var(--accent)]"
             />
           </label>
-          <label className="relative z-10 block space-y-1 text-sm">
-            <span className="text-[var(--muted-foreground)]">Password</span>
+          {flow === "resetVerification" ? (
+            <label className="block space-y-1 text-sm">
+              <span className="text-[var(--muted-foreground)]">Reset code</span>
+              <input
+                name="code"
+                type="text"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                required
+                className="w-full rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-[var(--foreground)] outline-none focus:border-[var(--accent)]"
+              />
+            </label>
+          ) : null}
+          {flow !== "reset" ? <label className="relative z-10 block space-y-1 text-sm">
+            <span className="text-[var(--muted-foreground)]">
+              {flow === "resetVerification" ? "New password" : "Password"}
+            </span>
             <input
-              name="password"
+              name={flow === "resetVerification" ? "newPassword" : "password"}
               type="password"
               required
               autoComplete={
@@ -128,7 +158,7 @@ export default function SignInPage() {
               minLength={8}
               readOnly={!passwordAutofillReady}
               onFocus={(event) => {
-                setPasswordAutofillReady(true);
+                  setPasswordAutofillReady(true);
                 const input = event.currentTarget;
                 input.readOnly = false;
                 requestAnimationFrame(() => {
@@ -140,7 +170,12 @@ export default function SignInPage() {
               }}
               className="w-full rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-[var(--foreground)] outline-none focus:border-[var(--accent)]"
             />
-          </label>
+          </label> : null}
+          {flow === "resetVerification" ? (
+            <p className="text-xs text-[var(--muted-foreground)]">
+              The code expires in 10 minutes. Request a new one if it expires.
+            </p>
+          ) : null}
           <input name="flow" type="hidden" value={flow} />
           {error ? (
             <p
@@ -159,23 +194,54 @@ export default function SignInPage() {
               ? "Working…"
               : flow === "signIn"
                 ? "Sign in"
-                : "Create account"}
+                : flow === "signUp"
+                  ? "Create account"
+                  : flow === "reset"
+                    ? "Email reset code"
+                    : "Reset password"}
           </button>
         </form>
 
+        {flow === "signIn" ? (
+          <p className="text-center text-sm text-[var(--muted-foreground)]">
+            <button
+              type="button"
+              className="text-[var(--accent)] underline-offset-2 hover:underline"
+              onClick={() => {
+                setError(null);
+                setFlow("reset");
+              }}
+            >
+              Forgot password?
+            </button>
+            <span className="mx-2">·</span>
+            Need an account?{" "}
+            <button
+              type="button"
+              className="text-[var(--accent)] underline-offset-2 hover:underline"
+              onClick={() => {
+                setError(null);
+                setFlow("signUp");
+              }}
+            >
+              Sign up
+            </button>
+          </p>
+        ) : (
         <p className="text-center text-sm text-[var(--muted-foreground)]">
-          {flow === "signIn" ? "Need an account?" : "Already have an account?"}{" "}
+          {flow === "signUp" ? "Already have an account?" : "Remember your password?"}{" "}
           <button
             type="button"
             className="text-[var(--accent)] underline-offset-2 hover:underline"
             onClick={() => {
               setError(null);
-              setFlow(flow === "signIn" ? "signUp" : "signIn");
+              setFlow(flow === "signUp" ? "signIn" : "signIn");
             }}
           >
-            {flow === "signIn" ? "Sign up" : "Sign in"}
+            {flow === "signUp" ? "Sign in" : "Sign in"}
           </button>
         </p>
+        )}
       </div>
     </main>
   );

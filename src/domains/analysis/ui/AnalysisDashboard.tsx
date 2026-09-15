@@ -56,6 +56,7 @@ import {
   type FacetPane,
 } from "@/domains/analysis/ui/analysisUiPrefs";
 import { formatMoney } from "@/domains/dashboard/domain/money";
+import { normalizeCurrencyCode } from "@/shared/lib/currency";
 import { useScratchNoteActions } from "@/domains/scratch-note/scratchNoteStore";
 import { cn } from "@/lib/utils";
 import { downloadCsv, toCsv } from "@/shared/lib/csv";
@@ -221,12 +222,20 @@ function useAnalysis(range: AnalysisRange, period: AnalysisPeriod) {
 }
 
 function moneyTick(value: number, currency: string) {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency,
-    notation: "compact",
-    maximumFractionDigits: 1,
-  }).format(value);
+  const code = normalizeCurrencyCode(currency);
+  try {
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: code,
+      notation: "compact",
+      maximumFractionDigits: 1,
+    }).format(value);
+  } catch {
+    return `${code} ${value.toLocaleString("en-US", {
+      notation: "compact",
+      maximumFractionDigits: 1,
+    })}`;
+  }
 }
 
 function InfoTip({ label, children }: { label: string; children: string }) {
