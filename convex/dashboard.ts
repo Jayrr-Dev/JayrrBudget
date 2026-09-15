@@ -117,7 +117,14 @@ export const get = query({
   handler: async (ctx, args) => {
     const user = await requireUser(ctx);
     try {
-      const [institutionRows, accountRows, allTxns, statementRows, termsRows] =
+      const limit =
+        typeof args.transactionLimit === "number" &&
+        Number.isFinite(args.transactionLimit) &&
+        args.transactionLimit > 0
+          ? args.transactionLimit
+          : null;
+
+      const [institutionRows, accountRows, txnRows, statementRows, termsRows, latestTxn, earliestTxn] =
         await Promise.all([
           ctx.db
             .query("institutions")
@@ -127,11 +134,17 @@ export const get = query({
             .query("accounts")
             .withIndex("by_userId", (q) => q.eq("userId", user._id))
             .collect(),
-          ctx.db
-            .query("transactions")
-            .withIndex("by_userId_posted", (q) => q.eq("userId", user._id))
-            .order("desc")
-            .collect(),
+          limit
+            ? ctx.db
+                .query("transactions")
+                .withIndex("by_userId_posted", (q) => q.eq("userId", user._id))
+                .order("desc")
+                .take(limit)
+            : ctx.db
+                .query("transactions")
+                .withIndex("by_userId_posted", (q) => q.eq("userId", user._id))
+                .order("desc")
+                .collect(),
           ctx.db
             .query("statementUploads")
             .withIndex("by_userId_status", (q) =>
@@ -142,17 +155,35 @@ export const get = query({
             .query("loanTerms")
             .withIndex("by_userId", (q) => q.eq("userId", user._id))
             .collect(),
+          ctx.db
+            .query("transactions")
+            .withIndex("by_userId_posted", (q) => q.eq("userId", user._id))
+            .order("desc")
+            .first(),
+          ctx.db
+            .query("transactions")
+            .withIndex("by_userId_posted", (q) => q.eq("userId", user._id))
+            .order("asc")
+            .first(),
         ]);
 
-      const limit =
-        typeof args.transactionLimit === "number" &&
-        Number.isFinite(args.transactionLimit) &&
-        args.transactionLimit > 0
-          ? args.transactionLimit
-          : null;
-
-      const txnRows = limit ? allTxns.slice(0, limit) : allTxns;
-      const padSource = txnPadRows(allTxns);
+      let padSource = txnPadRows(txnRows);
+      if (termsRows.length > 0) {
+        const loanAccountIds = [
+          ...new Set(termsRows.map((row) => row.accountId)),
+        ];
+        const loanTxnGroups = await Promise.all(
+          loanAccountIds.map((accountId) =>
+            ctx.db
+              .query("transactions")
+              .withIndex("by_userId_accountId_posted", (q) =>
+                q.eq("userId", user._id).eq("accountId", accountId),
+              )
+              .collect(),
+          ),
+        );
+        padSource = txnPadRows(loanTxnGroups.flat());
+      }
 
       let loanSummariesByAccount = new Map<
         string,
@@ -170,12 +201,8 @@ export const get = query({
         );
       }
 
-      let earliestDate: string | null = null;
-      let latestDate: string | null = null;
-      for (const txn of allTxns) {
-        if (!earliestDate || txn.posted < earliestDate) earliestDate = txn.posted;
-        if (!latestDate || txn.posted > latestDate) latestDate = txn.posted;
-      }
+      const earliestDate = earliestTxn?.posted ?? null;
+      const latestDate = latestTxn?.posted ?? null;
 
       let latestStatementDate: string | null = null;
       for (const s of statementRows) {
@@ -254,7 +281,8 @@ export const get = query({
             sum + (loan?.remainingPrincipal ?? account.currentBalance ?? 0)
           );
         }, 0),
-        transactionCount: allTxns.length,
+        transactionCount: txnRows.length,
+        hasMoreTransactions: Boolean(limit && txnRows.length === limit),
         earliestDate,
         latestDate,
         latestStatementDate,

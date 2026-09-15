@@ -1,3 +1,4 @@
+import { invalidateConvexUserCache } from "@/shared/convex/cachedRead";
 import { api } from "@/shared/convex/httpClient";
 import { getAuthenticatedConvexClient } from "@/shared/convex/httpClient.server";
 
@@ -28,9 +29,11 @@ export async function updateTransactionTaxonomy(
   input: UpdateTransactionTaxonomyInput,
 ): Promise<UpdateTransactionTaxonomyResult> {
   const client = await getAuthenticatedConvexClient();
-  return client.mutation(api.transactions.updateTaxonomy, {
+  const result = await client.mutation(api.transactions.updateTaxonomy, {
     transactionId: input.transactionId,
     field: input.field,
     value: input.value,
   });
+  await invalidateConvexUserCache();
+  return result;
 }

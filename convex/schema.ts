@@ -389,6 +389,16 @@ export default defineSchema({
     .index("by_userId", ["userId"])
     .index("by_userId_slug", ["userId", "slug"]),
 
+  /** Per-user dual-run toggles (encrypted ledger, cloud processing consent). */
+  featureFlags: defineTable({
+    userId: v.id("users"),
+    key: v.string(),
+    enabled: v.boolean(),
+    updatedAt: v.number(),
+  })
+    .index("by_userId", ["userId"])
+    .index("by_userId_key", ["userId", "key"]),
+
   /** Scratch note pads (tabs + vendor rows) for Analysis + FAB. */
   scratchNotes: defineTable({
     userId,

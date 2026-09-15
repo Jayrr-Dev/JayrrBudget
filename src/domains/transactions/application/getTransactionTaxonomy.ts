@@ -1,3 +1,4 @@
+import { cachedConvexRead } from "@/shared/convex/cachedRead";
 import { api } from "@/shared/convex/httpClient";
 import {
   AuthRequiredError,
@@ -27,8 +28,13 @@ export type TransactionTaxonomy = {
 };
 
 export async function getTransactionTaxonomy(): Promise<TransactionTaxonomy> {
-  const client = await getAuthenticatedConvexClient();
-  return client.query(api.transactions.taxonomy, {});
+  return cachedConvexRead({
+    name: "transactions.taxonomy",
+    load: async () => {
+      const client = await getAuthenticatedConvexClient();
+      return client.query(api.transactions.taxonomy, {});
+    },
+  });
 }
 
 export { AuthRequiredError };

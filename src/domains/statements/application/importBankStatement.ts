@@ -64,6 +64,8 @@ export async function importBankStatement(params: {
   bytes: Buffer;
   client: ConvexHttpClient;
   sourceHint?: string;
+  /** convex = write plaintext ledger; vault = return facts for client encrypt. */
+  persistMode?: "convex" | "vault";
   onProgress?: (progress: StatementImportProgress) => void;
 }): Promise<ImportBankStatementResult> {
   if (!isMistralConfigured()) {
@@ -196,6 +198,43 @@ export async function importBankStatement(params: {
     });
 
     emitProgress(params.onProgress, "save");
+    const persistMode = params.persistMode ?? "convex";
+    if (persistMode === "vault") {
+      emitProgress(params.onProgress, "done");
+      return {
+        ok: true,
+        uploadId: 0,
+        transactionCount: transactions.length,
+        insertedCount: transactions.length,
+        updatedCount: 0,
+        skippedCount: 0,
+        removedTwinCount: 0,
+        duplicateFile: false,
+        institutionName: parsed.institutionName,
+        accountName: parsed.accountName,
+        pageCount: ocr.pageCount,
+        statementPeriodStart: parsed.statementPeriodStart,
+        statementPeriodEnd: parsed.statementPeriodEnd,
+        openingBalance: balance.openingBalance,
+        closingBalance: balance.closingBalance,
+        transactionSum: balance.transactionSum,
+        computedClosing: balance.computedClosing,
+        balanceDelta: balance.delta,
+        balanceOk: balance.balanced,
+        vaultPayload: {
+          accountId,
+          accountName: parsed.accountName,
+          accountType: ledgerFields.type,
+          accountSubtype: ledgerFields.subtype,
+          accountMask: parsed.accountMask,
+          currency,
+          openingBalance: balance.openingBalance,
+          closingBalance: balance.closingBalance,
+          transactions,
+        },
+      };
+    }
+
     const result = await params.client.mutation(api.statements.importPaperFacts, {
       filename: params.filename,
       fileHash,

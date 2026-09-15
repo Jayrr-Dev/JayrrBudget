@@ -1,16 +1,16 @@
 "use client";
 
 import { createColumnHelper } from "@tanstack/react-table";
-import { useMutation, useQuery } from "convex/react";
-import { useEffect, useRef, useState } from "react";
+import { useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
-import type { Id } from "@convex/_generated/dataModel";
-import { toast } from "sonner";
 import { DataTable } from "@/components/ui/data-table";
 import type { DataTableFeatures } from "@/components/ui/data-table-features";
+import { EncryptedLedgerBanner } from "@/domains/dashboard/ui/DashboardPanels";
+import { usePrivateLedger } from "@/domains/vault/ui/usePrivateLedger";
+import { useMemo } from "react";
 
 type MerchantRow = {
-  id: Id<"merchants">;
+  id: string;
   slug: string;
   name: string;
   rawName: string | null;
@@ -115,31 +115,77 @@ const columns = columnHelper.columns([
 ]);
 
 export function MerchantsPanel() {
-  const merchants = useQuery(api.merchants.list, {});
-  const backfill = useMutation(api.merchants.backfillFromTransactions);
-  const syncedRef = useRef(false);
-  const [syncing, setSyncing] = useState(false);
+  const privateLedger = usePrivateLedger();
+  const merchants = useQuery(
+    api.merchants.list,
+    privateLedger.encryptedLedger ? "skip" : {},
+  );
 
-  useEffect(() => {
-    if (merchants === undefined || syncedRef.current) return;
-    syncedRef.current = true;
-    setSyncing(true);
-    void (async () => {
-      try {
-        for (let i = 0; i < 20; i += 1) {
-          const result = await backfill({ limit: 500 });
-          if (result.isDone) break;
-        }
-      } catch (error: unknown) {
-        syncedRef.current = false;
-        toast.error(
-          error instanceof Error ? error.message : "Merchant sync failed",
-        );
-      } finally {
-        setSyncing(false);
-      }
-    })();
-  }, [merchants, backfill]);
+  const encryptedRows = useMemo(() => {
+    if (!privateLedger.encryptedLedger || !privateLedger.unlocked) return [] as MerchantRow[];
+    const fromRecords = privateLedger.ledger.merchants.map((merchant) => ({
+      id: merchant.recordId,
+      slug: merchant.merchantId,
+      name: merchant.name,
+      rawName: merchant.rawName ?? null,
+      company: merchant.company ?? null,
+      brand: merchant.brand ?? null,
+      website: merchant.website ?? null,
+      logoUrl: null as string | null,
+      createdAt: 0,
+      updatedAt: 0,
+    }));
+    if (fromRecords.length) return fromRecords;
+    const names = new Map<string, MerchantRow>();
+    for (const tx of privateLedger.ledger.transactions) {
+      const name = tx.merchantClean ?? tx.merchantName ?? tx.description;
+      if (!name || names.has(name)) continue;
+      names.set(name, {
+        id: name,
+        slug: name.toLowerCase().replace(/\s+/g, "-"),
+        name,
+        rawName: tx.description,
+        company: null,
+        brand: null,
+        website: null,
+        logoUrl: null,
+        createdAt: 0,
+        updatedAt: 0,
+      });
+    }
+    return [...names.values()];
+  }, [privateLedger.encryptedLedger, privateLedger.ledger, privateLedger.unlocked]);
+
+  if (privateLedger.encryptedLedger) {
+    if (privateLedger.loading) {
+      return <p className="text-sm text-[var(--muted-foreground)]">Loading merchants…</p>;
+    }
+    return (
+      <div className="space-y-4">
+        <EncryptedLedgerBanner locked={!privateLedger.unlocked} />
+        {!privateLedger.unlocked ? null : (
+          <>
+            <p className="text-sm text-[var(--muted-foreground)]">
+              {encryptedRows.length === 0
+                ? "No merchants in the encrypted ledger yet."
+                : `${encryptedRows.length} merchant${encryptedRows.length === 1 ? "" : "s"} (from vault)`}
+            </p>
+            {encryptedRows.length === 0 ? null : (
+              <DataTable
+                columns={columns}
+                data={encryptedRows}
+                searchKey="name"
+                searchPlaceholder="Filter merchants…"
+                pageSize={25}
+                enableColumnToggle
+                csvFilename="merchants.csv"
+              />
+            )}
+          </>
+        )}
+      </div>
+    );
+  }
 
   if (merchants === undefined) {
     return (
@@ -152,16 +198,14 @@ export function MerchantsPanel() {
   return (
     <div className="space-y-4">
       <p className="text-sm text-[var(--muted-foreground)]">
-        {syncing
-          ? "Syncing merchants from ledger…"
-          : merchants.length === 0
-            ? "No merchants yet. They appear after ledger rows have merchant labels."
-            : `${merchants.length} merchant${merchants.length === 1 ? "" : "s"}`}
+        {merchants.length === 0
+          ? "No merchants yet. They appear after ledger rows have merchant labels."
+          : `${merchants.length} merchant${merchants.length === 1 ? "" : "s"}`}
       </p>
       {merchants.length === 0 ? null : (
         <DataTable
           columns={columns}
-          data={merchants}
+          data={merchants as MerchantRow[]}
           searchKey="name"
           searchPlaceholder="Filter merchants…"
           pageSize={25}

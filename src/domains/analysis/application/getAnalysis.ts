@@ -4,6 +4,7 @@ import type {
   AnalysisRange,
 } from "@/domains/analysis/domain/types";
 import { parseAnalysisRange } from "@/domains/analysis/domain/periods";
+import { cachedConvexRead } from "@/shared/convex/cachedRead";
 import { api } from "@/shared/convex/httpClient";
 import {
   AuthRequiredError,
@@ -21,9 +22,17 @@ export async function getAnalysis(
   period: AnalysisPeriod = "monthly",
 ): Promise<GetAnalysisResult> {
   try {
-    const client = await getAuthenticatedConvexClient();
-    const result = await client.action(api.analysis.get, { range, period });
-    return result as GetAnalysisResult;
+    return await cachedConvexRead({
+      name: "analysis.get",
+      args: { range, period },
+      load: async () => {
+        const client = await getAuthenticatedConvexClient();
+        return (await client.action(api.analysis.get, {
+          range,
+          period,
+        })) as GetAnalysisResult;
+      },
+    });
   } catch (error) {
     if (error instanceof AuthRequiredError) {
       return { ok: false, status: 401, error: error.message };

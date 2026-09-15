@@ -1,6 +1,6 @@
 "use client";
 
-import { useQuery } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import {
   CheckIcon,
   CopyCheckIcon,
@@ -54,10 +54,17 @@ import {
 } from "@/domains/statements/domain/importProgress";
 import { uploadBankStatement, isUploadAbortError } from "@/domains/statements/queries/uploadBankStatement";
 import { StatementAiRulesDialog } from "@/domains/statements/ui/StatementAiRulesDialog";
+import { getVaultMasterKey } from "@/crypto/session";
+import { useFeatureFlags } from "@/domains/feature-flags/ui/useFeatureFlag";
+import { encryptStatementImportToVault } from "@/domains/vault/application/encryptStatementImport";
+import { usePrivateLedger } from "@/domains/vault/ui/usePrivateLedger";
+import { useConvex } from "convex/react";
 import { cn } from "@/lib/utils";
 import { errorMessage } from "@/shared/lib/error-message";
+import type { MutationClient } from "@/crypto/vaultRecords";
 
 const UPLOAD_TOAST = "statement-upload";
+const MERCHANT_BACKFILL_KEY = "jayrr-budget.merchant-backfill-v1";
 const MAX_FILES = 24;
 const MAX_BYTES = 20 * 1024 * 1024;
 
@@ -160,6 +167,10 @@ export function StatementUpload({ onImported }: Props) {
   const [items, setItems] = useState<QueueItem[]>([]);
   const [dragOver, setDragOver] = useState(false);
   const [busy, setBusy] = useState(false);
+  const client = useConvex();
+  const flags = useFeatureFlags();
+  const privateLedger = usePrivateLedger();
+  const vaultPersist = flags.encryptedLedger;
 
   busyRef.current = busy;
   itemsRef.current = items;
@@ -168,6 +179,7 @@ export function StatementUpload({ onImported }: Props) {
     api.statements.listCompletedFingerprints,
     dialogOpen ? {} : "skip",
   );
+  const backfillMerchants = useMutation(api.merchants.backfillFromTransactions);
   fingerprintsRef.current = fingerprints;
 
   useEffect(() => {
@@ -395,6 +407,7 @@ export function StatementUpload({ onImported }: Props) {
       try {
         const result = await uploadBankStatement(item.file, {
           signal: controller.signal,
+          persistMode: vaultPersist ? "vault" : "convex",
           onProgress: (progress) => {
             const state: ItemState =
               progress.step === "parse" || progress.step === "save" || progress.step === "categorize"
@@ -410,6 +423,25 @@ export function StatementUpload({ onImported }: Props) {
             );
           },
         });
+
+        if (vaultPersist) {
+          if (!flags.cloudProcessing) {
+            throw new Error("Turn on Cloud Processing on Modules before OCR imports.");
+          }
+          const masterKey = getVaultMasterKey();
+          if (!privateLedger.userId || !privateLedger.vaultId || !privateLedger.keyId || !masterKey) {
+            throw new Error("Unlock the private vault before importing into the encrypted ledger.");
+          }
+          await encryptStatementImportToVault({
+            client: client as unknown as MutationClient,
+            userId: privateLedger.userId,
+            vaultId: privateLedger.vaultId,
+            keyId: privateLedger.keyId,
+            masterKey,
+            result,
+          });
+          privateLedger.reload();
+        }
 
         const copy = describeImportResult(result);
         if (result.categorization?.ok === false) {
@@ -444,6 +476,31 @@ export function StatementUpload({ onImported }: Props) {
 
     abortRef.current = null;
     setBusySafe(false);
+
+    if (okCount > 0 && !vaultPersist) {
+      try {
+        localStorage.removeItem(MERCHANT_BACKFILL_KEY);
+        let cursor: string | null = null;
+        for (let i = 0; i < 20; i += 1) {
+          const backfillResult: {
+            continueCursor: string | null;
+            isDone: boolean;
+          } = await backfillMerchants({
+            limit: 500,
+            cursor,
+          });
+          cursor = backfillResult.continueCursor;
+          localStorage.setItem(
+            MERCHANT_BACKFILL_KEY,
+            backfillResult.isDone ? "done" : (backfillResult.continueCursor ?? ""),
+          );
+          if (backfillResult.isDone) break;
+        }
+      } catch {
+        // ledger import already succeeded
+      }
+    }
+
     await onImported?.();
 
     if (cancelled) {
@@ -558,6 +615,9 @@ export function StatementUpload({ onImported }: Props) {
             <DialogDescription>
               Drag PDFs here or choose files. Up to {MAX_FILES} · 20MB each.
               Already-imported files are marked before scan.
+              {vaultPersist
+                ? " Cloud Processing: OCR sends readable PDF text to providers, then this browser encrypts the result into your vault. Not end-to-end encrypted during OCR."
+                : ""}
             </DialogDescription>
           </DialogHeader>
 

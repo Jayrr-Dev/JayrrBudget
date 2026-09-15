@@ -12,6 +12,7 @@ import {
   getModelChain,
   isOpenRouterConfigured,
 } from "@/shared/ai/openRouter";
+import { cachedConvexRead } from "@/shared/convex/cachedRead";
 import {
   AuthRequiredError,
   getAuthenticatedConvexClient,
@@ -42,8 +43,14 @@ export async function POST(request: Request) {
   let userKey: string;
   let role: string | undefined;
   try {
-    const client = await getAuthenticatedConvexClient();
-    const me = await client.query(api.users.me, {});
+    const me = await cachedConvexRead({
+      name: "users.me",
+      ttlMs: 60_000,
+      load: async () => {
+        const client = await getAuthenticatedConvexClient();
+        return client.query(api.users.me, {});
+      },
+    });
     if (!me) {
       return Response.json({ error: "Authentication required" }, { status: 401 });
     }
@@ -83,6 +90,8 @@ export async function POST(request: Request) {
   let body: {
     messages?: UIMessage[];
     canvas?: CanvasSnapshot | null;
+    budget?: unknown;
+    useClientBudget?: boolean;
   };
   try {
     body = (await request.json()) as typeof body;
@@ -103,13 +112,18 @@ export async function POST(request: Request) {
 
   const canvas = body.canvas ?? null;
   let budget: unknown;
-  try {
-    // Uses authenticated Convex client → only this user's ledger.
-    budget = await getBudgetContextForCanvas();
-  } catch (error) {
-    budget = {
-      error: errorMessage(error, "Budget context unavailable"),
-    };
+  if (body.useClientBudget) {
+    // Encrypted ledger: client already decrypted. Do not load plaintext dashboard.
+    budget = body.budget ?? { error: "Client budget snapshot missing." };
+  } else {
+    try {
+      // Uses authenticated Convex client → only this user's ledger.
+      budget = await getBudgetContextForCanvas();
+    } catch (error) {
+      budget = {
+        error: errorMessage(error, "Budget context unavailable"),
+      };
+    }
   }
 
   const [primary, ...fallbacks] = getModelChain();
@@ -132,6 +146,7 @@ export async function POST(request: Request) {
     "Keep layouts readable: space shapes, use short labels, prefer geo + text/notes.",
     "Coordinate space: x increases right, y increases down. Origin is top-left.",
     "After tool calls, briefly say what changed.",
+    "Cloud Processing notice: this chat receives readable budget context. It is not end-to-end encrypted.",
     "",
     "BUDGET DATA (JSON):",
     JSON.stringify(budget),

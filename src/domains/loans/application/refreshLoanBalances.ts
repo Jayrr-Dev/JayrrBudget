@@ -18,6 +18,7 @@ import {
   CIBC_CAR_LOAN_MERCHANT,
   CIBC_CAR_LOAN_TERMS,
 } from "@/domains/loans/domain/carLoanConstants";
+import { invalidateConvexUserCache } from "@/shared/convex/cachedRead";
 import { api } from "@/shared/convex/httpClient";
 import { getAuthenticatedConvexClient } from "@/shared/convex/httpClient.server";
 
@@ -132,7 +133,9 @@ export async function loadAllLoanTerms(): Promise<LoanTermsRow[]> {
 
 export async function refreshAllLoans(asOfDate?: string) {
   const client = await getAuthenticatedConvexClient();
-  return client.mutation(api.dashboard.refreshLoans, { asOfDate });
+  const result = await client.mutation(api.dashboard.refreshLoans, { asOfDate });
+  await invalidateConvexUserCache();
+  return result;
 }
 
 export async function refreshLoanAccount() {

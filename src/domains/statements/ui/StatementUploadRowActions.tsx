@@ -27,6 +27,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { analysisQueryKeys } from "@/domains/analysis/queries/query-keys";
 import { queryKeys } from "@/domains/dashboard/queries/query-keys";
 import { dbExplorerQueryKeys } from "@/domains/db-explorer/queries/query-keys";
 import type { StatementUploadLog } from "@/domains/statements/domain/types";
@@ -62,6 +63,7 @@ export function StatementUploadRowActions({
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.dashboard }),
         queryClient.invalidateQueries({ queryKey: dbExplorerQueryKeys.all }),
+        queryClient.invalidateQueries({ queryKey: analysisQueryKeys.all }),
       ]);
     },
     onError: error => toast.error("Categorization failed", { description: error.message }),
@@ -83,6 +85,7 @@ export function StatementUploadRowActions({
         queryClient.invalidateQueries({ queryKey: statementQueryKeys.uploads }),
         queryClient.invalidateQueries({ queryKey: queryKeys.dashboard }),
         queryClient.invalidateQueries({ queryKey: dbExplorerQueryKeys.all }),
+        queryClient.invalidateQueries({ queryKey: analysisQueryKeys.all }),
       ]);
       queryClient.removeQueries({
         queryKey: statementQueryKeys.upload(upload.id),

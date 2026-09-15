@@ -1,5 +1,6 @@
 "use client";
 
+import { FeatureFlagManager } from "@/domains/feature-flags/ui/FeatureFlagManager";
 import { ModuleManager } from "@/domains/modules/ui/ModuleManager";
 import { api } from "@convex/_generated/api";
 import { useConvexAuth, useQuery } from "convex/react";
@@ -33,6 +34,7 @@ export default function ModulesPage() {
           Turn app features on or off for everyone.
         </p>
       </header>
+      <FeatureFlagManager />
       <ModuleManager />
     </div>
   );

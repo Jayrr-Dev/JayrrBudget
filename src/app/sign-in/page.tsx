@@ -3,6 +3,8 @@
 import { useAuthActions } from "@convex-dev/auth/react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { clearPendingPasscode, setPendingPasscode } from "@/crypto/pendingPasscode";
+import { MIN_PASSCODE_LENGTH } from "@/domains/vault/application/ensureVaultFromPasscode";
 import { authErrorMessage } from "@/shared/lib/auth-error-message";
 
 type AuthFlow = "signIn" | "signUp" | "reset" | "resetVerification";
@@ -36,7 +38,7 @@ export default function SignInPage() {
               {flow === "signIn"
                 ? "Sign in to your ledger"
                 : flow === "signUp"
-                  ? "Create your account"
+                  ? "This password also unlocks your private vault"
                   : flow === "reset"
                     ? "Request a password reset"
                     : "Choose a new password"}
@@ -57,6 +59,18 @@ export default function SignInPage() {
               .toLowerCase();
             formData.set("email", email);
             formData.set("flow", flow);
+            const typedPassword = String(
+              formData.get(flow === "resetVerification" ? "newPassword" : "password") ?? "",
+            );
+            if (flow === "signUp" || flow === "resetVerification") {
+              const confirm = String(formData.get("confirmPassword") ?? "");
+              if (typedPassword !== confirm) {
+                setError("Passwords do not match.");
+                setPending(false);
+                return;
+              }
+              formData.delete("confirmPassword");
+            }
             if (flow === "signUp") {
               const firstName = String(formData.get("firstName") ?? "").trim();
               const lastName = String(formData.get("lastName") ?? "").trim();
@@ -71,6 +85,8 @@ export default function SignInPage() {
               formData.delete("password");
               formData.delete("newPassword");
               formData.delete("code");
+            } else if (typedPassword) {
+              setPendingPasscode(typedPassword);
             }
 
             void signIn("password", formData)
@@ -88,6 +104,7 @@ export default function SignInPage() {
                 setError("Check your email if you were sent a code.");
               })
               .catch((err: unknown) => {
+                clearPendingPasscode();
                 setError(authErrorMessage(err, flow === "signUp" ? "signUp" : "signIn"));
               })
               .finally(() => setPending(false));
@@ -155,7 +172,7 @@ export default function SignInPage() {
                     : "new-password"
                   : "off"
               }
-              minLength={8}
+              minLength={MIN_PASSCODE_LENGTH}
               readOnly={!passwordAutofillReady}
               onFocus={(event) => {
                   setPasswordAutofillReady(true);
@@ -171,9 +188,32 @@ export default function SignInPage() {
               className="w-full rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-[var(--foreground)] outline-none focus:border-[var(--accent)]"
             />
           </label> : null}
+          {flow === "signUp" || flow === "resetVerification" ? (
+            <label className="block space-y-1 text-sm">
+              <span className="text-[var(--muted-foreground)]">Confirm password</span>
+              <input
+                name="confirmPassword"
+                type="password"
+                required
+                minLength={MIN_PASSCODE_LENGTH}
+                autoComplete="new-password"
+                className="w-full rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-[var(--foreground)] outline-none focus:border-[var(--accent)]"
+              />
+            </label>
+          ) : null}
+          {flow === "signUp" ? (
+            <p className="text-xs text-[var(--muted-foreground)]">
+              This is also your private vault passcode. Convex stores a wrapped key, not the password itself.
+            </p>
+          ) : null}
+          {flow === "reset" ? (
+            <p className="text-xs text-[var(--muted-foreground)]">
+              Resetting login on this browser updates the vault passcode after you have unlocked here once. A new device still needs the recovery file.
+            </p>
+          ) : null}
           {flow === "resetVerification" ? (
             <p className="text-xs text-[var(--muted-foreground)]">
-              The code expires in 10 minutes. Request a new one if it expires.
+              The code expires in 10 minutes. On this browser the vault passcode becomes this new password automatically.
             </p>
           ) : null}
           <input name="flow" type="hidden" value={flow} />

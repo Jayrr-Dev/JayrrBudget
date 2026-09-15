@@ -22,6 +22,8 @@ import { cn } from "@/lib/utils";
 import { budgetBrandLabel } from "@/shared/lib/budget-brand";
 import { api } from "@convex/_generated/api";
 import { useAuthActions } from "@convex-dev/auth/react";
+import { clearPendingPasscode } from "@/crypto/pendingPasscode";
+import { lockVault } from "@/crypto/session";
 import { IconLogout, IconUser } from "@tabler/icons-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useConvexAuth, useQuery } from "convex/react";
@@ -217,10 +219,11 @@ function SignOutButton() {
             disabled={pending}
             onClick={() => {
               setPending(true);
+              clearPendingPasscode();
+              lockVault();
               void signOut()
                 .then(() => {
                   queryClient.clear();
-                  // Full navigation drops Convex React query cache + shell state.
                   window.location.assign("/sign-in");
                 })
                 .catch(() => setPending(false));

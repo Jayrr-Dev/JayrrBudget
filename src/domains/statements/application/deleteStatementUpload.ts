@@ -1,3 +1,4 @@
+import { invalidateConvexUserCache } from "@/shared/convex/cachedRead";
 import { api } from "@/shared/convex/httpClient";
 import {
   AuthRequiredError,
@@ -18,9 +19,11 @@ export async function deleteStatementUpload(
 ): Promise<DeleteStatementUploadResult> {
   try {
     const client = await getAuthenticatedConvexClient();
-    return (await client.mutation(api.statements.remove, {
+    const result = (await client.mutation(api.statements.remove, {
       uploadId: id,
     })) as DeleteStatementUploadResult;
+    await invalidateConvexUserCache();
+    return result;
   } catch (error) {
     if (error instanceof AuthRequiredError) {
       return { ok: false, status: 401, error: error.message };

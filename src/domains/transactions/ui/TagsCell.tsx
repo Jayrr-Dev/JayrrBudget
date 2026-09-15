@@ -9,6 +9,9 @@ import {
 } from "@/components/ui/popover";
 import type { DashboardData } from "@/domains/dashboard/domain/types";
 import { queryKeys } from "@/domains/dashboard/queries/query-keys";
+import { patchEncryptedTransaction, vaultWriteReady } from "@/domains/vault/application/saveEncryptedLedger";
+import { usePrivateLedger } from "@/domains/vault/ui/usePrivateLedger";
+import { useConvex } from "convex/react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { PlusIcon } from "lucide-react";
 import { useState } from "react";
@@ -38,17 +41,35 @@ type TagsCellProps = {
 /** Tag chips plus a + control to add one tag to this row. */
 export function TagsCell({ transactionId, tags }: TagsCellProps) {
   const queryClient = useQueryClient();
+  const client = useConvex();
+  const privateLedger = usePrivateLedger();
   const [open, setOpen] = useState(false);
   const [tag, setTag] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   const mutation = useMutation({
-    mutationFn: postAddTag,
+    mutationFn: async (input: { transactionId: string; tag: string }) => {
+      const write = vaultWriteReady({
+        encryptedLedger: privateLedger.encryptedLedger,
+        userId: privateLedger.userId,
+        vaultId: privateLedger.vaultId,
+        keyId: privateLedger.keyId,
+        client,
+      });
+      if (write) {
+        const tx = privateLedger.ledger.transactions.find((row) => row.recordId === input.transactionId);
+        if (!tx) throw new Error("Encrypted transaction not found.");
+        const nextTags = [...new Set([...(tx.tagNames ?? []), input.tag.trim()].filter(Boolean))];
+        await patchEncryptedTransaction(write, tx, { tagNames: nextTags });
+        privateLedger.reload();
+        return { ok: true as const, tags: nextTags, added: true, tag: input.tag.trim() };
+      }
+      return postAddTag(input);
+    },
     onSuccess: (result) => {
       setTag("");
       setError(null);
       setOpen(false);
-      // Patch caches from the write response - avoid refetching stale Turso reads.
       queryClient.setQueriesData<DashboardData>(
         { queryKey: queryKeys.dashboard },
         (current) => {

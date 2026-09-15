@@ -9,6 +9,7 @@ import {
 } from "@/domains/dashboard/ui/DashboardPanels";
 import { StatementUploadLogs } from "@/domains/statements/ui/StatementUploadLogs";
 import { statementQueryKeys } from "@/domains/statements/queries/query-keys";
+import { analysisQueryKeys } from "@/domains/analysis/queries/query-keys";
 import { queryKeys } from "@/domains/dashboard/queries/query-keys";
 
 export default function StatementsPage() {
@@ -39,6 +40,9 @@ export default function StatementsPage() {
               }),
               queryClient.invalidateQueries({
                 queryKey: statementQueryKeys.uploads,
+              }),
+              queryClient.invalidateQueries({
+                queryKey: analysisQueryKeys.all,
               }),
             ]);
           }}

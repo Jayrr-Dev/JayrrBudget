@@ -12,6 +12,9 @@ import type { DashboardData } from "@/domains/dashboard/domain/types";
 import { queryKeys } from "@/domains/dashboard/queries/query-keys";
 import type { TransactionTaxonomy } from "@/domains/transactions/application/getTransactionTaxonomy";
 import type { TaxonomyField } from "@/domains/transactions/application/updateTransactionTaxonomy";
+import { patchEncryptedTransaction, vaultWriteReady } from "@/domains/vault/application/saveEncryptedLedger";
+import { usePrivateLedger } from "@/domains/vault/ui/usePrivateLedger";
+import { useConvex } from "convex/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -128,6 +131,8 @@ export function TaxonomyCell({
   placeholder = "-",
 }: TaxonomyCellProps) {
   const queryClient = useQueryClient();
+  const client = useConvex();
+  const privateLedger = usePrivateLedger();
   const taxonomy = useTaxonomy();
   /** Optimistic selection while the POST is in flight / until props catch up. */
   const [pendingValue, setPendingValue] = useState<string | null | undefined>(
@@ -192,7 +197,47 @@ export function TaxonomyCell({
   }, [taxonomy.data, field, selected, sectionName, categoryName]);
 
   const mutation = useMutation({
-    mutationFn: postUpdateTaxonomy,
+    mutationFn: async (input: {
+      transactionId: string;
+      field: TaxonomyField;
+      value: string | null;
+    }) => {
+      const write = vaultWriteReady({
+        encryptedLedger: privateLedger.encryptedLedger,
+        userId: privateLedger.userId,
+        vaultId: privateLedger.vaultId,
+        keyId: privateLedger.keyId,
+        client,
+      });
+      if (write) {
+        const tx = privateLedger.ledger.transactions.find((row) => row.recordId === input.transactionId);
+        if (!tx) throw new Error("Encrypted transaction not found.");
+        const patch: Record<string, string | null> = {};
+        if (input.field === "section") {
+          patch.sectionName = input.value;
+          patch.categoryName = null;
+          patch.subcategoryName = null;
+        } else if (input.field === "category") {
+          patch.categoryName = input.value;
+          patch.subcategoryName = null;
+        } else if (input.field === "subcategory") {
+          patch.subcategoryName = input.value;
+        } else if (input.field === "spread") {
+          patch.spreadName = input.value;
+        }
+        const next = await patchEncryptedTransaction(write, tx, patch);
+        privateLedger.reload();
+        return {
+          ok: true as const,
+          transactionId: input.transactionId,
+          section: next.sectionName ?? null,
+          category: next.categoryName ?? null,
+          subcategory: next.subcategoryName ?? null,
+          spread: next.spreadName ?? null,
+        };
+      }
+      return postUpdateTaxonomy(input);
+    },
     onSuccess: (result) => {
       // Mutation body is source of truth - patch caches, do not refetch.
       // Refetching can reintroduce stale process-local Turso read cache.

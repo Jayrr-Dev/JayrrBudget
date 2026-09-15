@@ -2,6 +2,7 @@ import type {
   StatementUploadDetail,
   StatementUploadLog,
 } from "@/domains/statements/domain/types";
+import { cachedConvexRead } from "@/shared/convex/cachedRead";
 import { api } from "@/shared/convex/httpClient";
 import {
   AuthRequiredError,
@@ -13,10 +14,15 @@ export async function listStatementUploads(): Promise<
   | { ok: false; status: number; error: string }
 > {
   try {
-    const client = await getAuthenticatedConvexClient();
-    return (await client.query(api.statements.list, {})) as
-      | { ok: true; uploads: StatementUploadLog[] }
-      | { ok: false; status: number; error: string };
+    return await cachedConvexRead({
+      name: "statements.list",
+      load: async () => {
+        const client = await getAuthenticatedConvexClient();
+        return (await client.query(api.statements.list, {})) as
+          | { ok: true; uploads: StatementUploadLog[] }
+          | { ok: false; status: number; error: string };
+      },
+    });
   } catch (error) {
     if (error instanceof AuthRequiredError) {
       return { ok: false, status: 401, error: error.message };
@@ -37,10 +43,16 @@ export async function getStatementUpload(id: number): Promise<
   | { ok: false; status: number; error: string }
 > {
   try {
-    const client = await getAuthenticatedConvexClient();
-    return (await client.query(api.statements.get, { uploadId: id })) as
-      | { ok: true; upload: StatementUploadDetail }
-      | { ok: false; status: number; error: string };
+    return await cachedConvexRead({
+      name: "statements.get",
+      args: { uploadId: id },
+      load: async () => {
+        const client = await getAuthenticatedConvexClient();
+        return (await client.query(api.statements.get, { uploadId: id })) as
+          | { ok: true; upload: StatementUploadDetail }
+          | { ok: false; status: number; error: string };
+      },
+    });
   } catch (error) {
     if (error instanceof AuthRequiredError) {
       return { ok: false, status: 401, error: error.message };

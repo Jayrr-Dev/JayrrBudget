@@ -1,4 +1,8 @@
 import type { AppModuleRecord } from "@/domains/modules/domain/types";
+import {
+  cachedConvexRead,
+  invalidateConvexUserCache,
+} from "@/shared/convex/cachedRead";
 import { api } from "@/shared/convex/httpClient";
 import {
   AuthRequiredError,
@@ -13,15 +17,25 @@ export async function ensureAppModules() {
 export async function listAppModules(options?: {
   enabledOnly?: boolean;
 }): Promise<AppModuleRecord[]> {
-  const client = await getAuthenticatedConvexClient();
-  return client.query(api.modules.list, {
-    enabledOnly: options?.enabledOnly ?? false,
+  const enabledOnly = options?.enabledOnly ?? false;
+  return cachedConvexRead({
+    name: "modules.list",
+    args: { enabledOnly },
+    load: async () => {
+      const client = await getAuthenticatedConvexClient();
+      return client.query(api.modules.list, { enabledOnly });
+    },
   });
 }
 
 export async function setModuleEnabled(slug: string, enabled: boolean) {
   const client = await getAuthenticatedConvexClient();
-  return client.mutation(api.modules.setEnabled, { slug, enabled });
+  const result = await client.mutation(api.modules.setEnabled, {
+    slug,
+    enabled,
+  });
+  await invalidateConvexUserCache();
+  return result;
 }
 
 export { AuthRequiredError };

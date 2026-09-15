@@ -1,5 +1,6 @@
 import type { ConvexHttpClient } from "convex/browser";
 import { z } from "zod";
+import { invalidateConvexUserCache } from "@/shared/convex/cachedRead";
 import { api } from "@/shared/convex/httpClient";
 import { generateObjectWithFallback, mapPool } from "@/shared/ai/openRouter";
 import type { CategoryProfile } from "@convex/lib/categorization";
@@ -21,7 +22,10 @@ export async function categorizeStatement(client: ConvexHttpClient, uploadId: nu
     if (result.isDone) break;
     cursor = result.continueCursor;
   } while (cursor);
-  if (!groups.size) return summary;
+  if (!groups.size) {
+    await invalidateConvexUserCache();
+    return summary;
+  }
   summary.pending = [...groups.values()].reduce((n, rows) => n + rows.length, 0);
 
   const persist = async (matches: { key: string; profile: CategoryProfile }[], source: "cached" | "ai") => {
@@ -57,7 +61,10 @@ export async function categorizeStatement(client: ConvexHttpClient, uploadId: nu
       }
       await persist(cached, "cached");
     }
-    if (!unknown.length) return { ...summary, ok: summary.pending === 0 };
+    if (!unknown.length) {
+      await invalidateConvexUserCache();
+      return { ...summary, ok: summary.pending === 0 };
+    }
 
     await client.mutation(api.categorization.publishOwnVocabulary, {});
     const vocabulary: { paths: { key: string; section: string; category: string; subcategory: string | null }[];
@@ -114,5 +121,6 @@ export async function categorizeStatement(client: ConvexHttpClient, uploadId: nu
   } catch (error) {
     summary.error = error instanceof Error ? error.message : "Categorization failed";
   }
+  await invalidateConvexUserCache();
   return { ...summary, ok: summary.pending === 0 && !summary.error };
 }

@@ -31,7 +31,11 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { applyCanvasTool } from "@/domains/canvas/application/applyCanvasTools";
+import { buildBudgetContextFromDashboard } from "@/domains/canvas/domain/budgetContext";
 import { getCanvasSnapshot } from "@/domains/canvas/domain/canvasContext";
+import { dashboardFromPrivateLedger } from "@/domains/vault/application/dashboardFromPrivateLedger";
+import { useFeatureFlag } from "@/domains/feature-flags/ui/useFeatureFlag";
+import { usePrivateLedger } from "@/domains/vault/ui/usePrivateLedger";
 import { errorMessage } from "@/shared/lib/error-message";
 
 function messageText(parts: Array<{ type: string; text?: string }>) {
@@ -45,21 +49,34 @@ export function CanvasAiChat() {
   const editor = useEditor();
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState("");
+  const encryptedLedger = useFeatureFlag("encryptedLedger");
+  const cloudProcessing = useFeatureFlag("cloudProcessing");
+  const privateLedger = usePrivateLedger();
 
   const transport = useMemo(
     () =>
       new DefaultChatTransport({
         api: "/api/canvas/chat",
-        prepareSendMessagesRequest: ({ messages, id, body }) => ({
-          body: {
-            ...body,
-            id,
-            messages,
-            canvas: getCanvasSnapshot(editor),
-          },
-        }),
+        prepareSendMessagesRequest: ({ messages, id, body }) => {
+          const useClientBudget = encryptedLedger;
+          const budget = useClientBudget
+            ? privateLedger.unlocked
+              ? buildBudgetContextFromDashboard(dashboardFromPrivateLedger(privateLedger.ledger))
+              : { error: "Unlock the private vault before using canvas AI." }
+            : undefined;
+          return {
+            body: {
+              ...body,
+              id,
+              messages,
+              canvas: getCanvasSnapshot(editor),
+              useClientBudget,
+              budget,
+            },
+          };
+        },
       }),
-    [editor],
+    [editor, encryptedLedger, privateLedger.ledger, privateLedger.unlocked],
   );
 
   const { messages, sendMessage, addToolOutput, status, error } = useChat({
@@ -99,6 +116,7 @@ export function CanvasAiChat() {
   });
 
   const busy = status === "submitted" || status === "streaming";
+  const blocked = encryptedLedger && !cloudProcessing;
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -119,9 +137,15 @@ export function CanvasAiChat() {
         <PopoverHeader className="gap-1">
           <PopoverTitle>Canvas AI</PopoverTitle>
           <PopoverDescription>
-            Gemini can read your board + budget data and draw on the canvas.
+            Cloud Processing: readable budget text goes to the model. Not end-to-end encrypted.
           </PopoverDescription>
         </PopoverHeader>
+
+        {blocked ? (
+          <p className="text-xs text-[var(--muted-foreground)]">
+            Turn on the Cloud Processing feature flag on Modules before sending ledger data to AI.
+          </p>
+        ) : null}
 
         <MessageGroup className="max-h-64 overflow-y-auto rounded-lg border border-[var(--border)] bg-[var(--background)] p-2">
           {messages.length === 0 ? (
@@ -158,7 +182,7 @@ export function CanvasAiChat() {
           onSubmit={(event) => {
             event.preventDefault();
             const value = input.trim();
-            if (!value || busy) return;
+            if (!value || busy || blocked) return;
             void sendMessage({ text: value });
             setInput("");
           }}
@@ -167,13 +191,13 @@ export function CanvasAiChat() {
             value={input}
             onChange={(event) => setInput(event.target.value)}
             placeholder="Ask or draw…"
-            disabled={busy}
+            disabled={busy || blocked}
             className="h-8"
           />
           <Button
             type="submit"
             size="icon-sm"
-            disabled={busy || !input.trim()}
+            disabled={busy || blocked || !input.trim()}
             aria-label="Send"
           >
             <SendHorizonal className="size-3.5" />

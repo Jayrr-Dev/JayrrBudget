@@ -2,6 +2,7 @@
 
 import {
   DashboardToolbar,
+  EncryptedLedgerBanner,
   LoadingSkeleton,
   useDashboard,
 } from "@/domains/dashboard/ui/DashboardPanels";
@@ -22,12 +23,15 @@ export default function TransactionsPage() {
             Browse purchases and deposits. Bank details on the left; category
             and labels on the right.
             {data
-              ? ` Showing ${data.transactions.length} of ${data.transactionCount}.`
+              ? data.hasMoreTransactions
+                ? ` Showing latest ${data.transactions.length}.`
+                : ` Showing ${data.transactions.length} of ${data.transactionCount}.`
               : ""}
           </p>
         </div>
-        <DashboardToolbar />
+        <DashboardToolbar onImported={() => dashboard.reload?.()} />
       </header>
+      <EncryptedLedgerBanner locked={dashboard.locked} />
       {dashboard.isPending && !data ? (
         <LoadingSkeleton />
       ) : data ? (

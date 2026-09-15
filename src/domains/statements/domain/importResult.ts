@@ -44,6 +44,24 @@ export type ImportBankStatementSuccess = {
   hygiene?: ImportHygieneSummary;
   enrichment?: ImportEnrichmentSummary;
   categorization?: CategorizationSummary;
+  /** Present when persistMode is vault: client encrypts these rows. */
+  vaultPayload?: {
+    accountId: string;
+    accountName: string | null;
+    accountType: string | null;
+    accountSubtype: string | null;
+    accountMask: string | null;
+    currency: string;
+    openingBalance: number | null;
+    closingBalance: number | null;
+    transactions: Array<{
+      transactionId: string;
+      posted: string;
+      description: string;
+      amount: number;
+      pending: boolean;
+    }>;
+  };
 };
 
 export type ImportBankStatementResult =

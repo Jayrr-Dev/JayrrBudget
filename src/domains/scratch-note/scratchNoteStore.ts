@@ -1,8 +1,10 @@
 "use client";
 
 import { api } from "@convex/_generated/api";
-import { useMutation, useQuery } from "convex/react";
+import { useConvex, useMutation, useQuery } from "convex/react";
 import { useEffect, useRef } from "react";
+import { saveEncryptedScratchPad, vaultWriteReady } from "@/domains/vault/application/saveEncryptedLedger";
+import { usePrivateLedger } from "@/domains/vault/ui/usePrivateLedger";
 
 export type ScratchNoteRow = {
   id: string;
@@ -115,18 +117,26 @@ function openNotePopover() {
   }
 }
 
-/** Live note pad from Convex (falls back to empty while loading). */
+/** Live note pad from Convex (or encrypted vault when dual-run flag is on). */
 export function useScratchNote(): ScratchNoteState {
-  const data = useQuery(api.scratchNotes.get);
+  const privateLedger = usePrivateLedger();
+  const data = useQuery(api.scratchNotes.get, privateLedger.encryptedLedger ? "skip" : {});
+  if (privateLedger.encryptedLedger) {
+    const pad = privateLedger.ledger.scratchPads[0];
+    if (pad) return { tabs: pad.tabs, activeId: pad.activeId, receiveId: pad.receiveId };
+    return EMPTY_STATE;
+  }
   return data ?? EMPTY_STATE;
 }
 
 /** One-shot localStorage → Convex when cloud pad still empty. */
 export function useScratchNoteLocalMigration() {
   const importIfEmpty = useMutation(api.scratchNotes.importIfEmpty);
+  const privateLedger = usePrivateLedger();
   const ran = useRef(false);
 
   useEffect(() => {
+    if (privateLedger.encryptedLedger) return;
     if (ran.current || typeof window === "undefined") return;
     if (localStorage.getItem(MIGRATED_KEY) === "1") {
       ran.current = true;
@@ -148,10 +158,12 @@ export function useScratchNoteLocalMigration() {
       .catch(() => {
         ran.current = false;
       });
-  }, [importIfEmpty]);
+  }, [importIfEmpty, privateLedger.encryptedLedger]);
 }
 
 export function useScratchNoteActions() {
+  const client = useConvex();
+  const privateLedger = usePrivateLedger();
   const addRowMut = useMutation(api.scratchNotes.addRow);
   const removeRowMut = useMutation(api.scratchNotes.removeRow);
   const clearActiveMut = useMutation(api.scratchNotes.clearActive);
@@ -161,10 +173,54 @@ export function useScratchNoteActions() {
   const closeTabMut = useMutation(api.scratchNotes.closeTab);
   const renameTabMut = useMutation(api.scratchNotes.renameTab);
 
+  async function persistEncrypted(next: ScratchNoteState) {
+    const write = vaultWriteReady({
+      encryptedLedger: privateLedger.encryptedLedger,
+      userId: privateLedger.userId,
+      vaultId: privateLedger.vaultId,
+      keyId: privateLedger.keyId,
+      client,
+    });
+    if (!write) throw new Error("Unlock the private vault before editing scratch notes.");
+    const existing = privateLedger.ledger.scratchPads[0];
+    await saveEncryptedScratchPad(write, {
+      tabs: next.tabs,
+      activeId: next.activeId,
+      receiveId: next.receiveId,
+      expectedRevision: existing?.revision ?? null,
+    });
+    privateLedger.reload();
+  }
+
+  function currentState(): ScratchNoteState {
+    const pad = privateLedger.ledger.scratchPads[0];
+    if (pad) return { tabs: pad.tabs, activeId: pad.activeId, receiveId: pad.receiveId };
+    return EMPTY_STATE;
+  }
+
   return {
     addRow: async (
       input: Omit<ScratchNoteRow, "id"> & { id?: string },
     ) => {
+      if (privateLedger.encryptedLedger) {
+        const state = currentState();
+        const receive = state.tabs.find((tab) => tab.id === state.receiveId) ?? state.tabs[0];
+        if (!receive) return;
+        const row: ScratchNoteRow = {
+          id: input.id ?? crypto.randomUUID(),
+          name: input.name,
+          spend: input.spend,
+          count: input.count,
+          currency: input.currency,
+          parent: input.parent,
+        };
+        const tabs = state.tabs.map((tab) =>
+          tab.id === receive.id ? { ...tab, rows: [...tab.rows, row] } : tab,
+        );
+        await persistEncrypted({ ...state, tabs });
+        openNotePopover();
+        return;
+      }
       await addRowMut({
         name: input.name,
         spend: input.spend,
@@ -175,14 +231,85 @@ export function useScratchNoteActions() {
       });
       openNotePopover();
     },
-    removeRow: (rowId: string) => void removeRowMut({ rowId }),
-    clearActive: () => void clearActiveMut({}),
-    selectTab: (tabId: string) => void selectTabMut({ tabId }),
-    setReceiveTab: (tabId: string) => void setReceiveTabMut({ tabId }),
-    addTab: () => void addTabMut({}),
-    closeTab: (tabId: string) => void closeTabMut({ tabId }),
-    renameTab: (tabId: string, name: string) =>
-      void renameTabMut({ tabId, name }),
+    removeRow: (rowId: string) => {
+      if (privateLedger.encryptedLedger) {
+        const state = currentState();
+        void persistEncrypted({
+          ...state,
+          tabs: state.tabs.map((tab) => ({
+            ...tab,
+            rows: tab.rows.filter((row) => row.id !== rowId),
+          })),
+        });
+        return;
+      }
+      void removeRowMut({ rowId });
+    },
+    clearActive: () => {
+      if (privateLedger.encryptedLedger) {
+        const state = currentState();
+        void persistEncrypted({
+          ...state,
+          tabs: state.tabs.map((tab) =>
+            tab.id === state.activeId ? { ...tab, rows: [] } : tab,
+          ),
+        });
+        return;
+      }
+      void clearActiveMut({});
+    },
+    selectTab: (tabId: string) => {
+      if (privateLedger.encryptedLedger) {
+        void persistEncrypted({ ...currentState(), activeId: tabId });
+        return;
+      }
+      void selectTabMut({ tabId });
+    },
+    setReceiveTab: (tabId: string) => {
+      if (privateLedger.encryptedLedger) {
+        void persistEncrypted({ ...currentState(), receiveId: tabId });
+        return;
+      }
+      void setReceiveTabMut({ tabId });
+    },
+    addTab: () => {
+      if (privateLedger.encryptedLedger) {
+        const state = currentState();
+        const id = crypto.randomUUID();
+        void persistEncrypted({
+          ...state,
+          tabs: [...state.tabs, { id, name: `Sheet ${state.tabs.length + 1}`, rows: [] }],
+          activeId: id,
+        });
+        return;
+      }
+      void addTabMut({});
+    },
+    closeTab: (tabId: string) => {
+      if (privateLedger.encryptedLedger) {
+        const state = currentState();
+        if (state.tabs.length <= 1) return;
+        const tabs = state.tabs.filter((tab) => tab.id !== tabId);
+        void persistEncrypted({
+          tabs,
+          activeId: state.activeId === tabId ? tabs[0]!.id : state.activeId,
+          receiveId: state.receiveId === tabId ? tabs[0]!.id : state.receiveId,
+        });
+        return;
+      }
+      void closeTabMut({ tabId });
+    },
+    renameTab: (tabId: string, name: string) => {
+      if (privateLedger.encryptedLedger) {
+        const state = currentState();
+        void persistEncrypted({
+          ...state,
+          tabs: state.tabs.map((tab) => (tab.id === tabId ? { ...tab, name } : tab)),
+        });
+        return;
+      }
+      void renameTabMut({ tabId, name });
+    },
   };
 }
 

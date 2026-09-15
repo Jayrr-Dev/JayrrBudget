@@ -253,6 +253,7 @@ export const upsertAndLink = mutation({
 export const backfillFromTransactions = mutation({
   args: {
     limit: v.optional(v.number()),
+    cursor: v.optional(v.union(v.string(), v.null())),
   },
   returns: v.object({
     scanned: v.number(),
@@ -261,37 +262,31 @@ export const backfillFromTransactions = mutation({
     skippedNoLabel: v.number(),
     remaining: v.number(),
     isDone: v.boolean(),
+    continueCursor: v.union(v.string(), v.null()),
   }),
   handler: async (ctx, args) => {
     const user = await requireUser(ctx);
     const limit = Math.min(Math.max(args.limit ?? 500, 1), 2000);
+    const cursor = args.cursor ?? null;
 
-    const all = await ctx.db
+    const page = await ctx.db
       .query("transactions")
       .withIndex("by_userId", (q) => q.eq("userId", user._id))
-      .collect();
+      .order("desc")
+      .paginate({ numItems: limit, cursor });
 
-    const needing: typeof all = [];
     let skippedNoLabel = 0;
-    for (const txn of all) {
+    let merchantsUpserted = 0;
+    let transactionsLinked = 0;
+    const upsertedSlugs = new Set<string>();
+
+    for (const txn of page.page) {
       const label = merchantLabelFromTxn(txn);
       if (!label) {
         skippedNoLabel += 1;
         continue;
       }
-      if (txn.merchantId == null) {
-        needing.push(txn);
-      }
-    }
-
-    const batch = needing.slice(0, limit);
-    let merchantsUpserted = 0;
-    let transactionsLinked = 0;
-    const upsertedSlugs = new Set<string>();
-
-    for (const txn of batch) {
-      const label = merchantLabelFromTxn(txn);
-      if (!label) continue;
+      if (txn.merchantId != null) continue;
 
       const merchant = await ensureMerchant(ctx, user._id, {
         name: label,
@@ -318,14 +313,14 @@ export const backfillFromTransactions = mutation({
       transactionsLinked += 1;
     }
 
-    const remaining = Math.max(0, needing.length - batch.length);
     return {
-      scanned: batch.length,
+      scanned: page.page.length,
       merchantsUpserted,
       transactionsLinked,
       skippedNoLabel,
-      remaining,
-      isDone: remaining === 0,
+      remaining: page.isDone ? 0 : 1,
+      isDone: page.isDone,
+      continueCursor: page.isDone ? null : page.continueCursor,
     };
   },
 });

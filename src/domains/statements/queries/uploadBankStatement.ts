@@ -13,6 +13,7 @@ type StreamEvent =
 export type UploadBankStatementOptions = {
   onProgress?: (progress: StatementImportProgress) => void;
   signal?: AbortSignal;
+  persistMode?: "convex" | "vault";
 };
 
 export function isUploadAbortError(error: unknown) {
@@ -28,6 +29,7 @@ export async function uploadBankStatement(
 ) {
   const form = new FormData();
   form.append("file", file);
+  if (options?.persistMode === "vault") form.append("persistMode", "vault");
 
   options?.onProgress?.({
     step: "receive",

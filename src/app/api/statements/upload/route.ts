@@ -41,6 +41,7 @@ export async function POST(request: Request) {
   }
 
   const file = form.get("file");
+  const persistMode = form.get("persistMode") === "vault" ? "vault" : "convex";
 
   if (!(file instanceof File)) {
     return Response.json(
@@ -64,6 +65,7 @@ export async function POST(request: Request) {
           filename,
           bytes,
           client,
+          persistMode,
           onProgress: (progress) => {
             send({ type: "progress", progress });
           },

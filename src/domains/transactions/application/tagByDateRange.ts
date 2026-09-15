@@ -1,3 +1,4 @@
+import { invalidateConvexUserCache } from "@/shared/convex/cachedRead";
 import { api } from "@/shared/convex/httpClient";
 import { getAuthenticatedConvexClient } from "@/shared/convex/httpClient.server";
 
@@ -21,10 +22,12 @@ export async function tagByDateRange(
   input: TagByDateRangeInput,
 ): Promise<TagByDateRangeResult> {
   const client = await getAuthenticatedConvexClient();
-  return client.mutation(api.transactions.tagByDateRange, {
+  const result = await client.mutation(api.transactions.tagByDateRange, {
     tag: input.tag,
     startDate: input.startDate,
     endDate: input.endDate,
     excludeTransactionIds: input.excludeTransactionIds,
   });
+  await invalidateConvexUserCache();
+  return result;
 }

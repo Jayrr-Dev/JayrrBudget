@@ -1,12 +1,12 @@
 "use client";
 
-import { Suspense } from "react";
-import { useSearchParams } from "next/navigation";
 import {
   BankAccountsDashboard,
   BankAccountsLoadingSkeleton,
 } from "@/domains/dashboard/ui/BankAccountsDashboard";
-import { useDashboard } from "@/domains/dashboard/ui/DashboardPanels";
+import { EncryptedLedgerBanner, useDashboard } from "@/domains/dashboard/ui/DashboardPanels";
+import { Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 
 function AccountsContent() {
   const dashboard = useDashboard();
@@ -18,6 +18,7 @@ function AccountsContent() {
     if (dashboard.isPending && !data) {
       return <BankAccountsLoadingSkeleton />;
     }
+    if (dashboard.locked) return <EncryptedLedgerBanner locked />;
     if (!data) return null;
     return (
       <BankAccountsDashboard
@@ -36,6 +37,7 @@ function AccountsContent() {
           Open an account to see its balance and recent activity.
         </p>
       </header>
+      <EncryptedLedgerBanner locked={dashboard.locked} />
       {dashboard.isPending && !data ? (
         <BankAccountsLoadingSkeleton />
       ) : data ? (

@@ -48,6 +48,7 @@ import type {
   AnalysisTxnPeek,
   AnalysisTypeBreakdown,
 } from "@/domains/analysis/domain/types";
+import { analysisQueryKeys } from "@/domains/analysis/queries/query-keys";
 import {
   DEFAULT_ANALYSIS_UI_PREFS,
   readAnalysisUiPrefs,
@@ -58,6 +59,9 @@ import {
 import { formatMoney } from "@/domains/dashboard/domain/money";
 import { normalizeCurrencyCode } from "@/shared/lib/currency";
 import { useScratchNoteActions } from "@/domains/scratch-note/scratchNoteStore";
+import { analysisFromPrivateLedger } from "@/domains/vault/application/analysisFromPrivateLedger";
+import { usePrivateLedger } from "@/domains/vault/ui/usePrivateLedger";
+import { EncryptedLedgerBanner } from "@/domains/dashboard/ui/DashboardPanels";
 import { cn } from "@/lib/utils";
 import { downloadCsv, toCsv } from "@/shared/lib/csv";
 import {
@@ -66,6 +70,7 @@ import {
 } from "@/shared/lib/format-date";
 import { IconInfoCircle } from "@tabler/icons-react";
 import { api } from "@convex/_generated/api";
+import { useQuery } from "@tanstack/react-query";
 import { useAction } from "convex/react";
 import { ChevronDownIcon, PlusIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
@@ -169,55 +174,43 @@ const CHART_TOOLTIP_ESCAPE = { x: false, y: false } as const;
 
 function useAnalysis(range: AnalysisRange, period: AnalysisPeriod) {
   const getAnalysis = useAction(api.analysis.get);
-  const [result, setResult] = useState<
-    | { ok: true; data: AnalysisData }
-    | { ok: false; error: string }
-    | undefined
-  >(undefined);
-  const [isPending, setIsPending] = useState(true);
-  const [fetchError, setFetchError] = useState<Error | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    setIsPending(true);
-    setFetchError(null);
-    void getAnalysis({ range, period })
-      .then((res) => {
-        if (cancelled) return;
-        setResult(
-          res as
-            | { ok: true; data: AnalysisData }
-            | { ok: false; error: string },
-        );
-        setIsPending(false);
-      })
-      .catch((err: unknown) => {
-        if (cancelled) return;
-        setResult(undefined);
-        setFetchError(err instanceof Error ? err : new Error(String(err)));
-        setIsPending(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [getAnalysis, period, range]);
-
-  const failed =
-    fetchError != null ||
-    (result != null && "ok" in result && result.ok === false);
-  const data: AnalysisData | undefined =
-    result != null && "ok" in result && result.ok === true
-      ? result.data
-      : undefined;
-  const errorMessage =
-    fetchError?.message ??
-    (failed && result && "error" in result ? String(result.error) : null);
+  const privateLedger = usePrivateLedger();
+  const query = useQuery({
+    queryKey: [
+      ...analysisQueryKeys.range(range, period),
+      privateLedger.encryptedLedger,
+      privateLedger.unlocked,
+      privateLedger.ledger.transactions.length,
+    ],
+    staleTime: privateLedger.encryptedLedger ? 0 : 5 * 60_000,
+    gcTime: 30 * 60_000,
+    enabled: !privateLedger.encryptedLedger || (privateLedger.unlocked && !privateLedger.loading),
+    queryFn: async () => {
+      if (privateLedger.encryptedLedger) {
+        if (!privateLedger.unlocked) throw new Error("Unlock the private vault to run analysis.");
+        return analysisFromPrivateLedger(privateLedger.ledger, range, period);
+      }
+      const res = await getAnalysis({ range, period });
+      if (!res || !("ok" in res) || res.ok !== true) {
+        const message =
+          res && "error" in res ? String(res.error) : "Analysis failed";
+        throw new Error(message);
+      }
+      return res.data as AnalysisData;
+    },
+  });
   return {
-    data,
-    isPending,
-    isError: failed,
-    isFetching: isPending,
-    error: errorMessage ? new Error(errorMessage) : null,
+    data: query.data,
+    isPending: query.isPending || (privateLedger.encryptedLedger && privateLedger.loading),
+    isError: query.isError || Boolean(privateLedger.encryptedLedger && privateLedger.error),
+    isFetching: query.isFetching,
+    error: privateLedger.encryptedLedger && !privateLedger.unlocked
+      ? new Error("Unlock the private vault on Profile to view analysis.")
+      : query.error instanceof Error
+        ? query.error
+        : null,
+    encryptedLedger: privateLedger.encryptedLedger,
+    locked: privateLedger.encryptedLedger && !privateLedger.unlocked,
   };
 }
 
@@ -5525,6 +5518,7 @@ export function AnalysisDashboard() {
               {query.error?.message ?? "Analysis failed"}
             </div>
           ) : null}
+          <EncryptedLedgerBanner locked={query.locked} />
 
           {query.isPending && !data ? (
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

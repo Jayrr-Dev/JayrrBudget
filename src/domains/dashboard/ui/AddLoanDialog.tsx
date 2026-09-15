@@ -40,6 +40,9 @@ import {
   PAYMENT_FREQUENCIES,
   type PaymentFrequency,
 } from "@/domains/loans/domain/paymentFrequency";
+import { saveEncryptedLoan, saveEncryptedRecords, vaultWriteReady } from "@/domains/vault/application/saveEncryptedLedger";
+import { usePrivateLedger } from "@/domains/vault/ui/usePrivateLedger";
+import { useConvex } from "convex/react";
 
 type AddLoanDialogProps = {
   open: boolean;
@@ -62,6 +65,8 @@ const emptyForm = {
 
 export function AddLoanDialog({ open, onOpenChange }: AddLoanDialogProps) {
   const router = useRouter();
+  const client = useConvex();
+  const privateLedger = usePrivateLedger();
   const createCustomLoan = useMutation(api.dashboard.createCustomLoan);
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
@@ -109,19 +114,58 @@ export function AddLoanDialog({ open, onOpenChange }: AddLoanDialogProps) {
 
     setSaving(true);
     try {
-      const { accountId } = await createCustomLoan({
-        name: form.name.trim(),
-        loanType: form.loanType,
-        rateType: form.rateType,
-        vehicleLabel: form.vehicleLabel.trim() || null,
-        principalStart,
-        annualRate: annualRatePct / 100,
-        paymentAmount,
-        paymentFrequency: form.paymentFrequency,
-        paymentCount: Math.floor(paymentCount),
-        firstPaymentDate: form.firstPaymentDate,
-        matchMerchantClean: form.matchMerchantClean.trim() || null,
+      const write = vaultWriteReady({
+        encryptedLedger: privateLedger.encryptedLedger,
+        userId: privateLedger.userId,
+        vaultId: privateLedger.vaultId,
+        keyId: privateLedger.keyId,
+        client,
       });
+      let accountId: string;
+      if (write) {
+        accountId = `loan-${crypto.randomUUID()}`;
+        await saveEncryptedRecords(write, [{
+          recordId: `account-${accountId}`,
+          kind: "account_meta",
+          value: {
+            accountId,
+            name: form.name.trim(),
+            officialName: form.name.trim(),
+            mask: null,
+            type: "loan",
+            subtype: form.loanType,
+            currentBalance: principalStart,
+            availableBalance: null,
+            isoCurrencyCode: "CAD",
+          },
+          expectedRevision: null,
+        }]);
+        await saveEncryptedLoan(write, {
+          accountId,
+          principal: principalStart,
+          annualRate: annualRatePct / 100,
+          paymentAmount,
+          firstPaymentDate: form.firstPaymentDate,
+          paymentCount: Math.floor(paymentCount),
+          matchMerchantClean: form.matchMerchantClean.trim() || null,
+          expectedRevision: null,
+        });
+        privateLedger.reload();
+      } else {
+        ({ accountId } = await createCustomLoan({
+          name: form.name.trim(),
+          loanType: form.loanType,
+          rateType: form.rateType,
+          vehicleLabel: form.vehicleLabel.trim() || null,
+          principalStart,
+          annualRate: annualRatePct / 100,
+          paymentAmount,
+          paymentFrequency: form.paymentFrequency,
+          paymentCount: Math.floor(paymentCount),
+          firstPaymentDate: form.firstPaymentDate,
+          matchMerchantClean: form.matchMerchantClean.trim() || null,
+        }));
+      }
       setForm(emptyForm);
       onOpenChange(false);
       router.push(`/accounts?account=${encodeURIComponent(accountId)}`);

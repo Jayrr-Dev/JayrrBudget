@@ -64,6 +64,29 @@ export const setPasskeyPackage = mutation({
   },
 });
 
+export const setPassphrasePackage = mutation({
+  args: {
+    passphraseWrappedMasterKey: v.bytes(), passphraseSalt: v.bytes(), argon2: argon2Validator,
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const user = await requireUser(ctx);
+    const vault = await ctx.db.query("vaults").withIndex("by_userId", (q) => q.eq("userId", user._id)).first();
+    if (!vault) throw new Error("Private vault has not been created");
+    await ctx.db.patch(vault._id, {
+      passphraseWrappedMasterKey: args.passphraseWrappedMasterKey,
+      passphraseSalt: args.passphraseSalt,
+      argon2Version: args.argon2.version,
+      argon2TimeCost: args.argon2.timeCost,
+      argon2MemoryCost: args.argon2.memoryCost,
+      argon2Parallelism: args.argon2.parallelism,
+      argon2HashLength: args.argon2.hashLength,
+      updatedAt: Date.now(),
+    });
+    return null;
+  },
+});
+
 export const rotateUnlockPackages = mutation({
   args: {
     passphraseWrappedMasterKey: v.bytes(), passphraseSalt: v.bytes(), recoveryWrappedMasterKey: v.bytes(), recoverySalt: v.bytes(), argon2: argon2Validator,

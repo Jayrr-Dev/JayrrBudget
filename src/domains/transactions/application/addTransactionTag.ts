@@ -1,3 +1,4 @@
+import { invalidateConvexUserCache } from "@/shared/convex/cachedRead";
 import { api } from "@/shared/convex/httpClient";
 import { getAuthenticatedConvexClient } from "@/shared/convex/httpClient.server";
 
@@ -17,8 +18,10 @@ export async function addTransactionTag(
   input: AddTransactionTagInput,
 ): Promise<AddTransactionTagResult> {
   const client = await getAuthenticatedConvexClient();
-  return client.mutation(api.transactions.addTag, {
+  const result = await client.mutation(api.transactions.addTag, {
     transactionId: input.transactionId,
     tag: input.tag,
   });
+  await invalidateConvexUserCache();
+  return result;
 }

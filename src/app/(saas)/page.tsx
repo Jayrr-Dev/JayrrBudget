@@ -5,6 +5,7 @@ import {
   BankAccountsLoadingSkeleton,
 } from "@/domains/dashboard/ui/BankAccountsDashboard";
 import {
+  EncryptedLedgerBanner,
   LoadingSkeleton,
   useDashboard,
 } from "@/domains/dashboard/ui/DashboardPanels";
@@ -38,7 +39,9 @@ export default function OverviewPage() {
         </div>
       </header>
 
-      {dashboard.isError ? (
+      <EncryptedLedgerBanner locked={dashboard.locked} />
+
+      {dashboard.isError && !dashboard.locked ? (
         <div className="rounded-xl border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-800">
           {dashboard.error?.message ?? "Dashboard failed"}
         </div>
@@ -62,9 +65,11 @@ export default function OverviewPage() {
               </h2>
               <p className="text-sm text-[var(--muted-foreground)]">
                 Search, sort, and filter ledger rows.
-                {data.transactionCount
-                  ? ` ${data.transactionCount} stored.`
-                  : ""}
+                {data.hasMoreTransactions
+                  ? ` Showing latest ${data.transactions.length}.`
+                  : data.transactionCount
+                    ? ` ${data.transactionCount} stored.`
+                    : ""}
               </p>
             </div>
             <TransactionsDataTable transactions={data.transactions} />

@@ -92,6 +92,7 @@ export type DashboardData = {
   transactions: DashboardTransaction[];
   totalBalance: number;
   transactionCount: number;
+  hasMoreTransactions?: boolean;
   earliestDate: string | null;
   latestDate: string | null;
   latestStatementDate: string | null;

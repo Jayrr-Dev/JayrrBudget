@@ -7,6 +7,10 @@ import type {
 } from "@/domains/db-explorer/domain/types";
 import { COLUMN_HELP } from "@/domains/db-explorer/domain/columnHelp";
 import { api } from "@/shared/convex/httpClient";
+import {
+  cachedConvexRead,
+  SHORT_READ_TTL_MS,
+} from "@/shared/convex/cachedRead";
 import { getAuthenticatedConvexClient } from "@/shared/convex/httpClient.server";
 
 const CONVEX_TO_UI: Record<string, string> = {
@@ -277,8 +281,13 @@ function buildColumns(uiName: string, sampleKeys: string[]): DbColumnInfo[] {
 }
 
 export async function getSchemaGraph(): Promise<DbSchemaGraph> {
-  const client = await getAuthenticatedConvexClient();
-  const overview = await client.query(api.dbExplorer.schemaOverview, {});
+  const overview = await cachedConvexRead({
+    name: "dbExplorer.schemaOverview",
+    load: async () => {
+      const client = await getAuthenticatedConvexClient();
+      return client.query(api.dbExplorer.schemaOverview, {});
+    },
+  });
   const tables: DbTableInfo[] = overview.tables.map((table: (typeof overview.tables)[number]) => {
     const uiName = table.uiName ?? CONVEX_TO_UI[table.name] ?? table.name;
     return {
@@ -305,10 +314,17 @@ export async function browseTable(
   if (!isDbTableName(name)) {
     throw new Error(`Unknown table: ${name}`);
   }
-  const client = await getAuthenticatedConvexClient();
-  return client.query(api.dbExplorer.browseTable, {
-    table: name,
-    limit,
-    offset,
+  return cachedConvexRead({
+    name: "dbExplorer.browseTable",
+    args: { table: name, limit, offset },
+    ttlMs: SHORT_READ_TTL_MS,
+    load: async () => {
+      const client = await getAuthenticatedConvexClient();
+      return client.query(api.dbExplorer.browseTable, {
+        table: name,
+        limit,
+        offset,
+      });
+    },
   });
 }
