@@ -343,7 +343,6 @@ export const stripBankPairCategoryFields = internalMutation({
     scanned: v.number(),
   }),
   handler: async (ctx) => {
-    // eslint-disable-next-line @convex-dev/no-query-collect -- one-shot migration
     const rows = await ctx.db.query("transactions").collect();
     let patched = 0;
     for (const row of rows) {
@@ -386,7 +385,6 @@ export const consolidateTxnCodeAndKind = internalMutation({
     clearedKind: v.number(),
   }),
   handler: async (ctx) => {
-    // eslint-disable-next-line @convex-dev/no-query-collect -- one-shot migration
     const rows = await ctx.db.query("transactions").collect();
     let patched = 0;
     let clearedKind = 0;

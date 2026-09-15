@@ -49,6 +49,7 @@ import type * as statements from "../statements.js";
 import type * as transactions from "../transactions.js";
 import type * as userNotes from "../userNotes.js";
 import type * as users from "../users.js";
+import type * as vaults from "../vaults.js";
 
 import type {
   ApiFromModules,
@@ -98,6 +99,7 @@ declare const fullApi: ApiFromModules<{
   transactions: typeof transactions;
   userNotes: typeof userNotes;
   users: typeof users;
+  vaults: typeof vaults;
 }>;
 
 /**

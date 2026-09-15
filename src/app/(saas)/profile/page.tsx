@@ -1,6 +1,7 @@
 "use client";
 
 import { api } from "@convex/_generated/api";
+import { VaultSecurityCard } from "@/components/layout/VaultSecurityCard";
 import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import { useEffect, useState } from "react";
 
@@ -122,6 +123,8 @@ export default function ProfilePage() {
           {pending ? "Saving…" : "Save changes"}
         </button>
       </form>
+
+      <VaultSecurityCard />
     </div>
   );
 }

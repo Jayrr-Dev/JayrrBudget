@@ -1,6 +1,6 @@
 # TODO: Client-side encrypted financial storage
 
-**Status:** Phase 1 design approved; implementation not started.  
+**Status:** Phase 2–4 implementation slice in progress.
 **Architecture (full plan):** [e2ee-architecture.md](./e2ee-architecture.md)  
 **Rule:** Finish one phase (design → code → tests → manual check → security questions). Stop before the next.
 
@@ -10,6 +10,14 @@
 - [x] Two modes — **STRICT PRIVATE** (default, zero-knowledge ciphertext sync) + **Cloud Processing** (opt-in; Mistral / OpenRouter / canvas AI; **not** E2EE)
 - [x] Not messaging crypto — envelope encryption + AES-256-GCM (Web Crypto); no Signal / Double Ratchet
 - [x] Auth ≠ encryption — login must not give Convex the decryption key
+
+## Current implementation slice
+
+- [x] Browser Argon2id passphrase derivation and AES-KW master-key wrapping
+- [x] Versioned AES-256-GCM record envelopes with authenticated identity fields
+- [x] Authenticated Convex vault, wrapped-key, and encrypted-record APIs
+- [x] Profile UI for vault creation, passphrase unlock, recovery-file unlock, recovery rotation, and inactivity locking
+- [ ] Private screens, local import, migration, cloud-processing consent, and passkey PRF enrollment
 
 ## Phase checklist
 

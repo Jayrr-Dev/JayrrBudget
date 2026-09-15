@@ -27,6 +27,68 @@ export default defineSchema({
     userId: v.id("users"), key: v.string(), profile: profileValidator,
     updatedAt: v.number(),
   }).index("by_userId_key", ["userId", "key"]),
+  /** Zero-knowledge vault metadata. Wrapped keys are ciphertext and never plaintext UMKs. */
+  vaults: defineTable({
+    userId: v.id("users"),
+    vaultId: v.string(),
+    mode: v.union(v.literal("STRICT_PRIVATE"), v.literal("CLOUD_PROCESSING")),
+    status: v.union(v.literal("active"), v.literal("migrating"), v.literal("locked")),
+    currentKeyId: v.string(),
+    passphraseWrappedMasterKey: v.bytes(),
+    passphraseSalt: v.bytes(),
+    recoveryWrappedMasterKey: v.bytes(),
+    recoverySalt: v.bytes(),
+    argon2Version: v.number(),
+    argon2TimeCost: v.number(),
+    argon2MemoryCost: v.number(),
+    argon2Parallelism: v.number(),
+    argon2HashLength: v.number(),
+    passkeyWrappedMasterKey: v.optional(v.bytes()),
+    passkeyCredentialId: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_userId", ["userId"])
+    .index("by_userId_vaultId", ["userId", "vaultId"]),
+  /** Encrypted records only. Sensitive values belong inside ciphertext. */
+  encryptedRecords: defineTable({
+    userId: v.id("users"),
+    vaultId: v.string(),
+    recordId: v.string(),
+    kind: v.string(),
+    v: v.number(),
+    alg: v.string(),
+    keyId: v.string(),
+    iv: v.bytes(),
+    wrappedDek: v.bytes(),
+    ciphertext: v.bytes(),
+    revision: v.number(),
+    deleted: v.boolean(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_userId_vaultId", ["userId", "vaultId"])
+    .index("by_userId_vaultId_recordId", ["userId", "vaultId", "recordId"])
+    .index("by_userId_vaultId_updatedAt", ["userId", "vaultId", "updatedAt"]),
+  /** Encrypted original statements and exports. Large files use Convex storageId. */
+  encryptedDocuments: defineTable({
+    userId: v.id("users"),
+    vaultId: v.string(),
+    documentId: v.string(),
+    storageId: v.optional(v.id("_storage")),
+    contentType: v.string(),
+    byteLength: v.number(),
+    keyId: v.string(),
+    iv: v.bytes(),
+    wrappedDek: v.bytes(),
+    ciphertext: v.optional(v.bytes()),
+    revision: v.number(),
+    deleted: v.boolean(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_userId_vaultId", ["userId", "vaultId"])
+    .index("by_userId_vaultId_documentId", ["userId", "vaultId", "documentId"]),
   users: defineTable({
     name: v.optional(v.string()),
     image: v.optional(v.string()),
