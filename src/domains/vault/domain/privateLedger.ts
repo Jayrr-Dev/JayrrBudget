@@ -116,6 +116,21 @@ export type PrivateStatementLog = {
   transactionIds?: string[];
 };
 
+export type PrivateLoanDocument = {
+  recordId: string;
+  revision: number;
+  filename: string;
+  fileHash: string;
+  status: string;
+  pageCount: number | null;
+  accountId: string | null;
+  fields: Record<string, unknown> | null;
+  createdAt: string;
+  ocrMarkdown?: string | null;
+  ocrRecordId?: string | null;
+  ocrRevision?: number | null;
+};
+
 export type PrivateLedger = {
   transactions: PrivateTransaction[];
   accounts: PrivateAccount[];
@@ -124,4 +139,5 @@ export type PrivateLedger = {
   scratchPads: PrivateScratchPad[];
   loans: PrivateLoanTerms[];
   statementLogs: PrivateStatementLog[];
+  loanDocuments: PrivateLoanDocument[];
 };

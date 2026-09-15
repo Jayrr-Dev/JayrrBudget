@@ -69,6 +69,17 @@ export const SEED_MODULES: SeedModule[] = [
     isCore: false,
   },
   {
+    slug: "classifications",
+    name: "Classifications",
+    description: "Edit your sections, categories, and subcategories.",
+    href: "/classifications",
+    icon: "IconCategory",
+    category: "finance",
+    enabled: true,
+    sortOrder: 32,
+    isCore: false,
+  },
+  {
     slug: "statements",
     name: "Statements",
     description: "Upload bank PDFs and check imports.",

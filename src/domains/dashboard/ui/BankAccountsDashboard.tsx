@@ -21,6 +21,7 @@ import type {
 import { AccountPastTransactions } from "@/domains/dashboard/ui/AccountPastTransactions";
 import { AddLoanDialog } from "@/domains/dashboard/ui/AddLoanDialog";
 import { LOAN_TYPES, formatLoanRate, normalizeRateType } from "@/domains/loans/domain/loanTypes";
+import { LoanDocumentOcrButton } from "@/domains/loans/ui/LoanDocumentOcrButton";
 import { StatementUpload } from "@/domains/statements/ui/StatementUpload";
 import { formatDisplayDate } from "@/shared/lib/format-date";
 import { PlusIcon } from "lucide-react";
@@ -229,9 +230,12 @@ function AccountDetailView({
           All accounts
         </Button>
         <header className="space-y-1">
-          <h1 className="text-3xl font-semibold tracking-tight">
-            {account.name}
-          </h1>
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="text-3xl font-semibold tracking-tight">
+              {account.name}
+            </h1>
+            {loan ? <LoanDocumentOcrButton accountId={account.accountId} /> : null}
+          </div>
           <p className="text-[var(--muted-foreground)]">
             {accountSecondaryLine(account)}
           </p>
@@ -470,7 +474,7 @@ export function BankAccountsDashboard({
                 variant="ghost"
                 size="icon-sm"
                 className="size-4 shrink-0 rounded-full border border-[var(--border)] text-[var(--muted-foreground)]"
-                aria-label="Add loan"
+                aria-label="Register Lending Account"
                 onClick={() => setAddLoanOpen(true)}
               >
                 <PlusIcon className="size-2.5" />
@@ -480,7 +484,7 @@ export function BankAccountsDashboard({
           {section.accounts.length === 0 ? (
             section.id === "lending" ? (
               <div className="rounded-xl border border-dashed border-[var(--border)] bg-[var(--surface)]/70 px-4 py-6 text-sm text-[var(--muted-foreground)]">
-                No lending accounts yet. Use + to add a custom loan.
+                No lending accounts yet. Use + to register a lending account.
               </div>
             ) : null
           ) : (

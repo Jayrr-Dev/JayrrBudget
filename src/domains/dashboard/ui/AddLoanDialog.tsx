@@ -1,11 +1,13 @@
 "use client";
 
 import { api } from "@convex/_generated/api";
-import { useMutation } from "convex/react";
-import { Info } from "lucide-react";
+import { useConvex, useMutation } from "convex/react";
+import { Info, UploadIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { toast } from "sonner";
+import type { MutationClient } from "@/crypto/vaultRecords";
+import { getVaultMasterKey } from "@/crypto/session";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -29,6 +31,17 @@ import {
   PopoverTitle,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { Spinner } from "@/components/ui/spinner";
+import {
+  encryptLoanDocumentToVault,
+  linkEncryptedLoanDocument,
+} from "@/domains/loans/application/encryptLoanDocument";
+import { loanFieldsToFormFill } from "@/domains/loans/domain/loanDocumentFields";
+import { formatLoanDocumentProgress } from "@/domains/loans/domain/loanDocumentProgress";
+import {
+  isLoanUploadAbortError,
+  uploadLoanDocument,
+} from "@/domains/loans/queries/uploadLoanDocument";
 import {
   LOAN_TYPES,
   RATE_TYPES,
@@ -40,9 +53,20 @@ import {
   PAYMENT_FREQUENCIES,
   type PaymentFrequency,
 } from "@/domains/loans/domain/paymentFrequency";
-import { saveEncryptedLoan, saveEncryptedRecords, vaultWriteReady } from "@/domains/vault/application/saveEncryptedLedger";
+import {
+  OCR_DOCUMENT_ACCEPT,
+  isOcrDocumentFile,
+} from "@/domains/statements/domain/ocrDocumentTypes";
+import { useFeatureFlags } from "@/domains/feature-flags/ui/useFeatureFlag";
+import { hydrateVaultSession, type VaultClient } from "@/domains/vault/application/ensureVaultFromPasscode";
+import { loadPrivateLedger, type VaultListClient } from "@/domains/vault/application/loadPrivateLedger";
+import {
+  saveEncryptedLoan,
+  saveEncryptedRecords,
+  vaultWriteReady,
+} from "@/domains/vault/application/saveEncryptedLedger";
 import { usePrivateLedger } from "@/domains/vault/ui/usePrivateLedger";
-import { useConvex } from "convex/react";
+import { errorMessage } from "@/shared/lib/error-message";
 
 type AddLoanDialogProps = {
   open: boolean;
@@ -63,14 +87,23 @@ const emptyForm = {
   matchMerchantClean: "",
 };
 
+const UPLOAD_TOAST = "loan-document-upload";
+
 export function AddLoanDialog({ open, onOpenChange }: AddLoanDialogProps) {
   const router = useRouter();
   const client = useConvex();
   const privateLedger = usePrivateLedger();
+  const flags = useFeatureFlags();
   const createCustomLoan = useMutation(api.dashboard.createCustomLoan);
+  const linkLoanDocument = useMutation(api.loanDocuments.linkToAccount);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [pendingFileHash, setPendingFileHash] = useState<string | null>(null);
   const typeMeta = loanTypeMeta(form.loanType);
+  const busy = saving || uploading;
+  const vaultPersist = flags.encryptedLedger;
 
   function setField(key: keyof typeof emptyForm, value: string) {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -84,6 +117,96 @@ export function AddLoanDialog({ open, onOpenChange }: AddLoanDialogProps) {
       paymentFrequency: meta.defaultFrequency,
       rateType: meta.defaultRateType,
     }));
+  }
+
+  function resetAndClose() {
+    setForm(emptyForm);
+    setPendingFileHash(null);
+    onOpenChange(false);
+  }
+
+  async function onUploadDocument(file: File) {
+    if (!isOcrDocumentFile(file)) {
+      toast.error("Use a PDF or photo (PNG, JPG, WEBP, AVIF, HEIC).");
+      return;
+    }
+
+    setUploading(true);
+    toast.loading("Uploading document…", { id: UPLOAD_TOAST });
+
+    try {
+      const result = await uploadLoanDocument(file, {
+        persistMode: vaultPersist ? "vault" : "convex",
+        onProgress: (progress) => {
+          toast.loading(formatLoanDocumentProgress(progress), {
+            id: UPLOAD_TOAST,
+            description: file.name,
+          });
+        },
+      });
+
+      if (vaultPersist) {
+        if (!flags.cloudProcessing) {
+            throw new Error(
+            "Turn on Cloud Processing in Modules before uploading a document.",
+          );
+        }
+        const opened = await hydrateVaultSession(
+          client as unknown as VaultClient,
+        );
+        const masterKey = getVaultMasterKey();
+        const vaultId = privateLedger.vaultId ?? opened?.vaultId ?? null;
+        const keyId = privateLedger.keyId ?? opened?.keyId ?? null;
+        if (!privateLedger.userId || !vaultId || !keyId || !masterKey) {
+          throw new Error("Sign in again, then retry the upload.");
+        }
+        const ledger = await loadPrivateLedger(
+          client as unknown as VaultListClient,
+          {
+            userId: privateLedger.userId,
+            vaultId,
+          },
+        );
+        await encryptLoanDocumentToVault({
+          client: client as unknown as MutationClient,
+          userId: privateLedger.userId,
+          vaultId,
+          keyId,
+          masterKey,
+          filename: result.filename,
+          fileHash: result.fileHash,
+          pageCount: result.pageCount,
+          fields: result.fields,
+          ocrMarkdown: result.ocrMarkdown,
+          ledger,
+        });
+        privateLedger.reload();
+      }
+
+      const fill = loanFieldsToFormFill(result.fields);
+      setForm((prev) => ({
+        ...prev,
+        ...fill,
+        name: fill.name || prev.name,
+        vehicleLabel: fill.vehicleLabel || prev.vehicleLabel,
+        matchMerchantClean: fill.matchMerchantClean || prev.matchMerchantClean,
+      }));
+      setPendingFileHash(result.fileHash);
+      toast.success("Document scanned · review the fields", {
+        id: UPLOAD_TOAST,
+      });
+    } catch (error) {
+      if (isLoanUploadAbortError(error)) {
+        toast.message("Upload cancelled", { id: UPLOAD_TOAST });
+      } else {
+        toast.error(errorMessage(error, "Could not read loan document"), {
+          id: UPLOAD_TOAST,
+        });
+      }
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
   }
 
   async function onSubmit(event: React.FormEvent) {
@@ -124,22 +247,24 @@ export function AddLoanDialog({ open, onOpenChange }: AddLoanDialogProps) {
       let accountId: string;
       if (write) {
         accountId = `loan-${crypto.randomUUID()}`;
-        await saveEncryptedRecords(write, [{
-          recordId: `account-${accountId}`,
-          kind: "account_meta",
-          value: {
-            accountId,
-            name: form.name.trim(),
-            officialName: form.name.trim(),
-            mask: null,
-            type: "loan",
-            subtype: form.loanType,
-            currentBalance: principalStart,
-            availableBalance: null,
-            isoCurrencyCode: "CAD",
+        await saveEncryptedRecords(write, [
+          {
+            recordId: `account-${accountId}`,
+            kind: "account_meta",
+            value: {
+              accountId,
+              name: form.name.trim(),
+              officialName: form.name.trim(),
+              mask: null,
+              type: "loan",
+              subtype: form.loanType,
+              currentBalance: principalStart,
+              availableBalance: null,
+              isoCurrencyCode: "CAD",
+            },
+            expectedRevision: null,
           },
-          expectedRevision: null,
-        }]);
+        ]);
         await saveEncryptedLoan(write, {
           accountId,
           principal: principalStart,
@@ -150,6 +275,28 @@ export function AddLoanDialog({ open, onOpenChange }: AddLoanDialogProps) {
           matchMerchantClean: form.matchMerchantClean.trim() || null,
           expectedRevision: null,
         });
+        if (pendingFileHash) {
+          const masterKey = getVaultMasterKey();
+          if (masterKey) {
+            const ledger = await loadPrivateLedger(
+              client as unknown as VaultListClient,
+              {
+                userId: write.userId,
+                vaultId: write.vaultId,
+              },
+            );
+            await linkEncryptedLoanDocument({
+              client: client as unknown as MutationClient,
+              userId: write.userId,
+              vaultId: write.vaultId,
+              keyId: write.keyId,
+              masterKey,
+              fileHash: pendingFileHash,
+              accountId,
+              ledger,
+            });
+          }
+        }
         privateLedger.reload();
       } else {
         ({ accountId } = await createCustomLoan({
@@ -165,9 +312,14 @@ export function AddLoanDialog({ open, onOpenChange }: AddLoanDialogProps) {
           firstPaymentDate: form.firstPaymentDate,
           matchMerchantClean: form.matchMerchantClean.trim() || null,
         }));
+        if (pendingFileHash) {
+          await linkLoanDocument({
+            fileHash: pendingFileHash,
+            accountId,
+          });
+        }
       }
-      setForm(emptyForm);
-      onOpenChange(false);
+      resetAndClose();
       router.push(`/accounts?account=${encodeURIComponent(accountId)}`);
     } catch (error) {
       toast.error(
@@ -182,14 +334,46 @@ export function AddLoanDialog({ open, onOpenChange }: AddLoanDialogProps) {
     <Dialog
       open={open}
       onOpenChange={(next) => {
-        if (!saving) onOpenChange(next);
+        if (!busy) {
+          if (!next) {
+            setForm(emptyForm);
+            setPendingFileHash(null);
+          }
+          onOpenChange(next);
+        }
       }}
     >
       <DialogContent className="sm:max-w-md">
         <form onSubmit={onSubmit} className="grid gap-4">
           <DialogHeader>
-            <DialogTitle>Add loan</DialogTitle>
-            <DialogDescription>
+            <DialogTitle className="flex items-center gap-2">
+              Register Lending Account
+              <Popover>
+                <PopoverTrigger asChild>
+                  <button
+                    type="button"
+                    className="inline-flex size-6 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
+                    aria-label="Register Lending Account info"
+                  >
+                    <Info className="size-3.5" />
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent align="start" side="bottom" className="w-72">
+                  <PopoverHeader>
+                    <PopoverTitle>Register Lending Account</PopoverTitle>
+                    <PopoverDescription>
+                      Track a loan with amortization terms.
+                    </PopoverDescription>
+                    <ul className="mt-1.5 list-disc space-y-1 pl-4 text-muted-foreground">
+                      <li>Mortgage, auto, student, personal, HELOC, or other</li>
+                      <li>Upload a PDF or photo to fill the form from a scan</li>
+                      <li>OCR stays encrypted for later viewing</li>
+                    </ul>
+                  </PopoverHeader>
+                </PopoverContent>
+              </Popover>
+            </DialogTitle>
+            <DialogDescription className="sr-only">
               Track a mortgage, auto, student, personal, HELOC, or other loan
               with amortization terms.
             </DialogDescription>
@@ -203,12 +387,34 @@ export function AddLoanDialog({ open, onOpenChange }: AddLoanDialogProps) {
                 title: "Loan type",
                 body: "Sets the account subtype and the optional collateral field (vehicle, property, school, etc.).",
               }}
+              action={
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={busy}
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  {uploading ? (
+                    <>
+                      <Spinner className="size-3.5" />
+                      Scanning…
+                    </>
+                  ) : (
+                    <>
+                      <UploadIcon className="size-3.5" />
+                      Upload Document
+                    </>
+                  )}
+                </Button>
+              }
             >
               <NativeSelect
                 id="loan-type"
                 className="w-full"
                 value={form.loanType}
                 onChange={(e) => onLoanTypeChange(e.target.value as LoanType)}
+                disabled={busy}
               >
                 {LOAN_TYPES.map((option) => (
                   <NativeSelectOption key={option.value} value={option.value}>
@@ -225,6 +431,7 @@ export function AddLoanDialog({ open, onOpenChange }: AddLoanDialogProps) {
                 placeholder={typeMeta.namePlaceholder}
                 required
                 autoFocus
+                disabled={busy}
               />
             </Field>
             {typeMeta.showCollateral ? (
@@ -237,6 +444,7 @@ export function AddLoanDialog({ open, onOpenChange }: AddLoanDialogProps) {
                   value={form.vehicleLabel}
                   onChange={(e) => setField("vehicleLabel", e.target.value)}
                   placeholder={typeMeta.collateralPlaceholder}
+                  disabled={busy}
                 />
               </Field>
             ) : null}
@@ -258,6 +466,7 @@ export function AddLoanDialog({ open, onOpenChange }: AddLoanDialogProps) {
                   value={form.principalStart}
                   onChange={(e) => setField("principalStart", e.target.value)}
                   required
+                  disabled={busy}
                 />
               </Field>
               <Field
@@ -275,6 +484,7 @@ export function AddLoanDialog({ open, onOpenChange }: AddLoanDialogProps) {
                   onChange={(e) =>
                     setField("rateType", e.target.value as RateType)
                   }
+                  disabled={busy}
                 >
                   {RATE_TYPES.map((option) => (
                     <NativeSelectOption key={option.value} value={option.value}>
@@ -295,6 +505,7 @@ export function AddLoanDialog({ open, onOpenChange }: AddLoanDialogProps) {
                 onChange={(e) => setField("annualRatePct", e.target.value)}
                 placeholder="7.99"
                 required
+                disabled={busy}
               />
             </Field>
             <div className="grid grid-cols-2 gap-3">
@@ -308,6 +519,7 @@ export function AddLoanDialog({ open, onOpenChange }: AddLoanDialogProps) {
                   value={form.paymentAmount}
                   onChange={(e) => setField("paymentAmount", e.target.value)}
                   required
+                  disabled={busy}
                 />
               </Field>
               <Field
@@ -327,6 +539,7 @@ export function AddLoanDialog({ open, onOpenChange }: AddLoanDialogProps) {
                   value={form.paymentCount}
                   onChange={(e) => setField("paymentCount", e.target.value)}
                   required
+                  disabled={busy}
                 />
               </Field>
             </div>
@@ -349,6 +562,7 @@ export function AddLoanDialog({ open, onOpenChange }: AddLoanDialogProps) {
                       e.target.value as PaymentFrequency,
                     )
                   }
+                  disabled={busy}
                 >
                   {PAYMENT_FREQUENCIES.map((option) => (
                     <NativeSelectOption key={option.value} value={option.value}>
@@ -364,6 +578,7 @@ export function AddLoanDialog({ open, onOpenChange }: AddLoanDialogProps) {
                   value={form.firstPaymentDate}
                   onChange={(e) => setField("firstPaymentDate", e.target.value)}
                   required
+                  disabled={busy}
                 />
               </Field>
             </div>
@@ -380,21 +595,33 @@ export function AddLoanDialog({ open, onOpenChange }: AddLoanDialogProps) {
                 value={form.matchMerchantClean}
                 onChange={(e) => setField("matchMerchantClean", e.target.value)}
                 placeholder="Defaults to name"
+                disabled={busy}
               />
             </Field>
           </div>
+
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept={OCR_DOCUMENT_ACCEPT}
+            className="hidden"
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              if (file) void onUploadDocument(file);
+            }}
+          />
 
           <DialogFooter>
             <Button
               type="button"
               variant="outline"
-              disabled={saving}
-              onClick={() => onOpenChange(false)}
+              disabled={busy}
+              onClick={() => resetAndClose()}
             >
               Cancel
             </Button>
-            <Button type="submit" disabled={saving}>
-              {saving ? "Saving…" : "Add loan"}
+            <Button type="submit" disabled={busy}>
+              {saving ? "Saving…" : "Create Loan"}
             </Button>
           </DialogFooter>
         </form>
@@ -407,11 +634,13 @@ function Field({
   label,
   htmlFor,
   info,
+  action,
   children,
 }: {
   label: string;
   htmlFor: string;
   info?: { title: string; body: string };
+  action?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
@@ -437,6 +666,7 @@ function Field({
             </PopoverContent>
           </Popover>
         ) : null}
+        {action ? <div className="ml-auto shrink-0">{action}</div> : null}
       </div>
       {children}
     </div>

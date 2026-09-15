@@ -15,8 +15,9 @@ import {
 } from "@/domains/statements/domain/importProgress";
 import {
   isMistralConfigured,
-  ocrPdf,
+  ocrDocument,
 } from "@/domains/statements/infrastructure/mistralOcr";
+import { isOcrDocumentFilename } from "@/domains/statements/domain/ocrDocumentTypes";
 import {
   isOpenRouterConfigured,
   parseStatementPaperFacts,
@@ -65,6 +66,7 @@ export async function importBankStatement(params: {
   bytes: Buffer;
   client: ConvexHttpClient;
   sourceHint?: string;
+  mimeType?: string | null;
   /** convex = write plaintext ledger; vault = return facts for client encrypt. */
   persistMode?: "convex" | "vault";
   onProgress?: (progress: StatementImportProgress) => void;
@@ -87,11 +89,11 @@ export async function importBankStatement(params: {
     };
   }
 
-  if (!params.filename.toLowerCase().endsWith(".pdf")) {
+  if (!isOcrDocumentFilename(params.filename)) {
     return {
       ok: false,
       status: 400,
-      error: "Only PDF bank statements are supported.",
+      error: "Only PDF or image files (PNG, JPG, WEBP, AVIF, HEIC) are supported.",
     };
   }
 
@@ -103,7 +105,7 @@ export async function importBankStatement(params: {
     return {
       ok: false,
       status: 400,
-      error: "PDF must be 20MB or smaller.",
+      error: "File must be 20MB or smaller.",
     };
   }
 
@@ -111,7 +113,7 @@ export async function importBankStatement(params: {
     emitProgress(params.onProgress, "receive");
     const fileHash = statementFileHash(params.bytes);
 
-    // Same PDF bytes already imported → skip Mistral OCR + OpenRouter parse.
+    // Same file bytes already imported → skip Mistral OCR + OpenRouter parse.
     const persistMode = params.persistMode ?? "convex";
     const existing = persistMode === "vault"
       ? null
@@ -129,9 +131,10 @@ export async function importBankStatement(params: {
 
     emitProgress(params.onProgress, "ocr");
     const ocrStarted = Date.now();
-    const ocr = await ocrPdf({
+    const ocr = await ocrDocument({
       filename: params.filename,
       bytes: params.bytes,
+      mimeType: params.mimeType,
     });
     console.info(
       `[statements] OCR pages=${ocr.pageCount} in ${Date.now() - ocrStarted}ms`,

@@ -1,5 +1,5 @@
 ---
-description: Put long helper copy in an info icon immediately to the right of the header title
+description: Put long helper copy in an info icon; format short lead + bullets when useful
 alwaysApply: true
 ---
 
@@ -12,3 +12,27 @@ Put that copy in an info icon **directly to the right of the title** (same row, 
 Keep a `sr-only` description when the dialog still needs an accessible description.
 
 Do this for new UI and when editing existing headers with helper text.
+
+## Info icon message formatting
+
+Do not dump one long paragraph into the info popover.
+
+Format helper copy so it scans fast:
+
+1. **Short lead** in `PopoverDescription` (one sentence: what this is / does).
+2. **Bullets** when there are 2+ distinct points (loan kinds, steps, caveats, options). Prefer a `<ul className="list-disc …">` sibling under the header, not a wall of text inside the description `<p>`.
+3. Keep each bullet to one idea. Skip bullets when a single short sentence is enough (field-level tips).
+
+Example shape:
+
+```tsx
+<PopoverHeader>
+  <PopoverTitle>Register Lending Account</PopoverTitle>
+  <PopoverDescription>Track a loan with amortization terms.</PopoverDescription>
+  <ul className="mt-1.5 list-disc space-y-1 pl-4 text-muted-foreground">
+    <li>Mortgage, auto, student, personal, HELOC, or other</li>
+    <li>Upload a PDF or photo to fill the form from a scan</li>
+    <li>OCR stays encrypted for later viewing</li>
+  </ul>
+</PopoverHeader>
+```

@@ -53,6 +53,16 @@ export const MODULE_CATALOG: readonly ModuleCatalogEntry[] = [
     isCore: false,
   },
   {
+    slug: "classifications",
+    name: "Classifications",
+    description: "Your sections, categories, and subcategories.",
+    href: "/classifications",
+    icon: "IconCategory",
+    category: "finance",
+    sortOrder: 32,
+    isCore: false,
+  },
+  {
     slug: "statements",
     name: "Statements",
     description: "Import PDFs, overview stats, and parse logs.",

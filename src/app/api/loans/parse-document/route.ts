@@ -1,6 +1,6 @@
-import { importBankStatement } from "@/domains/statements/application/importBankStatement";
-import type { StatementImportProgress } from "@/domains/statements/domain/importProgress";
-import type { ImportBankStatementSuccess } from "@/domains/statements/domain/importResult";
+import { parseLoanDocument } from "@/domains/loans/application/parseLoanDocument";
+import type { LoanDocumentProgress } from "@/domains/loans/domain/loanDocumentProgress";
+import type { ParseLoanDocumentSuccess } from "@/domains/loans/domain/loanDocumentResult";
 import {
   AuthRequiredError,
   getAuthenticatedConvexClient,
@@ -11,8 +11,8 @@ export const runtime = "nodejs";
 export const maxDuration = 300;
 
 type StreamEvent =
-  | { type: "progress"; progress: StatementImportProgress }
-  | { type: "result"; result: ImportBankStatementSuccess }
+  | { type: "progress"; progress: LoanDocumentProgress }
+  | { type: "result"; result: ParseLoanDocumentSuccess }
   | { type: "error"; error: string; code?: string; status: number };
 
 function encodeEvent(event: StreamEvent) {
@@ -51,7 +51,7 @@ export async function POST(request: Request) {
   }
 
   const bytes = Buffer.from(await file.arrayBuffer());
-  const filename = file.name || "statement.pdf";
+  const filename = file.name || "loan.pdf";
   const mimeType = file.type || null;
   const encoder = new TextEncoder();
 
@@ -62,7 +62,7 @@ export async function POST(request: Request) {
       };
 
       try {
-        const result = await importBankStatement({
+        const result = await parseLoanDocument({
           filename,
           bytes,
           mimeType,
@@ -89,7 +89,7 @@ export async function POST(request: Request) {
       } catch (error) {
         send({
           type: "error",
-          error: errorMessage(error, "Statement import failed"),
+          error: errorMessage(error, "Loan document parse failed"),
           status: 500,
         });
         controller.close();

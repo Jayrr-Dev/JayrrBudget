@@ -9,6 +9,6 @@ export const FEATURE_FLAG_COPY: Record<FeatureFlagKey, { name: string; descripti
   },
   cloudProcessing: {
     name: "Cloud Processing",
-    description: "Lets us read a statement PDF or chat about your budget. That step leaves this device.",
+    description: "Lets us read a statement or loan PDF/photo or chat about your budget. That step leaves this device.",
   },
 };

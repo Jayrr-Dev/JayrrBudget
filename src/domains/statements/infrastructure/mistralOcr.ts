@@ -1,4 +1,9 @@
 import { Mistral } from "@mistralai/mistralai";
+import {
+  isImageFilename,
+  isOcrDocumentFilename,
+  ocrDocumentMime,
+} from "@/domains/statements/domain/ocrDocumentTypes";
 import { retryOn } from "@/shared/ai/errors";
 
 export function isMistralConfigured() {
@@ -18,7 +23,22 @@ export type OcrResult = {
   pageCount: number;
 };
 
-async function ocrPdfOnce(params: {
+function pagesToMarkdown(pages: Array<{ markdown?: string | null }>) {
+  return pages
+    .map((page, index) => {
+      const body = page.markdown?.trim() || "";
+      return `## Page ${index + 1}\n\n${body}`;
+    })
+    .join("\n\n");
+}
+
+function assertReadableMarkdown(markdown: string) {
+  if (!markdown.replace(/^## Page \d+\s*$/gim, "").trim()) {
+    throw new Error("OCR returned no readable text from this document.");
+  }
+}
+
+async function ocrViaFileUpload(params: {
   filename: string;
   bytes: Buffer;
 }): Promise<OcrResult> {
@@ -42,16 +62,8 @@ async function ocrPdfOnce(params: {
     });
 
     const pages = ocr.pages ?? [];
-    const markdown = pages
-      .map((page, index) => {
-        const body = page.markdown?.trim() || "";
-        return `## Page ${index + 1}\n\n${body}`;
-      })
-      .join("\n\n");
-
-    if (!markdown.replace(/^## Page \d+\s*$/gim, "").trim()) {
-      throw new Error("OCR returned no readable text from this PDF.");
-    }
+    const markdown = pagesToMarkdown(pages);
+    assertReadableMarkdown(markdown);
 
     return {
       markdown,
@@ -66,17 +78,81 @@ async function ocrPdfOnce(params: {
   }
 }
 
-/** OCR a PDF with Mistral. One retry on flake / empty text. */
-export async function ocrPdf(params: {
+/** Phone photos / scans: Mistral OCR image_url + base64 data URL. */
+async function ocrViaImageDataUrl(params: {
   filename: string;
   bytes: Buffer;
+  mime: string;
 }): Promise<OcrResult> {
-  return retryOn(() => ocrPdfOnce(params), {
+  const client = getMistralClient();
+  const base64 = params.bytes.toString("base64");
+  const dataUrl = `data:${params.mime};base64,${base64}`;
+
+  const ocr = await client.ocr.process({
+    model: "mistral-ocr-latest",
+    document: {
+      type: "image_url",
+      imageUrl: dataUrl,
+    },
+  });
+
+  const pages = ocr.pages ?? [];
+  const markdown = pagesToMarkdown(pages);
+  assertReadableMarkdown(markdown);
+
+  return {
+    markdown,
+    pageCount: Math.max(pages.length, 1),
+  };
+}
+
+async function ocrDocumentOnce(params: {
+  filename: string;
+  bytes: Buffer;
+  mimeType?: string | null;
+}): Promise<OcrResult> {
+  if (!isOcrDocumentFilename(params.filename)) {
+    throw new Error(
+      "Unsupported file type. Use PDF or an image (PNG, JPG, WEBP, AVIF, HEIC).",
+    );
+  }
+
+  const mime = ocrDocumentMime(params.filename, params.mimeType);
+  if (isImageFilename(params.filename) || mime.startsWith("image/")) {
+    return ocrViaImageDataUrl({
+      filename: params.filename,
+      bytes: params.bytes,
+      mime: mime.startsWith("image/") ? mime : "image/jpeg",
+    });
+  }
+
+  return ocrViaFileUpload(params);
+}
+
+/**
+ * OCR a PDF or photo of a document with Mistral.
+ * Images use image_url (phone pics); PDFs use file upload.
+ */
+export async function ocrDocument(params: {
+  filename: string;
+  bytes: Buffer;
+  mimeType?: string | null;
+}): Promise<OcrResult> {
+  return retryOn(() => ocrDocumentOnce(params), {
     attempts: 2,
     delayMs: 500,
     shouldRetry: (error) =>
-      !/unauthor|api key|invalid key|403|401/i.test(
+      !/unauthor|api key|invalid key|403|401|unsupported file type/i.test(
         error instanceof Error ? error.message : String(error),
       ),
   });
+}
+
+/** @deprecated Prefer ocrDocument — kept for call-site compatibility. */
+export async function ocrPdf(params: {
+  filename: string;
+  bytes: Buffer;
+  mimeType?: string | null;
+}): Promise<OcrResult> {
+  return ocrDocument(params);
 }

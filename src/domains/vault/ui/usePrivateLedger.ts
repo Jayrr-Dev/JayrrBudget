@@ -17,6 +17,7 @@ const EMPTY: PrivateLedger = {
   scratchPads: [],
   loans: [],
   statementLogs: [],
+  loanDocuments: [],
 };
 
 const ledgerListeners = new Set<() => void>();

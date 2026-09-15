@@ -226,6 +226,37 @@ export default defineSchema({
     .index("by_userId_status", ["userId", "status"])
     .index("by_userId_uploadId", ["userId", "uploadId"]),
 
+  /** Loan contract / disclosure PDF parses (OCR kept for later View OCR). */
+  loanDocumentUploads: defineTable({
+    userId,
+    uploadId: v.number(),
+    filename: v.string(),
+    fileHash: v.union(v.string(), v.null()),
+    status: v.string(),
+    pageCount: v.union(v.number(), v.null()),
+    accountId: v.union(v.string(), v.null()),
+    ocrMarkdown: v.optional(v.union(v.string(), v.null())),
+    name: v.union(v.string(), v.null()),
+    loanType: v.union(v.string(), v.null()),
+    rateType: v.union(v.string(), v.null()),
+    vehicleLabel: v.union(v.string(), v.null()),
+    principalStart: v.union(v.number(), v.null()),
+    annualRatePct: v.union(v.number(), v.null()),
+    paymentAmount: v.union(v.number(), v.null()),
+    paymentFrequency: v.union(v.string(), v.null()),
+    paymentCount: v.union(v.number(), v.null()),
+    firstPaymentDate: v.union(v.string(), v.null()),
+    matchMerchantClean: v.union(v.string(), v.null()),
+    institutionName: v.union(v.string(), v.null()),
+    error: v.union(v.string(), v.null()),
+    createdAt: v.number(),
+    completedAt: v.union(v.number(), v.null()),
+  })
+    .index("by_userId", ["userId"])
+    .index("by_userId_fileHash", ["userId", "fileHash"])
+    .index("by_userId_accountId", ["userId", "accountId"])
+    .index("by_userId_uploadId", ["userId", "uploadId"]),
+
   transactionSections: defineTable({
     userId,
     legacyId: v.number(),

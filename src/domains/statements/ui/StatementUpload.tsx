@@ -46,6 +46,10 @@ import {
   normalizeStatementFilename,
   sha256FileHex,
 } from "@/domains/statements/domain/fileFingerprint";
+import {
+  OCR_DOCUMENT_ACCEPT,
+  isOcrDocumentFile,
+} from "@/domains/statements/domain/ocrDocumentTypes";
 import { describeImportResult } from "@/domains/statements/domain/importCopy";
 import {
   formatImportProgress,
@@ -99,10 +103,8 @@ type Props = {
   onImported?: () => void | Promise<void>;
 };
 
-function isPdfFile(file: File) {
-  return (
-    file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")
-  );
+function isStatementUploadFile(file: File) {
+  return isOcrDocumentFile(file);
 }
 
 function formatFileSize(bytes: number) {
@@ -139,7 +141,7 @@ function classifyAgainstKnown(
       kind: "exact",
       hint: period
         ? `Already imported · ${period}`
-        : "Already imported · same PDF bytes",
+        : "Already imported · same file bytes",
     };
   }
   const name = normalizeStatementFilename(filename);
@@ -225,7 +227,7 @@ export function StatementUpload({ onImported }: Props) {
         let { kind, hint } = classifyAgainstKnown(hash, item.file.name, known);
         if (!kind && seenHashes.has(hash)) {
           kind = "queue";
-          hint = "Duplicate in this queue · same PDF bytes";
+          hint = "Duplicate in this queue · same file bytes";
         }
         seenHashes.add(hash);
         if (kind === "exact" || kind === "queue") exactCount += 1;
@@ -307,7 +309,7 @@ export function StatementUpload({ onImported }: Props) {
         skippedCap += 1;
         continue;
       }
-      if (!isPdfFile(file)) {
+      if (!isStatementUploadFile(file)) {
         skippedType += 1;
         continue;
       }
@@ -340,7 +342,7 @@ export function StatementUpload({ onImported }: Props) {
     }
 
     const notes: string[] = [];
-    if (skippedType) notes.push(`${skippedType} not PDF`);
+    if (skippedType) notes.push(`${skippedType} not PDF/image`);
     if (skippedSize) notes.push(`${skippedSize} over 20MB`);
     if (skippedDup) notes.push(`${skippedDup} already queued`);
     if (skippedCap) notes.push(`cap ${MAX_FILES} files`);
@@ -438,7 +440,7 @@ export function StatementUpload({ onImported }: Props) {
 
         if (vaultPersist) {
           if (!flags.cloudProcessing) {
-            throw new Error("Turn on Cloud Processing in Modules before uploading a PDF.");
+            throw new Error("Turn on Cloud Processing in Modules before uploading a document.");
           }
           const opened = await hydrateVaultSession(client as unknown as VaultClient);
           const masterKey = getVaultMasterKey();
@@ -571,7 +573,7 @@ export function StatementUpload({ onImported }: Props) {
 
   const triggerLabel = busy
     ? "Uploading…"
-    : "Upload statement PDF";
+    : "Upload statement";
 
   return (
     <div className="flex flex-col items-start gap-1.5">
@@ -600,8 +602,8 @@ export function StatementUpload({ onImported }: Props) {
             <PopoverHeader>
               <PopoverTitle>Manual import path</PopoverTitle>
               <PopoverDescription>
-                Opens a picker for up to 24 PDFs. Duplicates are marked in the
-                list before scan. Your upload rules apply only to your own
+                Opens a picker for up to 24 PDFs or photos. Duplicates are marked
+                in the list before scan. Your upload rules apply only to your own
                 statements. CSV import is encrypted.
               </PopoverDescription>
             </PopoverHeader>
@@ -651,14 +653,14 @@ export function StatementUpload({ onImported }: Props) {
                   <PopoverHeader className="gap-1.5">
                     <PopoverTitle>How upload works</PopoverTitle>
                     <PopoverDescription className="sr-only">
-                      Drag PDFs here or choose files. Up to {MAX_FILES} · 20MB
-                      each. Already-imported files are marked before scan.
+                      Drag PDFs or photos here or choose files. Up to {MAX_FILES} ·
+                      20MB each. Already-imported files are marked before scan.
                       {vaultPersist
                         ? " The scan is encrypted. Only you can read it."
                         : ""}
                     </PopoverDescription>
                     <ul className="mt-1 list-disc space-y-1 pl-4 text-sm leading-relaxed text-muted-foreground">
-                      <li>Drag PDFs here or choose files.</li>
+                      <li>Drag PDFs or photos here or choose files.</li>
                       <li>Up to {MAX_FILES} · 20MB each.</li>
                       <li>Already-imported files are marked before scan.</li>
                       {vaultPersist ? (
@@ -672,8 +674,8 @@ export function StatementUpload({ onImported }: Props) {
               </Popover>
             </DialogTitle>
             <DialogDescription className="sr-only">
-              Drag PDFs here or choose files. Up to {MAX_FILES} · 20MB each.
-              Already-imported files are marked before scan.
+              Drag PDFs or photos here or choose files. Up to {MAX_FILES} · 20MB
+              each. Already-imported files are marked before scan.
               {vaultPersist
                 ? " The scan is encrypted. Only you can read it."
                 : ""}
@@ -683,7 +685,7 @@ export function StatementUpload({ onImported }: Props) {
           <input
             ref={inputRef}
             type="file"
-            accept="application/pdf,.pdf"
+            accept={OCR_DOCUMENT_ACCEPT}
             multiple
             className="hidden"
             disabled={busy}
@@ -698,7 +700,7 @@ export function StatementUpload({ onImported }: Props) {
               role="button"
               tabIndex={busy ? -1 : 0}
               aria-disabled={busy}
-              aria-label="Choose PDF statement files"
+              aria-label="Choose statement files"
               onClick={() => {
                 if (!busy) inputRef.current?.click();
               }}
@@ -743,7 +745,7 @@ export function StatementUpload({ onImported }: Props) {
                 Drag & Drop or Choose file to upload
               </span>
               <span className="text-xs text-muted-foreground">
-                Up to {MAX_FILES} PDFs · 20MB each
+                PDF or photo · up to {MAX_FILES} · 20MB each
               </span>
             </div>
 
@@ -811,7 +813,7 @@ export function StatementUpload({ onImported }: Props) {
                                     ? "Imported"
                                     : item.duplicateHint
                                       ? item.duplicateHint
-                                      : `PDF · ${formatFileSize(item.file.size)}`}
+                                      : `File · ${formatFileSize(item.file.size)}`}
                           </AttachmentDescription>
                         </AttachmentContent>
                         <AttachmentActions>

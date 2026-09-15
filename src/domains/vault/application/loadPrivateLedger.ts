@@ -5,6 +5,7 @@ import type { EncryptedEnvelopeV1, EnvelopeKind } from "@/crypto/types";
 import type {
   PrivateAccount,
   PrivateLedger,
+  PrivateLoanDocument,
   PrivateLoanTerms,
   PrivateMerchant,
   PrivateNote,
@@ -29,6 +30,7 @@ const EMPTY: PrivateLedger = {
   scratchPads: [],
   loans: [],
   statementLogs: [],
+  loanDocuments: [],
 };
 
 function asTx(value: unknown, recordId: string, revision: number): PrivateTransaction | null {
@@ -191,6 +193,47 @@ function asOcrDoc(value: unknown, recordId: string, revision: number) {
   };
 }
 
+function asLoanOcrDoc(value: unknown, recordId: string, revision: number) {
+  if (!value || typeof value !== "object") return null;
+  const row = value as Record<string, unknown>;
+  if (row.type !== "loan_ocr") return null;
+  return {
+    recordId,
+    revision,
+    loanDocumentRecordId: String(row.loanDocumentRecordId ?? ""),
+    ocrMarkdown: String(row.ocrMarkdown ?? ""),
+  };
+}
+
+function asLoanDocument(
+  value: unknown,
+  recordId: string,
+  revision: number,
+): PrivateLoanDocument | null {
+  if (!value || typeof value !== "object") return null;
+  const row = value as Record<string, unknown>;
+  if (row.type !== "loan_document") return null;
+  const filename = String(row.filename ?? "").trim();
+  if (!filename) return null;
+  return {
+    recordId,
+    revision,
+    filename,
+    fileHash: String(row.fileHash ?? ""),
+    status: String(row.status ?? "completed"),
+    pageCount: asNumber(row.pageCount),
+    accountId: row.accountId == null ? null : String(row.accountId),
+    fields:
+      row.fields && typeof row.fields === "object"
+        ? (row.fields as Record<string, unknown>)
+        : null,
+    createdAt: String(row.createdAt ?? new Date().toISOString()),
+    ocrMarkdown: null,
+    ocrRecordId: row.ocrRecordId == null ? null : String(row.ocrRecordId),
+    ocrRevision: null,
+  };
+}
+
 function asLoan(value: unknown, recordId: string, revision: number): PrivateLoanTerms | null {
   if (!value || typeof value !== "object") return null;
   const row = value as Record<string, unknown>;
@@ -231,8 +274,10 @@ export async function loadPrivateLedger(
     scratchPads: [],
     loans: [],
     statementLogs: [],
+    loanDocuments: [],
   };
   const ocrDocs: Array<NonNullable<ReturnType<typeof asOcrDoc>>> = [];
+  const loanOcrDocs: Array<NonNullable<ReturnType<typeof asLoanOcrDoc>>> = [];
 
   let cursor: string | null = null;
   for (let pageIndex = 0; pageIndex < 40; pageIndex += 1) {
@@ -282,8 +327,18 @@ export async function loadPrivateLedger(
           if (ocr) {
             ocrDocs.push(ocr);
           } else {
-            const log = asStatementLog(value, recordId, revision);
-            if (log) ledger.statementLogs.push(log);
+            const loanOcr = asLoanOcrDoc(value, recordId, revision);
+            if (loanOcr) {
+              loanOcrDocs.push(loanOcr);
+            } else {
+              const loanDoc = asLoanDocument(value, recordId, revision);
+              if (loanDoc) {
+                ledger.loanDocuments.push(loanDoc);
+              } else {
+                const log = asStatementLog(value, recordId, revision);
+                if (log) ledger.statementLogs.push(log);
+              }
+            }
           }
         }
       } catch {
@@ -305,6 +360,18 @@ export async function loadPrivateLedger(
     log.ocrMarkdown = ocr.ocrMarkdown;
     log.ocrRecordId = ocr.recordId;
     log.ocrRevision = ocr.revision;
+  }
+
+  for (const ocr of loanOcrDocs) {
+    const doc = ledger.loanDocuments.find(
+      (row) =>
+        row.recordId === ocr.loanDocumentRecordId ||
+        (row.fileHash && `loan-ocr-${row.fileHash}` === ocr.recordId),
+    );
+    if (!doc) continue;
+    doc.ocrMarkdown = ocr.ocrMarkdown;
+    doc.ocrRecordId = ocr.recordId;
+    doc.ocrRevision = ocr.revision;
   }
 
   ledger.transactions.sort((a, b) => b.date.localeCompare(a.date));
