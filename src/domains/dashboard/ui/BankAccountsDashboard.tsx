@@ -1,6 +1,7 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
+import { PageSpinner } from "@/components/ui/spinner";
 import {
   ACCOUNT_SECTION_LABELS,
   detectCardNetwork,
@@ -513,27 +514,5 @@ export function BankAccountsDashboard({
 }
 
 export function BankAccountsLoadingSkeleton() {
-  return (
-    <div className="space-y-8">
-      {[0, 1].map((section) => (
-        <div key={section} className="space-y-2">
-          <div className="h-3 w-28 animate-pulse rounded bg-[var(--surface-2)]" />
-          <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)]">
-            {[0, 1].map((row) => (
-              <div
-                key={row}
-                className={`flex items-center justify-between px-4 py-3.5 ${row > 0 ? "border-t border-[var(--border)]" : ""}`}
-              >
-                <div className="space-y-2">
-                  <div className="h-4 w-48 animate-pulse rounded bg-[var(--surface-2)]" />
-                  <div className="h-3 w-24 animate-pulse rounded bg-[var(--surface-2)]" />
-                </div>
-                <div className="h-4 w-24 animate-pulse rounded bg-[var(--surface-2)]" />
-              </div>
-            ))}
-          </div>
-        </div>
-      ))}
-    </div>
-  );
+  return <PageSpinner />;
 }

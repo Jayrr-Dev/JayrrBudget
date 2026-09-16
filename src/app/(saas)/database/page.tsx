@@ -1,6 +1,7 @@
 "use client";
 
 import { DbExplorer } from "@/domains/db-explorer/ui/DbExplorer";
+import { PageSpinner } from "@/components/ui/spinner";
 import { api } from "@convex/_generated/api";
 import { useConvexAuth, useQuery } from "convex/react";
 
@@ -9,9 +10,7 @@ export default function DatabasePage() {
   const me = useQuery(api.users.me, isAuthenticated ? {} : "skip");
 
   if (me === undefined || me === null) {
-    return (
-      <p className="text-sm text-[var(--muted-foreground)]">Loading…</p>
-    );
+    return <PageSpinner />;
   }
 
   if (me.role !== "admin") {

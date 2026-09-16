@@ -1,9 +1,7 @@
 "use client";
 
-import {
-  BankAccountsDashboard,
-  BankAccountsLoadingSkeleton,
-} from "@/domains/dashboard/ui/BankAccountsDashboard";
+import { BankAccountsDashboard } from "@/domains/dashboard/ui/BankAccountsDashboard";
+import { Spinner } from "@/components/ui/spinner";
 import {
   LoadingSkeleton,
   useDashboard,
@@ -32,8 +30,12 @@ export default function OverviewPage() {
           <p className="text-sm tracking-[0.18em] text-[var(--muted-foreground)] uppercase">
             Latest statement
           </p>
-          <p className="mt-1 text-lg font-medium tracking-tight">
-            {formatDisplayDate(data?.latestStatementDate)}
+          <p className="mt-1 flex min-h-7 items-center justify-end text-lg font-medium tracking-tight">
+            {isInitialLoading ? (
+              <Spinner className="size-5" />
+            ) : (
+              formatDisplayDate(data?.latestStatementDate)
+            )}
           </p>
         </div>
       </header>
@@ -45,10 +47,7 @@ export default function OverviewPage() {
       ) : null}
 
       {isInitialLoading ? (
-        <div className="space-y-10">
-          <BankAccountsLoadingSkeleton />
-          <LoadingSkeleton />
-        </div>
+        <LoadingSkeleton />
       ) : data ? (
         <div className="space-y-10">
           <BankAccountsDashboard

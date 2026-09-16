@@ -12,10 +12,11 @@ import type {
 import { StatementUpload } from "@/domains/statements/ui/StatementUpload";
 import { dashboardFromPrivateLedger } from "@/domains/vault/application/dashboardFromPrivateLedger";
 import { usePrivateLedger } from "@/domains/vault/ui/usePrivateLedger";
+import { PageSpinner } from "@/components/ui/spinner";
 import { formatDisplayDate } from "@/shared/lib/format-date";
 
 export function useDashboard(transactionLimit: number | null = 250) {
-  const { isAuthenticated } = useConvexAuth();
+  const { isAuthenticated, isLoading: authLoading } = useConvexAuth();
   const privateLedger = usePrivateLedger();
   const result = useQuery(
     api.dashboard.get,
@@ -40,7 +41,7 @@ export function useDashboard(transactionLimit: number | null = 250) {
     return {
       data: locked ? undefined : encryptedData,
       error: privateLedger.error ? new Error(privateLedger.error) : null,
-      isPending: privateLedger.loading,
+      isPending: authLoading || privateLedger.loading,
       isError: Boolean(privateLedger.error),
       isSuccess: Boolean(encryptedData) && !locked,
       encryptedLedger: true as const,
@@ -52,7 +53,7 @@ export function useDashboard(transactionLimit: number | null = 250) {
   return {
     data: result?.ok ? result.data : undefined,
     error: result && !result.ok ? new Error(result.error) : null,
-    isPending: isAuthenticated && result === undefined,
+    isPending: authLoading || (isAuthenticated && result === undefined),
     isError: Boolean(result && !result.ok),
     isSuccess: Boolean(result?.ok),
     encryptedLedger: false as const,
@@ -246,22 +247,9 @@ function EmptyState({ text }: { text: string }) {
 }
 
 export function LoadingSkeleton() {
-  return (
-    <div className="space-y-4">
-      <div className="h-48 animate-pulse rounded-xl bg-[var(--surface-2)]" />
-    </div>
-  );
+  return <PageSpinner />;
 }
 
 export function OverviewBadgesSkeleton() {
-  return (
-    <div className="flex flex-wrap gap-2">
-      {[0, 1, 2].map((key) => (
-        <div
-          key={key}
-          className="h-7 w-28 animate-pulse rounded-full bg-[var(--surface-2)]"
-        />
-      ))}
-    </div>
-  );
+  return <PageSpinner className="min-h-16 py-8" />;
 }

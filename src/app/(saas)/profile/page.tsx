@@ -2,6 +2,7 @@
 
 import { api } from "@convex/_generated/api";
 import { VaultSecurityCard } from "@/components/layout/VaultSecurityCard";
+import { PageSpinner } from "@/components/ui/spinner";
 import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import { useEffect, useState } from "react";
 
@@ -31,9 +32,7 @@ export default function ProfilePage() {
   }, [me]);
 
   if (me === undefined || me === null) {
-    return (
-      <p className="text-sm text-[var(--muted-foreground)]">Loading…</p>
-    );
+    return <PageSpinner />;
   }
 
   return (

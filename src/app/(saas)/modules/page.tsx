@@ -2,6 +2,7 @@
 
 import { FeatureFlagManager } from "@/domains/feature-flags/ui/FeatureFlagManager";
 import { ModuleManager } from "@/domains/modules/ui/ModuleManager";
+import { PageSpinner } from "@/components/ui/spinner";
 import { api } from "@convex/_generated/api";
 import { useConvexAuth, useQuery } from "convex/react";
 
@@ -10,9 +11,7 @@ export default function ModulesPage() {
   const me = useQuery(api.users.me, isAuthenticated ? {} : "skip");
 
   if (me === undefined || me === null) {
-    return (
-      <p className="text-sm text-[var(--muted-foreground)]">Loading…</p>
-    );
+    return <PageSpinner />;
   }
 
   if (me.role !== "admin") {

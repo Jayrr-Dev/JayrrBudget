@@ -2,6 +2,7 @@
 
 import { badgeVariants } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { PageSpinner } from "@/components/ui/spinner";
 import {
   ChartContainer,
   ChartTooltip,
@@ -5849,16 +5850,7 @@ export function AnalysisDashboard() {
             </div>
           ) : null}
 
-          {query.isPending && !data ? (
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              {Array.from({ length: 4 }).map((_, index) => (
-                <div
-                  key={index}
-                  className="h-24 animate-pulse rounded-xl border border-[var(--border)] bg-[var(--muted)]/40"
-                />
-              ))}
-            </div>
-          ) : null}
+          {query.isPending && !data ? <PageSpinner /> : null}
 
           {data && data.transactionCount === 0 ? <EmptyState /> : null}
 

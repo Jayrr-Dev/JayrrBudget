@@ -4,6 +4,7 @@ import { createColumnHelper } from "@tanstack/react-table";
 import { useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
 import { DataTable } from "@/components/ui/data-table";
+import { PageSpinner } from "@/components/ui/spinner";
 import type { DataTableFeatures } from "@/components/ui/data-table-features";
 import { usePrivateLedger } from "@/domains/vault/ui/usePrivateLedger";
 import { useMemo } from "react";
@@ -160,12 +161,12 @@ export function MerchantsPanel() {
 
   if (privateLedger.encryptedLedger) {
     if (privateLedger.loading) {
-      return <p className="text-sm text-[var(--muted-foreground)]">Loading merchants…</p>;
+      return <PageSpinner />;
     }
     return (
       <div className="space-y-4">
         {privateLedger.loading || !privateLedger.unlocked ? (
-          <p className="text-sm text-[var(--muted-foreground)]">Loading merchants…</p>
+          <PageSpinner />
         ) : (
           <>
             <p className="text-sm text-[var(--muted-foreground)]">
@@ -191,11 +192,7 @@ export function MerchantsPanel() {
   }
 
   if (merchants === undefined) {
-    return (
-      <p className="text-sm text-[var(--muted-foreground)]">
-        Loading merchants…
-      </p>
-    );
+    return <PageSpinner />;
   }
 
   return (

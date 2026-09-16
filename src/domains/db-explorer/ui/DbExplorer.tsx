@@ -2,6 +2,7 @@
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { PageSpinner } from "@/components/ui/spinner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { tableHelp } from "@/domains/db-explorer/domain/columnHelp";
 import {
@@ -153,11 +154,7 @@ export function DbExplorer() {
   }
 
   if (schemaQuery.isPending) {
-    return (
-      <p className="text-sm text-[var(--muted-foreground)]">
-        Loading database…
-      </p>
-    );
+    return <PageSpinner />;
   }
 
   if (schemaQuery.isError) {
