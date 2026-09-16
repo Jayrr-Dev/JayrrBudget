@@ -1,4 +1,4 @@
-import { tool, type InferUITool, type UIMessage } from "ai";
+import { tool, type InferUITool } from "ai";
 import { z } from "zod";
 
 /**
@@ -73,24 +73,6 @@ export const askUserTool = tool({
 });
 
 export type AskUserUITool = InferUITool<typeof askUserTool>;
-
-/** UIMessage shape for Piggy chats that carry ask_user parts. */
-export type PiggyUIMessage = UIMessage<
-  unknown,
-  Record<string, never>,
-  { [ASK_USER_TOOL_NAME]: AskUserUITool }
->;
-
-export type AskUserPart = Extract<
-  PiggyUIMessage["parts"][number],
-  { type: `tool-${typeof ASK_USER_TOOL_NAME}` }
->;
-
-export function isAskUserPart(
-  part: PiggyUIMessage["parts"][number],
-): part is AskUserPart {
-  return part.type === `tool-${ASK_USER_TOOL_NAME}`;
-}
 
 /** One-line recap shown in the transcript after the user answers. */
 export function summarizeAskUserAnswers(output: AskUserOutput): string {
