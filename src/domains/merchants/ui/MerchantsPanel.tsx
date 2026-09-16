@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { EmptyPrompt } from "@/components/ui/empty-prompt";
 import { PageSpinner } from "@/components/ui/spinner";
+import { DecryptingPage } from "@/domains/vault/ui/DecryptingStatus";
 import {
   peekMerchants,
   rememberMerchants,
@@ -333,7 +334,7 @@ export function MerchantsPanel() {
 
   if (privateLedger.encryptedLedger) {
     if (privateLedger.loading || !privateLedger.unlocked) {
-      return <PageSpinner />;
+      return <DecryptingPage />;
     }
     if (encryptedRows.length === 0) {
       return (

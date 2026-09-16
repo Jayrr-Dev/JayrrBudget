@@ -47,22 +47,25 @@ type Box = { x: number; y: number; w: number; h: number };
 type Skeleton = ExcalidrawElementSkeleton;
 
 /** Fields shared by every element type, safe to patch via newElementWith. */
+type Writable<T> = { -readonly [P in keyof T]: T[P] };
 type ElementPatch = Partial<
-  Pick<
-    ExcalidrawElement,
-    | "x"
-    | "y"
-    | "width"
-    | "height"
-    | "strokeColor"
-    | "backgroundColor"
-    | "fillStyle"
-    | "strokeWidth"
-    | "strokeStyle"
-    | "roughness"
-    | "opacity"
-    | "boundElements"
-    | "frameId"
+  Writable<
+    Pick<
+      ExcalidrawElement,
+      | "x"
+      | "y"
+      | "width"
+      | "height"
+      | "strokeColor"
+      | "backgroundColor"
+      | "fillStyle"
+      | "strokeWidth"
+      | "strokeStyle"
+      | "roughness"
+      | "opacity"
+      | "boundElements"
+      | "frameId"
+    >
   >
 >;
 

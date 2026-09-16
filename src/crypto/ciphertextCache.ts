@@ -49,10 +49,9 @@ function asArrayBuffer(value: unknown): ArrayBuffer {
   if (value instanceof ArrayBuffer) return value;
   if (ArrayBuffer.isView(value)) {
     const view = value as ArrayBufferView;
-    return view.buffer.slice(
-      view.byteOffset,
-      view.byteOffset + view.byteLength,
-    );
+    const copy = new Uint8Array(new ArrayBuffer(view.byteLength));
+    copy.set(new Uint8Array(view.buffer, view.byteOffset, view.byteLength));
+    return copy.buffer;
   }
   throw new Error("Encrypted record bytes missing.");
 }

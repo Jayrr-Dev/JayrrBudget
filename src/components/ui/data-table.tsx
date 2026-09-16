@@ -270,6 +270,7 @@ interface DataTableProps<TData extends RowData> {
   onRefresh?: () => void | Promise<void>;
   isRefreshing?: boolean;
   isLoading?: boolean;
+  loadingSlot?: ReactNode;
 }
 
 function csvColumnLabel(column: {
@@ -356,6 +357,7 @@ export function DataTable<TData extends RowData>({
   onRefresh,
   isRefreshing = false,
   isLoading = false,
+  loadingSlot,
 }: DataTableProps<TData>) {
   const [sorting, setSorting] = useState<SortingState>(initialSorting);
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
@@ -1008,7 +1010,7 @@ export function DataTable<TData extends RowData>({
             </ul>
           ) : (
             <div className="flex min-h-40 items-center justify-center rounded-xl border border-[var(--border)] bg-surface-elevated px-4 py-10 text-center text-sm text-foreground-muted">
-              {isLoading ? <Spinner className="size-6" /> : "No results."}
+              {isLoading ? (loadingSlot ?? <Spinner className="size-6" />) : "No results."}
             </div>
           )}
         </div>
@@ -1279,7 +1281,7 @@ export function DataTable<TData extends RowData>({
                   >
                     {isLoading ? (
                       <span className="inline-flex w-full items-center justify-center">
-                        <Spinner className="size-6" />
+                        {loadingSlot ?? <Spinner className="size-6" />}
                       </span>
                     ) : (
                       "No results."

@@ -1,7 +1,7 @@
 "use client";
 
 import { VaultSecurityCard } from "@/components/layout/VaultSecurityCard";
-import { Spinner } from "@/components/ui/spinner";
+import { DecryptingStatus } from "@/domains/vault/ui/DecryptingStatus";
 import { usePrivateLedger } from "@/domains/vault/ui/usePrivateLedger";
 
 export function useVaultPageLocked() {
@@ -19,13 +19,8 @@ export function VaultLockedGate({ children }: { children: React.ReactNode }) {
     <div className="flex flex-1 items-center justify-center py-8">
       <div className="w-full max-w-md">
         {privateLedger.loading ? (
-          <div
-            className="flex justify-center py-10 text-[var(--muted-foreground)]"
-            role="status"
-            aria-live="polite"
-            aria-label="Loading vault"
-          >
-            <Spinner className="size-6" />
+          <div className="flex justify-center py-10">
+            <DecryptingStatus />
           </div>
         ) : (
           <VaultSecurityCard />

@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/popover";
 import { RowActionsMenu } from "@/components/ui/row-actions-menu";
 import { PageSpinner } from "@/components/ui/spinner";
+import { DecryptingPage } from "@/domains/vault/ui/DecryptingStatus";
 import {
   ScrollTopX,
   Table,
@@ -6026,7 +6027,13 @@ export function AnalysisDashboard() {
             </div>
           ) : null}
 
-          {query.isPending && !data ? <PageSpinner /> : null}
+          {query.isPending && !data ? (
+            query.encryptedLedger ? (
+              <DecryptingPage />
+            ) : (
+              <PageSpinner />
+            )
+          ) : null}
 
           {data && data.transactionCount === 0 ? <EmptyState /> : null}
 

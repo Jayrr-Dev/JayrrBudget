@@ -5,6 +5,7 @@ import { DataTable } from "@/components/ui/data-table";
 import type { DataTableFeatures } from "@/components/ui/data-table-features";
 import type { StatementUploadLog } from "@/domains/statements/domain/types";
 import { StatementUploadRowActions } from "@/domains/statements/ui/StatementUploadRowActions";
+import { DecryptingStatus } from "@/domains/vault/ui/DecryptingStatus";
 import type { PrivateStatementLog } from "@/domains/vault/domain/privateLedger";
 import { usePrivateLedger } from "@/domains/vault/ui/usePrivateLedger";
 import { api } from "@convex/_generated/api";
@@ -295,11 +296,9 @@ export function StatementUploadLogs() {
   if (privateLedger.encryptedLedger) {
     if (privateLedger.loading || !privateLedger.unlocked) {
       return (
-        <p className="text-sm text-[var(--muted-foreground)]">
-          {privateLedger.unlocked
-            ? "Loading parse logs…"
-            : "Loading encrypted parse logs…"}
-        </p>
+        <div className="flex justify-center py-10">
+          <DecryptingStatus />
+        </div>
       );
     }
     const uploads = privateLedger.ledger.statementLogs.map((log) =>

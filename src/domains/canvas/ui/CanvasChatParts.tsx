@@ -98,6 +98,18 @@ const TOOL_META: Record<string, ToolMeta> = {
     running: "Wiping the board…",
     done: "Board cleared",
   },
+  remember_about_user: {
+    icon: Brain,
+    preparing: "Making a note…",
+    running: "Remembering…",
+    done: "Noted for next time",
+  },
+  forget_about_user: {
+    icon: Eraser,
+    preparing: "Finding that note…",
+    running: "Forgetting…",
+    done: "Forgotten",
+  },
 };
 
 const FALLBACK_META: ToolMeta = {

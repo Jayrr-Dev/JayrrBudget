@@ -16,6 +16,8 @@ import { TagsCell } from "@/domains/transactions/ui/TagsCell";
 import { CreateTagButton } from "@/domains/transactions/ui/TagsColumnHeader";
 import { TaxonomyCell } from "@/domains/transactions/ui/TaxonomyCell";
 import { TransactionRowActions } from "@/domains/transactions/ui/TransactionRowActions";
+import { DecryptingStatus } from "@/domains/vault/ui/DecryptingStatus";
+import { usePrivateLedger } from "@/domains/vault/ui/usePrivateLedger";
 import { cn } from "@/lib/utils";
 import { formatDisplayDate } from "@/shared/lib/format-date";
 import { Icon } from "@iconify/react";
@@ -655,6 +657,7 @@ export function TransactionsDataTable({
 }) {
   const queryClient = useQueryClient();
   const dashboardFetches = useIsFetching({ queryKey: queryKeys.dashboard });
+  const encrypted = usePrivateLedger().encryptedLedger;
 
   const accountNameById = useMemo(() => {
     const map = new Map<string, string>();
@@ -755,6 +758,7 @@ export function TransactionsDataTable({
       toolbar={<CreateTagButton transactions={transactions} />}
       isRefreshing={dashboardFetches > 0}
       isLoading={loading}
+      loadingSlot={encrypted ? <DecryptingStatus /> : undefined}
       onRefresh={() =>
         queryClient.refetchQueries({ queryKey: queryKeys.dashboard })
       }

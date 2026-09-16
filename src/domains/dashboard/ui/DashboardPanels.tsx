@@ -2,6 +2,7 @@
 
 import { EmptyPrompt } from "@/components/ui/empty-prompt";
 import { PageSpinner } from "@/components/ui/spinner";
+import { DecryptingPage } from "@/domains/vault/ui/DecryptingStatus";
 import {
   formatLedgerSpend,
   formatMoney,
@@ -288,5 +289,9 @@ function StatBadge({ label, value }: { label: string; value: string }) {
 }
 
 export function OverviewBadgesSkeleton() {
+  const privateLedger = usePrivateLedger();
+  if (privateLedger.encryptedLedger) {
+    return <DecryptingPage className="min-h-16 py-8" />;
+  }
   return <PageSpinner className="min-h-16 py-8" />;
 }

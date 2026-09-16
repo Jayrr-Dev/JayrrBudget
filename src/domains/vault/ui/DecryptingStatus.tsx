@@ -1,5 +1,6 @@
 "use client";
 
+import { cn } from "@/lib/utils";
 import { useId } from "react";
 import styles from "./DecryptingStatus.module.css";
 
@@ -77,6 +78,20 @@ export function DecryptingStatus({ label = "Decrypting" }: { label?: string }) {
         {label}
         <span className={styles.dots} />
       </p>
+    </div>
+  );
+}
+
+export function DecryptingPage({ className }: { className?: string }) {
+  return (
+    <div
+      data-slot="decrypting-page"
+      className={cn(
+        "flex min-h-[16rem] w-full items-center justify-center py-16",
+        className,
+      )}
+    >
+      <DecryptingStatus />
     </div>
   );
 }
