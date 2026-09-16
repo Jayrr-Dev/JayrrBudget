@@ -1,9 +1,5 @@
 "use client";
 
-import { createColumnHelper } from "@tanstack/react-table";
-import { useConvexAuth, useQuery } from "convex/react";
-import { Icon } from "@iconify/react";
-import { api } from "@convex/_generated/api";
 import { Badge } from "@/components/ui/badge";
 import { DataTable } from "@/components/ui/data-table";
 import type { DataTableFeatures } from "@/components/ui/data-table-features";
@@ -11,13 +7,21 @@ import type { StatementUploadLog } from "@/domains/statements/domain/types";
 import { StatementUploadRowActions } from "@/domains/statements/ui/StatementUploadRowActions";
 import type { PrivateStatementLog } from "@/domains/vault/domain/privateLedger";
 import { usePrivateLedger } from "@/domains/vault/ui/usePrivateLedger";
+import { api } from "@convex/_generated/api";
+import { Icon } from "@iconify/react";
+import { createColumnHelper } from "@tanstack/react-table";
+import { useConvexAuth, useQuery } from "convex/react";
 
-const columnHelper = createColumnHelper<DataTableFeatures, StatementUploadLog>();
+const columnHelper = createColumnHelper<
+  DataTableFeatures,
+  StatementUploadLog
+>();
 
 function formatWhen(iso: string) {
   return new Date(iso).toLocaleString(undefined, {
-    dateStyle: "medium",
-    timeStyle: "short",
+    month: "short",
+    day: "numeric",
+    year: "numeric",
   });
 }
 
@@ -41,7 +45,7 @@ const columns = columnHelper.columns([
       </span>
     ),
     cell: ({ row }) => (
-        <div className="flex items-center justify-center">
+      <div className="flex items-center justify-center">
         <StatementUploadRowActions upload={row.original} />
       </div>
     ),
@@ -52,7 +56,7 @@ const columns = columnHelper.columns([
   columnHelper.accessor("createdAt", {
     header: "When",
     enableHiding: false,
-    meta: { width: "12rem" },
+    meta: { width: "8.5rem", nowrap: true },
     cell: ({ getValue }) => (
       <span className="whitespace-nowrap text-sm">
         {formatWhen(String(getValue()))}
@@ -101,7 +105,9 @@ const columns = columnHelper.columns([
       const total = transactionCount ?? 0;
       if (total === 0) {
         return (
-          <span className="text-xs text-[var(--muted-foreground)]">No txns</span>
+          <span className="text-xs text-[var(--muted-foreground)]">
+            No txns
+          </span>
         );
       }
       const label = categorized ? "Categorized" : "Not categorized";
@@ -140,7 +146,7 @@ const columns = columnHelper.columns([
     id: "balance",
     header: "Statement",
     enableHiding: false,
-    meta: { width: "12rem" },
+    meta: { width: "14rem", nowrap: true },
     cell: ({ row }) => {
       const {
         openingBalance,
@@ -154,25 +160,18 @@ const columns = columnHelper.columns([
         statementPeriodStart && statementPeriodEnd
           ? `${statementPeriodStart} → ${statementPeriodEnd}`
           : null;
+      const range = `${openingBalance != null ? openingBalance.toFixed(2) : "-"} → ${closingBalance != null ? closingBalance.toFixed(2) : "-"}`;
+      const check =
+        balanceOk === true
+          ? "Balanced"
+          : balanceOk === false
+            ? `Off by ${balanceDelta != null ? balanceDelta.toFixed(2) : "?"}`
+            : "No check";
+      const label = [period, range, check].filter(Boolean).join(" · ");
       return (
-        <div className="min-w-[10rem] text-sm">
-          {period ? (
-            <p className="text-xs text-[var(--muted-foreground)]">{period}</p>
-          ) : null}
-          <p>
-            {openingBalance != null ? openingBalance.toFixed(2) : "-"} →{" "}
-            {closingBalance != null ? closingBalance.toFixed(2) : "-"}
-          </p>
-          {balanceOk === true ? (
-            <p className="text-xs text-emerald-700">Balanced</p>
-          ) : balanceOk === false ? (
-            <p className="text-xs text-red-700">
-              Off by {balanceDelta != null ? balanceDelta.toFixed(2) : "?"}
-            </p>
-          ) : (
-            <p className="text-xs text-[var(--muted-foreground)]">No check</p>
-          )}
-        </div>
+        <span className="block truncate text-sm" title={label}>
+          {label}
+        </span>
       );
     },
   }),
@@ -199,12 +198,12 @@ function isVaultTxCategorized(tx: {
 }) {
   return Boolean(
     tx.merchantClean &&
-      tx.sectionName &&
-      tx.categoryName &&
-      tx.spreadName &&
-      tx.transactionTypeName &&
-      tx.txnCode &&
-      tx.channel,
+    tx.sectionName &&
+    tx.categoryName &&
+    tx.spreadName &&
+    tx.transactionTypeName &&
+    tx.txnCode &&
+    tx.channel,
   );
 }
 
@@ -277,7 +276,9 @@ export function StatementUploadLogs() {
     if (privateLedger.loading || !privateLedger.unlocked) {
       return (
         <p className="text-sm text-[var(--muted-foreground)]">
-          {privateLedger.unlocked ? "Loading parse logs…" : "Loading encrypted parse logs…"}
+          {privateLedger.unlocked
+            ? "Loading parse logs…"
+            : "Loading encrypted parse logs…"}
         </p>
       );
     }

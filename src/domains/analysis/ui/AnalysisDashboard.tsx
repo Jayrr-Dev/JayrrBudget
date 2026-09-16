@@ -707,7 +707,7 @@ function TimeSeriesTable({
               return (
                 <TableHead
                   key={column.key}
-                  className="max-w-[5.25rem] text-right whitespace-normal sm:max-w-none sm:whitespace-nowrap"
+                  className="max-w-[5.25rem] text-right whitespace-nowrap sm:max-w-none"
                 >
                   {filterable ? (
                     <button
@@ -1342,7 +1342,7 @@ function OtherBreakdownTable({
               const on = visibleSet.has(item.name);
               return (
                 <TableRow key={item.name} className={cn(!on && "opacity-40")}>
-                  <TableCell className="font-medium">
+                  <TableCell className="max-w-[18rem] truncate font-medium">
                     <button
                       type="button"
                       aria-pressed={on}
@@ -1353,9 +1353,10 @@ function OtherBreakdownTable({
                         )
                       }
                       className={cn(
-                        "text-left font-medium hover:bg-muted",
+                        "block max-w-full truncate text-left font-medium hover:bg-muted",
                         !on && "line-through",
                       )}
+                      title={item.name}
                     >
                       {item.name}
                     </button>
@@ -2168,7 +2169,7 @@ function TaxonomyBreakdownTable({
             const nested = stackedBreakdownText(row.name, stacked, currency);
             return (
               <TableRow key={row.name} className={cn(!on && "opacity-40")}>
-                <TableCell className="font-medium">
+                <TableCell className="max-w-[16rem] truncate font-medium">
                   <button
                     type="button"
                     aria-pressed={on}
@@ -2179,15 +2180,16 @@ function TaxonomyBreakdownTable({
                       )
                     }
                     className={cn(
-                      "text-left font-medium hover:bg-muted",
+                      "block max-w-full truncate text-left font-medium hover:bg-muted",
                       !on && "line-through",
                     )}
+                    title={row.name}
                   >
                     {row.name}
                   </button>
                 </TableCell>
                 {nestedLabel ? (
-                  <TableCell className="max-w-md whitespace-normal text-[var(--muted-foreground)]">
+                  <TableCell className="max-w-md truncate text-[var(--muted-foreground)]">
                     {nested ?? "-"}
                   </TableCell>
                 ) : null}

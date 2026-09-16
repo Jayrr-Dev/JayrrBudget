@@ -1,5 +1,6 @@
 "use client";
 
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
 import { DataTable } from "@/components/ui/data-table";
@@ -107,9 +108,13 @@ function childNamesCell(names: string[], emptyLabel: string) {
     );
   }
   return (
-    <span className="block truncate text-sm" title={names.join(", ")}>
-      {names.join(", ")}
-    </span>
+    <div className="flex max-w-full flex-nowrap gap-1 overflow-hidden">
+      {names.map((name) => (
+        <Badge key={name} variant="secondary" className="shrink-0">
+          {name}
+        </Badge>
+      ))}
+    </div>
   );
 }
 
@@ -658,6 +663,7 @@ export function ClassificationsPanel() {
           header: "Categories",
           cell: ({ getValue }) =>
             childNamesCell(getValue() ?? [], "No categories"),
+          meta: { wrap: true },
           filterFn: (row, _columnId, filterValue) => {
             const names = row.original.categoryNames ?? [];
             const needle = String(filterValue ?? "")
@@ -678,6 +684,7 @@ export function ClassificationsPanel() {
             </span>
           ),
           filterFn: "includesString",
+          meta: { grow: true },
         }),
       ]),
     [isAdmin, isUserScope, mine],
@@ -737,6 +744,7 @@ export function ClassificationsPanel() {
           header: "Sub",
           cell: ({ getValue }) =>
             childNamesCell(getValue() ?? [], "Needs a subcategory"),
+          meta: { wrap: true },
           filterFn: (row, _columnId, filterValue) => {
             const names = row.original.subcategoryNames ?? [];
             const needle = String(filterValue ?? "")
@@ -757,6 +765,7 @@ export function ClassificationsPanel() {
             </span>
           ),
           filterFn: "includesString",
+          meta: { grow: true },
         }),
       ]),
     [isAdmin, isUserScope, mine],
@@ -832,6 +841,7 @@ export function ClassificationsPanel() {
             </span>
           ),
           filterFn: "includesString",
+          meta: { grow: true },
         }),
       ]),
     [isAdmin, isUserScope, mine],
@@ -886,6 +896,7 @@ export function ClassificationsPanel() {
             </span>
           ),
           filterFn: "includesString",
+          meta: { grow: true },
         }),
       ]),
     [isAdmin, isUserScope, mine],

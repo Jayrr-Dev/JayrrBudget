@@ -6,14 +6,13 @@ import { Input } from "@/components/ui/input";
 import { ScrollTopX } from "@/components/ui/table";
 import type { DashboardTransaction } from "@/domains/dashboard/domain/types";
 import { MoneyText } from "@/domains/dashboard/ui/MoneyText";
-import { ledgerDebitCredit } from "@/domains/transactions/domain/debitCredit";
 import { formatDisplayDate } from "@/shared/lib/format-date";
 import { isValid, parseISO, subMonths, subWeeks } from "date-fns";
 import { useMemo, useState } from "react";
 
 type RangeKey = "4w" | "3m" | "6m" | "12m";
 type StatusKey = "all" | "pending" | "posted";
-type SortKey = "date" | "label" | "debit" | "credit" | "balance";
+type SortKey = "date" | "label" | "amount" | "balance";
 type SortDir = "asc" | "desc";
 
 const RANGE_OPTIONS: { key: RangeKey; label: string }[] = [
@@ -93,24 +92,9 @@ function compareRows(a: Row, b: Row, sortKey: SortKey, sortDir: SortDir) {
         sensitivity: "base",
       });
       break;
-    case "debit": {
-      const av = ledgerDebitCredit(a).debit;
-      const bv = ledgerDebitCredit(b).debit;
-      if (av == null && bv == null) cmp = 0;
-      else if (av == null) cmp = 1;
-      else if (bv == null) cmp = -1;
-      else cmp = av - bv;
+    case "amount":
+      cmp = a.amount - b.amount;
       break;
-    }
-    case "credit": {
-      const av = ledgerDebitCredit(a).credit;
-      const bv = ledgerDebitCredit(b).credit;
-      if (av == null && bv == null) cmp = 0;
-      else if (av == null) cmp = 1;
-      else if (bv == null) cmp = -1;
-      else cmp = av - bv;
-      break;
-    }
     case "balance": {
       const av = a.runningBalance;
       const bv = b.runningBalance;
@@ -334,8 +318,7 @@ export function AccountPastTransactions({
           <colgroup>
             <col className="w-[10rem]" />
             <col />
-            <col className="w-[6.75rem]" />
-            <col className="w-[6.75rem]" />
+            <col className="w-[9.75rem]" />
             <col className="w-[9.75rem]" />
           </colgroup>
           <thead>
@@ -356,16 +339,8 @@ export function AccountPastTransactions({
                 inset
               />
               <SortHeader
-                label="Debit"
-                column="debit"
-                sortKey={sortKey}
-                sortDir={sortDir}
-                align="right"
-                onSort={handleSort}
-              />
-              <SortHeader
-                label="Credit"
-                column="credit"
+                label="Amount"
+                column="amount"
                 sortKey={sortKey}
                 sortDir={sortDir}
                 align="right"
@@ -384,14 +359,12 @@ export function AccountPastTransactions({
           <tbody>
             {rows.length === 0 ? (
               <tr>
-                <td colSpan={5} className="py-10 text-center text-[#6b7280]">
+                <td colSpan={4} className="py-10 text-center text-[#6b7280]">
                   No transactions in this range.
                 </td>
               </tr>
             ) : (
-              rows.map((txn) => {
-                const { debit, credit } = ledgerDebitCredit(txn);
-                return (
+              rows.map((txn) => (
                   <tr
                     key={txn.transactionId}
                     className="border-b border-[#e5e9ef]"
@@ -400,19 +373,12 @@ export function AccountPastTransactions({
                       {formatDisplayDate(txn.date)}
                     </td>
                     <td className="min-w-0 py-3.5 pr-3 pl-3 text-[#1a2330]">
-                      <span className="line-clamp-2 break-words">
+                      <span className="block truncate" title={txnLabel(txn)}>
                         {txnLabel(txn)}
                       </span>
                     </td>
                     <td className="whitespace-nowrap py-3.5 pr-3 text-right text-[#1a2330]">
-                      {debit != null ? (
-                        <MoneyText amount={debit} currency={currency} />
-                      ) : null}
-                    </td>
-                    <td className="whitespace-nowrap py-3.5 pr-3 text-right text-[#1a2330]">
-                      {credit != null ? (
-                        <MoneyText amount={credit} currency={currency} />
-                      ) : null}
+                      <MoneyText amount={txn.amount} currency={currency} />
                     </td>
                     <td className="whitespace-nowrap py-3.5 text-right text-[#1a2330]">
                       <MoneyText
@@ -421,8 +387,7 @@ export function AccountPastTransactions({
                       />
                     </td>
                   </tr>
-                );
-              })
+                ))
             )}
           </tbody>
         </table>

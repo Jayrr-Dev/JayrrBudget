@@ -19,12 +19,13 @@ import {
   PopoverTitle,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { usePrivateLedger } from "@/domains/vault/ui/usePrivateLedger";
 import { errorMessage } from "@/shared/lib/error-message";
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
-import { useMutation } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import { Info } from "lucide-react";
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 
 export type EditableMerchant = {
@@ -41,6 +42,21 @@ type Props = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
 };
+
+function transactionNoun(count: number) {
+  return count === 1 ? "transaction" : "transactions";
+}
+
+function impactCopy(
+  affectedCount: number,
+  mergeIntoName: string | null,
+): string {
+  const noun = transactionNoun(affectedCount);
+  if (mergeIntoName) {
+    return `Merges into ${mergeIntoName}. ${affectedCount} ${noun} will be affected.`;
+  }
+  return `${affectedCount} ${noun} will be affected.`;
+}
 
 function Field({
   label,
@@ -61,12 +77,49 @@ function Field({
 
 export function EditMerchantDialog({ merchant, open, onOpenChange }: Props) {
   const update = useMutation(api.merchants.update);
+  const privateLedger = usePrivateLedger();
   const [name, setName] = useState("");
   const [company, setCompany] = useState("");
   const [brand, setBrand] = useState("");
   const [website, setWebsite] = useState("");
   const [logoUrl, setLogoUrl] = useState("");
   const [busy, setBusy] = useState(false);
+
+  const convexImpactArgs =
+    open && merchant != null && !privateLedger.encryptedLedger
+      ? {
+          merchantId: merchant.id as Id<"merchants">,
+          name,
+        }
+      : "skip";
+  const convexImpact = useQuery(api.merchants.editImpact, convexImpactArgs);
+
+  const encryptedAffectedCount = useMemo(() => {
+    if (!privateLedger.encryptedLedger || !merchant) return 0;
+    const label = merchant.name;
+    let count = 0;
+    for (const tx of privateLedger.ledger.transactions) {
+      const txLabel = tx.merchantClean ?? tx.merchantName ?? null;
+      if (txLabel === label) count += 1;
+    }
+    return count;
+  }, [
+    merchant,
+    privateLedger.encryptedLedger,
+    privateLedger.ledger.transactions,
+  ]);
+
+  const impactLabel = (() => {
+    if (!open || !merchant) return null;
+    if (privateLedger.encryptedLedger) {
+      return impactCopy(encryptedAffectedCount, null);
+    }
+    if (convexImpact === undefined) return "Checking linked transactions…";
+    return impactCopy(
+      convexImpact.affectedCount,
+      convexImpact.merge ? convexImpact.mergeIntoName : null,
+    );
+  })();
 
   useEffect(() => {
     if (!open || !merchant) return;
@@ -211,7 +264,12 @@ export function EditMerchantDialog({ merchant, open, onOpenChange }: Props) {
               />
             </Field>
           </div>
-          <DialogFooter>
+          <DialogFooter className="sm:items-center sm:justify-between">
+            {impactLabel ? (
+              <p className="text-sm text-muted-foreground sm:mr-auto">
+                {impactLabel}
+              </p>
+            ) : null}
             <Button
               type="button"
               variant="outline"

@@ -10,10 +10,7 @@ import type {
 import { queryKeys } from "@/domains/dashboard/queries/query-keys";
 import { MoneyText } from "@/domains/dashboard/ui/MoneyText";
 import { LOG_MONEY_RANGE_OPTIONS } from "@/domains/transactions/domain/amountLogRange";
-import {
-  historyMatchLabel,
-  ledgerDebitCredit,
-} from "@/domains/transactions/domain/debitCredit";
+import { historyMatchLabel } from "@/domains/transactions/domain/debitCredit";
 import { TagsCell } from "@/domains/transactions/ui/TagsCell";
 import { CreateTagButton } from "@/domains/transactions/ui/TagsColumnHeader";
 import { TaxonomyCell } from "@/domains/transactions/ui/TaxonomyCell";
@@ -78,18 +75,11 @@ function buildColumns(
   accountNameById: Map<string, string>,
   transactions: DashboardTransaction[],
 ) {
-  const debitLabels: string[] = [];
-  const creditLabels: string[] = [];
   const amountLabels: string[] = [];
   for (const txn of transactions) {
     const ccy = txn.isoCurrencyCode ?? "CAD";
-    const { debit, credit } = ledgerDebitCredit(txn);
-    if (debit != null) debitLabels.push(formatMoney(debit, ccy));
-    if (credit != null) creditLabels.push(formatMoney(credit, ccy));
     amountLabels.push(formatMoney(Number(txn.amount), ccy));
   }
-  const debitWidth = autoMoneyWidth("Debit", debitLabels);
-  const creditWidth = autoMoneyWidth("Credit", creditLabels);
   const amountWidth = autoMoneyWidth("Amount", amountLabels, { filter: true });
 
   // Left = paper facts (AI read from statement). Right = AI invent / labels.
@@ -147,58 +137,21 @@ function buildColumns(
           filterFn: "equalsString",
           sortFn: "text",
         }),
-        columnHelper.accessor((row) => ledgerDebitCredit(row).debit, {
-          id: "debit",
-          header: "Debit",
+        columnHelper.accessor("amount", {
+          header: "Amount",
           meta: bandMeta(
-            debitWidth,
+            amountWidth,
             "read",
-            "Money out (purchases, fees, PAD).",
+            "Signed amount. Positive = money out.",
           ),
-          cell: ({ row }) => {
-            const debit = ledgerDebitCredit(row.original).debit;
-            if (debit == null) {
-              return (
-                <span className="block text-right text-sm text-[var(--muted-foreground)]">
-                  -
-                </span>
-              );
-            }
-            return (
-              <MoneyText
-                amount={debit}
-                currency={row.original.isoCurrencyCode ?? "CAD"}
-                className="leading-snug text-foreground"
-              />
-            );
-          },
-          sortFn: "basic",
-        }),
-        columnHelper.accessor((row) => ledgerDebitCredit(row).credit, {
-          id: "credit",
-          header: "Credit",
-          meta: bandMeta(
-            creditWidth,
-            "read",
-            "Money in (deposits, refunds, payments).",
+          cell: ({ row, getValue }) => (
+            <MoneyText
+              amount={Number(getValue())}
+              currency={row.original.isoCurrencyCode ?? "CAD"}
+              className="leading-snug text-foreground"
+            />
           ),
-          cell: ({ row }) => {
-            const credit = ledgerDebitCredit(row.original).credit;
-            if (credit == null) {
-              return (
-                <span className="block text-right text-sm text-[var(--muted-foreground)]">
-                  -
-                </span>
-              );
-            }
-            return (
-              <MoneyText
-                amount={credit}
-                currency={row.original.isoCurrencyCode ?? "CAD"}
-                className="leading-snug text-foreground"
-              />
-            );
-          },
+          filterFn: "amountLogRange",
           sortFn: "basic",
         }),
       ]),
@@ -367,23 +320,6 @@ function buildColumns(
           meta: bandMeta("4rem", "read", "Currency code (usually CAD)."),
           cell: ({ getValue }) => textOrDash(getValue()),
           sortFn: "text",
-        }),
-        columnHelper.accessor("amount", {
-          header: "Amount",
-          meta: bandMeta(
-            amountWidth,
-            "read",
-            "Signed amount. Positive = money out.",
-          ),
-          cell: ({ row, getValue }) => (
-            <MoneyText
-              amount={Number(getValue())}
-              currency={row.original.isoCurrencyCode ?? "CAD"}
-              className="text-sm leading-snug"
-            />
-          ),
-          filterFn: "amountLogRange",
-          sortFn: "basic",
         }),
       ]),
     }),
@@ -686,7 +622,6 @@ export function TransactionsDataTable({
         locationRegion: false,
         locationCountry: false,
         isoCurrencyCode: false,
-        amount: false,
         source: false,
         transactionId: false,
         merchant: false,

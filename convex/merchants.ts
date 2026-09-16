@@ -7,6 +7,7 @@ import {
   merchantLabelFromTxn,
   updateMerchantOrMerge,
 } from "./lib/ensureMerchant";
+import { merchantSlug } from "./lib/merchantSlug";
 import type { Id } from "./_generated/dataModel";
 
 const merchantDoc = v.object({
@@ -184,6 +185,75 @@ export const upsert = mutation({
       logoUrl: args.logoUrl,
     });
     return toMerchantDoc(row);
+  },
+});
+
+/** How many ledger rows an edit would update, including a same-name merge. */
+export const editImpact = query({
+  args: {
+    merchantId: v.id("merchants"),
+    name: v.string(),
+  },
+  returns: v.object({
+    linkedCount: v.number(),
+    merge: v.boolean(),
+    mergeIntoName: v.union(v.string(), v.null()),
+    affectedCount: v.number(),
+  }),
+  handler: async (ctx, args) => {
+    const user = await requireUser(ctx);
+    const source = await ctx.db.get(args.merchantId);
+    if (!source || source.userId !== user._id) {
+      throw new Error("Merchant not found");
+    }
+
+    const linked = await ctx.db
+      .query("transactions")
+      .withIndex("by_userId_merchantId", (q) =>
+        q.eq("userId", user._id).eq("merchantId", source._id),
+      )
+      .collect();
+    const linkedCount = linked.length;
+
+    const slug = merchantSlug(args.name.trim());
+    if (!slug) {
+      return {
+        linkedCount,
+        merge: false,
+        mergeIntoName: null,
+        affectedCount: linkedCount,
+      };
+    }
+
+    const clash = await ctx.db
+      .query("merchants")
+      .withIndex("by_userId_slug", (q) =>
+        q.eq("userId", user._id).eq("slug", slug),
+      )
+      .unique();
+
+    if (!clash || clash._id === source._id) {
+      return {
+        linkedCount,
+        merge: false,
+        mergeIntoName: null,
+        affectedCount: linkedCount,
+      };
+    }
+
+    const keeperTxns = await ctx.db
+      .query("transactions")
+      .withIndex("by_userId_merchantId", (q) =>
+        q.eq("userId", user._id).eq("merchantId", clash._id),
+      )
+      .collect();
+
+    return {
+      linkedCount,
+      merge: true,
+      mergeIntoName: clash.name,
+      affectedCount: linkedCount + keeperTxns.length,
+    };
   },
 });
 
