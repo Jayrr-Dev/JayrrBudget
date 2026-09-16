@@ -68,6 +68,8 @@ type ColumnMeta = {
   label?: string;
   description?: string;
   nowrap?: boolean;
+  /** Allow wrapping. Default is a single clipped line. */
+  wrap?: boolean;
   /** Skip max-width so table-fixed leftover space can go to this column. */
   grow?: boolean;
 };
@@ -227,7 +229,7 @@ export function DataTable<TData extends RowData>({
   toolbar,
   enableColumnToggle = false,
   csvFilename,
-  fillWidth = false,
+  fillWidth = true,
   onRefresh,
   isRefreshing = false,
   isLoading = false,
@@ -802,7 +804,7 @@ export function DataTable<TData extends RowData>({
           <Table
             className={
               fillWidth
-                ? "w-full min-w-full table-fixed"
+                ? "w-full min-w-max table-fixed"
                 : "w-max min-w-max table-fixed"
             }
           >
@@ -892,7 +894,7 @@ export function DataTable<TData extends RowData>({
                           data-sticky-col={isStickyCol ? true : undefined}
                           style={columnSizeStyle(columnMeta)}
                           className={[
-                            "h-auto min-h-10 whitespace-normal",
+                            "h-auto min-h-10 whitespace-nowrap",
                             width ? "overflow-hidden" : "",
                             isActionsCol ? "px-0" : "",
                             showGroupTitle
@@ -1015,7 +1017,7 @@ export function DataTable<TData extends RowData>({
                       const width = cellMeta?.width;
                       const inventBand = cellMeta?.band === "invent";
                       const isActionsCol = cell.column.id === "actions";
-                      const nowrap = cellMeta?.nowrap === true;
+                      const wrap = cellMeta?.wrap === true;
                       return (
                         <TableCell
                           key={cell.id}
@@ -1026,9 +1028,9 @@ export function DataTable<TData extends RowData>({
                           }
                           style={columnSizeStyle(cellMeta)}
                           className={[
-                            nowrap
-                              ? "whitespace-nowrap align-middle"
-                              : "whitespace-normal align-top",
+                            wrap
+                              ? "whitespace-normal align-top"
+                              : "overflow-hidden text-ellipsis whitespace-nowrap align-middle",
                             width ? "overflow-hidden" : "",
                             isActionsCol ? "px-0" : "",
                             inventBand

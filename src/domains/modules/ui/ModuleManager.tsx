@@ -36,35 +36,55 @@ const columns = columnHelper.columns([
       const Icon = resolveModuleIcon(row.original.icon);
       return <Icon className="size-5 text-[var(--muted-foreground)]" />;
     },
+    meta: { label: "Icon", width: "2.5rem", nowrap: true },
   }),
   columnHelper.accessor("name", {
     header: "Module",
     cell: ({ row }) => (
-      <div>
-        <p className="font-medium">{row.original.name}</p>
-        <p className="text-sm text-[var(--muted-foreground)]">
-          {row.original.description}
-        </p>
-      </div>
+      <span
+        className="block truncate font-medium"
+        title={`${row.original.name} — ${row.original.description}`}
+      >
+        {row.original.name}
+      </span>
     ),
     filterFn: "includesString",
+    meta: { width: "14rem", nowrap: true, grow: true },
+  }),
+  columnHelper.accessor("description", {
+    header: "Description",
+    cell: ({ getValue }) => (
+      <span
+        className="block truncate text-sm text-[var(--muted-foreground)]"
+        title={String(getValue())}
+      >
+        {String(getValue())}
+      </span>
+    ),
+    filterFn: "includesString",
+    meta: { width: "22rem", nowrap: true, grow: true },
   }),
   columnHelper.accessor("category", {
     header: "Category",
     cell: ({ getValue }) => (
       <Badge variant="secondary">{String(getValue())}</Badge>
     ),
+    meta: { width: "8rem", nowrap: true },
   }),
   columnHelper.accessor("href", {
     header: "Route",
     cell: ({ getValue }) => (
-      <span className="font-mono text-xs">{String(getValue())}</span>
+      <span className="block truncate font-mono text-xs" title={String(getValue())}>
+        {String(getValue())}
+      </span>
     ),
+    meta: { width: "10rem", nowrap: true },
   }),
   columnHelper.display({
     id: "enabled",
     header: "Enabled",
     cell: ({ row }) => <ModuleEnabledSwitch module={row.original} />,
+    meta: { label: "Enabled", width: "6rem", nowrap: true },
   }),
 ]);
 

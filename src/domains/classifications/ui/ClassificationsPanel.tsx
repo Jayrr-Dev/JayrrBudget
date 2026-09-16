@@ -106,7 +106,11 @@ function childNamesCell(names: string[], emptyLabel: string) {
       </span>
     );
   }
-  return <span className="line-clamp-2 text-sm">{names.join(", ")}</span>;
+  return (
+    <span className="block truncate text-sm" title={names.join(", ")}>
+      {names.join(", ")}
+    </span>
+  );
 }
 
 function uniqueFilterOptions(values: Array<string | null | undefined>) {
@@ -648,7 +652,7 @@ export function ClassificationsPanel() {
           ),
           filterFn: "includesString",
           sortFn: "text",
-          meta: { width: "11rem" },
+          meta: { width: "11rem", nowrap: true },
         }),
         sectionHelper.accessor("categoryNames", {
           header: "Categories",
@@ -666,7 +670,10 @@ export function ClassificationsPanel() {
         sectionHelper.accessor("description", {
           header: "Description",
           cell: ({ getValue }) => (
-            <span className="line-clamp-2 text-sm text-[var(--muted-foreground)]">
+            <span
+              className="block truncate text-sm text-[var(--muted-foreground)]"
+              title={getValue() || "-"}
+            >
               {getValue() || "-"}
             </span>
           ),
@@ -742,7 +749,10 @@ export function ClassificationsPanel() {
         categoryHelper.accessor("description", {
           header: "Description",
           cell: ({ getValue }) => (
-            <span className="line-clamp-2 text-sm text-[var(--muted-foreground)]">
+            <span
+              className="block truncate text-sm text-[var(--muted-foreground)]"
+              title={getValue() || "-"}
+            >
               {getValue() || "-"}
             </span>
           ),
@@ -814,7 +824,10 @@ export function ClassificationsPanel() {
         subcategoryHelper.accessor("description", {
           header: "Description",
           cell: ({ getValue }) => (
-            <span className="line-clamp-2 text-sm text-[var(--muted-foreground)]">
+            <span
+              className="block truncate text-sm text-[var(--muted-foreground)]"
+              title={getValue() || "-"}
+            >
               {getValue() || "-"}
             </span>
           ),
@@ -865,7 +878,10 @@ export function ClassificationsPanel() {
         tagHelper.accessor("description", {
           header: "Description",
           cell: ({ getValue }) => (
-            <span className="line-clamp-2 text-sm text-[var(--muted-foreground)]">
+            <span
+              className="block truncate text-sm text-[var(--muted-foreground)]"
+              title={getValue() || "-"}
+            >
               {getValue() || "-"}
             </span>
           ),

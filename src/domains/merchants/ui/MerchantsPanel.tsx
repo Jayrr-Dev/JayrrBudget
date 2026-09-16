@@ -71,96 +71,86 @@ function actionsHeader() {
   );
 }
 
-function MerchantsTable({
-  rows,
-  canEdit,
-}: {
-  rows: MerchantRow[];
-  canEdit: boolean;
-}) {
+function MerchantsTable({ rows }: { rows: MerchantRow[] }) {
   const [editing, setEditing] = useState<MerchantRow | null>(null);
-  const columns = useMemo(() => {
-    const rest = [
-      columnHelper.accessor("name", {
-        header: "Merchant",
-        cell: ({ getValue }) => cellText(getValue(), "text-sm font-medium"),
-        filterFn: "includesString",
-        sortFn: "text",
-        meta: { width: "18rem", nowrap: true, grow: true },
-      }),
-      columnHelper.accessor("updatedAt", {
-        header: "Updated",
-        cell: ({ getValue }) => cellText(formatWhen(getValue())),
-        sortFn: "basic",
-        meta: { width: "8.5rem", nowrap: true },
-      }),
-      columnHelper.accessor("slug", {
-        header: "Slug",
-        cell: ({ getValue }) =>
-          cellText(
-            getValue(),
-            "font-mono text-xs text-[var(--muted-foreground)]",
-          ),
-        filterFn: "includesString",
-        sortFn: "text",
-        meta: { width: "14rem", nowrap: true },
-      }),
-      columnHelper.accessor("company", {
-        header: "Company",
-        cell: ({ getValue }) => cellText(getValue()),
-        filterFn: "equalsString",
-        sortFn: "text",
-        meta: { width: "14rem", nowrap: true },
-      }),
-      columnHelper.accessor("brand", {
-        header: "Brand",
-        cell: ({ getValue }) => cellText(getValue()),
-        filterFn: "fuzzy",
-        sortFn: "text",
-        meta: { width: "12rem", nowrap: true },
-      }),
-      columnHelper.accessor("website", {
-        header: "Website",
-        cell: ({ getValue }) => cellText(getValue()),
-        filterFn: "includesString",
-        sortFn: "text",
-        meta: { width: "16rem", nowrap: true },
-      }),
-    ];
-    if (!canEdit) {
-      return columnHelper.columns(rest);
-    }
-    return columnHelper.columns([
-      columnHelper.display({
-        id: "actions",
-        header: actionsHeader,
-        cell: ({ row }) => (
-          <div className="flex items-center justify-center">
-            <DropdownMenu>
-              <DropdownMenuTrigger
-                className="inline-flex size-6 cursor-pointer items-center justify-center rounded-[min(var(--radius-md),12px)] text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]"
-                aria-label={`Actions for ${row.original.name}`}
-              >
-                <Icon icon="basil:menu-outline" className="size-4" />
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" className="w-auto min-w-36">
-                <DropdownMenuItem
-                  className="cursor-pointer"
-                  onClick={() => setEditing(row.original)}
+  const columns = useMemo(
+    () =>
+      columnHelper.columns([
+        columnHelper.display({
+          id: "actions",
+          header: () => actionsHeader(),
+          cell: ({ row }) => (
+            <div className="flex items-center justify-center">
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  className="inline-flex size-6 cursor-pointer items-center justify-center rounded-[min(var(--radius-md),12px)] text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]"
+                  aria-label={`Actions for ${row.original.name}`}
                 >
-                  Edit
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-        ),
-        enableSorting: false,
-        enableHiding: true,
-        meta: { label: "Actions", width: "2rem" },
-      }),
-      ...rest,
-    ]);
-  }, [canEdit]);
+                  <Icon icon="basil:menu-outline" className="size-4" />
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="w-auto min-w-36">
+                  <DropdownMenuItem
+                    className="cursor-pointer"
+                    onClick={() => setEditing(row.original)}
+                  >
+                    Edit
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          ),
+          enableSorting: false,
+          enableHiding: false,
+          meta: { label: "Actions", width: "2rem" },
+        }),
+        columnHelper.accessor("name", {
+          header: "Merchant",
+          cell: ({ getValue }) => cellText(getValue(), "text-sm font-medium"),
+          filterFn: "includesString",
+          sortFn: "text",
+          meta: { width: "18rem", nowrap: true, grow: true },
+        }),
+        columnHelper.accessor("updatedAt", {
+          header: "Updated",
+          cell: ({ getValue }) => cellText(formatWhen(getValue())),
+          sortFn: "basic",
+          meta: { width: "8.5rem", nowrap: true },
+        }),
+        columnHelper.accessor("slug", {
+          header: "Slug",
+          cell: ({ getValue }) =>
+            cellText(
+              getValue(),
+              "font-mono text-xs text-[var(--muted-foreground)]",
+            ),
+          filterFn: "includesString",
+          sortFn: "text",
+          meta: { width: "14rem", nowrap: true },
+        }),
+        columnHelper.accessor("company", {
+          header: "Company",
+          cell: ({ getValue }) => cellText(getValue()),
+          filterFn: "equalsString",
+          sortFn: "text",
+          meta: { width: "14rem", nowrap: true },
+        }),
+        columnHelper.accessor("brand", {
+          header: "Brand",
+          cell: ({ getValue }) => cellText(getValue()),
+          filterFn: "fuzzy",
+          sortFn: "text",
+          meta: { width: "12rem", nowrap: true },
+        }),
+        columnHelper.accessor("website", {
+          header: "Website",
+          cell: ({ getValue }) => cellText(getValue()),
+          filterFn: "includesString",
+          sortFn: "text",
+          meta: { width: "16rem", nowrap: true },
+        }),
+      ]),
+    [],
+  );
 
   return (
     <>
@@ -176,15 +166,13 @@ function MerchantsTable({
         fillWidth
         initialColumnVisibility={HIDDEN_COLUMNS}
       />
-      {canEdit ? (
-        <EditMerchantDialog
-          merchant={editing}
-          open={editing != null}
-          onOpenChange={(open) => {
-            if (!open) setEditing(null);
-          }}
-        />
-      ) : null}
+      <EditMerchantDialog
+        merchant={editing}
+        open={editing != null}
+        onOpenChange={(open) => {
+          if (!open) setEditing(null);
+        }}
+      />
     </>
   );
 }
@@ -245,7 +233,7 @@ export function MerchantsPanel() {
         </p>
       );
     }
-    return <MerchantsTable rows={encryptedRows} canEdit={false} />;
+    return <MerchantsTable rows={encryptedRows} />;
   }
 
   if (merchants === undefined) {
@@ -260,7 +248,5 @@ export function MerchantsPanel() {
     );
   }
 
-  return (
-    <MerchantsTable rows={merchants as MerchantRow[]} canEdit />
-  );
+  return <MerchantsTable rows={merchants as MerchantRow[]} />;
 }

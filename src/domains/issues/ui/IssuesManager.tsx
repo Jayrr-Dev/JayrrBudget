@@ -114,10 +114,15 @@ const columns = columnHelper.columns([
   columnHelper.accessor("createdAt", {
     header: "When",
     cell: ({ getValue }) => (
-      <span className="whitespace-nowrap text-xs text-[var(--muted-foreground)]">
-        {new Date(Number(getValue())).toLocaleString()}
+      <span className="text-xs text-[var(--muted-foreground)]">
+        {new Date(Number(getValue())).toLocaleString(undefined, {
+          month: "short",
+          day: "numeric",
+          year: "numeric",
+        })}
       </span>
     ),
+    meta: { width: "8.5rem", nowrap: true },
   }),
   columnHelper.accessor("status", {
     header: "Status",
@@ -126,25 +131,25 @@ const columns = columnHelper.columns([
         {String(getValue())}
       </Badge>
     ),
+    meta: { width: "7rem", nowrap: true },
   }),
   columnHelper.accessor("message", {
     header: "Issue",
-    cell: ({ row }) => (
-      <div className="max-w-md">
-        <p className="font-medium leading-snug">{row.original.message}</p>
-        {row.original.url ? (
-          <p className="mt-1 truncate font-mono text-xs text-[var(--muted-foreground)]">
-            {row.original.url}
-          </p>
-        ) : null}
-        {row.original.userNote ? (
-          <p className="mt-1 text-xs text-[var(--muted-foreground)]">
-            Note: {row.original.userNote}
-          </p>
-        ) : null}
-      </div>
-    ),
+    cell: ({ row }) => {
+      const extra = [row.original.url, row.original.userNote]
+        .filter(Boolean)
+        .join(" · ");
+      const title = extra
+        ? `${row.original.message}\n${extra}`
+        : row.original.message;
+      return (
+        <span className="block truncate font-medium" title={title}>
+          {row.original.message}
+        </span>
+      );
+    },
     filterFn: "includesString",
+    meta: { width: "22rem", nowrap: true, grow: true },
   }),
   columnHelper.accessor("source", {
     header: "Source",
@@ -153,19 +158,22 @@ const columns = columnHelper.columns([
         {sourceLabel(getValue() as IssueRow["source"])}
       </Badge>
     ),
+    meta: { width: "8rem", nowrap: true },
   }),
   columnHelper.accessor("reporterEmail", {
     header: "Reporter",
     cell: ({ getValue }) => (
-      <span className="text-sm text-[var(--muted-foreground)]">
+      <span className="block truncate text-sm text-[var(--muted-foreground)]">
         {getValue() ? String(getValue()) : "-"}
       </span>
     ),
+    meta: { width: "12rem", nowrap: true },
   }),
   columnHelper.display({
     id: "actions",
     header: "",
     cell: ({ row }) => <StatusActions issue={row.original} />,
+    meta: { label: "Actions", width: "10rem", nowrap: true },
   }),
 ]);
 

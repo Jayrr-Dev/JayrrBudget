@@ -62,41 +62,40 @@ const columns = columnHelper.columns([
   columnHelper.accessor("filename", {
     header: "File",
     enableHiding: false,
-    meta: { width: "14rem" },
-    cell: ({ row }) => (
-      <div className="min-w-0">
-        <p className="truncate font-medium">{row.original.filename}</p>
-        <p className="truncate text-xs text-[var(--muted-foreground)]">
-          {[row.original.institutionName, row.original.accountMask]
-            .filter(Boolean)
-            .join(" · ") || "-"}
-        </p>
-      </div>
-    ),
+    meta: { width: "18rem", nowrap: true, grow: true },
+    cell: ({ row }) => {
+      const extra = [row.original.institutionName, row.original.accountMask]
+        .filter(Boolean)
+        .join(" · ");
+      const title = extra
+        ? `${row.original.filename} · ${extra}`
+        : row.original.filename;
+      return (
+        <span className="block truncate font-medium" title={title}>
+          {row.original.filename}
+        </span>
+      );
+    },
     filterFn: "includesString",
   }),
   columnHelper.accessor("status", {
     header: "Status",
     enableHiding: false,
-    meta: { width: "8rem" },
+    meta: { width: "8rem", nowrap: true },
     cell: ({ row }) => (
-      <div className="space-y-1">
-        <Badge variant={statusVariant(row.original.status)}>
-          {row.original.status}
-        </Badge>
-        {row.original.error ? (
-          <p className="max-w-[14rem] text-xs text-red-700">
-            {row.original.error}
-          </p>
-        ) : null}
-      </div>
+      <Badge
+        variant={statusVariant(row.original.status)}
+        title={row.original.error ?? row.original.status}
+      >
+        {row.original.status}
+      </Badge>
     ),
   }),
   columnHelper.display({
     id: "categorized",
     header: "Categories",
     enableHiding: false,
-    meta: { width: "8rem" },
+    meta: { width: "10rem", nowrap: true },
     cell: ({ row }) => {
       const { categorized, categorizedCount, transactionCount } = row.original;
       const total = transactionCount ?? 0;
@@ -105,38 +104,35 @@ const columns = columnHelper.columns([
           <span className="text-xs text-[var(--muted-foreground)]">No txns</span>
         );
       }
+      const label = categorized ? "Categorized" : "Not categorized";
       return (
-        <div className="space-y-1">
-          <Badge variant={categorized ? "secondary" : "outline"}>
-            {categorized ? "Categorized" : "Not categorized"}
-          </Badge>
-          <p className="text-xs text-[var(--muted-foreground)]">
-            {categorizedCount}/{total}
-          </p>
-        </div>
+        <span
+          className="block truncate text-sm"
+          title={`${label} · ${categorizedCount}/${total}`}
+        >
+          {label} · {categorizedCount}/{total}
+        </span>
       );
     },
   }),
   columnHelper.accessor("pageCount", {
     header: "Pages",
     enableHiding: false,
-    meta: { width: "5rem" },
+    meta: { width: "5rem", nowrap: true },
     cell: ({ getValue }) => String(getValue() ?? "-"),
   }),
   columnHelper.display({
     id: "counts",
     header: "Txns",
     enableHiding: false,
-    meta: { width: "7rem" },
+    meta: { width: "10rem", nowrap: true },
     cell: ({ row }) => {
       const { transactionCount, insertedCount, updatedCount } = row.original;
+      const label = `${transactionCount ?? 0} · ${insertedCount ?? 0} new · ${updatedCount ?? 0} existing`;
       return (
-        <div className="text-sm">
-          <p>{transactionCount ?? 0} total</p>
-          <p className="text-xs text-[var(--muted-foreground)]">
-            {insertedCount ?? 0} new · {updatedCount ?? 0} existing
-          </p>
-        </div>
+        <span className="block truncate text-sm" title={label}>
+          {label}
+        </span>
       );
     },
   }),

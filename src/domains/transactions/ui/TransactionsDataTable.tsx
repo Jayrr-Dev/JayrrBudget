@@ -46,9 +46,10 @@ function textOrDash(value: string | number | boolean | null | undefined) {
   if (value == null || value === "") {
     return <span className="text-sm text-[var(--muted-foreground)]">-</span>;
   }
+  const label = String(value);
   return (
-    <span className="line-clamp-2 block text-sm leading-snug break-words">
-      {String(value)}
+    <span className="block truncate text-sm" title={label}>
+      {label}
     </span>
   );
 }
@@ -131,9 +132,15 @@ function buildColumns(
         }),
         columnHelper.accessor("name", {
           header: "Description",
-          meta: bandMeta("28rem", "read", "Statement line text from the PDF."),
+          meta: {
+            ...bandMeta("28rem", "read", "Statement line text from the PDF."),
+            grow: true,
+          },
           cell: ({ getValue }) => (
-            <span className="line-clamp-2 block text-sm leading-snug font-medium break-words">
+            <span
+              className="block truncate text-sm font-medium"
+              title={String(getValue())}
+            >
               {String(getValue())}
             </span>
           ),
@@ -303,7 +310,7 @@ function buildColumns(
             header: "Name",
             meta: bandMeta("22rem", "read", "Friendly account name."),
             cell: ({ getValue }) => (
-              <span className="line-clamp-2 block text-sm leading-snug break-words">
+              <span className="block truncate text-sm" title={String(getValue())}>
                 {String(getValue())}
               </span>
             ),
@@ -414,7 +421,10 @@ function buildColumns(
             "Stable fingerprint for this ledger line.",
           ),
           cell: ({ getValue }) => (
-            <span className="line-clamp-2 block font-mono text-[11px] leading-snug break-all">
+            <span
+              className="block truncate font-mono text-[11px]"
+              title={String(getValue())}
+            >
               {String(getValue())}
             </span>
           ),
@@ -452,7 +462,10 @@ function buildColumns(
                 );
               }
               return (
-                <span className="line-clamp-2 block text-sm leading-snug font-medium break-words">
+                <span
+                  className="block truncate text-sm font-medium"
+                  title={String(value)}
+                >
                   {String(value)}
                 </span>
               );
@@ -477,12 +490,15 @@ function buildColumns(
         columnHelper.accessor((row) => row.tagNames ?? [], {
           id: "tags",
           header: "Tags",
-          meta: bandMeta(
-            "18rem",
-            "invent",
-            "Manual tags you add to rows.",
-            "Tags",
-          ),
+          meta: {
+            ...bandMeta(
+              "18rem",
+              "invent",
+              "Manual tags you add to rows.",
+              "Tags",
+            ),
+            wrap: true,
+          },
           cell: ({ row, getValue }) => (
             <TagsCell
               transactionId={row.original.transactionId}
@@ -552,10 +568,13 @@ function buildColumns(
             }
             return (
               <div className="min-w-0">
-                <p className="line-clamp-2 text-sm leading-snug break-words">
+                <p className="truncate text-sm" title={label}>
                   {label}
                 </p>
-                <p className="line-clamp-2 text-[11px] leading-snug break-words text-[var(--muted-foreground)]">
+                <p
+                  className="truncate text-[11px] text-[var(--muted-foreground)]"
+                  title={raw}
+                >
                   {raw}
                 </p>
               </div>
