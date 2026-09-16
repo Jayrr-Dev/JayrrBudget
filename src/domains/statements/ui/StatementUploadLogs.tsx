@@ -31,7 +31,7 @@ const columns = columnHelper.columns([
   columnHelper.display({
     id: "actions",
     header: () => (
-      <span className="flex w-full items-center justify-center">
+      <span className="flex items-center justify-center">
         <Icon
           icon="mynaui:mouse-pointer-click-solid"
           className="size-4 text-[var(--muted-foreground)]"
@@ -41,13 +41,13 @@ const columns = columnHelper.columns([
       </span>
     ),
     cell: ({ row }) => (
-      <div className="flex w-full items-center justify-center">
+        <div className="flex items-center justify-center">
         <StatementUploadRowActions upload={row.original} />
       </div>
     ),
     enableSorting: false,
     enableHiding: true,
-    meta: { label: "Actions", width: "3.25rem" },
+    meta: { label: "Actions", width: "2rem" },
   }),
   columnHelper.accessor("createdAt", {
     header: "When",

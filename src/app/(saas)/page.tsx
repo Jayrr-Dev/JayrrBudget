@@ -1,11 +1,7 @@
 "use client";
 
-import { Spinner } from "@/components/ui/spinner";
 import { BankAccountsDashboard } from "@/domains/dashboard/ui/BankAccountsDashboard";
-import {
-  LoadingSkeleton,
-  useDashboard,
-} from "@/domains/dashboard/ui/DashboardPanels";
+import { useDashboard } from "@/domains/dashboard/ui/DashboardPanels";
 import { TransactionsDataTable } from "@/domains/transactions/ui/TransactionsDataTable";
 import { formatDisplayDate } from "@/shared/lib/format-date";
 
@@ -18,24 +14,18 @@ export default function OverviewPage() {
     <div className="space-y-8">
       <header className="flex items-start justify-between gap-6 border-b border-[var(--border)] pb-6">
         <div className="space-y-2">
-          <p className="type-kicker">
-            Accounts
-          </p>
+          <p className="type-kicker">Accounts</p>
           <h1 className="type-page">Dashboard</h1>
           <p className="type-lead max-w-xl">
             See balances across chequing, credit, and loan accounts.
           </p>
         </div>
         <div className="shrink-0 text-right">
-          <p className="type-kicker">
-            Latest statement
-          </p>
-          <p className="type-section mt-1 flex min-h-7 items-center justify-end">
-            {isInitialLoading ? (
-              <Spinner className="size-5" />
-            ) : (
-              formatDisplayDate(data?.latestStatementDate)
-            )}
+          <p className="type-kicker">Latest statement</p>
+          <p className="type-section mt-1 min-h-7">
+            {isInitialLoading
+              ? "\u00a0"
+              : formatDisplayDate(data?.latestStatementDate)}
           </p>
         </div>
       </header>
@@ -46,13 +36,12 @@ export default function OverviewPage() {
         </div>
       ) : null}
 
-      {isInitialLoading ? (
-        <LoadingSkeleton />
-      ) : data ? (
+      {dashboard.isError && !dashboard.locked && !data ? null : (
         <div className="space-y-8">
           <BankAccountsDashboard
-            accounts={data.accounts}
-            transactions={data.transactions}
+            accounts={data?.accounts ?? []}
+            transactions={data?.transactions}
+            loading={isInitialLoading}
           />
           <section className="space-y-4">
             <div>
@@ -61,17 +50,20 @@ export default function OverviewPage() {
               </h2>
               <p className="text-sm text-[var(--muted-foreground)]">
                 Search, sort, and filter ledger rows.
-                {data.hasMoreTransactions
+                {data?.hasMoreTransactions
                   ? ` Showing latest ${data.transactions.length}.`
-                  : data.transactionCount
+                  : data?.transactionCount
                     ? ` ${data.transactionCount} stored.`
                     : ""}
               </p>
             </div>
-            <TransactionsDataTable transactions={data.transactions} />
+            <TransactionsDataTable
+              transactions={data?.transactions ?? []}
+              loading={isInitialLoading}
+            />
           </section>
         </div>
-      ) : null}
+      )}
     </div>
   );
 }

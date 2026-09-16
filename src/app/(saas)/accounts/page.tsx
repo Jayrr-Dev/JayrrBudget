@@ -1,9 +1,6 @@
 "use client";
 
-import {
-  BankAccountsDashboard,
-  BankAccountsLoadingSkeleton,
-} from "@/domains/dashboard/ui/BankAccountsDashboard";
+import { BankAccountsDashboard } from "@/domains/dashboard/ui/BankAccountsDashboard";
 import { useDashboard } from "@/domains/dashboard/ui/DashboardPanels";
 import { useSearchParams } from "next/navigation";
 import { Suspense } from "react";
@@ -16,9 +13,23 @@ function AccountsContent() {
 
   if (selectedAccountId) {
     if (dashboard.isPending && !data) {
-      return <BankAccountsLoadingSkeleton />;
+      return (
+        <BankAccountsDashboard
+          accounts={[]}
+          loading
+          selectedAccountId={selectedAccountId}
+        />
+      );
     }
-    if (dashboard.locked) return <BankAccountsLoadingSkeleton />;
+    if (dashboard.locked) {
+      return (
+        <BankAccountsDashboard
+          accounts={[]}
+          loading
+          selectedAccountId={selectedAccountId}
+        />
+      );
+    }
     if (!data) return null;
     return (
       <BankAccountsDashboard
@@ -38,7 +49,7 @@ function AccountsContent() {
         </p>
       </header>
       {dashboard.isPending && !data ? (
-        <BankAccountsLoadingSkeleton />
+        <BankAccountsDashboard accounts={[]} loading />
       ) : data ? (
         <BankAccountsDashboard
           accounts={data.accounts}
@@ -60,7 +71,7 @@ export default function AccountsPage() {
               Open an account to see its balance and recent activity.
             </p>
           </header>
-          <BankAccountsLoadingSkeleton />
+          <BankAccountsDashboard accounts={[]} loading />
         </div>
       }
     >

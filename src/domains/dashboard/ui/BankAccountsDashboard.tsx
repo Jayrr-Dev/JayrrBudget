@@ -1,7 +1,7 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
-import { PageSpinner } from "@/components/ui/spinner";
+import { Spinner } from "@/components/ui/spinner";
 import {
   ACCOUNT_SECTION_LABELS,
   detectCardNetwork,
@@ -21,6 +21,7 @@ import type {
 } from "@/domains/dashboard/domain/types";
 import { AccountPastTransactions } from "@/domains/dashboard/ui/AccountPastTransactions";
 import { AddLoanDialog } from "@/domains/dashboard/ui/AddLoanDialog";
+import { MoneyText } from "@/domains/dashboard/ui/MoneyText";
 import {
   LOAN_TYPES,
   formatLoanRate,
@@ -179,17 +180,23 @@ function LoanPaymentHistory({
                       ? "assumed"
                       : formatDisplayDate(row.postedDate)}
                   </td>
-                  <td className="px-3 py-2 text-right tabular-nums">
-                    {formatMoney(row.paymentAmount, currency)}
+                  <td className="px-3 py-2 text-right">
+                    <MoneyText amount={row.paymentAmount} currency={currency} />
                   </td>
-                  <td className="px-3 py-2 text-right tabular-nums">
-                    {formatMoney(row.interestPortion, currency)}
+                  <td className="px-3 py-2 text-right">
+                    <MoneyText
+                      amount={row.interestPortion}
+                      currency={currency}
+                    />
                   </td>
-                  <td className="px-3 py-2 text-right tabular-nums">
-                    {formatMoney(row.principalPortion, currency)}
+                  <td className="px-3 py-2 text-right">
+                    <MoneyText
+                      amount={row.principalPortion}
+                      currency={currency}
+                    />
                   </td>
-                  <td className="px-3 py-2 text-right tabular-nums font-medium">
-                    {formatMoney(row.balanceAfter, currency)}
+                  <td className="px-3 py-2 text-right font-medium">
+                    <MoneyText amount={row.balanceAfter} currency={currency} />
                   </td>
                 </tr>
               ))}
@@ -374,6 +381,21 @@ function AccountDetailView({
   );
 }
 
+function SectionCardSpinner() {
+  return (
+    <div
+      className="flex min-h-32 items-center justify-center rounded-xl border border-[var(--border)] bg-surface-elevated text-[var(--muted-foreground)]"
+      role="status"
+      aria-live="polite"
+      aria-label="Loading accounts"
+    >
+      <Spinner className="size-6" />
+    </div>
+  );
+}
+
+const LOADING_SECTIONS: AccountSectionId[] = ["deposit", "credit", "lending"];
+
 function ChevronRight() {
   return (
     <svg
@@ -398,11 +420,13 @@ export function BankAccountsDashboard({
   accounts,
   transactions = [],
   selectedAccountId = null,
+  loading = false,
 }: {
   accounts: DashboardAccount[];
   transactions?: DashboardTransaction[];
   /** When set (e.g. from `/accounts?account=`), open that account's detail view. */
   selectedAccountId?: string | null;
+  loading?: boolean;
 }) {
   const router = useRouter();
   const [addLoanOpen, setAddLoanOpen] = useState(false);
@@ -435,6 +459,23 @@ export function BankAccountsDashboard({
     );
   }, [transactions, selectedAccount]);
 
+  if (loading && selectedAccountId) {
+    return (
+      <div className="space-y-8">
+        <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-surface-elevated">
+          <div
+            className="flex min-h-64 items-center justify-center text-[var(--muted-foreground)]"
+            role="status"
+            aria-live="polite"
+            aria-label="Loading account"
+          >
+            <Spinner className="size-8" />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (selectedAccount) {
     return (
       <AccountDetailView
@@ -442,6 +483,36 @@ export function BankAccountsDashboard({
         transactions={selectedTransactions}
         onBack={() => router.replace("/accounts")}
       />
+    );
+  }
+
+  if (loading) {
+    return (
+      <div className="space-y-8">
+        {LOADING_SECTIONS.map((id) => (
+          <section key={id} className="space-y-2">
+            <div className="flex items-center gap-1.5 px-1">
+              <h2 className="text-xs font-medium tracking-[0.14em] text-[var(--muted-foreground)] uppercase">
+                {ACCOUNT_SECTION_LABELS[id]}
+              </h2>
+              {id === "lending" ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  className="size-4 shrink-0 rounded-full border border-[var(--border)] text-[var(--muted-foreground)]"
+                  aria-label="Register Lending Account"
+                  onClick={() => setAddLoanOpen(true)}
+                >
+                  <PlusIcon className="size-2.5" />
+                </Button>
+              ) : null}
+            </div>
+            <SectionCardSpinner />
+          </section>
+        ))}
+        <AddLoanDialog open={addLoanOpen} onOpenChange={setAddLoanOpen} />
+      </div>
     );
   }
 
@@ -512,8 +583,4 @@ export function BankAccountsDashboard({
       <AddLoanDialog open={addLoanOpen} onOpenChange={setAddLoanOpen} />
     </div>
   );
-}
-
-export function BankAccountsLoadingSkeleton() {
-  return <PageSpinner />;
 }

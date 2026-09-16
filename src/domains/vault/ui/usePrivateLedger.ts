@@ -146,6 +146,7 @@ export function usePrivateLedger() {
         hydrating),
     error,
     ledger,
+    version,
     reload: bumpLedgerEpoch,
   };
 }

@@ -63,13 +63,20 @@ import {
   type AnalysisTab,
   type FacetPane,
 } from "@/domains/analysis/ui/analysisUiPrefs";
-import { formatMoney } from "@/domains/dashboard/domain/money";
+import {
+  formatMoney,
+  formatMoneyParts,
+} from "@/domains/dashboard/domain/money";
+import { MoneyText } from "@/domains/dashboard/ui/MoneyText";
 import { useScratchNoteActions } from "@/domains/scratch-note/scratchNoteStore";
+import {
+  DescriptionActionsButton,
+  EditDescriptionDialog,
+} from "@/domains/transactions/ui/EditDescriptionDialog";
 import { analysisFromPrivateLedger } from "@/domains/vault/application/analysisFromPrivateLedger";
 import { usePrivateLedger } from "@/domains/vault/ui/usePrivateLedger";
 import { cn } from "@/lib/utils";
 import { downloadCsv, toCsv } from "@/shared/lib/csv";
-import { normalizeCurrencyCode } from "@/shared/lib/currency";
 import {
   formatDisplayDate,
   formatShortDisplayDate,
@@ -188,6 +195,7 @@ function useAnalysis(range: AnalysisRange, period: AnalysisPeriod) {
       privateLedger.encryptedLedger,
       privateLedger.unlocked,
       privateLedger.ledger.transactions.length,
+      privateLedger.version,
     ],
     staleTime: privateLedger.encryptedLedger ? 0 : 5 * 60_000,
     gcTime: 30 * 60_000,
@@ -229,20 +237,10 @@ function useAnalysis(range: AnalysisRange, period: AnalysisPeriod) {
 }
 
 function moneyTick(value: number, currency: string) {
-  const code = normalizeCurrencyCode(currency);
-  try {
-    return new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency: code,
-      notation: "compact",
-      maximumFractionDigits: 1,
-    }).format(value);
-  } catch {
-    return `${code} ${value.toLocaleString("en-US", {
-      notation: "compact",
-      maximumFractionDigits: 1,
-    })}`;
-  }
+  const parts = formatMoneyParts(value, currency, true);
+  if (!parts) return "-";
+  const sign = parts.negative ? "-" : "";
+  return `${parts.symbol} ${sign}${parts.number}`;
 }
 
 function InfoTip({ label, children }: { label: string; children: string }) {
@@ -750,9 +748,15 @@ function TimeSeriesTable({
                       !on && "opacity-40",
                     )}
                   >
-                    {valueKind === "percent"
-                      ? formatPercent(Number(row[column.key] ?? 0))
-                      : formatMoney(Number(row[column.key] ?? 0), currency)}
+                    {valueKind === "percent" ? (
+                      formatPercent(Number(row[column.key] ?? 0))
+                    ) : (
+                      <MoneyText
+                        amount={Number(row[column.key] ?? 0)}
+                        currency={currency}
+                        className="text-[0.7rem] sm:text-sm"
+                      />
+                    )}
                   </TableCell>
                 );
               })}
@@ -1356,8 +1360,8 @@ function OtherBreakdownTable({
                       {item.name}
                     </button>
                   </TableCell>
-                  <TableCell className="text-right font-mono tabular-nums">
-                    {formatMoney(item.spend, currency)}
+                  <TableCell className="text-right">
+                    <MoneyText amount={item.spend} currency={currency} />
                   </TableCell>
                   <TableCell className="text-right font-mono tabular-nums text-[var(--muted-foreground)]">
                     {on ? formatShare(item.spend, total) : "-"}
@@ -1369,8 +1373,8 @@ function OtherBreakdownTable({
           <TableFooter>
             <TableRow>
               <TableCell>Other total</TableCell>
-              <TableCell className="text-right font-mono tabular-nums">
-                {formatMoney(total, currency)}
+              <TableCell className="text-right">
+                <MoneyText amount={total} currency={currency} />
               </TableCell>
               <TableCell className="text-right font-mono tabular-nums">
                 100.0%
@@ -2187,11 +2191,11 @@ function TaxonomyBreakdownTable({
                     {nested ?? "-"}
                   </TableCell>
                 ) : null}
-                <TableCell className="text-right font-mono tabular-nums">
-                  {formatMoney(row.spend, currency)}
+                <TableCell className="text-right">
+                  <MoneyText amount={row.spend} currency={currency} />
                 </TableCell>
                 <TableCell className="text-right font-mono tabular-nums text-[var(--muted-foreground)]">
-                  {row.count ?? 0}
+                  {formatCount(row.count ?? 0)}
                 </TableCell>
                 <TableCell className="text-right font-mono tabular-nums text-[var(--muted-foreground)]">
                   {on ? formatShare(row.spend, totalSpend) : "-"}
@@ -2203,8 +2207,8 @@ function TaxonomyBreakdownTable({
         <TableFooter>
           <TableRow>
             <TableCell colSpan={nestedLabel ? 2 : 1}>Total</TableCell>
-            <TableCell className="text-right font-mono tabular-nums">
-              {formatMoney(tableTotal, currency)}
+            <TableCell className="text-right">
+              <MoneyText amount={tableTotal} currency={currency} />
             </TableCell>
             <TableCell className="text-right font-mono tabular-nums">
               {visibleRows.reduce((sum, row) => sum + (row.count ?? 0), 0)}
@@ -2999,90 +3003,130 @@ function RowTxnsPopover({
   currency: string;
   transactions: AnalysisTxnPeek[];
 }) {
+  const [editDescription, setEditDescription] = useState<string | null>(null);
   return (
-    <Popover>
-      <PopoverTrigger asChild>
-        <button
-          type="button"
-          aria-label={`Transactions for ${label}`}
-          onClick={(event) => event.stopPropagation()}
-          onPointerDown={(event) => event.stopPropagation()}
-          className="inline-flex size-5 shrink-0 items-center justify-center rounded-md text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]"
+    <>
+      <Popover>
+        <PopoverTrigger asChild>
+          <button
+            type="button"
+            aria-label={`Transactions for ${label}`}
+            onClick={(event) => event.stopPropagation()}
+            onPointerDown={(event) => event.stopPropagation()}
+            className="inline-flex size-5 shrink-0 items-center justify-center rounded-md text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]"
+          >
+            <IconInfoCircle className="size-3.5" />
+          </button>
+        </PopoverTrigger>
+        <PopoverContent
+          align="end"
+          side="left"
+          className="w-[min(34rem,calc(100vw-2rem))] gap-0 overflow-hidden p-0"
+          onPointerDownOutside={(event) => {
+            const target = event.target;
+            if (!(target instanceof Element)) return;
+            if (
+              target.closest("[data-slot=dropdown-menu-content]") ||
+              target.closest("[data-slot=dialog-content]") ||
+              target.closest("[data-slot=dropdown-menu]")
+            ) {
+              event.preventDefault();
+            }
+          }}
+          onFocusOutside={(event) => {
+            const target = event.target;
+            if (!(target instanceof Element)) return;
+            if (
+              target.closest("[data-slot=dropdown-menu-content]") ||
+              target.closest("[data-slot=dialog-content]")
+            ) {
+              event.preventDefault();
+            }
+          }}
         >
-          <IconInfoCircle className="size-3.5" />
-        </button>
-      </PopoverTrigger>
-      <PopoverContent
-        align="end"
-        side="left"
-        className="w-[min(32rem,calc(100vw-2rem))] gap-0 overflow-hidden p-0"
-      >
-        <div className="border-b border-[var(--border)] px-3 py-2 text-sm font-medium">
-          {label}
-          <span className="ml-2 font-normal text-[var(--muted-foreground)]">
-            {transactions.length}
-            {transactions.length >= 48 ? "+" : ""} txn
-            {transactions.length === 1 ? "" : "s"}
-          </span>
-        </div>
-        <div className="max-h-72 overflow-auto">
-          {transactions.length === 0 ? (
-            <p className="px-3 py-4 text-sm text-[var(--muted-foreground)]">
-              No transactions in this range.
-            </p>
-          ) : (
-            <table className="w-full text-sm">
-              <tbody>
-                {transactions.map((txn, index) => {
-                  const isCredit = txn.amount < 0;
-                  return (
-                    <tr
-                      key={`${txn.date}-${txn.description}-${index}`}
-                      className="border-b border-[var(--border)] last:border-b-0"
-                    >
-                      <td className="whitespace-nowrap px-3 py-1.5 align-top tabular-nums text-[var(--muted-foreground)]">
-                        {formatShortDisplayDate(txn.date)}
-                      </td>
-                      <td className="max-w-[12rem] px-2 py-1.5 align-top text-[var(--foreground)]">
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <span className="block truncate">
+          <div className="border-b border-[var(--border)] px-3 py-2 text-sm font-medium">
+            {label}
+            <span className="ml-2 font-normal text-[var(--muted-foreground)]">
+              {transactions.length}
+              {transactions.length >= 48 ? "+" : ""} txn
+              {transactions.length === 1 ? "" : "s"}
+            </span>
+          </div>
+          <div className="max-h-72 overflow-auto">
+            {transactions.length === 0 ? (
+              <p className="px-3 py-4 text-sm text-[var(--muted-foreground)]">
+                No transactions in this range.
+              </p>
+            ) : (
+              <table className="w-full text-sm">
+                <tbody>
+                  {transactions.map((txn, index) => {
+                    const isCredit = txn.amount < 0;
+                    return (
+                      <tr
+                        key={`${txn.date}-${txn.description}-${index}`}
+                        className="border-b border-[var(--border)] last:border-b-0"
+                      >
+                        <td className="w-8 px-1 py-1 align-top">
+                          <DescriptionActionsButton
+                            description={txn.description}
+                            onEdit={setEditDescription}
+                          />
+                        </td>
+                        <td className="whitespace-nowrap px-3 py-1.5 align-top tabular-nums text-[var(--muted-foreground)]">
+                          {formatShortDisplayDate(txn.date)}
+                        </td>
+                        <td className="max-w-[12rem] px-2 py-1.5 align-top text-[var(--foreground)]">
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span className="block truncate">
+                                {txn.description}
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent
+                              side="top"
+                              sideOffset={6}
+                              className="z-[60] max-w-sm text-left leading-snug"
+                            >
                               {txn.description}
-                            </span>
-                          </TooltipTrigger>
-                          <TooltipContent
-                            side="top"
-                            sideOffset={6}
-                            className="z-[60] max-w-sm text-left leading-snug"
+                            </TooltipContent>
+                          </Tooltip>
+                        </td>
+                        <td className="whitespace-nowrap px-2 py-1.5 text-right align-top">
+                          <MoneyText
+                            amount={Math.abs(txn.amount)}
+                            currency={currency}
+                          />
+                        </td>
+                        <td className="px-3 py-1.5 text-right align-top">
+                          <span
+                            className={`text-xs font-medium tabular-nums ${
+                              isCredit
+                                ? "text-[var(--foreground)]"
+                                : "text-[var(--muted-foreground)]"
+                            }`}
+                            aria-label={isCredit ? "Credit" : "Debit"}
                           >
-                            {txn.description}
-                          </TooltipContent>
-                        </Tooltip>
-                      </td>
-                      <td className="whitespace-nowrap px-2 py-1.5 text-right align-top font-mono tabular-nums">
-                        {formatMoney(Math.abs(txn.amount), currency)}
-                      </td>
-                      <td className="px-3 py-1.5 text-right align-top">
-                        <span
-                          className={`text-xs font-medium tabular-nums ${
-                            isCredit
-                              ? "text-[var(--foreground)]"
-                              : "text-[var(--muted-foreground)]"
-                          }`}
-                          aria-label={isCredit ? "Credit" : "Debit"}
-                        >
-                          {isCredit ? "CR" : "DR"}
-                        </span>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          )}
-        </div>
-      </PopoverContent>
-    </Popover>
+                            {isCredit ? "CR" : "DR"}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </PopoverContent>
+      </Popover>
+      <EditDescriptionDialog
+        open={editDescription != null}
+        onOpenChange={(open) => {
+          if (!open) setEditDescription(null);
+        }}
+        currentDescription={editDescription ?? ""}
+      />
+    </>
   );
 }
 
@@ -3152,11 +3196,11 @@ function LeaderboardTable({
           <div
             className={`${grid} border-b border-[var(--border)] py-2 text-xs text-[var(--muted-foreground)]`}
           >
-            <span className="tabular-nums">#</span>
+            <span className="text-left tabular-nums">#</span>
             <span className="min-w-0 truncate text-left">{nameLabel}</span>
-            <span className="w-full text-right">Spend</span>
-            <span className="w-full text-right">Count</span>
-            <span className="w-full text-right">Share</span>
+            <span className="w-full text-left">Spend</span>
+            <span className="w-full text-left">Count</span>
+            <span className="w-full text-left">Share</span>
             {canExpand ? <span /> : null}
             {showTxns ? <span className="sr-only">Info</span> : null}
           </div>
@@ -3181,19 +3225,23 @@ function LeaderboardTable({
               ) : null;
               const mainCells = (
                 <>
-                  <span className="text-[var(--muted-foreground)] tabular-nums">
+                  <span className="text-left text-[var(--muted-foreground)] tabular-nums">
                     {index + 1}
                   </span>
                   <span className="min-w-0 truncate font-medium">
                     {row.name}
                   </span>
-                  <span className="text-right font-mono text-sm tabular-nums">
-                    {formatMoney(row.spend, currency)}
+                  <span className="text-left font-mono text-sm tabular-nums">
+                    <MoneyText
+                      amount={row.spend}
+                      currency={currency}
+                      align="left"
+                    />
                   </span>
-                  <span className="text-right font-mono text-sm tabular-nums text-[var(--muted-foreground)]">
-                    {row.count ?? 0}
+                  <span className="text-left font-mono text-sm tabular-nums text-[var(--muted-foreground)]">
+                    {formatCount(row.count ?? 0)}
                   </span>
-                  <span className="text-right font-mono text-sm tabular-nums text-[var(--muted-foreground)]">
+                  <span className="text-left font-mono text-sm tabular-nums text-[var(--muted-foreground)]">
                     {formatShare(row.spend, totalSpend)}
                   </span>
                   {canExpand ? (
@@ -3278,13 +3326,17 @@ function LeaderboardTable({
                             <span className="min-w-0 truncate text-[var(--muted-foreground)]">
                               {vendor.name}
                             </span>
-                            <span className="text-right font-mono tabular-nums">
-                              {formatMoney(vendor.spend, currency)}
+                            <span className="text-left font-mono tabular-nums">
+                              <MoneyText
+                                amount={vendor.spend}
+                                currency={currency}
+                                align="left"
+                              />
                             </span>
-                            <span className="text-right font-mono tabular-nums text-[var(--muted-foreground)]">
-                              {vendor.count ?? 0}
+                            <span className="text-left font-mono tabular-nums text-[var(--muted-foreground)]">
+                              {formatCount(vendor.count ?? 0)}
                             </span>
-                            <span className="text-right font-mono tabular-nums text-[var(--muted-foreground)]">
+                            <span className="text-left font-mono tabular-nums text-[var(--muted-foreground)]">
                               {formatShare(vendor.spend, row.spend)}
                             </span>
                             {canExpand ? <span /> : null}
@@ -3314,13 +3366,11 @@ function LeaderboardTable({
           >
             <span />
             <span className="min-w-0 truncate">Top {top.length}</span>
-            <span className="text-right font-mono tabular-nums">
-              {formatMoney(topTotal, currency)}
+            <span className="text-left font-mono tabular-nums">
+              <MoneyText amount={topTotal} currency={currency} align="left" />
             </span>
-            <span className="text-right font-mono tabular-nums">
-              {topCount}
-            </span>
-            <span className="text-right font-mono tabular-nums">
+            <span className="text-left font-mono tabular-nums">{topCount}</span>
+            <span className="text-left font-mono tabular-nums">
               {formatShare(topTotal, totalSpend)}
             </span>
             {canExpand ? <span /> : null}
@@ -3333,10 +3383,15 @@ function LeaderboardTable({
 }
 
 function formatAvgCount(value: number) {
+  if (Math.abs(value) < 0.05) return "-";
   return value.toLocaleString(undefined, {
     maximumFractionDigits: 1,
     minimumFractionDigits: value > 0 && value < 10 ? 1 : 0,
   });
+}
+
+function formatCount(value: number) {
+  return value === 0 ? "-" : String(value);
 }
 
 /** High / median / low across period buckets that had spend (> 0). */
@@ -3459,13 +3514,13 @@ function RangeLeaderboardTable({
                     {row.name}
                   </span>
                   <span className="text-right font-mono tabular-nums text-[var(--foreground)]">
-                    {formatMoney(row.high, currency)}
+                    <MoneyText amount={row.high} currency={currency} />
                   </span>
                   <span className="text-right font-mono tabular-nums text-[var(--muted-foreground)]">
-                    {formatMoney(row.mid, currency)}
+                    <MoneyText amount={row.mid} currency={currency} />
                   </span>
                   <span className="text-right font-mono tabular-nums text-[var(--muted-foreground)]">
-                    {formatMoney(row.low, currency)}
+                    <MoneyText amount={row.low} currency={currency} />
                   </span>
                   {showTxns ? (
                     <RowTxnsPopover
@@ -3582,7 +3637,7 @@ function AverageLeaderboardTable({
                     {row.name}
                   </span>
                   <span className="text-right font-mono text-sm tabular-nums">
-                    {formatMoney(avgCost, currency)}
+                    <MoneyText amount={avgCost} currency={currency} />
                   </span>
                   <span className="text-right font-mono text-sm tabular-nums text-[var(--muted-foreground)]">
                     {formatAvgCount(avgCount)}
@@ -3688,7 +3743,10 @@ function AverageLeaderboardTable({
                               {vendor.name}
                             </span>
                             <span className="text-right font-mono tabular-nums">
-                              {formatMoney(vendor.spend / divisor, currency)}
+                              <MoneyText
+                                amount={vendor.spend / divisor}
+                                currency={currency}
+                              />
                             </span>
                             <span className="text-right font-mono tabular-nums text-[var(--muted-foreground)]">
                               {formatAvgCount((vendor.count ?? 0) / divisor)}
@@ -3723,7 +3781,7 @@ function AverageLeaderboardTable({
               {showAll ? `All ${visible.length}` : `Top ${visible.length}`}
             </span>
             <span className="text-right font-mono tabular-nums">
-              {formatMoney(visibleAvgCost, currency)}
+              <MoneyText amount={visibleAvgCost} currency={currency} />
             </span>
             <span className="text-right font-mono tabular-nums">
               {formatAvgCount(visibleAvgCount)}

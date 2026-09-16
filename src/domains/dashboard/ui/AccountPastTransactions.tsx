@@ -4,8 +4,8 @@ import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
 import { Input } from "@/components/ui/input";
 import { ScrollTopX } from "@/components/ui/table";
-import { formatMoney } from "@/domains/dashboard/domain/money";
 import type { DashboardTransaction } from "@/domains/dashboard/domain/types";
+import { MoneyText } from "@/domains/dashboard/ui/MoneyText";
 import { ledgerDebitCredit } from "@/domains/transactions/domain/debitCredit";
 import { formatDisplayDate } from "@/shared/lib/format-date";
 import { isValid, parseISO, subMonths, subWeeks } from "date-fns";
@@ -404,14 +404,21 @@ export function AccountPastTransactions({
                         {txnLabel(txn)}
                       </span>
                     </td>
-                    <td className="whitespace-nowrap py-3.5 pr-3 text-right font-mono text-[#1a2330]">
-                      {debit != null ? formatMoney(debit, currency) : ""}
+                    <td className="whitespace-nowrap py-3.5 pr-3 text-right text-[#1a2330]">
+                      {debit != null ? (
+                        <MoneyText amount={debit} currency={currency} />
+                      ) : null}
                     </td>
-                    <td className="whitespace-nowrap py-3.5 pr-3 text-right font-mono text-[#1a2330]">
-                      {credit != null ? formatMoney(credit, currency) : ""}
+                    <td className="whitespace-nowrap py-3.5 pr-3 text-right text-[#1a2330]">
+                      {credit != null ? (
+                        <MoneyText amount={credit} currency={currency} />
+                      ) : null}
                     </td>
-                    <td className="whitespace-nowrap py-3.5 text-right font-mono text-[#1a2330]">
-                      {formatMoney(txn.runningBalance, currency)}
+                    <td className="whitespace-nowrap py-3.5 text-right text-[#1a2330]">
+                      <MoneyText
+                        amount={txn.runningBalance}
+                        currency={currency}
+                      />
                     </td>
                   </tr>
                 );

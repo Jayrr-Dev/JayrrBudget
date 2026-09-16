@@ -1,8 +1,12 @@
+import { getVaultMasterKey } from "@/crypto/session";
+import {
+  savePrivateRecords,
+  type MutationClient,
+  type PrivateRecordInput,
+} from "@/crypto/vaultRecords";
+import type { PrivateTransaction } from "@/domains/vault/domain/privateLedger";
 import { api } from "@convex/_generated/api";
 import type { ConvexReactClient } from "convex/react";
-import { getVaultMasterKey } from "@/crypto/session";
-import { savePrivateRecords, type MutationClient, type PrivateRecordInput } from "@/crypto/vaultRecords";
-import type { PrivateTransaction } from "@/domains/vault/domain/privateLedger";
 
 export type VaultWriteContext = {
   client: ConvexReactClient;
@@ -13,11 +17,15 @@ export type VaultWriteContext = {
 
 function requireMasterKey() {
   const key = getVaultMasterKey();
-  if (!key) throw new Error("Sign in again so this browser can save encrypted rows.");
+  if (!key)
+    throw new Error("Sign in again so this browser can save encrypted rows.");
   return key;
 }
 
-export async function saveEncryptedRecords(ctx: VaultWriteContext, records: PrivateRecordInput[]) {
+export async function saveEncryptedRecords(
+  ctx: VaultWriteContext,
+  records: PrivateRecordInput[],
+) {
   return savePrivateRecords(ctx.client as unknown as MutationClient, {
     userId: ctx.userId,
     vaultId: ctx.vaultId,
@@ -27,6 +35,35 @@ export async function saveEncryptedRecords(ctx: VaultWriteContext, records: Priv
   });
 }
 
+function encryptedTxValue(
+  tx: Omit<PrivateTransaction, "recordId" | "revision">,
+) {
+  return {
+    date: tx.date,
+    authorizedDate: tx.authorizedDate ?? null,
+    description: tx.description,
+    amount: tx.amount,
+    currency: tx.currency,
+    accountId: tx.accountId ?? null,
+    pending: Boolean(tx.pending),
+    city: tx.city ?? null,
+    region: tx.region ?? null,
+    country: tx.country ?? null,
+    merchantName: tx.merchantName ?? null,
+    merchantClean: tx.merchantClean ?? null,
+    sectionName: tx.sectionName ?? null,
+    categoryName: tx.categoryName ?? null,
+    subcategoryName: tx.subcategoryName ?? null,
+    spreadName: tx.spreadName ?? null,
+    transactionTypeName: tx.transactionTypeName ?? null,
+    txnCode: tx.txnCode ?? null,
+    channel: tx.channel ?? null,
+    statementRecordId: tx.statementRecordId ?? null,
+    source: tx.source ?? "statement",
+    tagNames: tx.tagNames ?? [],
+  };
+}
+
 export async function patchEncryptedTransaction(
   ctx: VaultWriteContext,
   tx: PrivateTransaction,
@@ -34,55 +71,74 @@ export async function patchEncryptedTransaction(
 ) {
   const next = { ...tx, ...patch };
   const { recordId, revision, ...value } = next;
-  await saveEncryptedRecords(ctx, [{
-    recordId,
-    kind: "tx",
-    value: {
-      date: value.date,
-      authorizedDate: value.authorizedDate ?? null,
-      description: value.description,
-      amount: value.amount,
-      currency: value.currency,
-      accountId: value.accountId ?? null,
-      pending: Boolean(value.pending),
-      city: value.city ?? null,
-      region: value.region ?? null,
-      country: value.country ?? null,
-      merchantName: value.merchantName ?? null,
-      merchantClean: value.merchantClean ?? null,
-      sectionName: value.sectionName ?? null,
-      categoryName: value.categoryName ?? null,
-      subcategoryName: value.subcategoryName ?? null,
-      spreadName: value.spreadName ?? null,
-      transactionTypeName: value.transactionTypeName ?? null,
-      txnCode: value.txnCode ?? null,
-      channel: value.channel ?? null,
-      statementRecordId: value.statementRecordId ?? null,
-      source: value.source ?? "statement",
-      tagNames: value.tagNames ?? [],
+  await saveEncryptedRecords(ctx, [
+    {
+      recordId,
+      kind: "tx",
+      value: encryptedTxValue(value),
+      expectedRevision: revision,
     },
-    expectedRevision: revision,
-  }]);
+  ]);
   return { ...next, revision: revision + 1 };
+}
+
+const RENAME_CHUNK = 40;
+
+/** Rewrite every encrypted tx whose description matches `from`. */
+export async function renameEncryptedDescriptions(
+  ctx: VaultWriteContext,
+  txs: PrivateTransaction[],
+  from: string,
+  to: string,
+) {
+  const matches = txs.filter((tx) => tx.description === from);
+  if (matches.length === 0) throw new Error("No matching transactions.");
+  for (let i = 0; i < matches.length; i += RENAME_CHUNK) {
+    const chunk = matches.slice(i, i + RENAME_CHUNK);
+    await saveEncryptedRecords(
+      ctx,
+      chunk.map((tx) => {
+        const next = { ...tx, description: to };
+        const { recordId, revision, ...value } = next;
+        return {
+          recordId,
+          kind: "tx" as const,
+          value: encryptedTxValue(value),
+          expectedRevision: revision,
+        };
+      }),
+    );
+  }
+  return matches.length;
 }
 
 export async function saveEncryptedMerchant(
   ctx: VaultWriteContext,
-  input: { merchantId: string; name: string; rawName?: string | null; company?: string | null; brand?: string | null; website?: string | null; expectedRevision?: number | null },
+  input: {
+    merchantId: string;
+    name: string;
+    rawName?: string | null;
+    company?: string | null;
+    brand?: string | null;
+    website?: string | null;
+    expectedRevision?: number | null;
+  },
 ) {
-  await saveEncryptedRecords(ctx, [{
-    recordId: `merchant-${input.merchantId}`,
-    kind: "note",
-    value: {
-      merchantId: input.merchantId,
-      name: input.name,
-      rawName: input.rawName ?? null,
-      company: input.company ?? null,
-      brand: input.brand ?? null,
-      website: input.website ?? null,
+  await saveEncryptedRecords(ctx, [
+    {
+      recordId: `merchant-${input.merchantId}`,
+      kind: "note",
+      value: {
+        merchantId: input.merchantId,
+        name: input.name,
+        rawName: input.rawName ?? null,
+        company: input.company ?? null,
+        brand: input.brand ?? null,
+        website: input.website ?? null,
+      },
+      expectedRevision: input.expectedRevision ?? null,
     },
-    expectedRevision: input.expectedRevision ?? null,
-  }]);
+  ]);
 }
 
 export async function saveEncryptedLoan(
@@ -99,41 +155,67 @@ export async function saveEncryptedLoan(
     expectedRevision?: number | null;
   },
 ) {
-  await saveEncryptedRecords(ctx, [{
-    recordId: `loan-${input.accountId}`,
-    kind: "note",
-    value: input,
-    expectedRevision: input.expectedRevision ?? null,
-  }]);
+  await saveEncryptedRecords(ctx, [
+    {
+      recordId: `loan-${input.accountId}`,
+      kind: "note",
+      value: input,
+      expectedRevision: input.expectedRevision ?? null,
+    },
+  ]);
 }
 
 export async function saveEncryptedNote(
   ctx: VaultWriteContext,
-  input: { tabId: string; title: string; content: string; expectedRevision?: number | null },
+  input: {
+    tabId: string;
+    title: string;
+    content: string;
+    expectedRevision?: number | null;
+  },
 ) {
-  await saveEncryptedRecords(ctx, [{
-    recordId: `note-${input.tabId}`,
-    kind: "note",
-    value: { tabId: input.tabId, title: input.title, content: input.content },
-    expectedRevision: input.expectedRevision ?? null,
-  }]);
+  await saveEncryptedRecords(ctx, [
+    {
+      recordId: `note-${input.tabId}`,
+      kind: "note",
+      value: { tabId: input.tabId, title: input.title, content: input.content },
+      expectedRevision: input.expectedRevision ?? null,
+    },
+  ]);
 }
 
 export async function saveEncryptedScratchPad(
   ctx: VaultWriteContext,
   input: {
-    tabs: Array<{ id: string; name: string; rows: Array<{ id: string; name: string; spend: number; count: number; currency: string; parent?: string }> }>;
+    tabs: Array<{
+      id: string;
+      name: string;
+      rows: Array<{
+        id: string;
+        name: string;
+        spend: number;
+        count: number;
+        currency: string;
+        parent?: string;
+      }>;
+    }>;
     activeId: string;
     receiveId: string;
     expectedRevision?: number | null;
   },
 ) {
-  await saveEncryptedRecords(ctx, [{
-    recordId: "scratch-main",
-    kind: "note",
-    value: { tabs: input.tabs, activeId: input.activeId, receiveId: input.receiveId },
-    expectedRevision: input.expectedRevision ?? null,
-  }]);
+  await saveEncryptedRecords(ctx, [
+    {
+      recordId: "scratch-main",
+      kind: "note",
+      value: {
+        tabs: input.tabs,
+        activeId: input.activeId,
+        receiveId: input.receiveId,
+      },
+      expectedRevision: input.expectedRevision ?? null,
+    },
+  ]);
 }
 
 /** Ensure vault write context exists for encrypted edits. */
@@ -144,9 +226,15 @@ export function vaultWriteReady(input: {
   keyId: string | null;
   client: ConvexReactClient;
 }): VaultWriteContext | null {
-  if (!input.encryptedLedger || !input.userId || !input.vaultId || !input.keyId) return null;
+  if (!input.encryptedLedger || !input.userId || !input.vaultId || !input.keyId)
+    return null;
   if (!getVaultMasterKey()) return null;
-  return { client: input.client, userId: input.userId, vaultId: input.vaultId, keyId: input.keyId };
+  return {
+    client: input.client,
+    userId: input.userId,
+    vaultId: input.vaultId,
+    keyId: input.keyId,
+  };
 }
 
 export { api };

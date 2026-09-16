@@ -14,7 +14,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { formatMoney } from "@/domains/dashboard/domain/money";
+import { MoneyText } from "@/domains/dashboard/ui/MoneyText";
 import {
   subscribeScratchNoteOpen,
   useScratchNote,
@@ -384,8 +384,8 @@ function StoreSheetPanel({
                         </div>
                       ) : null}
                     </td>
-                    <td className="px-2 py-1.5 text-right font-mono tabular-nums whitespace-nowrap">
-                      {formatMoney(row.spend, row.currency)}
+                    <td className="px-2 py-1.5 text-right">
+                      <MoneyText amount={row.spend} currency={row.currency} />
                     </td>
                     <td className="px-2 py-1.5 text-right font-mono tabular-nums text-[var(--muted-foreground)]">
                       {row.count}
@@ -406,8 +406,8 @@ function StoreSheetPanel({
               <tfoot>
                 <tr className="border-t border-[var(--border)] bg-[var(--muted)]/40 text-sm font-medium">
                   <td className="px-2 py-2">Total</td>
-                  <td className="px-2 py-2 text-right font-mono tabular-nums whitespace-nowrap">
-                    {formatMoney(totalSpend, currency)}
+                  <td className="px-2 py-2 text-right">
+                    <MoneyText amount={totalSpend} currency={currency} />
                   </td>
                   <td className="px-2 py-2 text-right font-mono tabular-nums">
                     {totalCount}
@@ -475,8 +475,7 @@ function NotesPanel({
   const [activeId, setActiveId] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const active =
-    notes.find((n) => n.id === activeId) ?? notes[0] ?? null;
+  const active = notes.find((n) => n.id === activeId) ?? notes[0] ?? null;
 
   useEffect(() => {
     if (notes.length === 0) {

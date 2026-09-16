@@ -42,8 +42,8 @@ function Table({
         data-slot="table"
         className={cn(
           "w-full caption-bottom text-sm [transform:rotateX(180deg)]",
-          "[&_th:first-child]:sticky [&_th:first-child]:left-0 [&_th:first-child]:z-20 [&_th:first-child]:bg-surface-elevated",
-          "[&_td:first-child]:sticky [&_td:first-child]:left-0 [&_td:first-child]:z-10 [&_td:first-child]:bg-surface-elevated",
+          "[&_th[data-sticky-col]]:sticky [&_th[data-sticky-col]]:left-0 [&_th[data-sticky-col]]:z-20 [&_th[data-sticky-col]]:bg-surface-elevated",
+          "[&_td[data-sticky-col]]:sticky [&_td[data-sticky-col]]:left-0 [&_td[data-sticky-col]]:z-10 [&_td[data-sticky-col]]:bg-surface-elevated",
           className,
         )}
         {...props}

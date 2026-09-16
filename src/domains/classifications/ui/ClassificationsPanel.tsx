@@ -619,7 +619,7 @@ export function ClassificationsPanel() {
           id: "actions",
           header: actionsHeader,
           cell: ({ row }) => (
-            <div className="flex w-full items-center justify-center">
+            <div className="flex items-center justify-center">
               <RowActions
                 name={row.original.name}
                 onEdit={() => void editSection(row.original)}
@@ -639,7 +639,7 @@ export function ClassificationsPanel() {
           ),
           enableSorting: false,
           enableHiding: true,
-          meta: { label: "Actions", width: "3.25rem" },
+          meta: { label: "Actions", width: "2rem" },
         }),
         sectionHelper.accessor("name", {
           header: "Section",
@@ -648,6 +648,7 @@ export function ClassificationsPanel() {
           ),
           filterFn: "includesString",
           sortFn: "text",
+          meta: { width: "11rem" },
         }),
         sectionHelper.accessor("categoryNames", {
           header: "Categories",
@@ -682,7 +683,7 @@ export function ClassificationsPanel() {
           id: "actions",
           header: actionsHeader,
           cell: ({ row }) => (
-            <div className="flex w-full items-center justify-center">
+            <div className="flex items-center justify-center">
               <RowActions
                 name={row.original.name}
                 onEdit={() => void editCategory(row.original)}
@@ -706,7 +707,7 @@ export function ClassificationsPanel() {
           ),
           enableSorting: false,
           enableHiding: true,
-          meta: { label: "Actions", width: "3.25rem" },
+          meta: { label: "Actions", width: "2rem" },
         }),
         categoryHelper.accessor("sectionName", {
           header: "Section",
@@ -715,6 +716,7 @@ export function ClassificationsPanel() {
           ),
           filterFn: "includesString",
           sortFn: "text",
+          meta: { width: "11rem" },
         }),
         categoryHelper.accessor("name", {
           header: "Category",
@@ -757,7 +759,7 @@ export function ClassificationsPanel() {
           id: "actions",
           header: actionsHeader,
           cell: ({ row }) => (
-            <div className="flex w-full items-center justify-center">
+            <div className="flex items-center justify-center">
               <RowActions
                 name={row.original.name}
                 onEdit={() => void editSubcategory(row.original)}
@@ -782,7 +784,7 @@ export function ClassificationsPanel() {
           ),
           enableSorting: false,
           enableHiding: true,
-          meta: { label: "Actions", width: "3.25rem" },
+          meta: { label: "Actions", width: "2rem" },
         }),
         subcategoryHelper.accessor("sectionName", {
           header: "Section",
@@ -791,6 +793,7 @@ export function ClassificationsPanel() {
           ),
           filterFn: "includesString",
           sortFn: "text",
+          meta: { width: "11rem" },
         }),
         subcategoryHelper.accessor("categoryName", {
           header: "Category",
@@ -828,7 +831,7 @@ export function ClassificationsPanel() {
           id: "actions",
           header: actionsHeader,
           cell: ({ row }) => (
-            <div className="flex w-full items-center justify-center">
+            <div className="flex items-center justify-center">
               <RowActions
                 name={row.original.name}
                 onEdit={() => void editTag(row.original)}
@@ -848,7 +851,7 @@ export function ClassificationsPanel() {
           ),
           enableSorting: false,
           enableHiding: true,
-          meta: { label: "Actions", width: "3.25rem" },
+          meta: { label: "Actions", width: "2rem" },
         }),
         tagHelper.accessor("name", {
           header: "Tag",
@@ -857,6 +860,7 @@ export function ClassificationsPanel() {
           ),
           filterFn: "includesString",
           sortFn: "text",
+          meta: { width: "11rem" },
         }),
         tagHelper.accessor("description", {
           header: "Description",
@@ -1434,7 +1438,7 @@ export function ClassificationsPanel() {
 
 function actionsHeader() {
   return (
-    <span className="flex w-full items-center justify-center">
+    <span className="flex items-center justify-center">
       <Icon
         icon="mynaui:mouse-pointer-click-solid"
         className="size-4 text-[var(--muted-foreground)]"
@@ -1461,7 +1465,7 @@ function RowActions({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
-        className="inline-flex size-7 cursor-pointer items-center justify-center rounded-[min(var(--radius-md),12px)] text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]"
+        className="inline-flex size-6 cursor-pointer items-center justify-center rounded-[min(var(--radius-md),12px)] text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]"
         aria-label={`Actions for ${name}`}
       >
         <Icon icon="basil:menu-outline" className="size-4" />

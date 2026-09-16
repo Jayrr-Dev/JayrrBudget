@@ -1,13 +1,18 @@
 import { v } from "convex/values";
-import { mutation, query, type MutationCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
+import { mutation, query, type MutationCtx } from "./_generated/server";
 import { ensureUser, requireUser } from "./lib/auth";
+import { rememberCategorization } from "./lib/categorizationMemory";
 import { classifySpread } from "./lib/spreads";
 import { hasTag, joinTags, splitTags } from "./lib/tags";
 import { taxonomyDescription } from "./lib/taxonomyDescriptions";
-import { rememberCategorization } from "./lib/categorizationMemory";
 
-const TAXONOMY_FIELDS = ["section", "spread", "category", "subcategory"] as const;
+const TAXONOMY_FIELDS = [
+  "section",
+  "spread",
+  "category",
+  "subcategory",
+] as const;
 
 function norm(value: string | null | undefined) {
   return (value ?? "").trim().toLowerCase();
@@ -152,7 +157,10 @@ export const tagByDateRange = mutation({
     const startDate = args.startDate.trim();
     const endDate = args.endDate.trim();
     if (!tag) throw new Error("Tag name is required");
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate) || !/^\d{4}-\d{2}-\d{2}$/.test(endDate)) {
+    if (
+      !/^\d{4}-\d{2}-\d{2}$/.test(startDate) ||
+      !/^\d{4}-\d{2}-\d{2}$/.test(endDate)
+    ) {
       throw new Error("Dates must be YYYY-MM-DD");
     }
     if (startDate > endDate) {
@@ -160,9 +168,7 @@ export const tagByDateRange = mutation({
     }
 
     const exclude = new Set(
-      (args.excludeTransactionIds ?? [])
-        .map((id) => id.trim())
-        .filter(Boolean),
+      (args.excludeTransactionIds ?? []).map((id) => id.trim()).filter(Boolean),
     );
 
     const matchedRows = await ctx.db
@@ -219,7 +225,9 @@ export const updateTaxonomy = mutation({
     const transactionId = args.transactionId.trim();
     if (!transactionId) throw new Error("transactionId is required");
     if (!(TAXONOMY_FIELDS as readonly string[]).includes(args.field)) {
-      throw new Error("field must be section, spread, category, or subcategory");
+      throw new Error(
+        "field must be section, spread, category, or subcategory",
+      );
     }
 
     const rawValue = args.value?.trim() || null;
@@ -278,10 +286,7 @@ export const updateTaxonomy = mutation({
       return { _id: id, legacyId, name: name.trim() };
     };
 
-    const ensureCategory = async (
-      name: string,
-      sectionId: number | null,
-    ) => {
+    const ensureCategory = async (name: string, sectionId: number | null) => {
       const all = await ctx.db
         .query("transactionCategories")
         .withIndex("by_userId", (q) => q.eq("userId", user._id))
@@ -535,5 +540,35 @@ export const updateTaxonomy = mutation({
       subcategory,
       spread,
     };
+  },
+});
+
+export const renameDescriptions = mutation({
+  args: {
+    from: v.string(),
+    to: v.string(),
+  },
+  returns: v.object({ updated: v.number() }),
+  handler: async (ctx, args) => {
+    const user = await requireUser(ctx);
+    const from = args.from;
+    const to = args.to.trim();
+    if (!from) throw new Error("Current description is required");
+    if (!to) throw new Error("Description is required");
+    if (from === to) return { updated: 0 };
+
+    const rows = await ctx.db
+      .query("transactions")
+      .withIndex("by_userId", (q) => q.eq("userId", user._id))
+      .collect();
+
+    let updated = 0;
+    const now = Date.now();
+    for (const row of rows) {
+      if (row.description !== from) continue;
+      await ctx.db.patch(row._id, { description: to, updatedAt: now });
+      updated += 1;
+    }
+    return { updated };
   },
 });

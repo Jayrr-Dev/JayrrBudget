@@ -264,10 +264,6 @@ function EmptyState({ text }: { text: string }) {
   );
 }
 
-export function LoadingSkeleton() {
-  return <PageSpinner />;
-}
-
 export function OverviewBadgesSkeleton() {
   return <PageSpinner className="min-h-16 py-8" />;
 }

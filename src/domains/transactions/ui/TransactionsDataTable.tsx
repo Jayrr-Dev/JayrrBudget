@@ -8,6 +8,7 @@ import type {
   DashboardTransaction,
 } from "@/domains/dashboard/domain/types";
 import { queryKeys } from "@/domains/dashboard/queries/query-keys";
+import { MoneyText } from "@/domains/dashboard/ui/MoneyText";
 import { LOG_MONEY_RANGE_OPTIONS } from "@/domains/transactions/domain/amountLogRange";
 import {
   historyMatchLabel,
@@ -91,11 +92,11 @@ function buildColumns(
   const amountWidth = autoMoneyWidth("Amount", amountLabels, { filter: true });
 
   // Left = paper facts (AI read from statement). Right = AI invent / labels.
-  return columnHelper.columns([
+  const defs = columnHelper.columns([
     columnHelper.display({
       id: "actions",
       header: () => (
-        <span className="flex w-full items-center justify-center">
+        <span className="flex items-center justify-center">
           <Icon
             icon="mynaui:mouse-pointer-click-solid"
             className="size-4 text-[var(--muted-foreground)]"
@@ -105,13 +106,13 @@ function buildColumns(
         </span>
       ),
       cell: ({ row }) => (
-        <div className="flex w-full items-center justify-center">
+        <div className="flex items-center justify-center">
           <TransactionRowActions transaction={row.original} />
         </div>
       ),
       enableSorting: false,
       enableHiding: true,
-      meta: { label: "Actions", width: "3.25rem" },
+      meta: { label: "Actions", width: "2rem" },
     }),
     columnHelper.accessor("date", {
       header: "Posted",
@@ -169,23 +170,33 @@ function buildColumns(
       filterFn: "fuzzy",
       sortFn: "text",
     }),
-    columnHelper.accessor("name", {
-      header: "Description",
-      meta: bandMeta("28rem", "read", "Statement line text from the PDF."),
-      cell: ({ getValue }) => (
-        <span className="line-clamp-2 block text-sm leading-snug font-medium break-words">
-          {String(getValue())}
-        </span>
-      ),
-      filterFn: "equalsString",
-      sortFn: "text",
-    }),
-    columnHelper.accessor("originalDescription", {
-      header: "Original description",
-      meta: bandMeta("28rem", "read", "Raw description before any cleanup."),
-      cell: ({ getValue }) => textOrDash(getValue()),
-      filterFn: "equalsString",
-      sortFn: "text",
+    columnHelper.group({
+      id: "main",
+      header: "Main",
+      columns: columnHelper.columns([
+        columnHelper.accessor("name", {
+          header: "Description",
+          meta: bandMeta("28rem", "read", "Statement line text from the PDF."),
+          cell: ({ getValue }) => (
+            <span className="line-clamp-2 block text-sm leading-snug font-medium break-words">
+              {String(getValue())}
+            </span>
+          ),
+          filterFn: "equalsString",
+          sortFn: "text",
+        }),
+        columnHelper.accessor("originalDescription", {
+          header: "Original description",
+          meta: bandMeta(
+            "28rem",
+            "read",
+            "Raw description before any cleanup.",
+          ),
+          cell: ({ getValue }) => textOrDash(getValue()),
+          filterFn: "equalsString",
+          sortFn: "text",
+        }),
+      ]),
     }),
     columnHelper.accessor("pending", {
       header: "Pending",
@@ -238,9 +249,11 @@ function buildColumns(
           );
         }
         return (
-          <div className="whitespace-nowrap text-right font-mono leading-snug text-foreground">
-            {formatMoney(debit, row.original.isoCurrencyCode ?? "CAD")}
-          </div>
+          <MoneyText
+            amount={debit}
+            currency={row.original.isoCurrencyCode ?? "CAD"}
+            className="leading-snug text-foreground"
+          />
         );
       },
       sortFn: "basic",
@@ -263,9 +276,11 @@ function buildColumns(
           );
         }
         return (
-          <div className="whitespace-nowrap text-right font-mono leading-snug text-foreground">
-            {formatMoney(credit, row.original.isoCurrencyCode ?? "CAD")}
-          </div>
+          <MoneyText
+            amount={credit}
+            currency={row.original.isoCurrencyCode ?? "CAD"}
+            className="leading-snug text-foreground"
+          />
         );
       },
       sortFn: "basic",
@@ -278,12 +293,11 @@ function buildColumns(
         "Signed amount. Positive = money out.",
       ),
       cell: ({ row, getValue }) => (
-        <div className="whitespace-nowrap text-right font-mono text-sm leading-snug">
-          {formatMoney(
-            Number(getValue()),
-            row.original.isoCurrencyCode ?? "CAD",
-          )}
-        </div>
+        <MoneyText
+          amount={Number(getValue())}
+          currency={row.original.isoCurrencyCode ?? "CAD"}
+          className="text-sm leading-snug"
+        />
       ),
       filterFn: "amountLogRange",
       sortFn: "basic",
@@ -485,14 +499,38 @@ function buildColumns(
       sortFn: "text",
     }),
   ]);
+
+  return columnHelper.columns(
+    defs.map((def) => {
+      if (def.columns && def.columns.length > 0) {
+        return def;
+      }
+      const leafId =
+        def.id ??
+        ("accessorKey" in def && def.accessorKey != null
+          ? String(def.accessorKey)
+          : "column");
+      const header =
+        typeof def.header === "string" && def.header
+          ? def.header
+          : ((def.meta as { label?: string } | undefined)?.label ?? leafId);
+      return columnHelper.group({
+        id: `${leafId}Group`,
+        header,
+        columns: columnHelper.columns([def]),
+      });
+    }),
+  );
 }
 
 export function TransactionsDataTable({
   transactions,
   accounts = [],
+  loading = false,
 }: {
   transactions: DashboardTransaction[];
   accounts?: DashboardAccount[];
+  loading?: boolean;
 }) {
   const queryClient = useQueryClient();
   const dashboardFetches = useIsFetching({ queryKey: queryKeys.dashboard });
@@ -583,6 +621,7 @@ export function TransactionsDataTable({
       csvFilename="transactions.csv"
       toolbar={<CreateTagButton transactions={transactions} />}
       isRefreshing={dashboardFetches > 0}
+      isLoading={loading}
       onRefresh={() =>
         queryClient.refetchQueries({ queryKey: queryKeys.dashboard })
       }

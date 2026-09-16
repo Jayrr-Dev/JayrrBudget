@@ -1,12 +1,12 @@
 "use client";
 
+import { DataTable } from "@/components/ui/data-table";
+import type { DataTableFeatures } from "@/components/ui/data-table-features";
+import { PageSpinner } from "@/components/ui/spinner";
+import { usePrivateLedger } from "@/domains/vault/ui/usePrivateLedger";
+import { api } from "@convex/_generated/api";
 import { createColumnHelper } from "@tanstack/react-table";
 import { useQuery } from "convex/react";
-import { api } from "@convex/_generated/api";
-import { DataTable } from "@/components/ui/data-table";
-import { PageSpinner } from "@/components/ui/spinner";
-import type { DataTableFeatures } from "@/components/ui/data-table-features";
-import { usePrivateLedger } from "@/domains/vault/ui/usePrivateLedger";
 import { useMemo } from "react";
 
 type MerchantRow = {
@@ -46,9 +46,7 @@ function formatWhen(ms: number) {
 const columns = columnHelper.columns([
   columnHelper.accessor("name", {
     header: "Merchant",
-    cell: ({ getValue }) => (
-      <span className="font-medium">{getValue()}</span>
-    ),
+    cell: ({ getValue }) => <span className="font-medium">{getValue()}</span>,
     filterFn: "includesString",
     sortFn: "text",
     meta: { width: "14rem" },
@@ -85,26 +83,6 @@ const columns = columnHelper.columns([
     sortFn: "text",
     meta: { width: "12rem" },
   }),
-  columnHelper.accessor("website", {
-    header: "Website",
-    cell: ({ getValue }) => {
-      const value = getValue();
-      if (!value) return textOrDash(value);
-      return (
-        <a
-          href={value.startsWith("http") ? value : `https://${value}`}
-          target="_blank"
-          rel="noreferrer"
-          className="line-clamp-1 text-sm text-[var(--foreground)] underline-offset-2 hover:underline"
-        >
-          {value}
-        </a>
-      );
-    },
-    filterFn: "fuzzy",
-    sortFn: "text",
-    meta: { width: "14rem" },
-  }),
   columnHelper.accessor("updatedAt", {
     header: "Updated",
     cell: ({ getValue }) => {
@@ -125,7 +103,8 @@ export function MerchantsPanel() {
   );
 
   const encryptedRows = useMemo(() => {
-    if (!privateLedger.encryptedLedger || !privateLedger.unlocked) return [] as MerchantRow[];
+    if (!privateLedger.encryptedLedger || !privateLedger.unlocked)
+      return [] as MerchantRow[];
     const fromRecords = privateLedger.ledger.merchants.map((merchant) => ({
       id: merchant.recordId,
       slug: merchant.merchantId,
@@ -157,7 +136,11 @@ export function MerchantsPanel() {
       });
     }
     return [...names.values()];
-  }, [privateLedger.encryptedLedger, privateLedger.ledger, privateLedger.unlocked]);
+  }, [
+    privateLedger.encryptedLedger,
+    privateLedger.ledger,
+    privateLedger.unlocked,
+  ]);
 
   if (privateLedger.encryptedLedger) {
     if (privateLedger.loading) {

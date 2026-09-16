@@ -1,23 +1,25 @@
 "use client";
 
-import { Icon } from "@iconify/react";
-import { useConvex } from "convex/react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { toast } from "sonner";
-import { getVaultMasterKey } from "@/crypto/session";
-import type { MutationClient } from "@/crypto/vaultRecords";
-import { analysisQueryKeys } from "@/domains/analysis/queries/query-keys";
-import { queryKeys } from "@/domains/dashboard/queries/query-keys";
-import type { DashboardTransaction } from "@/domains/dashboard/domain/types";
-import { dbExplorerQueryKeys } from "@/domains/db-explorer/queries/query-keys";
-import { applyVaultCategorization } from "@/domains/vault/application/applyVaultCategorization";
-import { usePrivateLedger } from "@/domains/vault/ui/usePrivateLedger";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { getVaultMasterKey } from "@/crypto/session";
+import type { MutationClient } from "@/crypto/vaultRecords";
+import { analysisQueryKeys } from "@/domains/analysis/queries/query-keys";
+import type { DashboardTransaction } from "@/domains/dashboard/domain/types";
+import { queryKeys } from "@/domains/dashboard/queries/query-keys";
+import { dbExplorerQueryKeys } from "@/domains/db-explorer/queries/query-keys";
+import { EditDescriptionDialog } from "@/domains/transactions/ui/EditDescriptionDialog";
+import { applyVaultCategorization } from "@/domains/vault/application/applyVaultCategorization";
+import { usePrivateLedger } from "@/domains/vault/ui/usePrivateLedger";
+import { Icon } from "@iconify/react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useConvex } from "convex/react";
+import { useState } from "react";
+import { toast } from "sonner";
 
 export function TransactionRowActions({
   transaction,
@@ -27,6 +29,7 @@ export function TransactionRowActions({
   const queryClient = useQueryClient();
   const client = useConvex();
   const privateLedger = usePrivateLedger();
+  const [editOpen, setEditOpen] = useState(false);
 
   const rerun = useMutation({
     mutationFn: async () => {
@@ -45,9 +48,15 @@ export function TransactionRowActions({
           }),
         });
         const result = await response.json();
-        if (!response.ok) throw new Error(result.error ?? "Recategorize failed");
+        if (!response.ok)
+          throw new Error(result.error ?? "Recategorize failed");
         const masterKey = getVaultMasterKey();
-        if (!privateLedger.userId || !privateLedger.vaultId || !privateLedger.keyId || !masterKey) {
+        if (
+          !privateLedger.userId ||
+          !privateLedger.vaultId ||
+          !privateLedger.keyId ||
+          !masterKey
+        ) {
           throw new Error("Sign in again, then re-run.");
         }
         await applyVaultCategorization({
@@ -74,7 +83,10 @@ export function TransactionRowActions({
     onSuccess: async (result) => {
       const description = `${result.cached} reused, ${result.ai} categorized, ${result.pending} pending.`;
       if (result.ok) toast.success("Re-run complete", { description });
-      else toast.warning("Re-run needs attention", { description: result.error ?? description });
+      else
+        toast.warning("Re-run needs attention", {
+          description: result.error ?? description,
+        });
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.dashboard }),
         queryClient.invalidateQueries({ queryKey: dbExplorerQueryKeys.all }),
@@ -88,21 +100,36 @@ export function TransactionRowActions({
   });
 
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger
-        className="inline-flex size-7 cursor-pointer items-center justify-center rounded-[min(var(--radius-md),12px)] text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]"
-        aria-label={`Actions for ${transaction.name}`}
-      >
-        <Icon icon="basil:menu-outline" className="size-4" />
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="w-auto min-w-36">
-        <DropdownMenuItem
-          disabled={rerun.isPending}
-          onClick={() => rerun.mutate()}
+    <>
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          className="inline-flex size-6 cursor-pointer items-center justify-center rounded-[min(var(--radius-md),12px)] text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]"
+          aria-label={`Actions for ${transaction.name}`}
         >
-          {rerun.isPending ? "Re-running..." : "Re-run"}
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
+          <Icon icon="basil:menu-outline" className="size-4" />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start" className="w-auto min-w-36">
+          <DropdownMenuItem
+            disabled={rerun.isPending}
+            onClick={() => rerun.mutate()}
+          >
+            {rerun.isPending ? "Re-running..." : "Re-run"}
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            className="cursor-pointer"
+            onClick={() => {
+              window.setTimeout(() => setEditOpen(true), 0);
+            }}
+          >
+            Edit
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      <EditDescriptionDialog
+        open={editOpen}
+        onOpenChange={setEditOpen}
+        currentDescription={transaction.name}
+      />
+    </>
   );
 }

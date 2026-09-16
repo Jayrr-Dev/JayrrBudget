@@ -202,7 +202,7 @@ export function StatementUploadRowActions({
     <>
       <DropdownMenu>
         <DropdownMenuTrigger
-          className="inline-flex size-7 cursor-pointer items-center justify-center rounded-[min(var(--radius-md),12px)] text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]"
+          className="inline-flex size-6 cursor-pointer items-center justify-center rounded-[min(var(--radius-md),12px)] text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]"
           aria-label={`Actions for ${upload.filename}`}
         >
           <Icon icon="basil:menu-outline" className="size-4" />

@@ -12,6 +12,7 @@ import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuLabel,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
@@ -24,6 +25,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { Spinner } from "@/components/ui/spinner";
 import {
   Table,
   TableBody,
@@ -129,6 +131,7 @@ interface DataTableProps<TData extends RowData> {
   /** When set, toolbar shows Refresh to reload table data. */
   onRefresh?: () => void | Promise<void>;
   isRefreshing?: boolean;
+  isLoading?: boolean;
 }
 
 function csvColumnLabel(column: {
@@ -143,6 +146,16 @@ function csvColumnLabel(column: {
   const header = column.columnDef.header;
   if (typeof header === "string" && header) return header;
   return null;
+}
+
+function menuColumnLabel(column: {
+  id: string;
+  columnDef: {
+    header?: unknown;
+    meta?: unknown;
+  };
+}): string {
+  return csvColumnLabel(column) ?? column.id;
 }
 
 function parseYmd(ymd: string): Date {
@@ -203,6 +216,7 @@ export function DataTable<TData extends RowData>({
   csvFilename,
   onRefresh,
   isRefreshing = false,
+  isLoading = false,
 }: DataTableProps<TData>) {
   const [sorting, setSorting] = useState<SortingState>(initialSorting);
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
@@ -408,8 +422,56 @@ export function DataTable<TData extends RowData>({
   };
 
   const hideableColumns = table
-    .getAllColumns()
+    .getAllLeafColumns()
     .filter((column) => column.getCanHide());
+
+  const columnMenuSections = useMemo(() => {
+    const sections: Array<{
+      id: string;
+      label: string | null;
+      columns: typeof hideableColumns;
+    }> = [];
+
+    for (const column of hideableColumns) {
+      const parent = column.parent;
+      if (!parent) {
+        sections.push({
+          id: column.id,
+          label: menuColumnLabel(column),
+          columns: [column],
+        });
+        continue;
+      }
+
+      const last = sections[sections.length - 1];
+      if (last?.id === parent.id) {
+        last.columns.push(column);
+        continue;
+      }
+
+      const parentHeader = parent.columnDef.header;
+      sections.push({
+        id: parent.id,
+        label:
+          typeof parentHeader === "string" && parentHeader
+            ? parentHeader
+            : parent.id,
+        columns: [column],
+      });
+    }
+
+    const mainIndex = sections.findIndex((section) => section.id === "main");
+    if (mainIndex > 0) {
+      const [mainSection] = sections.splice(mainIndex, 1);
+      if (mainSection) {
+        sections.unshift(mainSection);
+      }
+    }
+
+    return sections;
+  }, [hideableColumns]);
+
+  const firstLeafColumnId = table.getVisibleLeafColumns()[0]?.id;
 
   /**
    * Columns menu: first pick from "all visible" solos that column;
@@ -501,30 +563,34 @@ export function DataTable<TData extends RowData>({
                 >
                   Columns
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-auto min-w-40">
-                  {hideableColumns.map((column) => {
-                    const meta = column.columnDef.meta as
-                      | { label?: string }
-                      | undefined;
-                    const header = column.columnDef.header;
-                    const label =
-                      meta?.label ??
-                      (typeof header === "string" && header
-                        ? header
-                        : column.id);
+                <DropdownMenuContent align="end" className="w-auto min-w-44">
+                  {columnMenuSections.map((section, index) => {
+                    const showGroupLabel = section.columns.length > 1;
+                    const prev = columnMenuSections[index - 1];
+                    const showSeparator =
+                      index > 0 &&
+                      (showGroupLabel || (prev?.columns.length ?? 0) > 1);
                     return (
-                      <DropdownMenuCheckboxItem
-                        key={column.id}
-                        checked={column.getIsVisible()}
-                        onCheckedChange={(checked) =>
-                          handleColumnVisibilityToggle(
-                            column.id,
-                            Boolean(checked),
-                          )
-                        }
-                      >
-                        {label}
-                      </DropdownMenuCheckboxItem>
+                      <DropdownMenuGroup key={section.id}>
+                        {showSeparator ? <DropdownMenuSeparator /> : null}
+                        {showGroupLabel && section.label ? (
+                          <DropdownMenuLabel>{section.label}</DropdownMenuLabel>
+                        ) : null}
+                        {section.columns.map((column) => (
+                          <DropdownMenuCheckboxItem
+                            key={column.id}
+                            checked={column.getIsVisible()}
+                            onCheckedChange={(checked) =>
+                              handleColumnVisibilityToggle(
+                                column.id,
+                                Boolean(checked),
+                              )
+                            }
+                          >
+                            {menuColumnLabel(column)}
+                          </DropdownMenuCheckboxItem>
+                        ))}
+                      </DropdownMenuGroup>
                     );
                   })}
                 </DropdownMenuContent>
@@ -670,46 +736,96 @@ export function DataTable<TData extends RowData>({
               })}
             </ul>
           ) : (
-            <div className="rounded-xl border border-[var(--border)] bg-surface-elevated px-4 py-10 text-center text-sm text-foreground-muted">
-              No results.
+            <div className="flex min-h-40 items-center justify-center rounded-xl border border-[var(--border)] bg-surface-elevated px-4 py-10 text-center text-sm text-foreground-muted">
+              {isLoading ? <Spinner className="size-6" /> : "No results."}
             </div>
           )}
         </div>
         <div className="hidden overflow-hidden rounded-xl border border-[var(--border)] bg-surface-elevated md:block">
-          <Table className="min-w-max table-fixed">
+          <Table className="w-max min-w-max table-fixed">
+            <colgroup>
+              {table.getVisibleLeafColumns().map((column) => {
+                const width = (column.columnDef.meta as ColumnMeta | undefined)
+                  ?.width;
+                return (
+                  <col key={column.id} style={width ? { width } : undefined} />
+                );
+              })}
+            </colgroup>
             <TableHeader>
               {table.getHeaderGroups().map((headerGroup) => (
                 <TableRow key={headerGroup.id}>
                   {headerGroup.headers.map((header) => {
-                    const canSort = header.column.getCanSort();
-                    const sorted = header.column.getIsSorted();
-                    const columnFilter = filtersByColumnId.get(
-                      header.column.id,
-                    );
+                    if (header.colSpan === 0 || header.rowSpan === 0) {
+                      return null;
+                    }
+                    const isGroupParent =
+                      header.subHeaders.length > 0 && !header.isPlaceholder;
+                    const isSoloGroupParent =
+                      isGroupParent &&
+                      header.subHeaders.length === 1 &&
+                      header.column.id !== "main";
+                    const visibleParentLeaves =
+                      header.column.parent?.columns.filter((column) =>
+                        column.getIsVisible(),
+                      ) ?? [];
+                    const isSoloGroupLeaf =
+                      !isGroupParent &&
+                      header.column.parent != null &&
+                      header.column.parent.id !== "main" &&
+                      visibleParentLeaves.length === 1;
+                    if (isSoloGroupLeaf) {
+                      return null;
+                    }
+                    const renderHeader = isSoloGroupParent
+                      ? header.subHeaders[0]!
+                      : header;
+                    const renderColumn = renderHeader.column;
+                    const canSort = renderColumn.getCanSort();
+                    const sorted = renderColumn.getIsSorted();
+                    const columnFilter = filtersByColumnId.get(renderColumn.id);
                     const filterValue =
-                      (header.column.getFilterValue() as string | undefined) ??
+                      (renderColumn.getFilterValue() as string | undefined) ??
                       "all";
                     const filterActive = Boolean(
                       columnFilter && filterValue !== "all",
                     );
-                    const columnMeta = header.column.columnDef.meta as
+                    const showGroupTitle = isGroupParent && !isSoloGroupParent;
+                    const columnMeta = renderColumn.columnDef.meta as
                       | ColumnMeta
                       | undefined;
-                    const width = columnMeta?.width;
+                    const groupLeafWidth =
+                      showGroupTitle && header.colSpan === 1
+                        ? (
+                            header.subHeaders[0]?.column.columnDef.meta as
+                              | ColumnMeta
+                              | undefined
+                          )?.width
+                        : undefined;
+                    const width = showGroupTitle
+                      ? groupLeafWidth
+                      : columnMeta?.width;
                     const inventBand = columnMeta?.band === "invent";
                     const description = columnMeta?.description;
-                    const isAmount = header.column.id === "amount";
-                    const headerDef = header.column.columnDef.header;
+                    const isAmount = renderColumn.id === "amount";
+                    const headerDef = renderColumn.columnDef.header;
                     const customHeader = typeof headerDef === "function";
                     const sortLabel =
-                      csvColumnLabel(header.column) ?? header.column.id;
+                      csvColumnLabel(renderColumn) ?? renderColumn.id;
+                    const isActionsCol = renderColumn.id === "actions";
+                    const isStickyCol = renderColumn.id === firstLeafColumnId;
+                    const headerRowSpan = isSoloGroupParent
+                      ? 2
+                      : header.rowSpan > 1
+                        ? header.rowSpan
+                        : undefined;
                     const labelNode = (
                       <HeaderLabel description={description}>
                         <span className="line-clamp-2 text-left leading-snug">
                           {customHeader ? (
                             sortLabel
                           ) : (
-                            <table.FlexRender header={header} />
+                            <table.FlexRender header={renderHeader} />
                           )}
                         </span>
                       </HeaderLabel>
@@ -717,6 +833,9 @@ export function DataTable<TData extends RowData>({
                     return (
                       <TableHead
                         key={header.id}
+                        colSpan={header.colSpan}
+                        rowSpan={headerRowSpan}
+                        data-sticky-col={isStickyCol ? true : undefined}
                         style={
                           width
                             ? { width, minWidth: width, maxWidth: width }
@@ -725,14 +844,23 @@ export function DataTable<TData extends RowData>({
                         className={[
                           "h-auto min-h-10 whitespace-normal",
                           width ? "overflow-hidden" : "",
-                          inventBand
+                          isActionsCol ? "px-0" : "",
+                          showGroupTitle
+                            ? "bg-[var(--muted)]/40 text-center text-xs font-semibold tracking-wide uppercase"
+                            : "",
+                          inventBand && !showGroupTitle
                             ? "border-l border-[var(--border)] bg-[var(--muted)]/35"
                             : "",
                         ]
                           .filter(Boolean)
                           .join(" ")}
                       >
-                        {header.isPlaceholder ? null : canSort ||
+                        {showGroupTitle ? (
+                          <span className="block px-2 py-1">
+                            <table.FlexRender header={header} />
+                          </span>
+                        ) : header.isPlaceholder &&
+                          header.rowSpan <= 1 ? null : canSort ||
                           columnFilter ? (
                           <div
                             className={`-ml-2 inline-flex max-w-full items-center gap-0.5 ${
@@ -743,7 +871,7 @@ export function DataTable<TData extends RowData>({
                               <button
                                 type="button"
                                 className="inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-md px-2 py-1 font-medium transition-colors hover:bg-[var(--muted)]"
-                                onClick={header.column.getToggleSortingHandler()}
+                                onClick={renderColumn.getToggleSortingHandler()}
                               >
                                 {labelNode}
                                 {sorted === "asc" ? (
@@ -760,7 +888,7 @@ export function DataTable<TData extends RowData>({
                               </span>
                             )}
                             {customHeader ? (
-                              <table.FlexRender header={header} />
+                              <table.FlexRender header={renderHeader} />
                             ) : null}
                             {columnFilter ? (
                               <DropdownMenu>
@@ -813,7 +941,7 @@ export function DataTable<TData extends RowData>({
                           </div>
                         ) : (
                           <HeaderLabel description={description}>
-                            <table.FlexRender header={header} />
+                            <table.FlexRender header={renderHeader} />
                           </HeaderLabel>
                         )}
                       </TableHead>
@@ -835,9 +963,15 @@ export function DataTable<TData extends RowData>({
                         | undefined;
                       const width = cellMeta?.width;
                       const inventBand = cellMeta?.band === "invent";
+                      const isActionsCol = cell.column.id === "actions";
                       return (
                         <TableCell
                           key={cell.id}
+                          data-sticky-col={
+                            cell.column.id === firstLeafColumnId
+                              ? true
+                              : undefined
+                          }
                           style={
                             width
                               ? { width, minWidth: width, maxWidth: width }
@@ -846,6 +980,7 @@ export function DataTable<TData extends RowData>({
                           className={[
                             "whitespace-normal align-top",
                             width ? "overflow-hidden" : "",
+                            isActionsCol ? "px-0" : "",
                             inventBand
                               ? "border-l border-[var(--border)] bg-[var(--muted)]/20"
                               : "",
@@ -862,10 +997,16 @@ export function DataTable<TData extends RowData>({
               ) : (
                 <TableRow>
                   <TableCell
-                    colSpan={columns.length}
-                    className="h-24 text-center text-foreground-muted"
+                    colSpan={Math.max(table.getVisibleLeafColumns().length, 1)}
+                    className="h-40 text-center text-foreground-muted"
                   >
-                    No results.
+                    {isLoading ? (
+                      <span className="inline-flex w-full items-center justify-center">
+                        <Spinner className="size-6" />
+                      </span>
+                    ) : (
+                      "No results."
+                    )}
                   </TableCell>
                 </TableRow>
               )}
