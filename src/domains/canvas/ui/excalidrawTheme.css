@@ -105,14 +105,18 @@
   --border-radius-md: calc(var(--radius) * 0.8);
   --border-radius-lg: var(--radius);
 
+  /* Card / popover recipe: sand edge + faint ring + soft lift. */
   --shadow-island:
+    0 0 0 1px color-mix(in srgb, var(--foreground) 10%, transparent),
     0 1px 2px color-mix(in srgb, var(--foreground) 6%, transparent),
-    0 8px 20px color-mix(in srgb, var(--foreground) 6%, transparent);
+    0 4px 10px -2px color-mix(in srgb, var(--foreground) 8%, transparent);
   --shadow-island-stronger:
-    0 1px 2px color-mix(in srgb, var(--foreground) 8%, transparent),
-    0 12px 24px color-mix(in srgb, var(--foreground) 10%, transparent);
+    0 0 0 1px color-mix(in srgb, var(--foreground) 10%, transparent),
+    0 4px 6px -1px color-mix(in srgb, var(--foreground) 8%, transparent),
+    0 12px 24px -4px color-mix(in srgb, var(--foreground) 12%, transparent);
   --modal-shadow: var(--shadow-island-stronger);
   --sidebar-shadow: var(--shadow-island-stronger);
+  --library-dropdown-shadow: var(--shadow-island-stronger);
 }
 
 .jayrr-excalidraw .excalidraw.theme--dark {
@@ -135,20 +139,95 @@
 
 .jayrr-excalidraw .excalidraw .Island {
   border: 1px solid var(--border);
+  box-shadow: var(--shadow-island);
+}
+
+.jayrr-excalidraw .excalidraw .Island.zen-mode {
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.jayrr-excalidraw .excalidraw .Modal .Island {
+  border: none;
+  box-shadow: none;
 }
 
 .jayrr-excalidraw .excalidraw .Modal__content {
+  border: 1px solid var(--border);
   border-radius: var(--radius-xl);
-  border-color: var(--border);
   background: var(--surface-elevated);
+  box-shadow: var(--modal-shadow);
 }
 
-.jayrr-excalidraw .excalidraw .dropdown-menu,
-.jayrr-excalidraw .excalidraw .context-menu {
+.jayrr-excalidraw .excalidraw .dropdown-menu .dropdown-menu-container,
+.jayrr-excalidraw .excalidraw .context-menu,
+.jayrr-excalidraw .excalidraw .popover,
+.jayrr-excalidraw .excalidraw .color-picker {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-elevated);
+  box-shadow: var(--shadow-island-stronger);
+}
+
+.jayrr-excalidraw .excalidraw .sidebar {
+  border-color: var(--border);
+  box-shadow: var(--sidebar-shadow);
+}
+
+.jayrr-excalidraw .excalidraw .sidebar--docked {
+  box-shadow: none;
+}
+
+.jayrr-excalidraw .excalidraw .help-icon,
+.jayrr-excalidraw .excalidraw .sidebar-trigger,
+.jayrr-excalidraw .excalidraw .dropdown-menu-button,
+.jayrr-excalidraw .zoom-actions,
+.jayrr-excalidraw .undo-redo-buttons,
+.jayrr-excalidraw .excalidraw .scroll-back-to-content {
+  border: 1px solid var(--border);
+  background-color: var(--surface-elevated);
+  box-shadow: var(--shadow-island);
+}
+
+.jayrr-excalidraw .excalidraw .help-icon:active,
+.jayrr-excalidraw .excalidraw .sidebar-trigger:active {
+  box-shadow: 0 0 0 1px var(--color-brand-active);
+}
+
+.jayrr-excalidraw .excalidraw .color-picker__button {
+  border-color: var(--border);
+}
+
+.jayrr-excalidraw .excalidraw .color-picker__button:hover::after {
+  box-shadow: 0 0 0 1px var(--border);
+}
+
+.jayrr-excalidraw .excalidraw-hyperlinkContainer {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--surface-elevated);
   box-shadow: var(--shadow-island);
+}
+
+.jayrr-excalidraw .excalidraw .Toast {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-elevated);
+  box-shadow: var(--shadow-island);
+}
+
+.jayrr-excalidraw .excalidraw .HintViewer {
+  border: none;
+  background: transparent;
+  box-shadow: none;
+}
+
+.jayrr-excalidraw .excalidraw .HintViewer > span {
+  padding: 0.25rem;
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  color: var(--foreground-muted);
 }
 
 .jayrr-excalidraw .excalidraw .divider {
@@ -162,4 +241,5 @@
   background: var(--foreground);
   color: var(--surface-elevated);
   border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-island);
 }

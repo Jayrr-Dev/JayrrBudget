@@ -20,7 +20,7 @@
     "@auth/core": "^0.41.1",
     "@base-ui/react": "^1.8.0",
     "@convex-dev/auth": "^0.0.95",
-    "@excalidraw/excalidraw": "^0.18.1",
+    "jayrr-draw": "workspace:*",
     "@iconify/react": "^6.0.2",
     "@libsql/client": "^0.18.0",
     "@mistralai/mistralai": "^2.7.0",

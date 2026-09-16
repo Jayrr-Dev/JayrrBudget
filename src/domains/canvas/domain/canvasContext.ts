@@ -1,4 +1,4 @@
-import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
+import type { ExcalidrawImperativeAPI } from "jayrr-draw";
 
 const DEFAULT_SNAPSHOT_LIMIT = 120;
 

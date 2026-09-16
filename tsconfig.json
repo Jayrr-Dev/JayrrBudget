@@ -20,7 +20,8 @@
     ],
     "paths": {
       "@/*": ["./src/*"],
-      "@convex/*": ["./convex/*"]
+      "@convex/*": ["./convex/*"],
+      "jayrr-draw": ["./packages/jayrr-draw/src/index.ts"]
     }
   },
   "include": [

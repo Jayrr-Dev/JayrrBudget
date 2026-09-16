@@ -17,7 +17,7 @@
   </g>
   <defs>
     <clipPath id="coin-slot">
-      <path d="M0 0h128v69.32L0 40Z"/>
+      <path d="M0 0h128v69.32L0 50Z"/>
     </clipPath>
   </defs>
   <g clip-path="url(#coin-slot)">
@@ -29,5 +29,5 @@
       <path stroke-width="3.5" d="m90 25-6 17"/>
     </g>
   </g>
-  <path stroke="#60353d" stroke-linecap="round" stroke-width="5" d="m58 53 32 9"/>
+  <path stroke="#60353d" stroke-linecap="round" stroke-width="5" d="m58 56 32 9"/>
 </svg>

@@ -14,14 +14,12 @@ import {
   CaptureUpdateAction,
   convertToExcalidrawElements,
   newElementWith,
-} from "@excalidraw/excalidraw";
-import type { ExcalidrawElementSkeleton } from "@excalidraw/excalidraw/data/transform";
-import type {
-  Arrowhead,
-  ExcalidrawElement,
-  FontFamilyValues,
-} from "@excalidraw/excalidraw/element/types";
-import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
+  type Arrowhead,
+  type ExcalidrawElement,
+  type ExcalidrawElementSkeleton,
+  type ExcalidrawImperativeAPI,
+  type FontFamilyValues,
+} from "jayrr-draw";
 
 const DEFAULT_STROKE = "#1e1e1e";
 const DEFAULT_TEXT = "#1e1e1e";

@@ -3,13 +3,13 @@
 import { CanvasAiChat } from "@/domains/canvas/ui/CanvasAiChat";
 import { CanvasApiContext } from "@/domains/canvas/ui/canvasApiContext";
 import { api } from "@convex/_generated/api";
-import { Excalidraw, serializeAsJSON } from "@excalidraw/excalidraw";
-import "@excalidraw/excalidraw/index.css";
+import {
+  JayrrDraw,
+  serializeAsJSON,
+  type ExcalidrawImperativeAPI,
+  type ExcalidrawInitialDataState,
+} from "jayrr-draw";
 import "@/domains/canvas/ui/excalidrawTheme.css";
-import type {
-  ExcalidrawImperativeAPI,
-  ExcalidrawInitialDataState,
-} from "@excalidraw/excalidraw/types";
 import { useMutation, useQuery } from "convex/react";
 import {
   useCallback,
@@ -118,7 +118,7 @@ export function BudgetCanvas() {
   }, [cloud, importIfEmpty]);
 
   const onChange = useCallback<
-    NonNullable<ComponentProps<typeof Excalidraw>["onChange"]>
+    NonNullable<ComponentProps<typeof JayrrDraw>["onChange"]>
   >(
     (elements, appState, files) => {
       if (!allowSave.current) return;
@@ -149,8 +149,8 @@ export function BudgetCanvas() {
 
   return (
     <CanvasApiContext.Provider value={apiRef}>
-      <div className="jayrr-excalidraw h-full min-h-0 w-full flex-1 overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)]">
-        <Excalidraw
+      <div className="jayrr-excalidraw h-full min-h-0 w-full flex-1 overflow-hidden rounded-xl border border-border bg-surface shadow-sm ring-1 ring-foreground/10">
+        <JayrrDraw
           excalidrawAPI={setApi}
           initialData={initialData ?? undefined}
           onChange={onChange}

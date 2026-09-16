@@ -334,7 +334,7 @@ function CanvasAiChatSession({ initialHistory, saveHistory, historyError }: {
           title="Canvas Piggy"
           aria-label="Canvas Piggy"
           className={cn(
-            "size-9 rounded-[var(--border-radius-lg,0.5rem)] border-0 bg-[var(--color-surface-low,#ececf4)] text-accent shadow-none hover:bg-[var(--button-gray-2,#e0e0e8)] hover:text-accent [&_svg]:size-5",
+            "size-9 rounded-lg border border-border bg-surface-elevated text-accent shadow-md ring-1 ring-foreground/10 hover:bg-muted hover:text-accent [&_svg]:size-5",
             busy && !open && "ring-2 ring-accent/35",
           )}
         >
@@ -346,7 +346,7 @@ function CanvasAiChatSession({ initialHistory, saveHistory, historyError }: {
         side="bottom"
         sideOffset={8}
         onOpenAutoFocus={(event) => event.preventDefault()}
-        className="z-[2000] flex w-[min(24rem,calc(100vw-1rem))] flex-col gap-0 overflow-hidden border-accent/25 p-0 shadow-lg"
+        className="z-[2000] flex w-[min(24rem,calc(100vw-1rem))] flex-col gap-0 overflow-hidden border border-border p-0 shadow-lg ring-1 ring-foreground/10"
       >
         <PopoverHeader className="flex-row items-center gap-1.5 border-b border-accent/15 bg-linear-to-r from-accent-subtle/80 to-transparent px-3 py-2.5">
           <PopoverTitle className="flex items-center gap-1.5">
@@ -475,7 +475,7 @@ function CanvasAiChatSession({ initialHistory, saveHistory, historyError }: {
                   variant="ghost"
                   onClick={() => void stop()}
                   aria-label="Stop"
-                  className="h-[var(--default-button-size,2.25rem)] w-[var(--default-button-size,2.25rem)] rounded-[var(--border-radius-lg,0.5rem)] border-0 bg-[var(--color-surface-low,#ececf4)] text-foreground shadow-none hover:bg-[var(--button-gray-2,#e0e0e8)]"
+                  className="size-8 rounded-lg"
                 >
                   <Square className="size-3.5 fill-current" />
                 </InputGroupButton>
@@ -486,7 +486,7 @@ function CanvasAiChatSession({ initialHistory, saveHistory, historyError }: {
                   variant="ghost"
                   disabled={blocked || !input.trim()}
                   aria-label="Send"
-                  className="h-[var(--default-button-size,2.25rem)] w-[var(--default-button-size,2.25rem)] rounded-[var(--border-radius-lg,0.5rem)] border-0 bg-[var(--color-surface-low,#ececf4)] text-foreground shadow-none hover:bg-[var(--button-gray-2,#e0e0e8)] disabled:opacity-40"
+                  className="size-8 rounded-lg disabled:opacity-40"
                 >
                   <ArrowUp className="size-3.5" strokeWidth={2.25} />
                 </InputGroupButton>
