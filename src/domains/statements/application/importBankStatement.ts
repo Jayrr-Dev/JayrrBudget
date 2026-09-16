@@ -1,5 +1,3 @@
-import type { ConvexHttpClient } from "convex/browser";
-import { categorizeStatement, labelDescriptionGroups } from "./categorizeStatement";
 import {
   normalizeStatementAccountType,
   statementTypeToLedgerFields,
@@ -13,29 +11,36 @@ import {
   STATEMENT_IMPORT_STEPS,
   type StatementImportProgress,
 } from "@/domains/statements/domain/importProgress";
-import {
-  isMistralConfigured,
-  ocrDocument,
-} from "@/domains/statements/infrastructure/mistralOcr";
+import type {
+  ImportBankStatementResult,
+  ImportBankStatementSuccess,
+} from "@/domains/statements/domain/importResult";
 import { isOcrDocumentFilename } from "@/domains/statements/domain/ocrDocumentTypes";
-import {
-  isOpenRouterConfigured,
-  parseStatementPaperFacts,
-} from "@/domains/statements/infrastructure/openRouterParse";
 import {
   manualAccountId,
   statementFileHash,
   statementOccurrenceKey,
   statementTransactionId,
 } from "@/domains/statements/domain/parsedStatement";
-import type {
-  ImportBankStatementResult,
-  ImportBankStatementSuccess,
-} from "@/domains/statements/domain/importResult";
+import {
+  isMistralConfigured,
+  ocrDocument,
+} from "@/domains/statements/infrastructure/mistralOcr";
+import { parseStatementPaperFacts } from "@/domains/statements/infrastructure/openRouterParse";
+import {
+  OPENROUTER_NOT_CONFIGURED,
+  runWithOpenRouterKey,
+} from "@/shared/ai/openRouter";
+import { resolveOpenRouterApiKey } from "@/shared/ai/resolveOpenRouter.server";
 import { invalidateConvexUserCache } from "@/shared/convex/cachedRead";
 import { api } from "@/shared/convex/httpClient";
-import { errorMessage } from "@/shared/lib/error-message";
 import { normalizeCurrencyCode } from "@/shared/lib/currency";
+import { errorMessage } from "@/shared/lib/error-message";
+import type { ConvexHttpClient } from "convex/browser";
+import {
+  categorizeStatement,
+  labelDescriptionGroups,
+} from "./categorizeStatement";
 
 export type {
   ImportBankStatementResult,
@@ -55,7 +60,7 @@ function emitProgress(
 /**
  * Slim statement import:
  * 0. SHA-256 of PDF bytes - skip OCR/parse if already imported
- * 1. Mistral OCR
+ * 1. OCR (server, or local markdown from the browser)
  * 2. AI paper-facts parse (dates/amounts/description/locations + account meta)
  * 3. Write transactions to Convex
  *
@@ -82,20 +87,28 @@ export async function importBankStatement(params: {
     };
   }
 
-  if (!isOpenRouterConfigured()) {
+  const apiKey = await resolveOpenRouterApiKey(params.client);
+  if (!apiKey) {
     return {
       ok: false,
       status: 503,
       code: "OPENROUTER_NOT_CONFIGURED",
-      error: "Missing OPENROUTER_API_KEY. Add it to .env.local.",
+      error: OPENROUTER_NOT_CONFIGURED,
     };
   }
 
+  return runWithOpenRouterKey(apiKey, () => importBankStatementWithKey(params));
+}
+
+async function importBankStatementWithKey(
+  params: Parameters<typeof importBankStatement>[0],
+): Promise<ImportBankStatementResult> {
   if (!isOcrDocumentFilename(params.filename)) {
     return {
       ok: false,
       status: 400,
-      error: "Only PDF or image files (PNG, JPG, WEBP, AVIF, HEIC) are supported.",
+      error:
+        "Only PDF or image files (PNG, JPG, WEBP, AVIF, HEIC) are supported.",
     };
   }
 
@@ -117,12 +130,12 @@ export async function importBankStatement(params: {
 
     // Same file bytes already imported → skip Mistral OCR + OpenRouter parse.
     const persistMode = params.persistMode ?? "convex";
-    const existing = persistMode === "vault"
-      ? null
-      : await params.client.query(
-          api.statements.findCompletedByFileHash,
-          { fileHash },
-        );
+    const existing =
+      persistMode === "vault"
+        ? null
+        : await params.client.query(api.statements.findCompletedByFileHash, {
+            fileHash,
+          });
     if (existing) {
       emitProgress(params.onProgress, "done");
       console.info(
@@ -219,9 +232,14 @@ export async function importBankStatement(params: {
       let categorization;
       let labeledTxns = transactions;
       try {
-        const labeled = await labelDescriptionGroups(params.client, transactions);
+        const labeled = await labelDescriptionGroups(
+          params.client,
+          transactions,
+        );
         categorization = labeled.summary;
-        const byId = new Map(labeled.labeled.map((row) => [row.transactionId, row]));
+        const byId = new Map(
+          labeled.labeled.map((row) => [row.transactionId, row]),
+        );
         labeledTxns = transactions.map((txn) => {
           const hit = byId.get(txn.transactionId);
           if (!hit) return txn;
@@ -286,39 +304,50 @@ export async function importBankStatement(params: {
       };
     }
 
-    const result = await params.client.mutation(api.statements.importPaperFacts, {
-      filename: params.filename,
-      fileHash,
-      pageCount: ocr.pageCount,
-      institutionName: parsed.institutionName,
-      accountName: parsed.accountName,
-      accountMask: parsed.accountMask,
-      currency,
-      accountId,
-      accountType: ledgerFields.type,
-      accountSubtype: ledgerFields.subtype,
-      statementPeriodStart: parsed.statementPeriodStart,
-      statementPeriodEnd: parsed.statementPeriodEnd,
-      openingBalance: balance.openingBalance,
-      closingBalance: balance.closingBalance,
-      totalDebits: parsed.totalDebits,
-      totalCredits: parsed.totalCredits,
-      transactionSum: balance.transactionSum,
-      computedClosing: balance.computedClosing,
-      balanceDelta: balance.delta,
-      balanceOk: balance.balanced,
-      ocrMarkdown: ocr.markdown,
-      transactions,
-    });
+    const result = await params.client.mutation(
+      api.statements.importPaperFacts,
+      {
+        filename: params.filename,
+        fileHash,
+        pageCount: ocr.pageCount,
+        institutionName: parsed.institutionName,
+        accountName: parsed.accountName,
+        accountMask: parsed.accountMask,
+        currency,
+        accountId,
+        accountType: ledgerFields.type,
+        accountSubtype: ledgerFields.subtype,
+        statementPeriodStart: parsed.statementPeriodStart,
+        statementPeriodEnd: parsed.statementPeriodEnd,
+        openingBalance: balance.openingBalance,
+        closingBalance: balance.closingBalance,
+        totalDebits: parsed.totalDebits,
+        totalCredits: parsed.totalCredits,
+        transactionSum: balance.transactionSum,
+        computedClosing: balance.computedClosing,
+        balanceDelta: balance.delta,
+        balanceOk: balance.balanced,
+        ocrMarkdown: ocr.markdown,
+        transactions,
+      },
+    );
     await invalidateConvexUserCache();
 
     emitProgress(params.onProgress, "categorize");
     let categorization;
     try {
-      categorization = await categorizeStatement(params.client, result.uploadId);
+      categorization = await categorizeStatement(
+        params.client,
+        result.uploadId,
+      );
     } catch (error) {
-      categorization = { ok: false, cached: 0, ai: 0, pending: result.transactionCount,
-        error: errorMessage(error, "Categorization failed") };
+      categorization = {
+        ok: false,
+        cached: 0,
+        ai: 0,
+        pending: result.transactionCount,
+        error: errorMessage(error, "Categorization failed"),
+      };
     }
     emitProgress(params.onProgress, "done");
     return { ...result, categorization } as ImportBankStatementSuccess;

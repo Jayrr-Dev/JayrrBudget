@@ -51,7 +51,12 @@ async function getWorker(): Promise<TesseractWorker> {
   if (!workerPromise) {
     workerPromise = (async () => {
       const { createWorker } = await import("tesseract.js");
-      return createWorker(["eng", "fra"]) as Promise<TesseractWorker>;
+      return createWorker(["eng", "fra"], 1, {
+        workerPath:
+          "https://cdn.jsdelivr.net/npm/tesseract.js@7.0.0/dist/worker.min.js",
+        corePath: "https://cdn.jsdelivr.net/npm/tesseract.js-core@7.0.0",
+        langPath: "https://tessdata.projectnaptha.com/4.0.0",
+      }) as Promise<TesseractWorker>;
     })();
   }
   try {
@@ -70,16 +75,14 @@ async function ensurePdfWorker() {
   return pdfjs;
 }
 
-async function renderPdfPage(
-  page: {
-    getViewport: (opts: { scale: number }) => { width: number; height: number };
-    render: (opts: {
-      canvasContext: CanvasRenderingContext2D;
-      viewport: { width: number; height: number };
-      canvas: HTMLCanvasElement;
-    }) => { promise: Promise<void> };
-  },
-) {
+async function renderPdfPage(page: {
+  getViewport: (opts: { scale: number }) => { width: number; height: number };
+  render: (opts: {
+    canvasContext: CanvasRenderingContext2D;
+    viewport: { width: number; height: number };
+    canvas: HTMLCanvasElement;
+  }) => { promise: Promise<void> };
+}) {
   const viewport = page.getViewport({ scale: PDF_RENDER_SCALE });
   const canvas = document.createElement("canvas");
   canvas.width = Math.ceil(viewport.width);
@@ -107,9 +110,7 @@ async function ocrPdf(
 
   for (let pageNumber = 1; pageNumber <= pageCount; pageNumber += 1) {
     throwIfAborted(signal);
-    onProgress?.(
-      `Scanning page ${pageNumber} of ${pageCount} on this device…`,
-    );
+    onProgress?.(`Scanning page ${pageNumber} of ${pageCount} on this device…`);
     const page = await pdf.getPage(pageNumber);
     const textContent = await page.getTextContent();
     const embedded = textContent.items

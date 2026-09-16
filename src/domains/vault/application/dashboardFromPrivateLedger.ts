@@ -1,7 +1,14 @@
-import type { DashboardAccount, DashboardData, DashboardTransaction } from "@/domains/dashboard/domain/types";
+import type {
+  DashboardAccount,
+  DashboardData,
+  DashboardTransaction,
+} from "@/domains/dashboard/domain/types";
 import type { PrivateLedger } from "@/domains/vault/domain/privateLedger";
+import { rewriteTaxonomyLabel } from "@convex/lib/seedCategoryPaths";
 
-export function dashboardFromPrivateLedger(ledger: PrivateLedger): DashboardData {
+export function dashboardFromPrivateLedger(
+  ledger: PrivateLedger,
+): DashboardData {
   const usedAccountIds = new Set(
     ledger.transactions
       .map((tx) => tx.accountId)
@@ -59,12 +66,12 @@ export function dashboardFromPrivateLedger(ledger: PrivateLedger): DashboardData
       companyName: null,
       brandName: null,
       sectionName: tx.sectionName ?? null,
-      categoryName: tx.categoryName ?? null,
+      categoryName: rewriteTaxonomyLabel("category", tx.categoryName),
       spreadName: tx.spreadName ?? null,
       transactionTypeName: tx.transactionTypeName ?? null,
-      typeName: tx.subcategoryName ?? null,
+      typeName: rewriteTaxonomyLabel("subcategory", tx.subcategoryName),
       typeNames: [],
-      subcategoryName: tx.subcategoryName ?? null,
+      subcategoryName: rewriteTaxonomyLabel("subcategory", tx.subcategoryName),
       tagNames: tx.tagNames ?? [],
       enrichmentStatus: null,
       amount: tx.amount,
@@ -86,8 +93,14 @@ export function dashboardFromPrivateLedger(ledger: PrivateLedger): DashboardData
     };
   });
 
-  const dates = transactions.map((tx) => tx.date).filter(Boolean).sort();
-  const totalBalance = accounts.reduce((sum, account) => sum + (account.currentBalance ?? 0), 0);
+  const dates = transactions
+    .map((tx) => tx.date)
+    .filter(Boolean)
+    .sort();
+  const totalBalance = accounts.reduce(
+    (sum, account) => sum + (account.currentBalance ?? 0),
+    0,
+  );
   const latestLog = ledger.statementLogs
     .slice()
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
@@ -104,6 +117,7 @@ export function dashboardFromPrivateLedger(ledger: PrivateLedger): DashboardData
     hasMoreTransactions: false,
     earliestDate: dates[0] ?? null,
     latestDate: dates[dates.length - 1] ?? null,
-    latestStatementDate: latestLog?.statementPeriodEnd ?? dates[dates.length - 1] ?? null,
+    latestStatementDate:
+      latestLog?.statementPeriodEnd ?? dates[dates.length - 1] ?? null,
   };
 }

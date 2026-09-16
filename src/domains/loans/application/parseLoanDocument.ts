@@ -1,21 +1,23 @@
-import type { ConvexHttpClient } from "convex/browser";
 import {
   LOAN_DOCUMENT_STEPS,
   type LoanDocumentProgress,
 } from "@/domains/loans/domain/loanDocumentProgress";
 import type { ParseLoanDocumentResult } from "@/domains/loans/domain/loanDocumentResult";
+import { parseLoanDocumentFields } from "@/domains/loans/infrastructure/openRouterParseLoan";
+import { isOcrDocumentFilename } from "@/domains/statements/domain/ocrDocumentTypes";
+import { statementFileHash } from "@/domains/statements/domain/parsedStatement";
 import {
   isMistralConfigured,
   ocrDocument,
 } from "@/domains/statements/infrastructure/mistralOcr";
 import {
-  isOpenRouterConfigured,
-  parseLoanDocumentFields,
-} from "@/domains/loans/infrastructure/openRouterParseLoan";
-import { isOcrDocumentFilename } from "@/domains/statements/domain/ocrDocumentTypes";
-import { statementFileHash } from "@/domains/statements/domain/parsedStatement";
+  OPENROUTER_NOT_CONFIGURED,
+  runWithOpenRouterKey,
+} from "@/shared/ai/openRouter";
+import { resolveOpenRouterApiKey } from "@/shared/ai/resolveOpenRouter.server";
 import { api } from "@/shared/convex/httpClient";
 import { errorMessage } from "@/shared/lib/error-message";
+import type { ConvexHttpClient } from "convex/browser";
 
 function emitProgress(
   onProgress: ((progress: LoanDocumentProgress) => void) | undefined,
@@ -28,7 +30,7 @@ function emitProgress(
 /**
  * Loan document parse (statement-import fundamentals, no ledger writes on vault):
  * 1. SHA-256 of file bytes
- * 2. Mistral OCR (PDF or photo)
+ * 2. OCR (server, or local markdown from the browser)
  * 3. OpenRouter structured loan terms
  * 4. convex = persist OCR + fields; vault = return payload for client encrypt
  */
@@ -50,20 +52,38 @@ export async function parseLoanDocument(params: {
     };
   }
 
-  if (!isOpenRouterConfigured()) {
+  const apiKey = await resolveOpenRouterApiKey(params.client);
+  if (!apiKey) {
     return {
       ok: false,
       status: 503,
       code: "OPENROUTER_NOT_CONFIGURED",
-      error: "Missing OPENROUTER_API_KEY. Add it to .env.local.",
+      error: OPENROUTER_NOT_CONFIGURED,
     };
   }
 
+  return runWithOpenRouterKey(apiKey, () => parseLoanDocumentWithKey(params));
+}
+
+type ParseLoanParams = {
+  filename: string;
+  bytes: Buffer;
+  client: ConvexHttpClient;
+  mimeType?: string | null;
+  persistMode?: "convex" | "vault";
+  clientOcr?: { markdown: string; pageCount: number } | null;
+  onProgress?: (progress: LoanDocumentProgress) => void;
+};
+
+async function parseLoanDocumentWithKey(
+  params: ParseLoanParams,
+): Promise<ParseLoanDocumentResult> {
   if (!isOcrDocumentFilename(params.filename)) {
     return {
       ok: false,
       status: 400,
-      error: "Only PDF or image files (PNG, JPG, WEBP, AVIF, HEIC) are supported.",
+      error:
+        "Only PDF or image files (PNG, JPG, WEBP, AVIF, HEIC) are supported.",
     };
   }
 

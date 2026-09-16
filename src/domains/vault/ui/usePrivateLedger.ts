@@ -10,6 +10,10 @@ import {
   loadPrivateLedger,
   type VaultListClient,
 } from "@/domains/vault/application/loadPrivateLedger";
+import {
+  rewriteEncryptedTaxonomyLabels,
+  vaultWriteReady,
+} from "@/domains/vault/application/saveEncryptedLedger";
 import type { PrivateLedger } from "@/domains/vault/domain/privateLedger";
 import { api } from "@convex/_generated/api";
 import { useConvex, useConvexAuth, useQuery } from "convex/react";
@@ -52,6 +56,7 @@ export function usePrivateLedger() {
   const vaultUpdatedAt = vault?.updatedAt ?? 0;
   const vaultId = vault?.vaultId ?? null;
   const hasLedger = useRef(false);
+  const rewritingLabels = useRef(false);
 
   useEffect(() => {
     const onBump = () => setVersion(ledgerEpoch);
@@ -108,6 +113,23 @@ export function usePrivateLedger() {
         if (!cancelled) {
           hasLedger.current = true;
           setLedger(next);
+          const write = vaultWriteReady({
+            encryptedLedger: true,
+            userId: String(me.userId),
+            vaultId,
+            keyId: vault?.currentKeyId ?? null,
+            client,
+          });
+          if (write) {
+            if (!rewritingLabels.current) {
+              rewritingLabels.current = true;
+              void rewriteEncryptedTaxonomyLabels(write, next.transactions)
+                .catch(() => undefined)
+                .finally(() => {
+                  rewritingLabels.current = false;
+                });
+            }
+          }
         }
       } catch (cause) {
         if (!cancelled) {

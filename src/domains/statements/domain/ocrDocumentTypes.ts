@@ -1,4 +1,4 @@
-/** Shared accept list for statement + loan OCR uploads (Mistral OCR). */
+/** Shared accept list for statement + loan OCR uploads. */
 
 export const OCR_DOCUMENT_EXTENSIONS = [
   "pdf",
@@ -39,10 +39,7 @@ export function isOcrDocumentFilename(filename: string) {
 export function isOcrDocumentFile(file: File) {
   if (isOcrDocumentFilename(file.name)) return true;
   const type = file.type.toLowerCase();
-  return (
-    type === "application/pdf" ||
-    type.startsWith("image/")
-  );
+  return type === "application/pdf" || type.startsWith("image/");
 }
 
 export function isPdfFilename(filename: string) {
@@ -51,7 +48,10 @@ export function isPdfFilename(filename: string) {
 
 export function isImageFilename(filename: string) {
   const ext = fileExtension(filename);
-  return ext !== "pdf" && (OCR_DOCUMENT_EXTENSIONS as readonly string[]).includes(ext);
+  return (
+    ext !== "pdf" &&
+    (OCR_DOCUMENT_EXTENSIONS as readonly string[]).includes(ext)
+  );
 }
 
 /** MIME for Mistral data URLs / uploads. Prefers File.type when present. */

@@ -1,7 +1,17 @@
+import { errorMessage, isRetryableAiError } from "@/shared/ai/errors";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { generateObject } from "ai";
+import { AsyncLocalStorage } from "node:async_hooks";
 import type { z } from "zod";
-import { errorMessage, isRetryableAiError } from "@/shared/ai/errors";
+
+const requestApiKey = new AsyncLocalStorage<string>();
+
+export const OPENROUTER_NOT_CONFIGURED =
+  "No OpenRouter key. Add yours on Profile, or set OPENROUTER_API_KEY on the server.";
+
+export function runWithOpenRouterKey<T>(apiKey: string, fn: () => T): T {
+  return requestApiKey.run(apiKey, fn);
+}
 
 const DEFAULT_MODELS = [
   "google/gemini-3.8-flash",
@@ -11,13 +21,13 @@ const DEFAULT_MODELS = [
 ] as const;
 
 export function isOpenRouterConfigured() {
-  return Boolean(process.env.OPENROUTER_API_KEY);
+  return Boolean(requestApiKey.getStore() || process.env.OPENROUTER_API_KEY);
 }
 
 export function getOpenRouter() {
-  const apiKey = process.env.OPENROUTER_API_KEY;
+  const apiKey = requestApiKey.getStore() || process.env.OPENROUTER_API_KEY;
   if (!apiKey) {
-    throw new Error("Missing OPENROUTER_API_KEY. Add it to .env.local.");
+    throw new Error(OPENROUTER_NOT_CONFIGURED);
   }
 
   return createOpenRouter({
@@ -41,11 +51,9 @@ export function getModelChain() {
     .map((value) => value.trim())
     .filter(Boolean);
 
-  const chain = [
-    primary,
-    ...(fallbacks ?? []),
-    ...DEFAULT_MODELS,
-  ].filter((value): value is string => Boolean(value));
+  const chain = [primary, ...(fallbacks ?? []), ...DEFAULT_MODELS].filter(
+    (value): value is string => Boolean(value),
+  );
 
   return [...new Set(chain)];
 }
@@ -109,9 +117,7 @@ async function withTimeout<T>(
     return await fn(controller.signal);
   } catch (error) {
     if (controller.signal.aborted) {
-      throw new Error(
-        `${label} timed out after ${timeoutMs}ms on ${modelId}`,
-      );
+      throw new Error(`${label} timed out after ${timeoutMs}ms on ${modelId}`);
     }
     throw error;
   } finally {
@@ -124,7 +130,9 @@ async function withTimeout<T>(
  * Structured generate with model-chain fallback.
  * OpenRouter also retries providers and heals malformed JSON.
  */
-export async function generateObjectWithFallback<SCHEMA extends z.ZodType>(params: {
+export async function generateObjectWithFallback<
+  SCHEMA extends z.ZodType,
+>(params: {
   schema: SCHEMA;
   prompt: string;
   logLabel: string;

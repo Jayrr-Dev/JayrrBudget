@@ -9,16 +9,31 @@ type SeedPath = {
  * Extra shelves from the household taxonomy are folded in; names stay ours.
  * `classifications:reconcileSharedPaths` makes the live table match this list.
  */
-const TREE: Array<[section: string, category: string, subcategories: string[]]> = [
+const TREE: Array<
+  [section: string, category: string, subcategories: string[]]
+> = [
   [
     "Finance",
     "Banking Fees",
-    ["Monthly Fees", "Interest", "Overdraft", "Transfer Fees", "ATM Fees", "Foreign Exchange"],
+    [
+      "Monthly Fees",
+      "Interest",
+      "Overdraft",
+      "Transfer Fees",
+      "ATM Fees",
+      "Foreign Exchange",
+    ],
   ],
   [
     "Finance",
     "Loans",
-    ["Student Loans", "Personal Financing", "BNPL", "Credit Card Interest", "Line of Credit"],
+    [
+      "Student Loans",
+      "Personal Financing",
+      "BNPL",
+      "Credit Card Interest",
+      "Line of Credit",
+    ],
   ],
   [
     "Finance",
@@ -33,7 +48,17 @@ const TREE: Array<[section: string, category: string, subcategories: string[]]> 
       "Travel Insurance",
     ],
   ],
-  ["Finance", "Investments", ["Brokerage", "Crypto", "Retirement Accounts", "Trading Fees", "Robo-Advisor"]],
+  [
+    "Finance",
+    "Investments",
+    [
+      "Brokerage",
+      "Crypto",
+      "Retirement Accounts",
+      "Trading Fees",
+      "Robo-Advisor",
+    ],
+  ],
   ["Finance", "Tax Payments", ["Income Tax", "Property Tax"]],
 
   ["Income", "Employment", ["Salary", "Bonus", "Contractor Pay"]],
@@ -41,12 +66,26 @@ const TREE: Array<[section: string, category: string, subcategories: string[]]> 
   [
     "Income",
     "Government Benefits",
-    ["Unemployment", "Child Benefit", "Pension", "Disability", "Social Assistance"],
+    [
+      "Unemployment",
+      "Child Benefit",
+      "Pension",
+      "Disability",
+      "Social Assistance",
+    ],
   ],
   ["Income", "Cashback", ["Cashback Rewards", "Merchant Rebates"]],
 
-  ["Transfers", "Account Transfers", ["Credit Card Payoffs", "Self Transfers", "Investment Transfers"]],
-  ["Transfers", "External Transfers", ["Interac e-Transfer", "Remittances", "P2P Apps"]],
+  [
+    "Transfers",
+    "Account Transfers",
+    ["Credit Card Payoffs", "Self Transfers", "Investment Transfers"],
+  ],
+  [
+    "Transfers",
+    "External Transfers",
+    ["Interac e-Transfer", "Remittances", "P2P Apps"],
+  ],
   ["Transfers", "ATM", ["ATM Withdrawals", "Cash Advances", "Cash Deposits"]],
 
   ["Home", "Housing", ["Rent", "Mortgage", "Parking Rent", "Storage Rent"]],
@@ -58,9 +97,21 @@ const TREE: Array<[section: string, category: string, subcategories: string[]]> 
   [
     "Home",
     "Home Maintenance",
-    ["Hardware", "Equipment Rental", "Repairs", "Cleaning", "Lawn", "Snow", "Pest Control"],
+    [
+      "Hardware",
+      "Equipment Rental",
+      "Repairs",
+      "Cleaning",
+      "Lawn",
+      "Snow",
+      "Pest Control",
+    ],
   ],
-  ["Home", "Furnishings", ["Furniture", "Appliances", "Decor", "Housewares", "Bedding"]],
+  [
+    "Home",
+    "Furnishings",
+    ["Furniture", "Appliances", "Decor", "Housewares", "Bedding"],
+  ],
 
   [
     "Food",
@@ -74,22 +125,18 @@ const TREE: Array<[section: string, category: string, subcategories: string[]]> 
   ],
   ["Food", "Takeout", ["Restaurant Pickup", "Prepared Meals"]],
   ["Food", "Delivery", ["Food Delivery", "Delivery Fees"]],
-  ["Food", "Specialty Food", ["Bakery", "Butcher", "Specialty Grocery", "Seafood", "Cheese", "Deli"]],
+  [
+    "Food",
+    "Specialty Food",
+    ["Bakery", "Butcher", "Specialty Grocery", "Seafood", "Cheese", "Deli"],
+  ],
   ["Food", "Drink", ["Coffee", "Tea", "Juice", "Smoothies", "Soft Drinks"]],
   ["Food", "Alcohol", ["Liquor Store", "Beer Store", "Wine Store"]],
 
   [
     "Lifestyle",
     "Entertainment",
-    [
-      "Streaming",
-      "Games",
-      "Cinemas",
-      "Museums",
-      "Sports",
-      "Concerts",
-      "Bars",
-    ],
+    ["Streaming", "Games", "Cinemas", "Museums", "Sports", "Concerts", "Bars"],
   ],
   [
     "Lifestyle",
@@ -104,18 +151,41 @@ const TREE: Array<[section: string, category: string, subcategories: string[]]> 
       "Footwear",
     ],
   ],
-  ["Lifestyle", "Personal Care", ["Gym Memberships", "Barbers", "Salons", "Cosmetics", "Toiletries"]],
+  [
+    "Lifestyle",
+    "Personal Care",
+    ["Gym Memberships", "Barbers", "Salons", "Cosmetics", "Toiletries"],
+  ],
   ["Lifestyle", "Fitness", ["Classes", "Equipment", "Coaching"]],
-  ["Lifestyle", "Recreational", ["Golf", "Pickleball", "Driving Range", "Board Game Cafes", "Bowling", "Climbing"]],
+  [
+    "Lifestyle",
+    "Recreational",
+    [
+      "Golf",
+      "Pickleball",
+      "Driving Range",
+      "Board Game Cafes",
+      "Bowling",
+      "Climbing",
+    ],
+  ],
   ["Lifestyle", "Gifts", ["Personal Gifts", "Charity", "Cards"]],
-  ["Lifestyle", "Business Services", ["Accounting", "Legal", "Advertising", "Consulting"]],
+  [
+    "Lifestyle",
+    "Business Services",
+    ["Accounting", "Legal", "Advertising", "Consulting"],
+  ],
 
   [
     "Development",
     "Education",
     ["Courses", "Classes", "Tuition", "Tutoring", "Certification"],
   ],
-  ["Development", "Career", ["Licensing", "Conferences", "Memberships", "Exam Fees"]],
+  [
+    "Development",
+    "Career",
+    ["Licensing", "Conferences", "Memberships", "Exam Fees"],
+  ],
   ["Development", "Books", ["Ebooks", "Audiobooks", "Magazines"]],
 
   [
@@ -123,14 +193,26 @@ const TREE: Array<[section: string, category: string, subcategories: string[]]> 
     "Software",
     ["Security", "Productivity", "Creative", "Communication"],
   ],
-  ["Technology", "Cloud", ["Developer", "Payments", "Infrastructure", "Domains"]],
+  [
+    "Technology",
+    "Cloud",
+    ["Developer", "Payments", "Infrastructure", "Domains"],
+  ],
   ["Technology", "AI Services", ["Code Editors", "Assistants", "Model APIs"]],
-  ["Technology", "Devices", ["Computers", "Phones", "Tablets", "Wearables", "Accessories"]],
+  [
+    "Technology",
+    "Devices",
+    ["Computers", "Phones", "Tablets", "Wearables", "Accessories"],
+  ],
 
   ["Family", "Childcare", ["Daycare", "Babysitting", "After School", "Camps"]],
   ["Family", "Kids", ["Clothing", "Toys", "School Supplies"]],
   ["Family", "Elder Support", ["Care", "Home Help"]],
-  ["Family", "Pets", ["Pet Food", "Pet Supplies", "Veterinary", "Grooming", "Boarding"]],
+  [
+    "Family",
+    "Pets",
+    ["Pet Food", "Pet Supplies", "Veterinary", "Grooming", "Boarding"],
+  ],
 
   ["Travel", "Flights", ["Airline Tickets", "In-Flight", "Baggage"]],
   ["Travel", "Lodging", ["Hotels", "Vacation Rentals", "Hostels"]],
@@ -138,13 +220,25 @@ const TREE: Array<[section: string, category: string, subcategories: string[]]> 
 
   ["Transport", "Fuel", ["Gas Stations", "Diesel", "EV Charging"]],
   ["Transport", "Rideshare", ["Uber", "Taxi"]],
-  ["Transport", "Transit", ["Public Transit", "Transit Pass", "Intercity Rail"]],
-  ["Transport", "Auto", ["Maintenance", "Tires", "Parking", "Car Wash", "Tolls", "Registration"]],
+  [
+    "Transport",
+    "Transit",
+    ["Public Transit", "Transit Pass", "Intercity Rail"],
+  ],
+  [
+    "Transport",
+    "Auto",
+    ["Maintenance", "Tires", "Parking", "Car Wash", "Tolls", "Registration"],
+  ],
   ["Transport", "Dealership", ["Service", "Parts"]],
   ["Transport", "Vehicle Payments", ["Car Payment", "Lease"]],
   ["Transport", "Rentals", ["Car Rental", "Scooter"]],
 
-  ["Health", "Medical", ["Clinics", "Hospital", "Pharmacies", "Prescriptions", "Supplements"]],
+  [
+    "Health",
+    "Medical",
+    ["Clinics", "Hospital", "Pharmacies", "Prescriptions", "Supplements"],
+  ],
   ["Health", "Dental", ["Checkup", "Treatment", "Orthodontics"]],
   ["Health", "Vision", ["Eye Exam", "Glasses", "Contacts"]],
   ["Health", "Therapy", ["Counselling", "Psychiatry"]],
@@ -205,6 +299,26 @@ export const SUBCATEGORY_RENAMES: Array<{ from: string; to: string }> = [
   { from: "Glasses & Contacts", to: "Glasses" },
 ];
 
+function renameMap(rows: Array<{ from: string; to: string }>) {
+  return new Map(rows.map((row) => [row.from.trim().toLowerCase(), row.to]));
+}
+
+const CATEGORY_RENAME_MAP = renameMap(CATEGORY_RENAMES);
+const SUBCATEGORY_RENAME_MAP = renameMap(SUBCATEGORY_RENAMES);
+
+/** Map a stored category/sub label onto the shortened catalog name. */
+export function rewriteTaxonomyLabel(
+  kind: "category" | "subcategory",
+  name: string | null | undefined,
+): string | null {
+  if (name == null) return null;
+  const trimmed = name.trim();
+  if (!trimmed) return name;
+  const map =
+    kind === "category" ? CATEGORY_RENAME_MAP : SUBCATEGORY_RENAME_MAP;
+  return map.get(trimmed.toLowerCase()) ?? name;
+}
+
 /** Move these categories onto the Food section after rename. */
 export const FOOD_SECTION_CATEGORY_MOVES = [
   "Groceries",
@@ -216,7 +330,10 @@ export const FOOD_SECTION_CATEGORY_MOVES = [
   "Alcohol",
 ] as const;
 
-export const CATEGORY_SECTION_MOVES: Array<{ name: string; toSection: string }> = [
+export const CATEGORY_SECTION_MOVES: Array<{
+  name: string;
+  toSection: string;
+}> = [
   { name: "Pets", toSection: "Family" },
   { name: "Education", toSection: "Development" },
   { name: "Career", toSection: "Development" },

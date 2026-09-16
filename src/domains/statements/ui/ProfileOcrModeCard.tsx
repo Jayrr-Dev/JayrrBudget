@@ -118,7 +118,7 @@ export function ProfileOcrModeCard({ ocrMode }: Props) {
                 <FieldTitle>Local</FieldTitle>
                 <FieldDescription>
                   Runs on this device. Slower, and photos or messy scans may
-                  miss more.
+                  miss more, but it&apos;s more private.
                 </FieldDescription>
               </FieldContent>
             </Field>

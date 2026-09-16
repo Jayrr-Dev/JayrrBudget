@@ -1,16 +1,13 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
-import { ensureUser, requireUser } from "./lib/auth";
 import { buildScheduledDates } from "./lib/amortize";
+import { ensureUser, requireUser } from "./lib/auth";
 import {
   collectPadCandidates,
   computeLoanAmortization,
   summaryFromAmortize,
   type LoanTermsRow,
 } from "./lib/loanCompute";
-import {
-  normalizePaymentFrequency,
-} from "./lib/paymentFrequency";
 import {
   loanTypeMeta,
   normalizeLoanType,
@@ -19,6 +16,8 @@ import {
   type LoanType,
   type RateType,
 } from "./lib/loanTypes";
+import { normalizePaymentFrequency } from "./lib/paymentFrequency";
+import { rewriteTaxonomyLabel } from "./lib/seedCategoryPaths";
 import { splitTags } from "./lib/tags";
 
 const MANUAL_INSTITUTION_ID = "manual";
@@ -39,10 +38,7 @@ const loanTypeArgValidator = v.union(
   v.literal("other"),
 );
 
-const rateTypeArgValidator = v.union(
-  v.literal("fixed"),
-  v.literal("variable"),
-);
+const rateTypeArgValidator = v.union(v.literal("fixed"), v.literal("variable"));
 
 function mapLoanTerms(row: {
   accountId: string;
@@ -124,48 +120,55 @@ export const get = query({
           ? args.transactionLimit
           : null;
 
-      const [institutionRows, accountRows, txnRows, statementRows, termsRows, latestTxn, earliestTxn] =
-        await Promise.all([
-          ctx.db
-            .query("institutions")
-            .withIndex("by_userId", (q) => q.eq("userId", user._id))
-            .collect(),
-          ctx.db
-            .query("accounts")
-            .withIndex("by_userId", (q) => q.eq("userId", user._id))
-            .collect(),
-          limit
-            ? ctx.db
-                .query("transactions")
-                .withIndex("by_userId_posted", (q) => q.eq("userId", user._id))
-                .order("desc")
-                .take(limit)
-            : ctx.db
-                .query("transactions")
-                .withIndex("by_userId_posted", (q) => q.eq("userId", user._id))
-                .order("desc")
-                .collect(),
-          ctx.db
-            .query("statementUploads")
-            .withIndex("by_userId_status", (q) =>
-              q.eq("userId", user._id).eq("status", "completed"),
-            )
-            .collect(),
-          ctx.db
-            .query("loanTerms")
-            .withIndex("by_userId", (q) => q.eq("userId", user._id))
-            .collect(),
-          ctx.db
-            .query("transactions")
-            .withIndex("by_userId_posted", (q) => q.eq("userId", user._id))
-            .order("desc")
-            .first(),
-          ctx.db
-            .query("transactions")
-            .withIndex("by_userId_posted", (q) => q.eq("userId", user._id))
-            .order("asc")
-            .first(),
-        ]);
+      const [
+        institutionRows,
+        accountRows,
+        txnRows,
+        statementRows,
+        termsRows,
+        latestTxn,
+        earliestTxn,
+      ] = await Promise.all([
+        ctx.db
+          .query("institutions")
+          .withIndex("by_userId", (q) => q.eq("userId", user._id))
+          .collect(),
+        ctx.db
+          .query("accounts")
+          .withIndex("by_userId", (q) => q.eq("userId", user._id))
+          .collect(),
+        limit
+          ? ctx.db
+              .query("transactions")
+              .withIndex("by_userId_posted", (q) => q.eq("userId", user._id))
+              .order("desc")
+              .take(limit)
+          : ctx.db
+              .query("transactions")
+              .withIndex("by_userId_posted", (q) => q.eq("userId", user._id))
+              .order("desc")
+              .collect(),
+        ctx.db
+          .query("statementUploads")
+          .withIndex("by_userId_status", (q) =>
+            q.eq("userId", user._id).eq("status", "completed"),
+          )
+          .collect(),
+        ctx.db
+          .query("loanTerms")
+          .withIndex("by_userId", (q) => q.eq("userId", user._id))
+          .collect(),
+        ctx.db
+          .query("transactions")
+          .withIndex("by_userId_posted", (q) => q.eq("userId", user._id))
+          .order("desc")
+          .first(),
+        ctx.db
+          .query("transactions")
+          .withIndex("by_userId_posted", (q) => q.eq("userId", user._id))
+          .order("asc")
+          .first(),
+      ]);
 
       let padSource = txnPadRows(txnRows);
       if (termsRows.length > 0) {
@@ -196,7 +199,10 @@ export const get = query({
           termsList.map((terms) => {
             const pads = collectPadCandidates(padSource, terms.matchAmount);
             const result = computeLoanAmortization(terms, pads);
-            return [terms.accountId, summaryFromAmortize(terms, result)] as const;
+            return [
+              terms.accountId,
+              summaryFromAmortize(terms, result),
+            ] as const;
           }),
         );
       }
@@ -247,12 +253,15 @@ export const get = query({
             companyName: txn.company,
             brandName: txn.brand,
             sectionName: txn.section,
-            categoryName: txn.category,
+            categoryName: rewriteTaxonomyLabel("category", txn.category),
             spreadName: txn.spread,
             transactionTypeName: txn.transactionType,
             typeName: null,
             typeNames: [],
-            subcategoryName: txn.subcategory,
+            subcategoryName: rewriteTaxonomyLabel(
+              "subcategory",
+              txn.subcategory,
+            ),
             tagNames: [...new Set(splitTags(txn.tags))].sort((a, b) =>
               a.localeCompare(b),
             ),
@@ -525,9 +534,8 @@ export const refreshLoans = mutation({
         accountId: terms.accountId,
         balance: result.currentBalance,
         paymentsApplied: result.paymentsApplied,
-        linkedPads: result.schedule.filter(
-          (s) => s.applied && s.transactionId,
-        ).length,
+        linkedPads: result.schedule.filter((s) => s.applied && s.transactionId)
+          .length,
       });
     }
 

@@ -8,6 +8,7 @@
  * @module
  */
 
+import type * as aiByok from "../aiByok.js";
 import type * as aiRules from "../aiRules.js";
 import type * as analysis from "../analysis.js";
 import type * as auth from "../auth.js";
@@ -67,6 +68,7 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  aiByok: typeof aiByok;
   aiRules: typeof aiRules;
   analysis: typeof analysis;
   auth: typeof auth;

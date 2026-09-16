@@ -1,10 +1,13 @@
 "use client";
 
+import {
+  saveEncryptedScratchPad,
+  vaultWriteReady,
+} from "@/domains/vault/application/saveEncryptedLedger";
+import { usePrivateLedger } from "@/domains/vault/ui/usePrivateLedger";
 import { api } from "@convex/_generated/api";
 import { useConvex, useMutation, useQuery } from "convex/react";
-import { useEffect, useRef } from "react";
-import { saveEncryptedScratchPad, vaultWriteReady } from "@/domains/vault/application/saveEncryptedLedger";
-import { usePrivateLedger } from "@/domains/vault/ui/usePrivateLedger";
+import { useEffect, useRef, useState } from "react";
 
 export type ScratchNoteRow = {
   id: string;
@@ -40,6 +43,43 @@ const EMPTY_STATE: ScratchNoteState = {
   receiveId: "tab-1",
 };
 
+const scratchUiListeners = new Set<() => void>();
+let pendingScratch: ScratchNoteState | null = null;
+let scratchRevision: number | null = null;
+let scratchDirty = false;
+let scratchWriteChain: Promise<void> = Promise.resolve();
+
+type ScratchWriteDeps = {
+  persist: (
+    state: ScratchNoteState,
+    expectedRevision: number | null,
+  ) => Promise<number | null>;
+  ledgerRevision: number | null;
+  reload: () => void;
+};
+
+let scratchWriteDeps: ScratchWriteDeps | null = null;
+
+function notifyScratchUi() {
+  for (const listener of scratchUiListeners) listener();
+}
+
+function padState(
+  pad:
+    | { tabs: ScratchNoteState["tabs"]; activeId: string; receiveId: string }
+    | undefined,
+): ScratchNoteState | null {
+  if (!pad) return null;
+  return { tabs: pad.tabs, activeId: pad.activeId, receiveId: pad.receiveId };
+}
+
+function isScratchConflict(cause: unknown) {
+  return (
+    cause instanceof Error &&
+    cause.message.includes("Encrypted record conflict: scratch-main")
+  );
+}
+
 function isRow(value: unknown): value is ScratchNoteRow {
   return (
     value != null &&
@@ -67,7 +107,11 @@ function readLocalStorageState(): ScratchNoteState | null {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw) as Partial<ScratchNoteState>;
-      if (Array.isArray(parsed.tabs) && parsed.tabs.length > 0 && parsed.tabs.every(isTab)) {
+      if (
+        Array.isArray(parsed.tabs) &&
+        parsed.tabs.length > 0 &&
+        parsed.tabs.every(isTab)
+      ) {
         const tabs = parsed.tabs;
         const activeId =
           typeof parsed.activeId === "string" &&
@@ -117,13 +161,75 @@ function openNotePopover() {
   }
 }
 
+function applyAddRow(
+  state: ScratchNoteState,
+  input: Omit<ScratchNoteRow, "id"> & { id?: string },
+): ScratchNoteState {
+  const receive =
+    state.tabs.find((tab) => tab.id === state.receiveId) ?? state.tabs[0];
+  if (!receive) return state;
+
+  const existing = receive.rows.find(
+    (row) =>
+      row.name === input.name &&
+      (row.parent ?? "") === (input.parent ?? "") &&
+      row.currency === input.currency,
+  );
+  const nextRow: ScratchNoteRow = existing
+    ? { ...existing, spend: input.spend, count: input.count }
+    : {
+        id: input.id ?? crypto.randomUUID(),
+        name: input.name,
+        spend: input.spend,
+        count: input.count,
+        currency: input.currency,
+        parent: input.parent,
+      };
+  const rows = existing
+    ? receive.rows.map((row) => (row.id === existing.id ? nextRow : row))
+    : [...receive.rows, nextRow];
+
+  return {
+    ...state,
+    activeId: receive.id,
+    tabs: state.tabs.map((tab) =>
+      tab.id === receive.id ? { ...tab, rows } : tab,
+    ),
+  };
+}
+
 /** Live note pad from Convex, or encrypted rows when the ledger flag is on. */
 export function useScratchNote(): ScratchNoteState {
   const privateLedger = usePrivateLedger();
-  const data = useQuery(api.scratchNotes.get, privateLedger.encryptedLedger ? "skip" : {});
-  if (privateLedger.encryptedLedger) {
+  const data = useQuery(
+    api.scratchNotes.get,
+    privateLedger.encryptedLedger ? "skip" : {},
+  );
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const onChange = () => setTick((n) => n + 1);
+    scratchUiListeners.add(onChange);
+    return () => {
+      scratchUiListeners.delete(onChange);
+    };
+  }, []);
+  useEffect(() => {
     const pad = privateLedger.ledger.scratchPads[0];
-    if (pad) return { tabs: pad.tabs, activeId: pad.activeId, receiveId: pad.receiveId };
+    if (!pendingScratch || scratchDirty) return;
+    if (!pad || scratchRevision === null || pad.revision !== scratchRevision)
+      return;
+    pendingScratch = null;
+    notifyScratchUi();
+  }, [privateLedger.ledger, privateLedger.version]);
+  if (privateLedger.encryptedLedger) {
+    if (pendingScratch) return pendingScratch;
+    const pad = privateLedger.ledger.scratchPads[0];
+    if (pad)
+      return {
+        tabs: pad.tabs,
+        activeId: pad.activeId,
+        receiveId: pad.receiveId,
+      };
     return EMPTY_STATE;
   }
   return data ?? EMPTY_STATE;
@@ -161,10 +267,50 @@ export function useScratchNoteLocalMigration() {
   }, [importIfEmpty, privateLedger.encryptedLedger]);
 }
 
+async function flushEncryptedScratch() {
+  while (scratchDirty) {
+    scratchDirty = false;
+    const payload = pendingScratch;
+    const deps = scratchWriteDeps;
+    if (!payload || !deps) return;
+    const expected = scratchRevision ?? deps.ledgerRevision;
+    try {
+      const nextRevision = await deps.persist(payload, expected);
+      scratchRevision = nextRevision ?? (expected ?? 0) + 1;
+    } catch (cause) {
+      if (!isScratchConflict(cause)) throw cause;
+      const nextRevision = await deps.persist(payload, null);
+      scratchRevision = nextRevision ?? (expected ?? 0) + 1;
+    }
+    deps.reload();
+  }
+}
+
+function queueEncryptedScratch(next: ScratchNoteState) {
+  pendingScratch = next;
+  scratchDirty = true;
+  notifyScratchUi();
+  scratchWriteChain = scratchWriteChain
+    .then(flushEncryptedScratch)
+    .catch(() => {
+      pendingScratch = null;
+      scratchDirty = false;
+      scratchRevision = null;
+      notifyScratchUi();
+      scratchWriteDeps?.reload();
+    });
+}
+
 export function useScratchNoteActions() {
   const client = useConvex();
   const privateLedger = usePrivateLedger();
-  const addRowMut = useMutation(api.scratchNotes.addRow);
+  const addRowMut = useMutation(api.scratchNotes.addRow).withOptimisticUpdate(
+    (localStore, args) => {
+      const current = localStore.getQuery(api.scratchNotes.get, {});
+      if (!current) return;
+      localStore.setQuery(api.scratchNotes.get, {}, applyAddRow(current, args));
+    },
+  );
   const removeRowMut = useMutation(api.scratchNotes.removeRow);
   const clearActiveMut = useMutation(api.scratchNotes.clearActive);
   const selectTabMut = useMutation(api.scratchNotes.selectTab);
@@ -173,52 +319,44 @@ export function useScratchNoteActions() {
   const closeTabMut = useMutation(api.scratchNotes.closeTab);
   const renameTabMut = useMutation(api.scratchNotes.renameTab);
 
-  async function persistEncrypted(next: ScratchNoteState) {
-    const write = vaultWriteReady({
-      encryptedLedger: privateLedger.encryptedLedger,
-      userId: privateLedger.userId,
-      vaultId: privateLedger.vaultId,
-      keyId: privateLedger.keyId,
-      client,
-    });
-    if (!write) throw new Error("Sign in again so this browser can save scratch notes.");
-    const existing = privateLedger.ledger.scratchPads[0];
-    await saveEncryptedScratchPad(write, {
-      tabs: next.tabs,
-      activeId: next.activeId,
-      receiveId: next.receiveId,
-      expectedRevision: existing?.revision ?? null,
-    });
-    privateLedger.reload();
+  scratchWriteDeps = {
+    ledgerRevision: privateLedger.ledger.scratchPads[0]?.revision ?? null,
+    reload: privateLedger.reload,
+    persist: async (state, expectedRevision) => {
+      const write = vaultWriteReady({
+        encryptedLedger: privateLedger.encryptedLedger,
+        userId: privateLedger.userId,
+        vaultId: privateLedger.vaultId,
+        keyId: privateLedger.keyId,
+        client,
+      });
+      if (!write)
+        throw new Error(
+          "Sign in again so this browser can save scratch notes.",
+        );
+      return saveEncryptedScratchPad(write, {
+        tabs: state.tabs,
+        activeId: state.activeId,
+        receiveId: state.receiveId,
+        expectedRevision,
+      });
+    },
+  };
+
+  function persistEncrypted(next: ScratchNoteState) {
+    queueEncryptedScratch(next);
   }
 
   function currentState(): ScratchNoteState {
-    const pad = privateLedger.ledger.scratchPads[0];
-    if (pad) return { tabs: pad.tabs, activeId: pad.activeId, receiveId: pad.receiveId };
-    return EMPTY_STATE;
+    if (pendingScratch) return pendingScratch;
+    return padState(privateLedger.ledger.scratchPads[0]) ?? EMPTY_STATE;
   }
 
   return {
-    addRow: async (
-      input: Omit<ScratchNoteRow, "id"> & { id?: string },
-    ) => {
+    addRow: async (input: Omit<ScratchNoteRow, "id"> & { id?: string }) => {
+      openNotePopover();
       if (privateLedger.encryptedLedger) {
-        const state = currentState();
-        const receive = state.tabs.find((tab) => tab.id === state.receiveId) ?? state.tabs[0];
-        if (!receive) return;
-        const row: ScratchNoteRow = {
-          id: input.id ?? crypto.randomUUID(),
-          name: input.name,
-          spend: input.spend,
-          count: input.count,
-          currency: input.currency,
-          parent: input.parent,
-        };
-        const tabs = state.tabs.map((tab) =>
-          tab.id === receive.id ? { ...tab, rows: [...tab.rows, row] } : tab,
-        );
-        await persistEncrypted({ ...state, tabs });
-        openNotePopover();
+        persistEncrypted(applyAddRow(currentState(), input));
         return;
       }
       await addRowMut({
@@ -229,7 +367,6 @@ export function useScratchNoteActions() {
         parent: input.parent,
         id: input.id,
       });
-      openNotePopover();
     },
     removeRow: (rowId: string) => {
       if (privateLedger.encryptedLedger) {
@@ -278,7 +415,10 @@ export function useScratchNoteActions() {
         const id = crypto.randomUUID();
         void persistEncrypted({
           ...state,
-          tabs: [...state.tabs, { id, name: `Sheet ${state.tabs.length + 1}`, rows: [] }],
+          tabs: [
+            ...state.tabs,
+            { id, name: `Sheet ${state.tabs.length + 1}`, rows: [] },
+          ],
           activeId: id,
         });
         return;
@@ -304,7 +444,9 @@ export function useScratchNoteActions() {
         const state = currentState();
         void persistEncrypted({
           ...state,
-          tabs: state.tabs.map((tab) => (tab.id === tabId ? { ...tab, name } : tab)),
+          tabs: state.tabs.map((tab) =>
+            tab.id === tabId ? { ...tab, name } : tab,
+          ),
         });
         return;
       }

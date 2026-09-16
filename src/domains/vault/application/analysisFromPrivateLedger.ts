@@ -1,10 +1,17 @@
-import { computeAnalysis } from "@convex/lib/computeAnalysis";
-import type { AnalysisSourceRow } from "@convex/lib/analysisTypes";
-import type { AnalysisData, AnalysisPeriod, AnalysisRange } from "@/domains/analysis/domain/types";
+import type {
+  AnalysisData,
+  AnalysisPeriod,
+  AnalysisRange,
+} from "@/domains/analysis/domain/types";
 import type { PrivateLedger } from "@/domains/vault/domain/privateLedger";
+import type { AnalysisSourceRow } from "@convex/lib/analysisTypes";
+import { computeAnalysis } from "@convex/lib/computeAnalysis";
+import { rewriteTaxonomyLabel } from "@convex/lib/seedCategoryPaths";
 
 function toSourceRows(ledger: PrivateLedger): AnalysisSourceRow[] {
-  const accountById = new Map(ledger.accounts.map((account) => [account.accountId, account]));
+  const accountById = new Map(
+    ledger.accounts.map((account) => [account.accountId, account]),
+  );
   return ledger.transactions.map((tx) => {
     const account = tx.accountId ? accountById.get(tx.accountId) : undefined;
     return {
@@ -23,8 +30,8 @@ function toSourceRows(ledger: PrivateLedger): AnalysisSourceRow[] {
       merchantClean: tx.merchantClean ?? tx.merchantName ?? null,
       enrichmentChannel: null,
       sectionName: tx.sectionName ?? null,
-      categoryName: tx.categoryName ?? null,
-      typeName: tx.subcategoryName ?? null,
+      categoryName: rewriteTaxonomyLabel("category", tx.categoryName),
+      typeName: rewriteTaxonomyLabel("subcategory", tx.subcategoryName),
       spreadName: tx.spreadName ?? null,
       companyName: null,
       brandName: null,
@@ -40,7 +47,10 @@ export function analysisFromPrivateLedger(
   period: AnalysisPeriod,
 ): AnalysisData {
   const rows = toSourceRows(ledger);
-  const dates = rows.map((row) => row.postedDate).filter(Boolean).sort();
+  const dates = rows
+    .map((row) => row.postedDate)
+    .filter(Boolean)
+    .sort();
   return computeAnalysis({
     range,
     period,

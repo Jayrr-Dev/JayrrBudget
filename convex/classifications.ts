@@ -1,13 +1,20 @@
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
-import { internalMutation, mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
+import {
+  internalMutation,
+  mutation,
+  query,
+  type MutationCtx,
+  type QueryCtx,
+} from "./_generated/server";
 import { requireRole, requireUser, userRole } from "./lib/auth";
 import { normalizedLabel, taxonomyKey } from "./lib/categorization";
 import {
   CATEGORY_RENAMES,
   SEED_CATEGORY_PATHS,
   SUBCATEGORY_RENAMES,
+  rewriteTaxonomyLabel,
 } from "./lib/seedCategoryPaths";
 import { ensureSeedSharedTags, sortSharedTagNames } from "./lib/seedSharedTags";
 import {
@@ -102,7 +109,10 @@ async function nextLegacyId(
   return rows.reduce((max, row) => Math.max(max, row.legacyId), 0) + 1;
 }
 
-async function userTransactions(ctx: QueryCtx | MutationCtx, userId: Id<"users">) {
+async function userTransactions(
+  ctx: QueryCtx | MutationCtx,
+  userId: Id<"users">,
+) {
   return await ctx.db
     .query("transactions")
     .withIndex("by_userId", (q) => q.eq("userId", userId))
@@ -384,8 +394,7 @@ async function syncCategorySubcategories(
   }
 
   return working.filter(
-    (sub) =>
-      sub.categoryLegacyId === category.legacyId && keep.has(sub._id),
+    (sub) => sub.categoryLegacyId === category.legacyId && keep.has(sub._id),
   );
 }
 
@@ -492,7 +501,9 @@ export const reconcileSharedPaths = internalMutation({
       await remountCategorySectionsForUser(ctx, user._id);
     }
     const canonicalKeys = new Set(
-      SEED_CATEGORY_PATHS.map((p) => taxonomyKey(p.section, p.category, p.subcategory)),
+      SEED_CATEGORY_PATHS.map((p) =>
+        taxonomyKey(p.section, p.category, p.subcategory),
+      ),
     );
     const existing = await ctx.db.query("sharedCategoryPaths").collect();
     const existingKeys = new Set(existing.map((row) => row.key));
@@ -524,9 +535,18 @@ export const reconcileSharedPaths = internalMutation({
     let userSubcategoriesRemoved = 0;
     for (const user of users) {
       const [sections, categories, subs, txs] = await Promise.all([
-        ctx.db.query("transactionSections").withIndex("by_userId", (q) => q.eq("userId", user._id)).collect(),
-        ctx.db.query("transactionCategories").withIndex("by_userId", (q) => q.eq("userId", user._id)).collect(),
-        ctx.db.query("transactionSubcategories").withIndex("by_userId", (q) => q.eq("userId", user._id)).collect(),
+        ctx.db
+          .query("transactionSections")
+          .withIndex("by_userId", (q) => q.eq("userId", user._id))
+          .collect(),
+        ctx.db
+          .query("transactionCategories")
+          .withIndex("by_userId", (q) => q.eq("userId", user._id))
+          .collect(),
+        ctx.db
+          .query("transactionSubcategories")
+          .withIndex("by_userId", (q) => q.eq("userId", user._id))
+          .collect(),
         userTransactions(ctx, user._id),
       ]);
       const usedCategoryIds = new Set(txs.map((t) => t.categoryLegacyId));
@@ -535,21 +555,42 @@ export const reconcileSharedPaths = internalMutation({
         sections.find((s) => s.legacyId === legacyId)?.name ?? "";
 
       for (const sub of subs) {
-        const category = categories.find((c) => c.legacyId === sub.categoryLegacyId);
+        const category = categories.find(
+          (c) => c.legacyId === sub.categoryLegacyId,
+        );
         if (!category) continue;
-        const key = taxonomyKey(sectionName(category.sectionLegacyId), category.name, sub.name);
-        const echo = normalizedLabel(sub.name) === normalizedLabel(category.name);
+        const key = taxonomyKey(
+          sectionName(category.sectionLegacyId),
+          category.name,
+          sub.name,
+        );
+        const echo =
+          normalizedLabel(sub.name) === normalizedLabel(category.name);
         const extra = !canonicalKeys.has(key);
-        if ((!retiredSubKeys.has(key) && !echo && !extra) || usedSubIds.has(sub.legacyId)) continue;
+        if (
+          (!retiredSubKeys.has(key) && !echo && !extra) ||
+          usedSubIds.has(sub.legacyId)
+        )
+          continue;
         await ctx.db.delete(sub._id);
         userSubcategoriesRemoved += 1;
       }
 
       for (const category of categories) {
-        const key = taxonomyKey(sectionName(category.sectionLegacyId), category.name, null);
+        const key = taxonomyKey(
+          sectionName(category.sectionLegacyId),
+          category.name,
+          null,
+        );
         const extra = !canonicalKeys.has(key);
-        if ((!retiredCategoryKeys.has(key) && !extra) || usedCategoryIds.has(category.legacyId)) continue;
-        const children = subs.filter((s) => s.categoryLegacyId === category.legacyId);
+        if (
+          (!retiredCategoryKeys.has(key) && !extra) ||
+          usedCategoryIds.has(category.legacyId)
+        )
+          continue;
+        const children = subs.filter(
+          (s) => s.categoryLegacyId === category.legacyId,
+        );
         if (children.some((s) => usedSubIds.has(s.legacyId))) continue;
         for (const child of children) {
           const doc = await ctx.db.get(child._id);
@@ -581,9 +622,13 @@ export const reconcileSharedPaths = internalMutation({
       }
     }
 
-    await ctx.scheduler.runAfter(0, internal.classifications.rewriteTxnTaxonomyLabels, {
-      cursor: null,
-    });
+    await ctx.scheduler.runAfter(
+      0,
+      internal.classifications.rewriteTxnTaxonomyLabels,
+      {
+        cursor: null,
+      },
+    );
 
     return {
       sharedAdded,
@@ -631,6 +676,7 @@ export const rewriteTxnTaxonomyLabels = internalMutation({
       } else if (tx.category) {
         nextCategory = categoryRename.get(norm(tx.category)) ?? tx.category;
       }
+      nextCategory = rewriteTaxonomyLabel("category", nextCategory);
       if (tx.subcategoryLegacyId != null) {
         const sub = await ctx.db
           .query("transactionSubcategories")
@@ -642,7 +688,9 @@ export const rewriteTxnTaxonomyLabels = internalMutation({
       } else if (tx.subcategory) {
         nextSub = subRename.get(norm(tx.subcategory)) ?? tx.subcategory;
       }
-      const patch: { category?: string | null; subcategory?: string | null } = {};
+      nextSub = rewriteTaxonomyLabel("subcategory", nextSub);
+      const patch: { category?: string | null; subcategory?: string | null } =
+        {};
       if (nextCategory !== tx.category) patch.category = nextCategory;
       if (nextSub !== tx.subcategory) patch.subcategory = nextSub;
       if (Object.keys(patch).length === 0) continue;
@@ -840,25 +888,25 @@ export const catalog = query({
     const user = await requireUser(ctx);
     const [paths, sharedTagRows, sections, categories, subcategories, tags] =
       await Promise.all([
-      loadSharedPaths(ctx),
-      ctx.db.query("sharedTags").collect(),
-      ctx.db
-        .query("transactionSections")
-        .withIndex("by_userId", (q) => q.eq("userId", user._id))
-        .collect(),
-      ctx.db
-        .query("transactionCategories")
-        .withIndex("by_userId", (q) => q.eq("userId", user._id))
-        .collect(),
-      ctx.db
-        .query("transactionSubcategories")
-        .withIndex("by_userId", (q) => q.eq("userId", user._id))
-        .collect(),
-      ctx.db
-        .query("transactionTags")
-        .withIndex("by_userId", (q) => q.eq("userId", user._id))
-        .collect(),
-    ]);
+        loadSharedPaths(ctx),
+        ctx.db.query("sharedTags").collect(),
+        ctx.db
+          .query("transactionSections")
+          .withIndex("by_userId", (q) => q.eq("userId", user._id))
+          .collect(),
+        ctx.db
+          .query("transactionCategories")
+          .withIndex("by_userId", (q) => q.eq("userId", user._id))
+          .collect(),
+        ctx.db
+          .query("transactionSubcategories")
+          .withIndex("by_userId", (q) => q.eq("userId", user._id))
+          .collect(),
+        ctx.db
+          .query("transactionTags")
+          .withIndex("by_userId", (q) => q.eq("userId", user._id))
+          .collect(),
+      ]);
 
     const sharedSectionNames = new Set(
       paths.map((path) => normalizedLabel(path.section)),
@@ -874,7 +922,10 @@ export const catalog = query({
         ),
     );
 
-    const sectionByName = new Map<string, { name: string; subs: Set<string> }>();
+    const sectionByName = new Map<
+      string,
+      { name: string; subs: Set<string> }
+    >();
     for (const path of paths) {
       const sectionKey = norm(path.section);
       if (!sectionByName.has(sectionKey)) {
@@ -1200,9 +1251,11 @@ export const removeFromShared = mutation({
     if (!section) throw new Error("Section is required");
     const paths = await loadSharedPaths(ctx);
     const matches = paths.filter((path) => {
-      if (normalizedLabel(path.section) !== normalizedLabel(section)) return false;
+      if (normalizedLabel(path.section) !== normalizedLabel(section))
+        return false;
       if (args.kind === "section") return true;
-      if (normalizedLabel(path.category) !== normalizedLabel(category)) return false;
+      if (normalizedLabel(path.category) !== normalizedLabel(category))
+        return false;
       if (args.kind === "category") return true;
       return (
         normalizedLabel(path.subcategory ?? "") === normalizedLabel(subcategory)
@@ -1510,7 +1563,9 @@ export const createSubcategory = mutation({
         : await ctx.db
             .query("transactionSections")
             .withIndex("by_userId_legacyId", (q) =>
-              q.eq("userId", user._id).eq("legacyId", category.sectionLegacyId!),
+              q
+                .eq("userId", user._id)
+                .eq("legacyId", category.sectionLegacyId!),
             )
             .unique();
     return {
@@ -1588,7 +1643,9 @@ export const updateSubcategory = mutation({
         : await ctx.db
             .query("transactionSections")
             .withIndex("by_userId_legacyId", (q) =>
-              q.eq("userId", user._id).eq("legacyId", category.sectionLegacyId!),
+              q
+                .eq("userId", user._id)
+                .eq("legacyId", category.sectionLegacyId!),
             )
             .unique();
     return {

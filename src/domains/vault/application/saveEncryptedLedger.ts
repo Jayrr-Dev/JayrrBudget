@@ -6,6 +6,7 @@ import {
 } from "@/crypto/vaultRecords";
 import type { PrivateTransaction } from "@/domains/vault/domain/privateLedger";
 import { api } from "@convex/_generated/api";
+import { rewriteTaxonomyLabel } from "@convex/lib/seedCategoryPaths";
 import type { ConvexReactClient } from "convex/react";
 
 export type VaultWriteContext = {
@@ -116,6 +117,49 @@ export async function renameEncryptedDescriptions(
                 subcategoryName: taxonomy.subcategoryName,
               }
             : {}),
+        };
+        const { recordId, revision, ...value } = next;
+        return {
+          recordId,
+          kind: "tx" as const,
+          value: encryptedTxValue(value),
+          expectedRevision: revision,
+        };
+      }),
+    );
+  }
+  return matches.length;
+}
+
+function taxonomyRewritePatch(tx: PrivateTransaction) {
+  const categoryName = rewriteTaxonomyLabel("category", tx.categoryName);
+  const subcategoryName = rewriteTaxonomyLabel(
+    "subcategory",
+    tx.subcategoryName,
+  );
+  const changed =
+    categoryName !== (tx.categoryName ?? null) ||
+    subcategoryName !== (tx.subcategoryName ?? null);
+  return { categoryName, subcategoryName, changed };
+}
+
+/** Rewrite stored category/sub labels onto the shortened catalog names. */
+export async function rewriteEncryptedTaxonomyLabels(
+  ctx: VaultWriteContext,
+  txs: PrivateTransaction[],
+) {
+  const matches = txs.filter((tx) => taxonomyRewritePatch(tx).changed);
+  if (matches.length === 0) return 0;
+  for (let i = 0; i < matches.length; i += RENAME_CHUNK) {
+    const chunk = matches.slice(i, i + RENAME_CHUNK);
+    await saveEncryptedRecords(
+      ctx,
+      chunk.map((tx) => {
+        const patch = taxonomyRewritePatch(tx);
+        const next = {
+          ...tx,
+          categoryName: patch.categoryName,
+          subcategoryName: patch.subcategoryName,
         };
         const { recordId, revision, ...value } = next;
         return {
@@ -268,7 +312,7 @@ export async function saveEncryptedScratchPad(
     expectedRevision?: number | null;
   },
 ) {
-  await saveEncryptedRecords(ctx, [
+  const saved = await saveEncryptedRecords(ctx, [
     {
       recordId: "scratch-main",
       kind: "note",
@@ -280,6 +324,10 @@ export async function saveEncryptedScratchPad(
       expectedRevision: input.expectedRevision ?? null,
     },
   ]);
+  return (
+    saved.revisions?.find((row) => row.recordId === "scratch-main")?.revision ??
+    null
+  );
 }
 
 /** Ensure vault write context exists for encrypted edits. */

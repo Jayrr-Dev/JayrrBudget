@@ -1,17 +1,12 @@
-import {
-  convertToModelMessages,
-  stepCountIs,
-  streamText,
-  type UIMessage,
-} from "ai";
 import { getBudgetContextForCanvas } from "@/domains/canvas/application/getBudgetContextForCanvas";
-import { canvasClientTools } from "@/domains/canvas/domain/canvasTools";
 import type { CanvasSnapshot } from "@/domains/canvas/domain/canvasContext";
+import { canvasClientTools } from "@/domains/canvas/domain/canvasTools";
 import {
   chatModel,
   getModelChain,
-  isOpenRouterConfigured,
+  runWithOpenRouterKey,
 } from "@/shared/ai/openRouter";
+import { loadOpenRouterKeyOr503 } from "@/shared/ai/resolveOpenRouter.server";
 import { cachedConvexRead } from "@/shared/convex/cachedRead";
 import {
   AuthRequiredError,
@@ -19,6 +14,12 @@ import {
 } from "@/shared/convex/httpClient.server";
 import { errorMessage } from "@/shared/lib/error-message";
 import { api } from "@convex/_generated/api";
+import {
+  convertToModelMessages,
+  stepCountIs,
+  streamText,
+  type UIMessage,
+} from "ai";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -52,13 +53,19 @@ export async function POST(request: Request) {
       },
     });
     if (!me) {
-      return Response.json({ error: "Authentication required" }, { status: 401 });
+      return Response.json(
+        { error: "Authentication required" },
+        { status: 401 },
+      );
     }
     userKey = me.userId;
     role = me.role;
   } catch (error) {
     if (error instanceof AuthRequiredError) {
-      return Response.json({ error: "Authentication required" }, { status: 401 });
+      return Response.json(
+        { error: "Authentication required" },
+        { status: 401 },
+      );
     }
     throw error;
   }
@@ -77,98 +84,91 @@ export async function POST(request: Request) {
     );
   }
 
-  if (!isOpenRouterConfigured()) {
-    return Response.json(
-      {
-        error: "Missing OPENROUTER_API_KEY. Add it to .env.local.",
-        code: "OPENROUTER_NOT_CONFIGURED",
-      },
-      { status: 503 },
-    );
-  }
+  const convex = await getAuthenticatedConvexClient();
+  const loaded = await loadOpenRouterKeyOr503(convex);
+  if (!loaded.ok) return loaded.response;
 
-  let body: {
-    messages?: UIMessage[];
-    canvas?: CanvasSnapshot | null;
-    budget?: unknown;
-    useClientBudget?: boolean;
-  };
-  try {
-    body = (await request.json()) as typeof body;
-  } catch {
-    return Response.json(
-      { error: "Request body must be valid JSON." },
-      { status: 400 },
-    );
-  }
-
-  const messages = body.messages ?? [];
-  if (messages.length === 0) {
-    return Response.json(
-      { error: "messages is required." },
-      { status: 400 },
-    );
-  }
-
-  const canvas = body.canvas ?? null;
-  let budget: unknown;
-  if (body.useClientBudget) {
-    // Encrypted ledger: client already decrypted. Do not load plaintext dashboard.
-    budget = body.budget ?? { error: "Client budget snapshot missing." };
-  } else {
+  return runWithOpenRouterKey(loaded.apiKey, async () => {
+    let body: {
+      messages?: UIMessage[];
+      canvas?: CanvasSnapshot | null;
+      budget?: unknown;
+      useClientBudget?: boolean;
+    };
     try {
-      // Uses authenticated Convex client → only this user's ledger.
-      budget = await getBudgetContextForCanvas();
-    } catch (error) {
-      budget = {
-        error: errorMessage(error, "Budget context unavailable"),
-      };
+      body = (await request.json()) as typeof body;
+    } catch {
+      return Response.json(
+        { error: "Request body must be valid JSON." },
+        { status: 400 },
+      );
     }
-  }
 
-  const [primary, ...fallbacks] = getModelChain();
-  const modelId = primary ?? "google/gemini-3.8-flash";
+    const messages = body.messages ?? [];
+    if (messages.length === 0) {
+      return Response.json({ error: "messages is required." }, { status: 400 });
+    }
 
-  let modelMessages;
-  try {
-    modelMessages = await convertToModelMessages(messages);
-  } catch (error) {
-    return Response.json(
-      { error: errorMessage(error, "Could not read chat messages.") },
-      { status: 400 },
-    );
-  }
+    const canvas = body.canvas ?? null;
+    let budget: unknown;
+    if (body.useClientBudget) {
+      // Encrypted ledger: client already decrypted. Do not load plaintext dashboard.
+      budget = body.budget ?? { error: "Client budget snapshot missing." };
+    } else {
+      try {
+        // Uses authenticated Convex client → only this user's ledger.
+        budget = await getBudgetContextForCanvas();
+      } catch (error) {
+        budget = {
+          error: errorMessage(error, "Budget context unavailable"),
+        };
+      }
+    }
 
-  const system = [
-    "You are the JayrrBudget canvas assistant inside Excalidraw.",
-    "You can read the live canvas snapshot and the signed-in user's budget ledger only.",
-    "Never invent other users' data. When the user asks to draw, rearrange, label, or clear the board, use tools.",
-    "Keep layouts readable: space shapes, use short labels, prefer geo + text/notes.",
-    "Geo types: rectangle, ellipse, diamond. Notes are yellow sticky cards.",
-    "Coordinate space: x increases right, y increases down. Origin is top-left.",
-    "After tool calls, briefly say what changed.",
-    "Cloud Processing notice: this chat receives readable budget context. It is not end-to-end encrypted.",
-    "",
-    "BUDGET DATA (JSON):",
-    JSON.stringify(budget),
-    "",
-    "CANVAS SNAPSHOT (JSON):",
-    JSON.stringify(canvas),
-  ].join("\n");
+    const [primary, ...fallbacks] = getModelChain();
+    const modelId = primary ?? "google/gemini-3.8-flash";
 
-  const result = streamText({
-    model: chatModel(modelId, fallbacks),
-    system,
-    messages: modelMessages,
-    tools: canvasClientTools,
-    stopWhen: stepCountIs(6),
-    temperature: 0.2,
-    onError: ({ error }) => {
-      console.warn(`[canvas] stream error: ${errorMessage(error)}`);
-    },
-  });
+    let modelMessages;
+    try {
+      modelMessages = await convertToModelMessages(messages);
+    } catch (error) {
+      return Response.json(
+        { error: errorMessage(error, "Could not read chat messages.") },
+        { status: 400 },
+      );
+    }
 
-  return result.toUIMessageStreamResponse({
-    onError: (error) => errorMessage(error, "Canvas AI failed"),
+    const system = [
+      "You are the JayrrBudget canvas assistant inside Excalidraw.",
+      "You can read the live canvas snapshot and the signed-in user's budget ledger only.",
+      "Never invent other users' data. When the user asks to draw, rearrange, label, or clear the board, use tools.",
+      "Keep layouts readable: space shapes, use short labels, prefer geo + text/notes.",
+      "Geo types: rectangle, ellipse, diamond. Notes are yellow sticky cards.",
+      "Coordinate space: x increases right, y increases down. Origin is top-left.",
+      "After tool calls, briefly say what changed.",
+      "Cloud Processing notice: this chat receives readable budget context. It is not end-to-end encrypted.",
+      "",
+      "BUDGET DATA (JSON):",
+      JSON.stringify(budget),
+      "",
+      "CANVAS SNAPSHOT (JSON):",
+      JSON.stringify(canvas),
+    ].join("\n");
+
+    const result = streamText({
+      model: chatModel(modelId, fallbacks),
+      system,
+      messages: modelMessages,
+      tools: canvasClientTools,
+      stopWhen: stepCountIs(6),
+      temperature: 0.2,
+      onError: ({ error }) => {
+        console.warn(`[canvas] stream error: ${errorMessage(error)}`);
+      },
+    });
+
+    return result.toUIMessageStreamResponse({
+      onError: (error) => errorMessage(error, "Canvas AI failed"),
+    });
   });
 }

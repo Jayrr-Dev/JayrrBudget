@@ -2,7 +2,8 @@ import {
   cleanSimilarMerchants,
   planSimilarMerchantMerges,
 } from "@/domains/merchants/application/cleanSimilarMerchants";
-import { isOpenRouterConfigured } from "@/shared/ai/openRouter";
+import { runWithOpenRouterKey } from "@/shared/ai/openRouter";
+import { loadOpenRouterKeyOr503 } from "@/shared/ai/resolveOpenRouter.server";
 import {
   AuthRequiredError,
   getAuthenticatedConvexClient,
@@ -25,45 +26,40 @@ type ProbeBody = {
 
 export async function POST(request: Request) {
   try {
-    if (!isOpenRouterConfigured()) {
-      return Response.json(
-        {
-          error: "Missing OPENROUTER_API_KEY. Add it to .env.local.",
-          code: "OPENROUTER_NOT_CONFIGURED",
-        },
-        { status: 503 },
-      );
-    }
     const client = await getAuthenticatedConvexClient();
-    const body = (await request.json().catch(() => ({}))) as ProbeBody;
-    const probes = (body.merchants ?? [])
-      .map((row) => {
-        const name = row.name?.trim() ?? "";
-        const id = row.id?.trim() ?? "";
-        if (!name || !id) return null;
-        return {
-          id,
-          name,
-          slug: row.slug?.trim() || merchantSlug(name),
-          transactionCount: Number(row.transactionCount) || 0,
-        };
-      })
-      .filter((row): row is NonNullable<typeof row> => row != null);
+    const loaded = await loadOpenRouterKeyOr503(client);
+    if (!loaded.ok) return loaded.response;
+    return runWithOpenRouterKey(loaded.apiKey, async () => {
+      const body = (await request.json().catch(() => ({}))) as ProbeBody;
+      const probes = (body.merchants ?? [])
+        .map((row) => {
+          const name = row.name?.trim() ?? "";
+          const id = row.id?.trim() ?? "";
+          if (!name || !id) return null;
+          return {
+            id,
+            name,
+            slug: row.slug?.trim() || merchantSlug(name),
+            transactionCount: Number(row.transactionCount) || 0,
+          };
+        })
+        .filter((row): row is NonNullable<typeof row> => row != null);
 
-    if (probes.length > 0 || body.planOnly) {
-      const plan = await planSimilarMerchantMerges(probes);
-      return Response.json({
-        clustersFound: plan.clustersFound,
-        mergesApplied: 0,
-        merchantsDeleted: 0,
-        transactionsUpdated: 0,
-        merges: plan.merges,
-        planOnly: true,
-      });
-    }
+      if (probes.length > 0 || body.planOnly) {
+        const plan = await planSimilarMerchantMerges(probes);
+        return Response.json({
+          clustersFound: plan.clustersFound,
+          mergesApplied: 0,
+          merchantsDeleted: 0,
+          transactionsUpdated: 0,
+          merges: plan.merges,
+          planOnly: true,
+        });
+      }
 
-    const result = await cleanSimilarMerchants(client);
-    return Response.json(result);
+      const result = await cleanSimilarMerchants(client);
+      return Response.json(result);
+    });
   } catch (error) {
     return Response.json(
       { error: errorMessage(error, "Merchant clean failed") },

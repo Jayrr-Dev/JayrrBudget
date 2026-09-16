@@ -1,4 +1,6 @@
 import { recategorizeTransaction } from "@/domains/transactions/application/recategorizeTransaction";
+import { runWithOpenRouterKey } from "@/shared/ai/openRouter";
+import { loadOpenRouterKeyOr503 } from "@/shared/ai/resolveOpenRouter.server";
 import {
   AuthRequiredError,
   getAuthenticatedConvexClient,
@@ -10,6 +12,8 @@ export const maxDuration = 300;
 export async function POST(request: Request) {
   try {
     const client = await getAuthenticatedConvexClient();
+    const loaded = await loadOpenRouterKeyOr503(client);
+    if (!loaded.ok) return loaded.response;
     const body = (await request.json()) as {
       transactionId?: string;
       description?: string;
@@ -19,10 +23,19 @@ export async function POST(request: Request) {
     const description = body.description?.trim() ?? "";
     const amount = Number(body.amount);
     if (!transactionId || !description || !Number.isFinite(amount)) {
-      return Response.json({ error: "Transaction is incomplete." }, { status: 400 });
+      return Response.json(
+        { error: "Transaction is incomplete." },
+        { status: 400 },
+      );
     }
-    return Response.json(
-      await recategorizeTransaction(client, { transactionId, description, amount }),
+    return runWithOpenRouterKey(loaded.apiKey, async () =>
+      Response.json(
+        await recategorizeTransaction(client, {
+          transactionId,
+          description,
+          amount,
+        }),
+      ),
     );
   } catch (error) {
     return Response.json(

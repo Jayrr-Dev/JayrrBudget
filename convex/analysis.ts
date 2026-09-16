@@ -1,17 +1,15 @@
 import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
-import { action, internalQuery } from "./_generated/server";
 import { internal } from "./_generated/api";
-import {
-  computeAnalysis,
-  rangeStartDate,
-} from "./lib/computeAnalysis";
+import { action, internalQuery } from "./_generated/server";
 import type {
   AnalysisPeriod,
   AnalysisRange,
   AnalysisSourceRow,
 } from "./lib/analysisTypes";
 import { requireUser } from "./lib/auth";
+import { computeAnalysis, rangeStartDate } from "./lib/computeAnalysis";
+import { rewriteTaxonomyLabel } from "./lib/seedCategoryPaths";
 
 const rangeValidator = v.union(
   v.literal("1w"),
@@ -74,8 +72,8 @@ function toSourceRow(
     merchantClean: txn.merchantClean ?? null,
     enrichmentChannel: txn.channel ?? null,
     sectionName: txn.section ?? null,
-    categoryName: txn.category ?? null,
-    typeName: txn.subcategory ?? null,
+    categoryName: rewriteTaxonomyLabel("category", txn.category),
+    typeName: rewriteTaxonomyLabel("subcategory", txn.subcategory),
     spreadName: txn.spread ?? null,
     companyName: txn.company ?? null,
     brandName: txn.brand ?? null,
@@ -131,9 +129,7 @@ export const loadPage = internalQuery({
       .query("transactions")
       .withIndex("by_userId_posted", (q) => {
         const byUser = q.eq("userId", user._id);
-        return args.startDate
-          ? byUser.gte("posted", args.startDate)
-          : byUser;
+        return args.startDate ? byUser.gte("posted", args.startDate) : byUser;
       })
       .order("desc")
       .paginate(args.paginationOpts);
@@ -203,10 +199,12 @@ export const get = action({
       range !== "all" ? rangeStartDate(latestDate, range) : null;
 
     const accountById = new Map<string, { name: string; type: string }>(
-      meta.accounts.map((account: { accountId: string; name: string; type: string }) => [
-        account.accountId,
-        { name: account.name, type: account.type },
-      ]),
+      meta.accounts.map(
+        (account: { accountId: string; name: string; type: string }) => [
+          account.accountId,
+          { name: account.name, type: account.type },
+        ],
+      ),
     );
 
     const rows: AnalysisSourceRow[] = [];

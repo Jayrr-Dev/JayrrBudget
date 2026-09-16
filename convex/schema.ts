@@ -20,7 +20,9 @@ export default defineSchema({
   ...authTables,
   // Shared vocabulary contains labels only, never ledger rows or owner IDs.
   sharedCategoryPaths: defineTable({
-    key: v.string(), section: v.string(), category: v.string(),
+    key: v.string(),
+    section: v.string(),
+    category: v.string(),
     subcategory: v.union(v.string(), v.null()),
   }).index("by_key", ["key"]),
   sharedTags: defineTable({
@@ -36,7 +38,9 @@ export default defineSchema({
     .index("by_userId", ["userId"])
     .index("by_userId_name", ["userId", "name"]),
   categorizationRules: defineTable({
-    userId: v.id("users"), key: v.string(), profile: profileValidator,
+    userId: v.id("users"),
+    key: v.string(),
+    profile: profileValidator,
     updatedAt: v.number(),
   }).index("by_userId_key", ["userId", "key"]),
   /** Zero-knowledge vault metadata. Wrapped keys are ciphertext and never plaintext UMKs. */
@@ -44,7 +48,11 @@ export default defineSchema({
     userId: v.id("users"),
     vaultId: v.string(),
     mode: v.union(v.literal("STRICT_PRIVATE"), v.literal("CLOUD_PROCESSING")),
-    status: v.union(v.literal("active"), v.literal("migrating"), v.literal("locked")),
+    status: v.union(
+      v.literal("active"),
+      v.literal("migrating"),
+      v.literal("locked"),
+    ),
     currentKeyId: v.string(),
     passphraseWrappedMasterKey: v.bytes(),
     passphraseSalt: v.bytes(),
@@ -111,11 +119,7 @@ export default defineSchema({
     isAnonymous: v.optional(v.boolean()),
     /** RBAC: admin | normal | premium (defaults to normal when missing). */
     role: v.optional(
-      v.union(
-        v.literal("admin"),
-        v.literal("normal"),
-        v.literal("premium"),
-      ),
+      v.union(v.literal("admin"), v.literal("normal"), v.literal("premium")),
     ),
     /** Document OCR: local (device) or server. Defaults to server when missing. */
     ocrMode: v.optional(v.union(v.literal("local"), v.literal("server"))),
@@ -489,6 +493,19 @@ export default defineSchema({
     rules: v.array(v.string()),
     updatedAt: v.number(),
   }).index("by_userId", ["userId"]),
+
+  /**
+   * BYOK ciphertext only. Plaintext never enters Convex.
+   * Next.js encrypts with AI_BYOK_WRAP_KEY before putEncrypted.
+   */
+  userAiKeys: defineTable({
+    userId: v.id("users"),
+    provider: v.literal("openrouter"),
+    ciphertext: v.string(),
+    iv: v.string(),
+    last4: v.string(),
+    updatedAt: v.number(),
+  }).index("by_userId_provider", ["userId", "provider"]),
 
   /** Client-reported errors (Error Boundary + manual). */
   issues: defineTable({

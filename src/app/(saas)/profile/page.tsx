@@ -10,6 +10,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { PageSpinner } from "@/components/ui/spinner";
+import { ProfileAiByokCard } from "@/domains/ai-keys/ui/ProfileAiByokCard";
 import { resolveOcrMode } from "@/domains/statements/domain/ocrMode";
 import { ProfileOcrModeCard } from "@/domains/statements/ui/ProfileOcrModeCard";
 import { api } from "@convex/_generated/api";
@@ -70,18 +71,19 @@ export default function ProfilePage() {
               <PopoverHeader className="gap-1.5">
                 <PopoverTitle>Profile</PopoverTitle>
                 <PopoverDescription>
-                  Your name, sign-in, scan, and encryption settings.
+                  Your name, sign-in, scan, AI key, and encryption settings.
                 </PopoverDescription>
                 <ul className="mt-1.5 list-disc space-y-1 pl-4 text-muted-foreground">
                   <li>The same password protects ledger data on this device</li>
+                  <li>An optional OpenRouter key is stored as ciphertext</li>
                 </ul>
               </PopoverHeader>
             </PopoverContent>
           </Popover>
         </h1>
         <p className="sr-only">
-          Your name, sign-in, and encryption settings. The same password protects
-          ledger data on this device.
+          Your name, sign-in, and encryption settings. The same password
+          protects ledger data on this device.
         </p>
       </header>
 
@@ -165,6 +167,8 @@ export default function ProfilePage() {
       </form>
 
       <ProfileOcrModeCard ocrMode={resolveOcrMode(me.ocrMode)} />
+
+      <ProfileAiByokCard />
 
       <VaultSecurityCard />
     </div>
