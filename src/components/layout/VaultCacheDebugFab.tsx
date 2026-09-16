@@ -139,45 +139,26 @@ function AiUsageEventRow({ event }: { event: AiUsageDebugEvent }) {
 function AiCostRatesTable() {
   return (
     <div className="px-3 py-2">
-      <p className="mb-1.5 text-[10px] font-medium tracking-wide text-[var(--muted-foreground)] uppercase">
-        Rate card · est. only
-      </p>
-      <table className="w-full border-collapse font-mono text-[10px]">
+      <table className="w-full border-collapse font-mono text-[11px]">
         <thead>
           <tr className="text-left text-[var(--muted-foreground)]">
-            <th className="pb-1 font-medium">Model</th>
-            <th className="pb-1 text-right font-medium">In / Out</th>
+            <th className="pb-1.5 font-medium">Model</th>
+            <th className="pb-1.5 text-right font-medium">Rate</th>
           </tr>
         </thead>
         <tbody>
           {AI_COST_TABLE.map((row) => (
-            <tr key={row.id} className="align-top">
-              <td className="py-0.5 pr-2 text-[var(--foreground)]">
-                <div>{row.label}</div>
-                <div className="text-[var(--muted-foreground)]">{row.id}</div>
-              </td>
-              <td className="py-0.5 text-right tabular-nums whitespace-nowrap text-[var(--foreground)]">
-                {row.unit === "tokens" ? (
-                  <>
-                    {formatRatePerMillion(row.inputPerMillionUsd)} /{" "}
-                    {formatRatePerMillion(row.outputPerMillionUsd)}
-                    <div className="text-[var(--muted-foreground)]">/1M tok</div>
-                  </>
-                ) : (
-                  <>
-                    {formatUsd(row.perPageUsd)}
-                    <div className="text-[var(--muted-foreground)]">/page</div>
-                  </>
-                )}
+            <tr key={row.id}>
+              <td className="py-1 pr-3 text-[var(--foreground)]">{row.label}</td>
+              <td className="py-1 text-right tabular-nums whitespace-nowrap text-[var(--foreground)]">
+                {row.unit === "tokens"
+                  ? `${formatRatePerMillion(row.inputPerMillionUsd)} / ${formatRatePerMillion(row.outputPerMillionUsd)} /1M`
+                  : `${formatUsd(row.perPageUsd)} /page`}
               </td>
             </tr>
           ))}
         </tbody>
       </table>
-      <p className="mt-1.5 text-[10px] text-[var(--muted-foreground)]">
-        OpenRouter list + Mistral OCR $4/1k pages. As of{" "}
-        {AI_COST_TABLE[0]?.asOf ?? "—"}.
-      </p>
     </div>
   );
 }
