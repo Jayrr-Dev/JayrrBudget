@@ -1,0 +1,115 @@
+"use client";
+
+import { Bubble, BubbleContent } from "@/components/ui/bubble";
+import {
+  Message,
+  MessageAvatar,
+  MessageContent,
+} from "@/components/ui/message";
+import {
+  MessageScroller,
+  MessageScrollerButton,
+  MessageScrollerContent,
+  MessageScrollerItem,
+  MessageScrollerProvider,
+  MessageScrollerViewport,
+} from "@/components/ui/message-scroller";
+import {
+  PiggyMascot,
+  type PiggyMood,
+} from "@/domains/ledger-ai/ui/PiggyMascot";
+import { cn } from "@/lib/utils";
+import type { ReactNode } from "react";
+
+/** Shared scroll shell for bottom Piggy and Canvas Piggy. */
+export function PiggyTranscript({
+  ariaLabel,
+  children,
+  className,
+}: {
+  ariaLabel: string;
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className={cn("min-h-0 bg-background", className)}>
+      <MessageScrollerProvider autoScroll defaultScrollPosition="end">
+        <MessageScroller>
+          <MessageScrollerViewport
+            aria-label={ariaLabel}
+            className="px-3 py-3"
+          >
+            <MessageScrollerContent className="gap-3">
+              {children}
+            </MessageScrollerContent>
+          </MessageScrollerViewport>
+          <MessageScrollerButton aria-label="Scroll to latest" />
+        </MessageScroller>
+      </MessageScrollerProvider>
+    </div>
+  );
+}
+
+export function PiggyTranscriptItem({
+  messageId,
+  scrollAnchor = false,
+  children,
+}: {
+  messageId: string;
+  scrollAnchor?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <MessageScrollerItem messageId={messageId} scrollAnchor={scrollAnchor}>
+      {children}
+    </MessageScrollerItem>
+  );
+}
+
+export function PiggyUserMessage({ text }: { text: string }) {
+  return (
+    <Message align="end" className="motion-safe:animate-piggy-pop">
+      <MessageContent>
+        <Bubble align="end" variant="default">
+          <BubbleContent className="whitespace-pre-wrap">{text}</BubbleContent>
+        </Bubble>
+      </MessageContent>
+    </Message>
+  );
+}
+
+export function PiggyAssistantMessage({
+  children,
+  mood = "still",
+  className,
+}: {
+  children: ReactNode;
+  mood?: PiggyMood;
+  className?: string;
+}) {
+  return (
+    <Message
+      align="start"
+      className={cn("motion-safe:animate-piggy-pop", className)}
+    >
+      <MessageAvatar className="size-7 self-start bg-accent-subtle">
+        <PiggyMascot mood={mood} iconClassName="size-3.5" />
+      </MessageAvatar>
+      <MessageContent className="gap-1.5">{children}</MessageContent>
+    </Message>
+  );
+}
+
+export function PiggyTextBubble({
+  children,
+  align = "start",
+}: {
+  children: ReactNode;
+  align?: "start" | "end";
+}) {
+  return (
+    <Bubble align={align} variant="piggy">
+      <BubbleContent>{children}</BubbleContent>
+    </Bubble>
+  );
+}

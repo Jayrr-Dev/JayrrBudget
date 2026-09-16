@@ -76,7 +76,7 @@ export function ChromeTab({
         }
       }}
       className={cn(
-        "group relative flex h-6 min-w-[5.5rem] max-w-[8.5rem] shrink-0 cursor-pointer select-none items-center gap-0.5 rounded-t-md border border-b-0 px-0.5 transition-colors",
+        "group relative flex h-7 min-w-[5.5rem] max-w-[8.5rem] shrink-0 cursor-pointer select-none items-center gap-0.5 rounded-t-md border border-b-0 px-0.5 transition-colors",
         isActive
           ? "z-[1] -mb-px border-[var(--border)] bg-[var(--background)] text-[var(--foreground)] shadow-sm"
           : "border-transparent bg-[var(--muted)]/35 text-[var(--muted-foreground)] hover:bg-[var(--muted)]/55 hover:text-[var(--foreground)]",
@@ -89,7 +89,7 @@ export function ChromeTab({
           ref={inputRef}
           value={draft}
           aria-label="Tab name"
-          className="min-w-0 flex-1 bg-transparent px-0.5 text-[11px] leading-none outline-none"
+          className="min-w-0 flex-1 bg-transparent px-0.5 text-[11px] leading-snug outline-none"
           onChange={(event) => setDraft(event.target.value)}
           onBlur={commit}
           onKeyDown={onKeyDown}
@@ -98,7 +98,7 @@ export function ChromeTab({
         />
       ) : (
         <span
-          className="min-w-0 flex-1 truncate px-0.5 text-[11px] leading-none"
+          className="min-w-0 flex-1 truncate px-0.5 text-[11px] leading-snug"
           onDoubleClick={(event) => {
             event.stopPropagation();
             setEditing(true);

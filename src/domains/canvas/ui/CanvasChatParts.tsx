@@ -5,10 +5,6 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import {
-  PiggyMascot,
-  type PiggyMood,
-} from "@/domains/ledger-ai/ui/PiggyMascot";
 import { cn } from "@/lib/utils";
 import type { DynamicToolUIPart, ReasoningUIPart, ToolUIPart } from "ai";
 import {
@@ -147,22 +143,20 @@ export function ToolActivity({
         (part.state === "output-error" ? part.errorText : undefined)
       }
       className={cn(
-        "inline-flex w-fit max-w-full items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs motion-safe:animate-piggy-pop",
+        "inline-flex w-fit max-w-full items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs",
         tone === "busy" && "border-accent/20 bg-accent-subtle/50 text-accent",
         tone === "done" && "border-success/20 bg-success-subtle text-success",
         tone === "error" && "border-danger/20 bg-danger-subtle text-danger",
       )}
     >
-      {tone === "done" ? (
+        {tone === "done" ? (
         <Check className="size-3 shrink-0" strokeWidth={2.5} />
       ) : tone === "error" ? (
         <CircleAlert className="size-3 shrink-0" />
       ) : (
-        <Icon className="size-3 shrink-0 motion-safe:animate-piggy-idle" />
+        <Icon className="size-3 shrink-0" />
       )}
-      <span className={cn("truncate", tone === "busy" && "shimmer")}>
-        {label}
-      </span>
+      <span className="truncate">{label}</span>
     </div>
   );
 }
@@ -220,11 +214,14 @@ export function ReasoningBlock({ part }: { part: ReasoningUIPart }) {
       className="w-full max-w-[85%] rounded-lg border border-accent/15 bg-accent-subtle/30 text-xs"
     >
       <CollapsibleTrigger className="group/reason flex w-full items-start gap-1.5 px-2 py-1.5 text-left text-accent">
-        <Brain className="mt-0.5 size-3 shrink-0" />
+        <Brain
+          className={cn(
+            "mt-0.5 size-3 shrink-0",
+            streaming && "motion-safe:animate-piggy-think",
+          )}
+        />
         <span className="min-w-0 flex-1">
-          <span className={cn("block font-medium", streaming && "shimmer")}>
-            {header}
-          </span>
+          <span className="block font-medium">{header}</span>
           {!open && preview ? (
             <span className="mt-0.5 block truncate font-normal text-muted-foreground">
               {preview}
@@ -261,37 +258,16 @@ export function AssistantMarkdown({ text }: { text: string }) {
 /* Thinking indicator                                                  */
 /* ------------------------------------------------------------------ */
 
-const COIN_DELAYS = ["0ms", "150ms", "300ms"] as const;
-
-/** Piggy + bouncing coins shown before the first assistant text arrives. */
-export function PiggyThinking({
-  label,
-  mood = "think",
-}: {
-  label: string;
-  mood?: PiggyMood;
-}) {
+/** Compact status before the first assistant part arrives. Only the brain moves. */
+export function PiggyThinking({ label }: { label: string }) {
   return (
     <div
       role="status"
       aria-live="polite"
-      className="flex items-center gap-2 motion-safe:animate-piggy-pop"
+      className="inline-flex w-fit max-w-[85%] items-center gap-1.5 rounded-lg border border-accent/15 bg-accent-subtle/30 px-2 py-1.5 text-xs text-accent"
     >
-      <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-accent-subtle">
-        <PiggyMascot mood={mood} iconClassName="size-3.5" />
-      </span>
-      <div className="flex items-center gap-2 rounded-xl border border-accent/15 bg-accent-subtle/70 px-3 py-2">
-        <span className="text-xs text-accent shimmer">{label}</span>
-        <span className="flex items-end gap-0.5" aria-hidden>
-          {COIN_DELAYS.map((delay) => (
-            <span
-              key={delay}
-              style={{ animationDelay: delay }}
-              className="size-1.5 rounded-full bg-amber-400 ring-1 ring-amber-600/40 motion-safe:animate-piggy-coin"
-            />
-          ))}
-        </span>
-      </div>
+      <Brain className="size-3 shrink-0 motion-safe:animate-piggy-think" />
+      <span className="font-medium">{label}</span>
     </div>
   );
 }

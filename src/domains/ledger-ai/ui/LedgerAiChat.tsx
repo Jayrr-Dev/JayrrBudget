@@ -1,15 +1,8 @@
 "use client";
 
 import { ChromeTab } from "@/components/layout/ChromeTab";
-import { Bubble, BubbleContent } from "@/components/ui/bubble";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  Message,
-  MessageAvatar,
-  MessageContent,
-  MessageGroup,
-} from "@/components/ui/message";
 import {
   Popover,
   PopoverContent,
@@ -21,10 +14,16 @@ import {
 import { buildBudgetContextFromDashboard } from "@/domains/canvas/domain/budgetContext";
 import { useFeatureFlag } from "@/domains/feature-flags/ui/useFeatureFlag";
 import {
-  PiggyMascot,
   piggyMoodFromChat,
   type PiggyMood,
 } from "@/domains/ledger-ai/ui/PiggyMascot";
+import {
+  PiggyAssistantMessage,
+  PiggyTextBubble,
+  PiggyTranscript,
+  PiggyTranscriptItem,
+  PiggyUserMessage,
+} from "@/domains/ledger-ai/ui/PiggyTranscript";
 import { useScratchNote } from "@/domains/scratch-note/scratchNoteStore";
 import { dashboardFromPrivateLedger } from "@/domains/vault/application/dashboardFromPrivateLedger";
 import { usePrivateLedger } from "@/domains/vault/ui/usePrivateLedger";
@@ -140,58 +139,64 @@ function PiggyChatPane({
   }, [active, mood, onMoodChange, open]);
 
   return (
-    <div className="flex flex-col gap-3 p-3" hidden={!active}>
+    <div className="flex flex-col" hidden={!active}>
       {blocked ? (
-        <p className="text-xs text-[var(--muted-foreground)]">
+        <p className="border-b border-border bg-warning-subtle px-3 py-2 text-xs text-warning">
           Turn on Cloud Processing in Modules before sending ledger data to
           Piggy.
         </p>
       ) : null}
 
-      <MessageGroup className="max-h-64 overflow-y-auto rounded-lg border border-[var(--border)] bg-[var(--background)] p-2">
+      <PiggyTranscript
+        ariaLabel={`${tabName} conversation`}
+        className="h-64"
+      >
         {messages.length === 0 ? (
-          <p className="px-1 py-2 text-xs text-[var(--muted-foreground)]">
-            What&apos;s rattling in the bank? Try &quot;How much did I spend on
-            groceries last month?&quot; or &quot;Move Uber Eats to Food /
-            Delivery.&quot;
-          </p>
+          <PiggyTranscriptItem messageId="piggy-empty">
+            <p className="px-1 py-2 text-xs text-muted-foreground">
+              What&apos;s rattling in the bank? Try &quot;How much did I spend
+              on groceries last month?&quot; or &quot;Move Uber Eats to Food /
+              Delivery.&quot;
+            </p>
+          </PiggyTranscriptItem>
         ) : (
           messages.map((message) => {
             const text = messageText(message.parts ?? []);
             if (!text) return null;
-            const align = message.role === "user" ? "end" : "start";
             const assistantTalking =
               message.role === "assistant" &&
               status === "streaming" &&
               message.id === messages.at(-1)?.id;
             return (
-              <Message key={message.id} align={align}>
-                {message.role === "assistant" ? (
-                  <MessageAvatar className="size-7 bg-accent-subtle">
-                    <PiggyMascot
-                      mood={assistantTalking ? "talk" : "still"}
-                      iconClassName="size-3.5"
-                    />
-                  </MessageAvatar>
-                ) : null}
-                <MessageContent>
-                  <Bubble
-                    align={align}
-                    variant={message.role === "user" ? "default" : "secondary"}
+              <PiggyTranscriptItem
+                key={message.id}
+                messageId={message.id}
+                scrollAnchor={message.role === "user"}
+              >
+                {message.role === "user" ? (
+                  <PiggyUserMessage text={text} />
+                ) : (
+                  <PiggyAssistantMessage
+                    mood={assistantTalking ? "talk" : "still"}
                   >
-                    <BubbleContent>{text}</BubbleContent>
-                  </Bubble>
-                </MessageContent>
-              </Message>
+                    <PiggyTextBubble>{text}</PiggyTextBubble>
+                  </PiggyAssistantMessage>
+                )}
+              </PiggyTranscriptItem>
             );
           })
         )}
-      </MessageGroup>
-
-      {error ? <p className="text-xs text-red-700">{error.message}</p> : null}
+        {error ? (
+          <PiggyTranscriptItem messageId="piggy-error">
+            <p className="rounded-lg border border-danger/20 bg-danger-subtle px-3 py-2 text-xs text-danger">
+              {error.message}
+            </p>
+          </PiggyTranscriptItem>
+        ) : null}
+      </PiggyTranscript>
 
       <form
-        className="flex items-center gap-1.5"
+        className="flex items-center gap-1.5 border-t border-border bg-surface p-3"
         onSubmit={(event) => {
           event.preventDefault();
           const value = input.trim();
