@@ -1,32 +1,33 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" fill="none" role="img" aria-labelledby="title desc">
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" fill="none" aria-labelledby="title desc" viewBox="0 0 128 128">
   <title id="title">JayrrBudget</title>
-  <desc id="desc">A soft pink piggy bank with a golden savings coin, a compact body, and rounded cocoa outlines.</desc>
-  <g transform="translate(9.6 0) scale(.85 1)" stroke="#60353D" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M106 74C123 78 126 58 116 59C108 60 112 70 119 66"/>
-    <path d="M32 53C28 48 28 39 34 39C41 39 47 42 49 46C63 40 80 40 93 47C107 55 114 70 109 86Q106 99 95 104L94 114H81L78 108Q65 111 52 106L48 114H35L34 100Q24 94 22 85H16Q10 85 10 79V68Q10 62 17 62H22Q26 56 32 53Z" fill="#F8C3CC" stroke="none"/>
-    <path d="M32 53C28 48 28 39 34 39C41 39 47 42 49 46Q39.5 51 32 53Z" fill="#ECA5B7" stroke="none"/>
-    <path d="M34 93Q64 115 95 97Q104 90 108 78Q114 96 95 104L94 114H81L78 108Q65 111 52 106L48 114H35L34 100Z" fill="#ECA5B7" stroke="none"/>
-    <path d="M32 53C28 48 28 39 34 39C41 39 47 42 49 46C63 40 80 40 93 47C107 55 114 70 109 86Q106 99 95 104L94 114H81L78 108Q65 111 52 106L48 114H35L34 100Q24 94 22 85H16Q10 85 10 79V68Q10 62 17 62H22Q26 56 32 53Z"/>
-    <path d="M16 71V76" stroke-width="3.5"/>
-    <ellipse cx="37" cy="66" rx="4" ry="5" fill="#60353D" stroke="none"/>
-    <circle cx="38" cy="64" r="1.2" fill="#FFF5F3" stroke="none"/>
-    <ellipse cx="43" cy="80" rx="8" ry="5" fill="#EF94AF" stroke="none"/>
-    <path d="M27 86Q31 89 34 86" stroke-width="3"/>
-    <path d="M53 53Q62 48 69 49" stroke="#FFE5E8" stroke-width="5"/>
+  <desc id="desc">
+    A soft pink piggy bank with a golden savings coin, a compact body, and rounded cocoa outlines.
+  </desc>
+  <g stroke="#60353d" stroke-linecap="round" stroke-linejoin="round" stroke-width="4.5" transform="matrix(.85 0 0 1 9.6 0)">
+    <path d="M106 74c17 4 20-16 10-15-8 1-4 11 3 7"/>
+    <path fill="#f8c3cc" stroke="none" d="M32 53c-4-5-4-14 2-14 7 0 13 3 15 7 14-6 31-6 44 1 14 8 21 23 16 39q-3 13-14 18l-1 10H81l-3-6q-13 3-26-2l-4 8H35l-1-14q-10-6-12-15h-6q-6 0-6-6V68q0-6 7-6h5q4-6 10-9"/>
+    <path fill="#eca5b7" stroke="none" d="M32 53c-4-5-4-14 2-14 7 0 13 3 15 7q-9.5 5-17 7m2 40q30 22 61 4 9-7 13-19 6 18-13 26l-1 10H81l-3-6q-13 3-26-2l-4 8H35l-1-14Z"/>
+    <path d="M32 53c-4-5-4-14 2-14 7 0 13 3 15 7 14-6 31-6 44 1 14 8 21 23 16 39q-3 13-14 18l-1 10H81l-3-6q-13 3-26-2l-4 8H35l-1-14q-10-6-12-15h-6q-6 0-6-6V68q0-6 7-6h5q4-6 10-9"/>
+    <path stroke-width="3.5" d="M16 71v5"/>
+    <ellipse cx="37" cy="66" fill="#60353d" stroke="none" rx="4" ry="5"/>
+    <circle cx="38" cy="64" r="1.2" fill="#fff5f3" stroke="none"/>
+    <ellipse cx="43" cy="80" fill="#ef94af" stroke="none" rx="8" ry="5"/>
+    <path stroke-width="3" d="M27 86q4 3 7 0"/>
+    <path stroke="#ffe5e8" stroke-width="5" d="M53 53q9-5 16-4"/>
   </g>
-  <!-- Clip the lowered portion of the coin at the slot, keeping more of its face visible. -->
-  <defs><clipPath id="coin-slot"><path d="M0 0H128V69.32L0 31.68Z"/></clipPath></defs>
+  <defs>
+    <clipPath id="coin-slot">
+      <path d="M0 0h128v69.32L0 31.6Z"/>
+    </clipPath>
+  </defs>
   <g clip-path="url(#coin-slot)">
-  <g transform="translate(-7.7 9)" stroke="#60353D" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round">
-    <circle cx="87" cy="34" r="20" fill="#F6D588"/>
-    <path d="M91 16C109 20 111 45 93 53Q82 57 73 48C95 54 104 27 91 16Z" fill="#E9B85F" stroke="none"/>
-    <circle cx="87" cy="34" r="20" fill="none"/>
-    <path d="M76 29Q78 22 84 22" stroke="#FFF0CC" stroke-width="4"/>
-    <path d="M90 25L84 42" stroke-width="3.5"/>
+    <g stroke="#60353d" stroke-linecap="round" stroke-linejoin="round" stroke-width="4.5" transform="translate(-7.7 9)">
+      <circle cx="87" cy="34" r="20" fill="#f6d588"/>
+      <path fill="#e9b85f" stroke="none" d="M91 16c18 4 20 29 2 37q-11 4-20-5c22 6 31-21 18-32"/>
+      <circle cx="87" cy="34" r="20"/>
+      <path stroke="#fff0cc" stroke-width="4" d="M76 29q2-7 8-7"/>
+      <path stroke-width="3.5" d="m90 25-6 17"/>
+    </g>
   </g>
-  </g>
-  <path d="M59 49.03L100 61.09" stroke="#60353D" stroke-width="5" stroke-linecap="round"/>
+  <path stroke="#60353d" stroke-linecap="round" stroke-width="5" d="m60 47 32 11.06"/>
 </svg>
-
-
-

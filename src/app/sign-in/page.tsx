@@ -42,7 +42,7 @@ export default function SignInPage() {
           <div className="flex flex-col items-center space-y-4 text-center">
             <div className="flex flex-col items-center gap-2">
               <img
-                src="/logo.svg"
+                src="/icon.svg"
                 alt=""
                 width={72}
                 height={72}

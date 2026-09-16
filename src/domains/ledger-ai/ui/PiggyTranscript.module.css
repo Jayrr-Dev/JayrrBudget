@@ -11,29 +11,32 @@
 
 .assistant [data-slot="bubble"][data-variant="piggy"] > [data-slot="bubble-content"],
 .userBubble > [data-slot="bubble-content"] {
+  position: relative;
+  z-index: 1;
   background: var(--bubble-fill);
   color: var(--foreground);
   border: 1.5px solid var(--bubble-ink);
   border-radius: 19px 23px 18px 12px / 15px 17px 21px 18px;
   box-shadow: 1px 3px 0 color-mix(in srgb, var(--bubble-ink) 12%, transparent);
   padding: 10px 13px;
+  overflow: visible;
   overflow-wrap: anywhere;
 }
 
-/* A small folded corner keeps the outline crisp at every message height. */
+/* Folded corner tucked under the fill so it stays glued at any height. */
 .assistant [data-slot="bubble"][data-variant="piggy"]::after,
 .userBubble::after {
   content: "";
   position: absolute;
-  top: 16px;
-  left: -5px;
-  width: 10px;
-  height: 10px;
+  top: 12px;
+  left: -3px;
+  z-index: 0;
+  width: 12px;
+  height: 12px;
   background: var(--bubble-fill);
   border-left: 1.5px solid var(--bubble-ink);
   border-bottom: 1.5px solid var(--bubble-ink);
-  transform: skewY(25deg) rotate(25deg);
-  border-bottom-left-radius: 2px;
+  transform: rotate(42deg);
   pointer-events: none;
 }
 
@@ -50,6 +53,8 @@
 
 .userBubble.userBubble::after {
   left: auto;
-  right: -5px;
-  transform: skewY(-25deg) rotate(65deg);
+  right: -3px;
+  border-left: none;
+  border-right: 1.5px solid var(--bubble-ink);
+  transform: rotate(-42deg);
 }
