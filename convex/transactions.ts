@@ -388,6 +388,7 @@ export const recategorizeByMerchant = mutation({
 
 const aiTxnRow = v.object({
   transactionId: v.string(),
+  accountId: v.string(),
   date: v.string(),
   description: v.string(),
   merchant: v.union(v.string(), v.null()),
@@ -420,8 +421,31 @@ function haystack(row: {
     .toLowerCase();
 }
 
+/** Resolve an AI-supplied account reference (id, name, official name, or last-4 mask). */
+function findAiAccount<
+  T extends {
+    accountId: string;
+    name: string;
+    officialName: string | null;
+    mask: string | null;
+  },
+>(accounts: T[], key: string | undefined) {
+  const wanted = key?.trim();
+  if (!wanted) return { account: null as T | null, missing: false };
+  const lowered = norm(wanted);
+  const account =
+    accounts.find((row) => row.accountId === wanted) ??
+    accounts.find((row) => norm(row.name) === lowered) ??
+    accounts.find((row) => norm(row.officialName) === lowered) ??
+    accounts.find((row) => row.mask && wanted.endsWith(row.mask)) ??
+    accounts.find((row) => norm(row.name).includes(lowered)) ??
+    null;
+  return { account, missing: account === null };
+}
+
 function toAiTxn(row: {
   transactionId: string;
+  accountId: string;
   posted: string;
   description: string;
   merchantClean: string | null;
@@ -435,6 +459,7 @@ function toAiTxn(row: {
 }) {
   return {
     transactionId: row.transactionId,
+    accountId: row.accountId,
     date: row.posted,
     description: row.description,
     merchant: row.merchantClean ?? row.merchantName,
@@ -457,12 +482,16 @@ export const searchForAi = query({
     subcategory: v.optional(v.string()),
     startDate: v.optional(v.string()),
     endDate: v.optional(v.string()),
+    /** Account id, name, or last-4 mask. Narrows to one account. */
+    account: v.optional(v.string()),
     limit: v.optional(v.number()),
   },
   returns: v.object({
     matches: v.array(aiTxnRow),
     scanned: v.number(),
     truncated: v.boolean(),
+    /** Set when `account` was given but matched none of the user's accounts. */
+    accountNotFound: v.optional(v.boolean()),
   }),
   handler: async (ctx, args) => {
     const user = await requireUser(ctx);
@@ -470,6 +499,18 @@ export const searchForAi = query({
       AI_BULK_LIMIT,
       Math.max(1, Math.floor(args.limit ?? 25)),
     );
+    let accountId: string | null = null;
+    if (args.account?.trim()) {
+      const accounts = await ctx.db
+        .query("accounts")
+        .withIndex("by_userId", (q) => q.eq("userId", user._id))
+        .collect();
+      const found = findAiAccount(accounts, args.account);
+      if (found.missing) {
+        return { matches: [], scanned: 0, truncated: false, accountNotFound: true };
+      }
+      accountId = found.account?.accountId ?? null;
+    }
     const qText = args.query?.trim().toLowerCase() ?? "";
     const merchant = args.merchant?.trim().toLowerCase() ?? "";
     const section = args.section?.trim().toLowerCase() ?? "";
@@ -494,6 +535,7 @@ export const searchForAi = query({
 
     const matches = [];
     for (const row of rows) {
+      if (accountId && row.accountId !== accountId) continue;
       if (merchant) {
         const label = `${row.merchantClean ?? ""} ${row.merchantName ?? ""}`.toLowerCase();
         if (!label.includes(merchant)) continue;
@@ -525,11 +567,15 @@ export const summarizeForAi = query({
     ),
     startDate: v.optional(v.string()),
     endDate: v.optional(v.string()),
+    /** Account id, name, or last-4 mask. Narrows to one account. */
+    account: v.optional(v.string()),
   },
   returns: v.object({
     groupBy: v.string(),
     scanned: v.number(),
     truncated: v.boolean(),
+    /** Set when `account` was given but matched none of the user's accounts. */
+    accountNotFound: v.optional(v.boolean()),
     spendTotal: v.number(),
     incomeTotal: v.number(),
     /** Money moved between own accounts / card payoffs. Excluded from spend and income. */
@@ -555,8 +601,22 @@ export const summarizeForAi = query({
     const accountTypeById = new Map(
       accounts.map((account) => [account.accountId, account.type ?? null]),
     );
+    const found = findAiAccount(accounts, args.account);
+    if (found.missing) {
+      return {
+        groupBy: args.groupBy,
+        scanned: 0,
+        truncated: false,
+        accountNotFound: true,
+        spendTotal: 0,
+        incomeTotal: 0,
+        transferTotal: 0,
+        groups: [],
+      };
+    }
+    const onlyAccountId = found.account?.accountId ?? null;
 
-    const rows = await ctx.db
+    const allRows = await ctx.db
       .query("transactions")
       .withIndex("by_userId_posted", (q) => {
         const base = q.eq("userId", user._id);
@@ -569,6 +629,9 @@ export const summarizeForAi = query({
       })
       .order("desc")
       .take(1500);
+    const rows = onlyAccountId
+      ? allRows.filter((row) => row.accountId === onlyAccountId)
+      : allRows;
 
     const buckets = new Map<
       string,
@@ -632,7 +695,7 @@ export const summarizeForAi = query({
     return {
       groupBy: args.groupBy,
       scanned: rows.length,
-      truncated: rows.length === 1500,
+      truncated: allRows.length === 1500,
       spendTotal: Number(spendTotal.toFixed(2)),
       incomeTotal: Number(incomeTotal.toFixed(2)),
       transferTotal: Number(transferTotal.toFixed(2)),
@@ -888,8 +951,13 @@ export const accountsForAi = query({
     v.object({
       accountId: v.string(),
       name: v.string(),
+      officialName: v.union(v.string(), v.null()),
+      mask: v.union(v.string(), v.null()),
       type: v.union(v.string(), v.null()),
+      subtype: v.union(v.string(), v.null()),
       currency: v.union(v.string(), v.null()),
+      balance: v.union(v.number(), v.null()),
+      available: v.union(v.number(), v.null()),
     }),
   ),
   handler: async (ctx) => {
@@ -902,8 +970,13 @@ export const accountsForAi = query({
       .map((row) => ({
         accountId: row.accountId,
         name: row.name,
+        officialName: row.officialName,
+        mask: row.mask,
         type: row.type,
+        subtype: row.subtype,
         currency: row.isoCurrencyCode,
+        balance: row.currentBalance,
+        available: row.availableBalance,
       }))
       .sort((a, b) => a.name.localeCompare(b.name));
   },

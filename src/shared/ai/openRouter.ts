@@ -160,6 +160,17 @@ export function chatModel(
   return getOpenRouter()(choice.openRouterId, settings);
 }
 
+const WEB_SEARCH_MAX_RESULTS = 5;
+
+/**
+ * OpenRouter server-side web search. The model decides when to call it;
+ * OpenRouter runs the search and streams `url_citation`s back as source parts.
+ * Billed per search on the same key as the chat call.
+ */
+export function webSearchTool(maxResults = WEB_SEARCH_MAX_RESULTS) {
+  return getOpenRouter().tools.webSearch({ maxResults });
+}
+
 const GENERATE_TIMEOUT_MS = 120_000;
 
 async function withTimeout<T>(

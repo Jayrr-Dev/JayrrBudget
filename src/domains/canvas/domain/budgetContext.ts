@@ -1,5 +1,30 @@
 import { classifyCashFlow, type CashFlowKind } from "@/domains/analysis/domain/cashFlow";
-import type { DashboardData, DashboardTransaction } from "@/domains/dashboard/domain/types";
+import type {
+  DashboardData,
+  DashboardLoanSummary,
+  DashboardTransaction,
+} from "@/domains/dashboard/domain/types";
+
+/** Loan facts Piggy can quote without the full payment schedule. */
+function compactLoan(loan: DashboardLoanSummary | null | undefined) {
+  if (!loan) return null;
+  return {
+    type: loan.loanType,
+    rateType: loan.rateType,
+    annualRate: loan.annualRate,
+    apr: loan.aprDisclosed,
+    paymentAmount: loan.paymentAmount,
+    remainingPrincipal: loan.remainingPrincipal,
+    paidInterest: loan.paidInterest,
+    paidPrincipal: loan.paidPrincipal,
+    progressPct: loan.progressPct,
+    paymentsApplied: loan.paymentsApplied,
+    remainingPayments: loan.remainingPayments,
+    nextPaymentDate: loan.nextPaymentDate,
+    maturityDate: loan.maturityDate,
+    collateral: loan.vehicleLabel,
+  };
+}
 
 function cashFlowKind(txn: DashboardTransaction, accountType: string | null): CashFlowKind {
   return classifyCashFlow({
@@ -41,14 +66,37 @@ export function buildBudgetContextFromDashboard(data: DashboardData) {
     .slice(0, 12)
     .map(([name, amount]) => ({ name, amount: Number(amount.toFixed(2)) }));
 
+  // Spend / income per account so "what did I put on my Visa" has an answer.
+  const byAccount = new Map<string, { spend: number; income: number; count: number }>();
+  for (const { txn, kind } of classified) {
+    if (kind !== "spend" && kind !== "income") continue;
+    const bucket = byAccount.get(txn.accountId) ?? { spend: 0, income: 0, count: 0 };
+    bucket.count += 1;
+    if (kind === "spend") bucket.spend += txn.amount;
+    else bucket.income += Math.abs(txn.amount);
+    byAccount.set(txn.accountId, bucket);
+  }
+
   return {
-    accounts: data.accounts.map((account) => ({
-      name: account.name,
-      mask: account.mask,
-      type: account.type,
-      balance: account.currentBalance,
-      currency: account.isoCurrencyCode,
-    })),
+    accounts: data.accounts.map((account) => {
+      const activity = byAccount.get(account.accountId);
+      return {
+        accountId: account.accountId,
+        name: account.name,
+        officialName: account.officialName,
+        mask: account.mask,
+        type: account.type,
+        subtype: account.subtype,
+        balance: account.currentBalance,
+        available: account.availableBalance,
+        currency: account.isoCurrencyCode,
+        /** Over the loaded window (see totals.earliestDate / latestDate). */
+        spend: Number((activity?.spend ?? 0).toFixed(2)),
+        income: Number((activity?.income ?? 0).toFixed(2)),
+        transactionCount: activity?.count ?? 0,
+        loan: compactLoan(account.loanSummary),
+      };
+    }),
     totals: {
       balance: data.totalBalance,
       transactionCount: data.transactionCount,
@@ -62,6 +110,7 @@ export function buildBudgetContextFromDashboard(data: DashboardData) {
     topMerchants,
     recentTransactions: classified.slice(0, 25).map(({ txn, kind }) => ({
       date: txn.date,
+      accountId: txn.accountId,
       merchant: txn.merchantClean ?? txn.merchantName ?? txn.name,
       amount: txn.amount,
       kind,

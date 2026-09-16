@@ -7,11 +7,6 @@ import {
 } from "@/components/layout/VaultCacheDebugFab";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Tooltip,
@@ -58,13 +53,18 @@ function storeSheetCsvFilename(tabName: string) {
 }
 
 const FAB_COLLAPSED_PX = 44;
+/** Panels stack in the same fixed column as the pill, so they hug the right edge like the debug panel. */
+const FAB_DOCK_PANEL =
+  "pointer-events-auto w-[min(24rem,calc(100vw-1.5rem))] overflow-hidden rounded-xl border border-border bg-background text-foreground shadow-lg ring-1 ring-border/40";
 const FAB_EXPANDED_ICON_ONLY_SEGMENT_PX = 36;
 const FAB_EXPANDED_PILL_INNER_PADDING_PX = 8;
 const FAB_EXPANDED_DUAL_SEGMENT_GAP_PX = 2;
-const FAB_EXPANDED_BASE_PX = 56;
-const FAB_EXPANDED_PIGGY_PX = 72;
-const FAB_EXPANDED_EXTRA_PER_COUNT_DIGIT_PX = 6;
-const FAB_EXPANDED_MAX_PX = 88;
+// Widths fit text-sm labels: icon (24) + label + optional count.
+const FAB_EXPANDED_BASE_PX = 80;
+const FAB_EXPANDED_PIGGY_PX = 88;
+const FAB_EXPANDED_DEBUG_PX = 84;
+const FAB_EXPANDED_EXTRA_PER_COUNT_DIGIT_PX = 8;
+const FAB_EXPANDED_MAX_PX = 112;
 const BADGE_CAP = 99;
 
 const CORNER_BADGE_CLASS =
@@ -104,7 +104,7 @@ function expandedPillWidthPx(
     : FAB_EXPANDED_ICON_ONLY_SEGMENT_PX;
   const debugPx = showDebug
     ? debugOpen
-      ? FAB_EXPANDED_BASE_PX
+      ? FAB_EXPANDED_DEBUG_PX
       : FAB_EXPANDED_ICON_ONLY_SEGMENT_PX
     : 0;
   return (
@@ -189,17 +189,7 @@ function StoreSheetTab({
   );
 }
 
-function StoreSheetPanel({
-  open,
-  onOpenChange,
-  trigger,
-  contentSide = "top",
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  trigger: ReactElement;
-  contentSide?: "top" | "bottom";
-}) {
+function StoreSheetPanel({ open }: { open: boolean }) {
   const { tabs, activeId, receiveId } = useScratchNote();
   const actions = useScratchNoteActions();
   const activeTab = tabs.find((tab) => tab.id === activeId) ?? tabs[0];
@@ -214,22 +204,10 @@ function StoreSheetPanel({
     [rows],
   );
 
+  if (!open) return null;
+
   return (
-    <Popover modal={false} open={open} onOpenChange={onOpenChange}>
-      <FabTooltip label="Open store sheet" side={contentSide}>
-        <PopoverTrigger asChild>{trigger}</PopoverTrigger>
-      </FabTooltip>
-      <PopoverContent
-        align="end"
-        side={contentSide}
-        sideOffset={8}
-        className="pointer-events-auto w-[min(24rem,calc(100vw-1rem))] gap-0 overflow-hidden border border-[var(--border)] bg-[var(--background)] p-0 shadow-lg duration-0 data-closed:animate-none data-open:animate-none"
-        onOpenAutoFocus={(event) => event.preventDefault()}
-        onCloseAutoFocus={(event) => event.preventDefault()}
-        onInteractOutside={(event) => event.preventDefault()}
-        onFocusOutside={(event) => event.preventDefault()}
-        onPointerDownOutside={(event) => event.preventDefault()}
-      >
+    <div className={FAB_DOCK_PANEL}>
         <div className="relative border-b border-[var(--border)] bg-[var(--muted)]/25">
           <ChromeTabStrip
             ariaLabel="Store sheet tabs"
@@ -365,22 +343,11 @@ function StoreSheetPanel({
             Export CSV
           </Button>
         </div>
-      </PopoverContent>
-    </Popover>
+    </div>
   );
 }
 
-function NotesPanel({
-  open,
-  onOpenChange,
-  trigger,
-  contentSide = "top",
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  trigger: ReactElement;
-  contentSide?: "top" | "bottom";
-}) {
+function NotesPanel({ open }: { open: boolean }) {
   const notes = useUserNotes();
   const actions = useUserNotesActions();
   useEnsureDefaultUserNote(open, notes);
@@ -424,22 +391,10 @@ function NotesPanel({
     setActiveId(noteId);
   };
 
+  if (!open) return null;
+
   return (
-    <Popover modal={false} open={open} onOpenChange={onOpenChange}>
-      <FabTooltip label="Open notes" side={contentSide}>
-        <PopoverTrigger asChild>{trigger}</PopoverTrigger>
-      </FabTooltip>
-      <PopoverContent
-        align="end"
-        side={contentSide}
-        sideOffset={8}
-        className="pointer-events-auto w-[min(23rem,calc(100vw-1rem))] gap-0 overflow-hidden border border-[var(--border)] bg-[var(--background)] p-0 shadow-lg"
-        onOpenAutoFocus={(event) => event.preventDefault()}
-        onCloseAutoFocus={(event) => event.preventDefault()}
-        onInteractOutside={(event) => event.preventDefault()}
-        onFocusOutside={(event) => event.preventDefault()}
-        onPointerDownOutside={(event) => event.preventDefault()}
-      >
+    <div className={FAB_DOCK_PANEL}>
         <div className="relative border-b border-[var(--border)] bg-[var(--muted)]/25">
           <ChromeTabStrip
             ariaLabel="Note tabs"
@@ -499,8 +454,7 @@ function NotesPanel({
             </p>
           )}
         </div>
-      </PopoverContent>
-    </Popover>
+    </div>
   );
 }
 
@@ -610,11 +564,7 @@ export function PersistentNoteFab({
 
   const actions = (
     <>
-      <StoreSheetPanel
-        open={sheetOpen}
-        onOpenChange={handleSheetOpenChange}
-        contentSide={contentSide}
-        trigger={
+      <FabTooltip label="Open store sheet" side={contentSide}>
           <button
             type="button"
             aria-expanded={sheetOpen}
@@ -625,10 +575,11 @@ export function PersistentNoteFab({
                 : "Store sheet"
             }
             className={segmentBtn(sheetOpen)}
+            onClick={() => handleSheetOpenChange(!sheetOpen)}
           >
             <PiggyIcon name="sheet" className="size-6" />
             {sheetOpen && !isNavbar ? (
-              <span className="flex min-w-0 select-none items-center gap-1 pr-0.5 text-[11px] font-medium tracking-tight whitespace-nowrap">
+              <span className="flex min-w-0 select-none items-center gap-1 pr-0.5 text-sm font-medium tracking-tight whitespace-nowrap">
                 <span>Sheet</span>
                 <span
                   className="tabular-nums text-[var(--muted-foreground)]"
@@ -652,24 +603,20 @@ export function PersistentNoteFab({
               </span>
             ) : null}
           </button>
-        }
-      />
+      </FabTooltip>
 
-      <NotesPanel
-        open={notesOpen}
-        onOpenChange={handleNotesOpenChange}
-        contentSide={contentSide}
-        trigger={
+      <FabTooltip label="Open notes" side={contentSide}>
           <button
             type="button"
             aria-expanded={notesOpen}
             aria-haspopup="dialog"
             aria-label={noteCount > 0 ? `Notes, ${noteCount} tabs` : "Notes"}
             className={segmentBtn(notesOpen)}
+            onClick={() => handleNotesOpenChange(!notesOpen)}
           >
             <PiggyIcon name="notes" className="size-6" />
             {notesOpen && !isNavbar ? (
-              <span className="flex min-w-0 select-none items-center gap-1 pr-0.5 text-[11px] font-medium tracking-tight whitespace-nowrap">
+              <span className="flex min-w-0 select-none items-center gap-1 pr-0.5 text-sm font-medium tracking-tight whitespace-nowrap">
                 <span>Note</span>
                 <span
                   className="tabular-nums text-[var(--muted-foreground)]"
@@ -680,36 +627,30 @@ export function PersistentNoteFab({
               </span>
             ) : null}
           </button>
-        }
-      />
+      </FabTooltip>
 
       <PiggySketchDialog />
 
-      <LedgerAiChat
-        open={aiOpen}
-        onOpenChange={handleAiOpenChange}
-        onMoodChange={setPiggyMood}
-        contentSide={contentSide}
-        trigger={
+      <FabTooltip label="Piggy" side={contentSide}>
           <button
             type="button"
             aria-expanded={aiOpen}
             aria-haspopup="dialog"
             aria-label="Piggy"
             className={segmentBtn(aiOpen)}
+            onClick={() => handleAiOpenChange(!aiOpen)}
           >
             <PiggyMascot
               mood={aiOpen ? piggyMood : "still"}
               iconClassName="size-8 shrink-0"
             />
             {aiOpen && !isNavbar ? (
-              <span className="flex min-w-0 select-none items-center pr-0.5 text-[11px] font-medium tracking-tight whitespace-nowrap">
+              <span className="flex min-w-0 select-none items-center pr-0.5 text-sm font-medium tracking-tight whitespace-nowrap">
                 Piggy
               </span>
             ) : null}
           </button>
-        }
-      />
+      </FabTooltip>
 
       {showDebug ? (
         <FabTooltip label="Vault cache debug" side={contentSide}>
@@ -723,7 +664,7 @@ export function PersistentNoteFab({
           >
             <PiggyIcon name="issues" className="size-6" />
             {debugOpen && !isNavbar ? (
-              <span className="flex min-w-0 select-none items-center pr-0.5 text-[11px] font-medium tracking-tight whitespace-nowrap">
+              <span className="flex min-w-0 select-none items-center pr-0.5 text-sm font-medium tracking-tight whitespace-nowrap">
                 Debug
               </span>
             ) : null}
@@ -740,14 +681,26 @@ export function PersistentNoteFab({
     />
   ) : null;
 
+  const dockedPanels = (
+    <>
+      {debugPanel}
+      <StoreSheetPanel open={sheetOpen} />
+      <NotesPanel open={notesOpen} />
+      <LedgerAiChat
+        open={aiOpen}
+        anchor={isNavbar ? "top-right" : "bottom-right"}
+        onOpenChange={handleAiOpenChange}
+        onMoodChange={setPiggyMood}
+      />
+    </>
+  );
+
   if (isNavbar) {
     return (
       <TooltipProvider>
-        {debugPanel ? (
-          <div className="pointer-events-auto fixed top-16 right-3 z-40">
-            {debugPanel}
-          </div>
-        ) : null}
+        <div className="pointer-events-auto fixed top-16 right-3 z-40 flex flex-col items-end gap-2">
+          {dockedPanels}
+        </div>
         <div className="flex h-8 items-center gap-0.5">{actions}</div>
       </TooltipProvider>
     );
@@ -755,7 +708,7 @@ export function PersistentNoteFab({
 
   return (
     <div className="pointer-events-none fixed right-3 bottom-3 z-40 hidden flex-col items-end gap-2 md:flex">
-      {debugPanel}
+      {dockedPanels}
       <TooltipProvider>
         <div
           className="relative transition-[width] duration-300 ease-out"

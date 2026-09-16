@@ -2,7 +2,12 @@
 
 import { ChromeTab, ChromeTabStrip } from "@/components/layout/ChromeTab";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+  InputGroupInput,
+} from "@/components/ui/input-group";
 import {
   Popover,
   PopoverContent,
@@ -29,6 +34,7 @@ import {
 import { useScratchNote } from "@/domains/scratch-note/scratchNoteStore";
 import { dashboardFromPrivateLedger } from "@/domains/vault/application/dashboardFromPrivateLedger";
 import { usePrivateLedger } from "@/domains/vault/ui/usePrivateLedger";
+import { cn } from "@/lib/utils";
 import { errorMessage } from "@/shared/lib/error-message";
 import { logAiUsageFromMessageMetadata } from "@/shared/debug/aiUsageDebug";
 import {
@@ -46,8 +52,21 @@ import {
   isShowSketchPart,
   type PiggyUIMessage,
 } from "@/domains/ledger-ai/domain/piggyUiMessage";
+import {
+  addPiggyDocuments,
+  documentsToFileParts,
+  filesFromDataTransfer,
+  imagesFromClipboard,
+} from "@/domains/ledger-ai/application/attachDocuments";
+import { earlierDocumentNote } from "@/domains/ledger-ai/domain/piggyDocuments";
+import { OCR_DOCUMENT_ACCEPT } from "@/domains/statements/domain/ocrDocumentTypes";
 import { PiggyAttachment } from "@/domains/ledger-ai/ui/PiggyAttachment";
+import {
+  PiggyPendingDocuments,
+  PiggySentDocuments,
+} from "@/domains/ledger-ai/ui/PiggyDocumentChips";
 import { PiggyFeatureCarousel } from "@/domains/ledger-ai/ui/PiggyFeatureCarousel";
+import { PiggyIdlePrompt } from "@/domains/ledger-ai/ui/PiggyIdlePrompt";
 import { PiggyInlineSketch } from "@/domains/ledger-ai/ui/PiggyInlineSketch";
 import {
   PiggyQuestionnaire,
@@ -58,14 +77,29 @@ import {
   DefaultChatTransport,
   lastAssistantMessageIsCompleteWithToolCalls,
 } from "ai";
-import { Info, PlusIcon, SendHorizonal } from "lucide-react";
-import { useEffect, useMemo, useRef, useState, type ReactElement } from "react";
+import { Info, Paperclip, PlusIcon, SendHorizonal } from "lucide-react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ClipboardEvent,
+  type DragEvent,
+} from "react";
 import { toast } from "sonner";
 import type { ComponentProps } from "react";
 import { emptyPiggyHistory, restorePiggyHistory, restorePiggyChatIndex, type PiggyChatIndex, type PiggyHistory } from "../domain/piggyHistory";
 import { usePiggyHistory } from "./usePiggyHistory";
+import {
+  DEFAULT_PIGGY_PANEL_SIZE,
+  usePiggyPanelSize,
+  type PiggyPanelAnchor,
+} from "./usePiggyPanelSize";
 
 const MAX_PIGGY_TABS = 8;
+/** Same shell as the fab's docked panels, so the chat hugs the right edge under the pill. */
+const LEDGER_AI_DOCK_PANEL =
+  "pointer-events-auto max-w-[calc(100vw-1.5rem)] overflow-hidden rounded-xl border border-border bg-background shadow-lg ring-1 ring-border/40";
 type PiggyTab = {
   id: string;
   name: string;
@@ -113,6 +147,9 @@ function PiggyAboutInfo() {
           <PopoverDescription>
             A financial advisor mascot who works from your budget numbers.
           </PopoverDescription>
+          <ul className="mt-1.5 list-disc space-y-1 pl-4 text-muted-foreground">
+            <li>Scroll past the last reply to clear this chat</li>
+          </ul>
         </PopoverHeader>
         <PiggyFeatureCarousel className="mt-3" />
       </PopoverContent>
@@ -135,6 +172,7 @@ function PiggyChatPaneSession({
   open,
   blocked,
   transport,
+  transcriptHeight,
   onMoodChange,
   initialHistory,
   saveHistory,
@@ -147,12 +185,18 @@ function PiggyChatPaneSession({
   open: boolean;
   blocked: boolean;
   transport: DefaultChatTransport<PiggyUIMessage>;
+  /** Pixel height of the message list; the user drags the panel grip to change it. */
+  transcriptHeight: number;
   onMoodChange?: (mood: PiggyMood) => void;
 }) {
   const [input, setInput] = useState(initialHistory.draft);
   const [inputFocused, setInputFocused] = useState(false);
+  const [pendingFiles, setPendingFiles] = useState<File[]>([]);
+  const [dragging, setDragging] = useState(false);
+  const [attaching, setAttaching] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const { messages, sendMessage, status, error, addToolResult } =
+  const { messages, sendMessage, setMessages, status, error, addToolResult, stop } =
     useChat<PiggyUIMessage>({
     id: chatId,
     messages: initialHistory.messages as PiggyUIMessage[],
@@ -172,9 +216,43 @@ function PiggyChatPaneSession({
   });
 
   useEffect(() => {
-    saveHistory({ ...emptyPiggyHistory(), messages, draft: input });
+    // File parts hold data URLs; never persist those to localStorage.
+    const slim = messages.map((message) => ({
+      ...message,
+      parts: message.parts.filter((part) => part.type !== "file"),
+    }));
+    saveHistory({ ...emptyPiggyHistory(), messages: slim, draft: input });
   }, [input, messages, saveHistory]);
 
+  const clearChat = () => {
+    void stop();
+    setMessages([]);
+    setInput("");
+    setPendingFiles([]);
+    saveHistory(emptyPiggyHistory());
+  };
+
+  const attachFiles = (incoming: File[]) => {
+    if (incoming.length === 0) return;
+    const { files, rejected } = addPiggyDocuments(pendingFiles, incoming);
+    setPendingFiles(files);
+    for (const reason of rejected) toast.warning("Skipped a file", { description: reason });
+  };
+
+  const onDragOver = (event: DragEvent<HTMLDivElement>) => {
+    if (!Array.from(event.dataTransfer.types).includes("Files")) return;
+    event.preventDefault();
+    if (!dragging) setDragging(true);
+  };
+  const onDragLeave = (event: DragEvent<HTMLDivElement>) => {
+    if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
+    setDragging(false);
+  };
+  const onDrop = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    setDragging(false);
+    attachFiles(filesFromDataTransfer(event.dataTransfer));
+  };
   const busy = status === "submitted" || status === "streaming";
   const lastMessage = messages.at(-1);
   // Piggy is waiting on a questionnaire answer; hold the text box until then.
@@ -184,6 +262,14 @@ function PiggyChatPaneSession({
     lastMessage.parts.some(
       (part) => isAskUserPart(part) && part.state === "input-available",
     );
+  // Ctrl+V a screenshot anywhere in the pane; text pastes fall through to the input.
+  const onPaste = (event: ClipboardEvent<HTMLDivElement>) => {
+    if (busy || blocked || awaitingAnswer || attaching) return;
+    const images = imagesFromClipboard(event.clipboardData);
+    if (images.length === 0) return;
+    event.preventDefault();
+    attachFiles(images);
+  };
   const answerAsk = (toolCallId: string, output: AskUserOutput) =>
     void addToolResult({ tool: ASK_USER_TOOL_NAME, toolCallId, output });
   const reportExport = (toolCallId: string, output: ExportFileOutput) =>
@@ -203,7 +289,23 @@ function PiggyChatPaneSession({
   }, [active, mood, onMoodChange, open]);
 
   return (
-    <div className="flex flex-col" hidden={!active}>
+    <div
+      className="relative flex flex-col"
+      hidden={!active}
+      onDragOver={onDragOver}
+      onDragEnter={onDragOver}
+      onDragLeave={onDragLeave}
+      onDrop={onDrop}
+      onPaste={onPaste}
+    >
+      {dragging ? (
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center rounded-lg border-2 border-dashed border-accent bg-accent-subtle/80 text-sm font-medium text-accent"
+        >
+          Drop a statement, loan document, or receipt for {tabName}
+        </div>
+      ) : null}
       {blocked ? (
         <p className="border-b border-border bg-warning-subtle px-3 py-2 text-xs text-warning">
           Turn on Cloud Processing in Modules before sending budget data to
@@ -213,17 +315,15 @@ function PiggyChatPaneSession({
 
       <PiggyTranscript
         ariaLabel={`${tabName} conversation`}
-        className="h-[21.3rem]"
+        style={{ height: transcriptHeight }}
+        onClearChat={clearChat}
+        canClearChat={messages.length > 0 || !!error}
       >
         {messages.length === 0 ? (
           <PiggyTranscriptItem messageId="piggy-empty">
             <PiggyAssistantMessage mood="happy">
               <PiggyTextBubble>
-                <p className="font-medium">What&apos;s rattling in the bank?</p>
-                <p className="mt-1.5 text-xs leading-relaxed">
-                  Try &quot;How much did I spend on groceries last month?&quot;
-                  {" "}or &quot;Move Uber Eats to Food / Delivery.&quot;
-                </p>
+                <PiggyIdlePrompt />
               </PiggyTextBubble>
             </PiggyAssistantMessage>
           </PiggyTranscriptItem>
@@ -231,7 +331,12 @@ function PiggyChatPaneSession({
           messages.map((message) => {
             const text = messageText(message.parts ?? []);
             const cards = message.parts.filter(isPiggyCardPart);
-            if (!text && cards.length === 0) return null;
+            const files = message.parts.flatMap((part) =>
+              part.type === "file"
+                ? [{ filename: part.filename ?? "document", mediaType: part.mediaType }]
+                : [],
+            );
+            if (!text && cards.length === 0 && files.length === 0) return null;
             const assistantTalking =
               message.role === "assistant" &&
               status === "streaming" &&
@@ -243,7 +348,9 @@ function PiggyChatPaneSession({
                 scrollAnchor={message.role === "user"}
               >
                 {message.role === "user" ? (
-                  <PiggyUserMessage text={text} />
+                  <PiggyUserMessage text={text}>
+                    <PiggySentDocuments files={files} />
+                  </PiggyUserMessage>
                 ) : (
                   <PiggyAssistantMessage
                     mood={assistantTalking ? mood : piggyMoodFromMessage(message)}
@@ -336,67 +443,121 @@ function PiggyChatPaneSession({
         ) : null}
       </PiggyTranscript>
 
-      <form
-        className="flex items-center gap-1.5 border-t border-border bg-surface p-3"
-        onSubmit={(event) => {
-          event.preventDefault();
-          const value = input.trim();
-          if (!value || busy || blocked || awaitingAnswer) return;
-          void sendMessage({ text: value });
-          setInput("");
-        }}
-      >
-        <Input
-          value={input}
-          onChange={(event) => setInput(event.target.value)}
-          onFocus={() => setInputFocused(true)}
-          onBlur={() => setInputFocused(false)}
-          placeholder={
-            awaitingAnswer ? "Answer Piggy above, or Skip all" : `Ask ${tabName}…`
+      <div className="border-t border-border bg-surface">
+        <PiggyPendingDocuments
+          files={pendingFiles}
+          disabled={attaching}
+          onRemove={(index) =>
+            setPendingFiles((current) => current.filter((_, i) => i !== index))
           }
-          disabled={busy || blocked || awaitingAnswer}
-          className="h-8"
         />
-        <Button
-          type="submit"
-          size="icon-sm"
-          disabled={busy || blocked || awaitingAnswer || !input.trim()}
-          aria-label="Send"
+        <form
+          className="flex items-center gap-1.5 p-3"
+          onSubmit={async (event) => {
+            event.preventDefault();
+            const value = input.trim();
+            const hasFiles = pendingFiles.length > 0;
+            if ((!value && !hasFiles) || busy || blocked || awaitingAnswer || attaching) return;
+            let files;
+            if (hasFiles) {
+              setAttaching(true);
+              try {
+                files = await documentsToFileParts(pendingFiles);
+              } catch (err) {
+                toast.error("Could not read a file", {
+                  description: errorMessage(err, "Try attaching it again"),
+                });
+                setAttaching(false);
+                return;
+              }
+              setAttaching(false);
+            }
+            void sendMessage({
+              text: value || "Here is a document.",
+              files,
+            });
+            setInput("");
+            setPendingFiles([]);
+          }}
         >
-          <SendHorizonal className="size-3.5" />
-        </Button>
-      </form>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept={OCR_DOCUMENT_ACCEPT}
+            multiple
+            hidden
+            onChange={(event) => {
+              attachFiles(Array.from(event.target.files ?? []));
+              event.target.value = "";
+            }}
+          />
+          <InputGroup className="h-8 min-w-0 flex-1 items-center">
+            <InputGroupInput
+              value={input}
+              onChange={(event) => setInput(event.target.value)}
+              onFocus={() => setInputFocused(true)}
+              onBlur={() => setInputFocused(false)}
+              placeholder={
+                awaitingAnswer
+                  ? "Answer Piggy above, or Skip all"
+                  : pendingFiles.length > 0
+                    ? "Say what to do with it, or just send"
+                    : `Ask ${tabName}…`
+              }
+              disabled={busy || blocked || awaitingAnswer}
+              className="h-8"
+            />
+            <InputGroupAddon align="inline-end" className="self-center">
+              <InputGroupButton
+                type="submit"
+                size="icon-xs"
+                variant="default"
+                disabled={
+                  busy ||
+                  blocked ||
+                  awaitingAnswer ||
+                  attaching ||
+                  (!input.trim() && pendingFiles.length === 0)
+                }
+                aria-label="Send"
+                className="size-6 rounded-full"
+              >
+                <SendHorizonal className="size-3.5" />
+              </InputGroupButton>
+            </InputGroupAddon>
+          </InputGroup>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            aria-label="Attach a document"
+            title="Attach a statement, loan document, or receipt. You can also paste a screenshot."
+            disabled={busy || blocked || awaitingAnswer || attaching}
+            onClick={() => fileInputRef.current?.click()}
+          >
+            <Paperclip className="size-3.5" />
+          </Button>
+        </form>
+      </div>
     </div>
   );
 }
 
 export function LedgerAiChat(props: Omit<ComponentProps<typeof LedgerAiChatSession>, "initialIndex" | "saveIndex" | "historyError">) {
   const history = usePiggyHistory("ledger-index", restorePiggyChatIndex);
+  if (!props.open) return null;
   if (!history.ready) return (
-    <Popover modal={false} open={props.open} onOpenChange={props.onOpenChange}>
-      <PopoverTrigger asChild>{props.trigger}</PopoverTrigger>
-      <PopoverContent
-        side={props.contentSide ?? "top"}
-        align="end"
-        onOpenAutoFocus={(event) => event.preventDefault()}
-        onCloseAutoFocus={(event) => event.preventDefault()}
-        onInteractOutside={(event) => event.preventDefault()}
-        onFocusOutside={(event) => event.preventDefault()}
-        onPointerDownOutside={(event) => event.preventDefault()}
-      >
-        <p className="text-xs text-muted-foreground">Loading saved Piggy chats…</p>
-      </PopoverContent>
-    </Popover>
+    <div className={`${LEDGER_AI_DOCK_PANEL} p-3`} style={{ width: DEFAULT_PIGGY_PANEL_SIZE.width }}>
+      <p className="text-xs text-muted-foreground">Loading saved Piggy chats…</p>
+    </div>
   );
   return <LedgerAiChatSession key={history.owner} {...props} initialIndex={history.initial!} saveIndex={history.save} historyError={history.error} />;
 }
 
 function LedgerAiChatSession({
   open,
-  onOpenChange,
+  anchor = "bottom-right",
   onMoodChange,
-  trigger,
-  contentSide = "top",
   initialIndex,
   saveIndex,
   historyError,
@@ -406,12 +567,13 @@ function LedgerAiChatSession({
   saveIndex: (value: PiggyChatIndex) => void;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** Screen corner the panel is docked to; the resize grip sits on the opposite corner. */
+  anchor?: PiggyPanelAnchor;
   onMoodChange?: (mood: PiggyMood) => void;
-  trigger: ReactElement;
-  contentSide?: "top" | "bottom";
 }) {
   const [tabs, setTabs] = useState<PiggyTab[]>(initialIndex.tabs);
   const [activeId, setActiveId] = useState(initialIndex.activeId);
+  const panelSize = usePiggyPanelSize(anchor);
   useEffect(() => { saveIndex({ tabs, activeId }); }, [tabs, activeId, saveIndex]);
   const encryptedLedger = useFeatureFlag("encryptedLedger");
   const cloudProcessing = useFeatureFlag("cloudProcessing");
@@ -436,11 +598,26 @@ function LedgerAiChatSession({
                 )
               : { error: "Unlock the vault, then try chat." };
           }
+          // Only the newest user message carries file bytes; older ones keep
+          // a text note so the request stays small and the context stays clear.
+          const lastUserIndex = messages.findLastIndex((m) => m.role === "user");
+          const slimMessages = messages.map((message, index) =>
+            index === lastUserIndex || !message.parts.some((p) => p.type === "file")
+              ? message
+              : {
+                  ...message,
+                  parts: message.parts.map((part) =>
+                    part.type === "file"
+                      ? { type: "text" as const, text: earlierDocumentNote(part.filename ?? "document") }
+                      : part,
+                  ),
+                },
+          );
           return {
             body: {
               ...body,
               id,
-              messages,
+              messages: slimMessages,
               useClientBudget,
               budget,
               storeSheet,
@@ -476,42 +653,25 @@ function LedgerAiChatSession({
   };
 
   return (
-    <Popover modal={false} open={open} onOpenChange={onOpenChange}>
-      <PopoverTrigger asChild>{trigger}</PopoverTrigger>
-      <PopoverContent
-        align="end"
-        side={contentSide}
-        sideOffset={8}
-        className="pointer-events-auto w-[min(24rem,calc(100vw-1rem))] gap-0 overflow-hidden border border-[var(--border)] bg-[var(--background)] p-0 shadow-lg"
-        onOpenAutoFocus={(event) => event.preventDefault()}
-        onCloseAutoFocus={(event) => event.preventDefault()}
-        onInteractOutside={(event) => event.preventDefault()}
-        onFocusOutside={(event) => event.preventDefault()}
-        onPointerDownOutside={(event) => event.preventDefault()}
-      >
-        <div className="relative border-b border-[var(--border)] bg-[var(--muted)]/25">
-          <ChromeTabStrip
-            ariaLabel="Piggy chats"
-            trailing={
-              <>
-                <button
-                  type="button"
-                  aria-label="Add Piggy tab"
-                  title={
-                    tabs.length >= MAX_PIGGY_TABS
-                      ? `Up to ${MAX_PIGGY_TABS} chats`
-                      : "Add tab"
-                  }
-                  disabled={tabs.length >= MAX_PIGGY_TABS}
-                  className="inline-flex size-5 shrink-0 items-center justify-center rounded-sm text-accent hover:bg-accent-subtle hover:text-accent disabled:pointer-events-none disabled:opacity-40"
-                  onClick={addTab}
-                >
-                  <PlusIcon className="size-3" strokeWidth={2} />
-                </button>
-                <PiggyAboutInfo />
-              </>
-            }
-          >
+    <div
+      className={cn(LEDGER_AI_DOCK_PANEL, "relative", panelSize.resizing && "select-none")}
+      style={{ width: panelSize.size.width }}
+    >
+        <div
+          role="separator"
+          aria-label="Resize Piggy panel. Drag to resize, double-click to reset."
+          title="Drag to resize · double-click to reset"
+          className={cn(
+            "absolute left-0 z-30 size-5 touch-none",
+            anchor === "bottom-right"
+              ? "top-0 cursor-nwse-resize"
+              : "bottom-0 cursor-nesw-resize",
+          )}
+          onDoubleClick={panelSize.reset}
+          {...panelSize.gripProps}
+        />
+        <div className="relative border-b border-border bg-muted/25">
+          <ChromeTabStrip ariaLabel="Piggy chats">
             {tabs.map((tab) => (
               <ChromeTab
                 key={tab.id}
@@ -523,6 +683,23 @@ function LedgerAiChatSession({
                 onRename={(name) => renameTab(tab.id, name)}
               />
             ))}
+            <div className="mb-1 ml-0.5 flex shrink-0 items-center gap-0.5">
+              <button
+                type="button"
+                aria-label="Add Piggy tab"
+                title={
+                  tabs.length >= MAX_PIGGY_TABS
+                    ? `Up to ${MAX_PIGGY_TABS} chats`
+                    : "Add tab"
+                }
+                disabled={tabs.length >= MAX_PIGGY_TABS}
+                className="inline-flex size-5 shrink-0 items-center justify-center rounded-sm text-accent hover:bg-accent-subtle hover:text-accent disabled:pointer-events-none disabled:opacity-40"
+                onClick={addTab}
+              >
+                <PlusIcon className="size-3" strokeWidth={2} />
+              </button>
+              <PiggyAboutInfo />
+            </div>
           </ChromeTabStrip>
         </div>
         <p className="sr-only">
@@ -541,10 +718,10 @@ function LedgerAiChatSession({
             open={open}
             blocked={blocked}
             transport={transport}
+            transcriptHeight={panelSize.size.transcriptHeight}
             onMoodChange={onMoodChange}
           />
         ))}
-      </PopoverContent>
-    </Popover>
+    </div>
   );
 }

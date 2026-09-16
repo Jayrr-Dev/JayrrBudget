@@ -207,66 +207,136 @@ function createWorkspaceTools(
       },
     }),
 
-    write_note: tool({
+    create_note: tool({
       description:
-        "Create or update one of the signed-in user's note tabs. replace overwrites; append adds to the end.",
+        "Create a NEW note tab for the signed-in user. Fails if a tab with that name already exists (use append_note for those). Never overwrites.",
       inputSchema: z.object({
         tabName: z.string(),
         content: z.string(),
-        mode: z.enum(["replace", "append"]).optional(),
       }),
       execute: async (input) => {
         const tabName = input.tabName.trim();
         if (!tabName) return { error: "tabName is required." };
-        let notes = await client.query(api.userNotes.list, {});
-        let note = notes.find((item) => sameName(item.tabName, tabName));
-        if (!note) {
-          note = await client.mutation(api.userNotes.insertTab, {});
-          await client.mutation(api.userNotes.renameTab, {
-            noteId: note.id,
-            tabName,
-          });
-          notes = await client.query(api.userNotes.list, {});
-          note = notes.find((item) => sameName(item.tabName, tabName)) ?? note;
+        const existing = await findNote(client, tabName);
+        if (existing) {
+          return {
+            error: `Note "${existing.tabName}" already exists (${existing.content.length} chars). Use append_note to add to it, or pick a different tabName.`,
+          };
         }
-        const mode = input.mode ?? "replace";
-        const next =
-          mode === "append"
-            ? `${note.content}${note.content ? "\n" : ""}${input.content}`
-            : input.content;
+        const note = await createNoteTab(client, tabName);
+        await client.mutation(api.userNotes.updateContent, {
+          noteId: note.id,
+          content: input.content,
+        });
+        return afterWrite({
+          id: note.id,
+          tabName: note.tabName,
+          created: true,
+          length: input.content.length,
+        });
+      },
+    }),
+
+    append_note: tool({
+      description:
+        "Add text to the END of one of the signed-in user's note tabs. Existing text is kept. Creates the tab if it does not exist yet.",
+      inputSchema: z.object({
+        tabName: z.string(),
+        content: z.string(),
+      }),
+      execute: async (input) => {
+        const tabName = input.tabName.trim();
+        if (!tabName) return { error: "tabName is required." };
+        const existing = await findNote(client, tabName);
+        const note = existing ?? (await createNoteTab(client, tabName));
+        const next = existing?.content
+          ? `${existing.content}\n\n${input.content}`
+          : input.content;
         await client.mutation(api.userNotes.updateContent, {
           noteId: note.id,
           content: next,
         });
         return afterWrite({
           id: note.id,
-          tabName,
-          mode,
+          tabName: note.tabName,
+          created: !existing,
+          appendedChars: input.content.length,
           length: next.length,
+        });
+      },
+    }),
+
+    replace_note: tool({
+      description:
+        "Overwrite the full text of an existing note tab. Destructive: only after the user explicitly asks to rewrite or clear that note and you have told them what will be lost. confirmed must be true.",
+      inputSchema: z.object({
+        tabName: z.string(),
+        content: z.string(),
+        confirmed: z.boolean(),
+      }),
+      execute: async (input) => {
+        const tabName = input.tabName.trim();
+        if (!tabName) return { error: "tabName is required." };
+        const note = await findNote(client, tabName);
+        if (!note) {
+          return {
+            error: `Note not found: ${tabName}. Use create_note instead.`,
+          };
+        }
+        if (!input.confirmed) {
+          return {
+            error: `Not replaced. "${note.tabName}" has ${note.content.length} chars that would be lost. Ask the user to confirm, then call again with confirmed: true.`,
+            currentContent: note.content,
+          };
+        }
+        await client.mutation(api.userNotes.updateContent, {
+          noteId: note.id,
+          content: input.content,
+        });
+        return afterWrite({
+          id: note.id,
+          tabName: note.tabName,
+          replaced: true,
+          previousLength: note.content.length,
+          length: input.content.length,
         });
       },
     }),
   };
 }
 
-export function createLedgerAiTools(
-  client: ConvexHttpClient,
-  options: LedgerAiToolOptions = {},
-) {
-  const workspace = createWorkspaceTools(client, {
-    allowStoreSheetWrites: options.allowStoreSheetWrites ?? true,
-    storeSheetSnapshot: options.storeSheetSnapshot,
+async function findNote(client: ConvexHttpClient, tabName: string) {
+  const notes = await client.query(api.userNotes.list, {});
+  return notes.find((item) => sameName(item.tabName, tabName)) ?? null;
+}
+
+/** insertTab names the tab "Note N"; rename it right away so the user sees the asked-for name. */
+async function createNoteTab(client: ConvexHttpClient, tabName: string) {
+  const created = await client.mutation(api.userNotes.insertTab, {});
+  return await client.mutation(api.userNotes.renameTab, {
+    noteId: created.id,
+    tabName,
   });
-  const reads = {
+}
+
+const accountArg = z
+  .string()
+  .optional()
+  .describe("Account id, name, or last-4 digits. Narrows to one account (card, chequing, loan).");
+
+/** Read-only ledger tools: search, summaries, accounts, statements, taxonomy. */
+export function createLedgerReadTools(client: ConvexHttpClient) {
+  return {
     search_transactions: tool({
       description:
-        "Search the signed-in user's transactions. Use before editing. Filter by text, merchant, taxonomy, or date (YYYY-MM-DD).",
+        "Search the signed-in user's transactions. Use before editing. Filter by text, merchant, taxonomy, account, or date (YYYY-MM-DD).",
       inputSchema: z.object({
         query: z.string().optional(),
         merchant: z.string().optional(),
         section: z.string().optional(),
         category: z.string().optional(),
         subcategory: z.string().optional(),
+        account: accountArg,
         startDate: z.string().optional(),
         endDate: z.string().optional(),
         limit: z.number().optional(),
@@ -277,14 +347,23 @@ export function createLedgerAiTools(
     }),
     summarize_spend: tool({
       description:
-        "Analyze the signed-in user's spend and income grouped by merchant, section, category, or subcategory. Optional YYYY-MM-DD range. Own-account transfers and card payoffs are excluded and reported as transferTotal.",
+        "Analyze the signed-in user's spend and income grouped by merchant, section, category, or subcategory. Optional YYYY-MM-DD range and account. Own-account transfers and card payoffs are excluded and reported as transferTotal.",
       inputSchema: z.object({
         groupBy: z.enum(["merchant", "section", "category", "subcategory"]),
+        account: accountArg,
         startDate: z.string().optional(),
         endDate: z.string().optional(),
       }),
       execute: async (input) => {
         return await client.query(api.transactions.summarizeForAi, input);
+      },
+    }),
+    list_statements: tool({
+      description:
+        "List the signed-in user's imported bank/card statements: period, opening and closing balance, total debits/credits, and whether the statement reconciled. Newest first. Optional account filter.",
+      inputSchema: z.object({ account: accountArg }),
+      execute: async (input) => {
+        return await client.query(api.statements.listForAi, input);
       },
     }),
     list_taxonomy: tool({
@@ -317,13 +396,24 @@ export function createLedgerAiTools(
     }),
     list_accounts: tool({
       description:
-        "List the signed-in user's accounts (name, id, currency). Use before create_transaction.",
+        "List the signed-in user's accounts (name, id, last-4 mask, type/subtype, balances, currency). Use to resolve which card or account the user means, and before create_transaction.",
       inputSchema: z.object({}),
       execute: async () => {
         return await client.query(api.transactions.accountsForAi, {});
       },
     }),
   };
+}
+
+export function createLedgerAiTools(
+  client: ConvexHttpClient,
+  options: LedgerAiToolOptions = {},
+) {
+  const workspace = createWorkspaceTools(client, {
+    allowStoreSheetWrites: options.allowStoreSheetWrites ?? true,
+    storeSheetSnapshot: options.storeSheetSnapshot,
+  });
+  const reads = createLedgerReadTools(client);
   if (options.allowLedgerWrites === false) {
     if (options.includeLedgerReads) {
       return { ...reads, ...workspace };

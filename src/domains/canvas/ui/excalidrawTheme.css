@@ -238,8 +238,10 @@
   background-color: var(--border);
 }
 
-/* Extra tools: keep frame / embed / laser. Hide Generate + Mermaid. */
-.jayrr-excalidraw .excalidraw .App-toolbar__extra-tools-dropdown > :nth-child(n + 4) {
+/* Extra tools: keep frame / embed / laser. Hide Generate + Mermaid.
+   Items live under .dropdown-menu-container (Island), not as direct
+   children of .App-toolbar__extra-tools-dropdown. */
+.jayrr-excalidraw .excalidraw .App-toolbar__extra-tools-dropdown .dropdown-menu-container > :nth-child(n + 4) {
   display: none;
 }
 

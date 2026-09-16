@@ -14,6 +14,7 @@ import {
   MessageCircleQuestion,
   NotebookPen,
   PanelsTopLeft,
+  Paperclip,
   PenTool,
   PiggyBank,
   Save,
@@ -101,6 +102,17 @@ export const PIGGY_FEATURE_SLIDES: readonly PiggyFeatureSlide[] = [
     features: [
       { icon: FileSpreadsheet, label: "CSV for spreadsheets" },
       { icon: FileText, label: "PDF for a clean summary" },
+    ],
+  },
+  {
+    id: "documents",
+    mood: "happy",
+    badge: { icon: Paperclip, label: "Takes documents" },
+    title: "Drop in a statement or loan PDF",
+    chips: ["statement.pdf", "auto-loan.pdf", "receipt.jpg"],
+    features: [
+      { icon: FileText, label: "Imports statements into your budget" },
+      { icon: Layers, label: "Registers loans from a contract or disclosure" },
     ],
   },
   {

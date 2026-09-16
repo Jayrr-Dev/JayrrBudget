@@ -6,17 +6,27 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
-import type { DynamicToolUIPart, ReasoningUIPart, ToolUIPart } from "ai";
+import type {
+  DynamicToolUIPart,
+  ReasoningUIPart,
+  SourceUrlUIPart,
+  ToolUIPart,
+} from "ai";
 import {
   Brain,
   Check,
   ChevronDown,
   CircleAlert,
   Eraser,
+  FileText,
+  Globe,
+  Landmark,
   LayoutTemplate,
   MessageCircle,
   Move,
   PencilLine,
+  Search,
+  Sigma,
   Trash2,
   type LucideIcon,
 } from "lucide-react";
@@ -116,6 +126,36 @@ const TOOL_META: Record<string, ToolMeta> = {
     running: "Forgetting…",
     done: "Forgotten",
   },
+  web_search: {
+    icon: Globe,
+    preparing: "Thinking of what to look up…",
+    running: "Searching the web…",
+    done: "Checked the web",
+  },
+  search_transactions: {
+    icon: Search,
+    preparing: "Deciding what to look for…",
+    running: "Flipping through transactions…",
+    done: "Found {n} transaction(s)",
+  },
+  summarize_spend: {
+    icon: Sigma,
+    preparing: "Picking what to total…",
+    running: "Adding it up…",
+    done: "Totals ready",
+  },
+  list_accounts: {
+    icon: Landmark,
+    preparing: "Checking your accounts…",
+    running: "Listing accounts…",
+    done: "Accounts in hand",
+  },
+  list_statements: {
+    icon: FileText,
+    preparing: "Reaching for statements…",
+    running: "Reading statements…",
+    done: "Read {n} statement(s)",
+  },
 };
 
 const FALLBACK_META: ToolMeta = {
@@ -127,11 +167,12 @@ const FALLBACK_META: ToolMeta = {
 
 function countOf(value: unknown): number | null {
   if (!value || typeof value !== "object") return null;
+  if (Array.isArray(value)) return value.length;
   const record = value as Record<string, unknown>;
   for (const key of ["count", "deleted"]) {
     if (typeof record[key] === "number") return record[key];
   }
-  for (const key of ["elements", "ids", "createdIds", "updated"]) {
+  for (const key of ["elements", "ids", "createdIds", "updated", "matches"]) {
     const list = record[key];
     if (Array.isArray(list)) return list.length;
   }
@@ -291,6 +332,50 @@ export function ReasoningBlock({ part }: { part: ReasoningUIPart }) {
         </div>
       </CollapsibleContent>
     </Collapsible>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Web sources                                                         */
+/* ------------------------------------------------------------------ */
+
+function hostOf(url: string) {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return url;
+  }
+}
+
+/** Links Piggy cited from web_search, deduped by URL. */
+export function SourceList({ parts }: { parts: SourceUrlUIPart[] }) {
+  const seen = new Set<string>();
+  const sources = parts.filter((part) => {
+    if (!part.url || seen.has(part.url)) return false;
+    seen.add(part.url);
+    return true;
+  });
+  if (sources.length === 0) return null;
+  return (
+    <div className="mt-1.5 flex max-w-[85%] flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+      <span className="inline-flex items-center gap-1">
+        <Globe className="size-3" />
+        Sources
+      </span>
+      {sources.map((source, index) => (
+        <a
+          key={source.sourceId ?? source.url}
+          href={source.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          title={source.title || source.url}
+          className="inline-flex max-w-48 items-center gap-1 rounded-full border border-border bg-surface px-2 py-0.5 hover:border-accent/40 hover:text-accent"
+        >
+          <span className="tabular-nums">{index + 1}</span>
+          <span className="truncate">{source.title?.trim() || hostOf(source.url)}</span>
+        </a>
+      ))}
+    </div>
   );
 }
 

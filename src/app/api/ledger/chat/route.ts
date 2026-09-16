@@ -1,3 +1,7 @@
+import {
+  createDocumentTools,
+  extractPiggyDocuments,
+} from "@/domains/ledger-ai/application/createDocumentTools";
 import { createLedgerAiTools } from "@/domains/ledger-ai/application/createLedgerAiTools";
 import { PIGGY_VOICE_LINES } from "@/domains/ledger-ai/domain/piggyVoice";
 import { getLedgerAiContext } from "@/domains/ledger-ai/application/getLedgerAiContext";
@@ -71,12 +75,17 @@ export async function POST(request: Request) {
       );
     }
 
-    const messages = body.messages ?? [];
-    if (messages.length === 0) {
+    if ((body.messages ?? []).length === 0) {
       return Response.json({ error: "messages is required." }, { status: 400 });
     }
 
     const useClientBudget = Boolean(body.useClientBudget);
+    // Attached files become server-side documents reachable through tools.
+    const {
+      messages,
+      documents,
+      error: documentError,
+    } = extractPiggyDocuments(body.messages ?? []);
     const client = await getAuthenticatedConvexClient();
     const piggyUser = await loadPiggyUserContext(client);
     let context: unknown;
@@ -111,6 +120,11 @@ export async function POST(request: Request) {
     const modelId = primary ?? "google/gemini-3.8-flash";
 
     const tools = {
+      ...createDocumentTools({
+        client,
+        documents,
+        allowLedgerWrites: !useClientBudget,
+      }),
       ...createPiggyMemoryTools(client),
       ...createPiggyCrewTools({
         client,
@@ -215,12 +229,16 @@ export async function POST(request: Request) {
       "When the request is ambiguous or risky, call ask_user instead of guessing: which category or account, which of several matching rows, or a yes/no before a delete. Ask 1 to 3 short questions with 2 to 6 concrete choices. Offer real names from list_taxonomy or search results as choices. After the answers arrive, act on them without re-asking.",
       "When a picture would help (split of spend, money flow, before vs after), call show_sketch. The drawing appears inline in chat; the user can tap it for a larger view. Coords are 0-100. Use rect, circle, line, arrow, text. Keep 4 to 12 shapes. Still explain in chat with a table when numbers matter.",
       "When the user wants a file, export, report, or something to print or share, call export_file. Pull the rows first (search_transactions, summaries, taxonomy), then pass columns and string rows, max 300. Use csv for spreadsheet data and pdf for a readable report with a title, subtitle, and notes. After the receipt comes back, tell the user the file is ready in one short line; do not repeat the table in chat.",
-      "For the store sheet, use add_store_sheet_row or remove_store_sheet_row. For notes, use write_note.",
+      "Attached documents: the user can drop PDFs or photos into chat. They show up as [Attached document #n] notes; the bytes are only reachable through tools. If the user says what it is, act on it: a bank or card statement goes through import_statement_document; a loan contract, disclosure, or loan statement goes through register_loan_from_document. If they did not say, call read_document on it, decide from the text, and confirm with ask_user before filing (choices: import as statement, register as loan, just answer questions about it). Receipts or one-off documents: read_document, then create_transaction if they want it recorded.",
+      "After filing a document, confirm in one line: what it was, the account or loan name, and the row count. If a loan is missing terms, ask_user for exactly those fields and retry with overrides. Attachments only live for the message they were sent with; if you need one again, ask the user to attach it again.",
+      documentError ? `Attachment warning to relay to the user: ${documentError}` : "",
+      "For the store sheet, use add_store_sheet_row or remove_store_sheet_row.",
+      "Notes: the user's note tabs are in the context and via list_notes. To save something new, use create_note (new tab) or append_note (adds to the end, keeps what is there). Never wipe a note on your own. replace_note is only for when the user explicitly asks to rewrite or clear a note; tell them what will be lost, get a yes, then pass confirmed: true.",
       "Confirm what changed in one short sentence, including how many rows.",
       "Do not mention being an AI model. You are Piggy.",
       "Cloud Processing notice: this chat receives readable budget, store sheet, and note context. It is not end-to-end encrypted.",
       useClientBudget
-        ? "Encrypted vault is on. Answer from the budget and store sheet snapshots. You can still read and write notes. You cannot edit transactions or the store sheet from this chat."
+        ? "Encrypted vault is on. Answer from the budget and store sheet snapshots. You can still read and write notes. You cannot edit transactions or the store sheet from this chat. You can read attached documents but not import them; point the user to the Statements page or Register Lending Account dialog for that."
         : "Write tools are available for this user's plaintext budget, store sheet, and notes.",
       "",
       ...piggyUser.systemLines,

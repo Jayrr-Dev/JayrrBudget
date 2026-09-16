@@ -27,6 +27,10 @@ export function restorePiggyHistory(value: unknown): PiggyHistory {
         const tool = part as { state?: string; toolCallId?: string };
         return tool.toolCallId && ["output-available", "output-error", "output-denied"].includes(tool.state ?? "") ? [part] : [];
       }
+      if (part.type === "source-url") {
+        const source = part as { url?: unknown };
+        return typeof source.url === "string" ? [part] : [];
+      }
       return part.type === "step-start" ? [part] : [];
     });
     if (parts.some((part) => part.type !== "step-start")) messages.push({ ...message, parts });

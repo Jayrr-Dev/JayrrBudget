@@ -2,6 +2,7 @@ import { getBudgetContextForCanvas } from "@/domains/canvas/application/getBudge
 import type { CanvasSnapshot } from "@/domains/canvas/domain/canvasContext";
 import { CANVAS_SYSTEM_PROMPT } from "@/domains/canvas/domain/canvasSystemPrompt";
 import { createCanvasTools } from "@/domains/canvas/domain/canvasTools";
+import { createLedgerReadTools } from "@/domains/ledger-ai/application/createLedgerAiTools";
 import { createPiggyCrewTools } from "@/domains/ledger-ai/application/piggyCrew.server";
 import {
   createPiggyMemoryTools,
@@ -11,6 +12,7 @@ import {
 import {
   chatModel,
   getModelChain,
+  webSearchTool,
 } from "@/shared/ai/openRouter";
 import { persistAiUsage, runMeteredOpenRouter } from "@/shared/ai/aiMeter.server";
 import { aiCallDeniedResponse, checkAiCall } from "@/shared/ai/enforceAiCall.server";
@@ -140,11 +142,20 @@ export async function POST(request: Request) {
       },
     });
 
+    // Private-ledger users: plaintext stays in the browser, so no server-side
+    // ledger reads and no outbound web queries built from their data.
+    const serverLedger = !body.useClientBudget;
     const system = [
       CANVAS_SYSTEM_PROMPT,
       "",
       "Coordinate space: x increases right, y increases down. Origin is top-left.",
       "You may hire up to 2 helper piggies with hire_piggy, then ask_piggy_helper. They research numbers through crew mail. You still draw and talk to the user.",
+      ...(serverLedger
+        ? [
+            "You can look things up yourself: list_accounts, search_transactions, summarize_spend (both take an account filter), and list_statements. Use them when the BUDGET DATA below is not enough, for example one card's spend, a statement's closing balance, or an older month.",
+            "web_search reaches the public web. Use it only for general facts (rates, fees, definitions, how a bank product works). Never put balances, account names, masks, merchants, or amounts from this user's budget in a search query. Cite what you used.",
+          ]
+        : []),
       "",
       ...piggyUser.systemLines,
       "",
@@ -166,13 +177,16 @@ export async function POST(request: Request) {
       messages: modelMessages,
       tools: {
         ...createPiggyMemoryTools(convex),
+        ...(serverLedger
+          ? { ...createLedgerReadTools(convex), web_search: webSearchTool() }
+          : {}),
         ...createPiggyCrewTools({
           client: convex,
           chatId: body.id ?? "canvas",
           modelId,
           fallbacks,
           billedTo: loaded.billedTo,
-          includeLedgerReads: !body.useClientBudget,
+          includeLedgerReads: serverLedger,
           helperContext: JSON.stringify(budget),
         }),
         ...createCanvasTools(canvas?.shapes.map((shape) => shape.id)),

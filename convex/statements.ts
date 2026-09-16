@@ -286,6 +286,75 @@ export const list = query({
   },
 });
 
+const AI_STATEMENT_LIMIT = 24;
+
+const aiStatementRow = v.object({
+  uploadId: v.number(),
+  accountId: v.union(v.string(), v.null()),
+  institution: v.union(v.string(), v.null()),
+  account: v.union(v.string(), v.null()),
+  mask: v.union(v.string(), v.null()),
+  currency: v.union(v.string(), v.null()),
+  periodStart: v.union(v.string(), v.null()),
+  periodEnd: v.union(v.string(), v.null()),
+  openingBalance: v.union(v.number(), v.null()),
+  closingBalance: v.union(v.number(), v.null()),
+  totalDebits: v.union(v.number(), v.null()),
+  totalCredits: v.union(v.number(), v.null()),
+  transactionCount: v.union(v.number(), v.null()),
+  /** true = statement math reconciles with imported rows. */
+  balanceOk: v.union(v.boolean(), v.null()),
+});
+
+/**
+ * Compact completed statements for AI context. Newest period first.
+ * Optional `account` narrows by account id, name, or last-4 mask.
+ */
+export const listForAi = query({
+  args: { account: v.optional(v.string()) },
+  returns: v.array(aiStatementRow),
+  handler: async (ctx, args) => {
+    const user = await requireUser(ctx);
+    const rows = await ctx.db
+      .query("statementUploads")
+      .withIndex("by_userId_status", (q) =>
+        q.eq("userId", user._id).eq("status", "completed"),
+      )
+      .collect();
+    const wanted = args.account?.trim().toLowerCase() ?? "";
+    return rows
+      .filter((row) => {
+        if (!wanted) return true;
+        return (
+          row.accountId === args.account ||
+          (row.accountName ?? "").toLowerCase().includes(wanted) ||
+          (row.accountMask ? wanted.endsWith(row.accountMask) : false)
+        );
+      })
+      .sort((a, b) =>
+        (b.statementPeriodEnd ?? "").localeCompare(a.statementPeriodEnd ?? "") ||
+        b.createdAt - a.createdAt,
+      )
+      .slice(0, AI_STATEMENT_LIMIT)
+      .map((row) => ({
+        uploadId: row.uploadId,
+        accountId: row.accountId,
+        institution: row.institutionName,
+        account: row.accountName,
+        mask: row.accountMask,
+        currency: row.currency,
+        periodStart: row.statementPeriodStart,
+        periodEnd: row.statementPeriodEnd,
+        openingBalance: row.openingBalance,
+        closingBalance: row.closingBalance,
+        totalDebits: row.totalDebits,
+        totalCredits: row.totalCredits,
+        transactionCount: row.transactionCount,
+        balanceOk: row.balanceOk,
+      }));
+  },
+});
+
 export const get = query({
   args: { uploadId: v.number() },
   handler: async (ctx, args) => {

@@ -22,11 +22,13 @@ import {
 } from "@/domains/canvas/application/applyCanvasTools";
 import { buildBudgetContextFromDashboard } from "@/domains/canvas/domain/budgetContext";
 import { getCanvasSnapshot } from "@/domains/canvas/domain/canvasContext";
+import { PIGGY_BUBBLE_MAX_CHARS } from "@/domains/canvas/domain/canvasTools";
 import {
   AssistantMarkdown,
   PiggyThinking,
   ReasoningBlock,
   ScratchFold,
+  SourceList,
   ToolActivity,
 } from "@/domains/canvas/ui/CanvasChatParts";
 import { PiggyGreeting } from "@/domains/canvas/ui/PiggyGreeting";
@@ -57,13 +59,20 @@ import {
   isTextUIPart,
   isToolUIPart,
   lastAssistantMessageIsCompleteWithToolCalls,
+  type SourceUrlUIPart,
   type UIMessage,
 } from "ai";
 import { ArrowUp, Eraser, Info, Square } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { createPortal } from "react-dom";
 import { toast } from "sonner";
 import { emptyPiggyHistory, restorePiggyHistory, type PiggyHistory } from "@/domains/ledger-ai/domain/piggyHistory";
 import { usePiggyHistory } from "@/domains/ledger-ai/ui/usePiggyHistory";
+
+/** How long Piggy's say_bubble line stays before idle greetings resume. */
+const BUBBLE_HOLD_MS = 12000;
+/** How long "I'm done!" stays on the button after a reply finishes. */
+const DONE_HOLD_MS = 3500;
 
 const SUGGESTIONS = [
   "Sketch where my money goes",
@@ -122,13 +131,16 @@ function CanvasPiggyInfo() {
           </PopoverDescription>
           <ul className="mt-1.5 list-disc space-y-1 pl-4 text-muted-foreground">
             <li>Chat can see the budget numbers you send</li>
+            <li>Can look up one account, a statement, or an older month when you ask</li>
+            <li>Can search the web for general facts (rates, fees, definitions) and lists its sources</li>
             <li>Can hire up to two helper piggies; they talk through your private crew mail</li>
             <li>Piggy stamps a chart skeleton, then fills your numbers</li>
             <li>Thoughts and stamp notes show while Piggy works, then tuck away</li>
             <li>Ask for edits — Piggy moves or erases what’s there</li>
+            <li>When a drawing is done, Piggy drops a short line in the speech bubble by the button</li>
             <li>Enter sends, Shift+Enter adds a line</li>
             <li>Chat and draft are saved on this browser for your account</li>
-            <li>Eraser in the header clears this chat, not the board</li>
+            <li>Eraser in the header, or scroll past the last reply, clears this chat — not the board</li>
           </ul>
         </PopoverHeader>
       </PopoverContent>
@@ -226,7 +238,10 @@ function AssistantTurn({
       });
     }
   }
-  if (rows.length === 0) return null;
+  const sources = message.parts.filter(
+    (part): part is SourceUrlUIPart => part.type === "source-url",
+  );
+  if (rows.length === 0 && sources.length === 0) return null;
 
   return (
     <PiggyAssistantMessage mood={mood ?? piggyMoodFromMessage(message, boardErrors)}>
@@ -265,6 +280,7 @@ function AssistantTurn({
             </ScratchFold>
           );
         })}
+        {!live ? <SourceList parts={sources} /> : null}
       </div>
     </PiggyAssistantMessage>
   );
@@ -295,6 +311,7 @@ function CanvasAiChatSession({ initialHistory, saveHistory, historyError }: {
 }) {
   const api = useCanvasApi();
   const [open, setOpen] = useState(false);
+  const [dockReady, setDockReady] = useState(false);
   const [input, setInput] = useState(initialHistory.draft);
   const [inputFocused, setInputFocused] = useState(false);
   const encryptedLedger = useFeatureFlag("encryptedLedger");
@@ -335,6 +352,21 @@ function CanvasAiChatSession({ initialHistory, saveHistory, historyError }: {
   const [boardErrors, setBoardErrors] = useState<ReadonlyMap<string, string>>(
     () => new Map(initialHistory.boardErrors),
   );
+  const [bubble, setBubble] = useState<string | null>(null);
+  const bubbleTimer = useRef(0);
+  const speak = (text: string) => {
+    window.clearTimeout(bubbleTimer.current);
+    setBubble(text.trim().slice(0, PIGGY_BUBBLE_MAX_CHARS));
+    bubbleTimer.current = window.setTimeout(() => setBubble(null), BUBBLE_HOLD_MS);
+  };
+  useEffect(() => () => window.clearTimeout(bubbleTimer.current), []);
+  const wasBusy = useRef(false);
+  const [doneLine, setDoneLine] = useState(false);
+  const doneTimer = useRef(0);
+  useEffect(() => () => window.clearTimeout(doneTimer.current), []);
+  useEffect(() => {
+    setDockReady(true);
+  }, []);
 
   const { messages, sendMessage, setMessages, status, error, stop } = useChat({
     messages: initialHistory.messages,
@@ -355,6 +387,11 @@ function CanvasAiChatSession({ initialHistory, saveHistory, historyError }: {
     // arrives, so each piece lands on the board while Piggy keeps talking.
     async onToolCall({ toolCall }) {
       if (toolCall.dynamic) return;
+      if (toolCall.toolName === "say_bubble") {
+        const { text } = toolCall.input as { text?: string };
+        if (text) speak(text);
+        return;
+      }
       // Memory tools run on the server; nothing to draw.
       if (!isCanvasToolName(toolCall.toolName)) return;
 
@@ -393,6 +430,25 @@ function CanvasAiChatSession({ initialHistory, saveHistory, historyError }: {
   });
 
   useEffect(() => {
+    if (busy) {
+      wasBusy.current = true;
+      window.clearTimeout(doneTimer.current);
+      setDoneLine(false);
+      return;
+    }
+    if (!wasBusy.current) return;
+    wasBusy.current = false;
+    setDoneLine(true);
+    doneTimer.current = window.setTimeout(() => setDoneLine(false), DONE_HOLD_MS);
+  }, [busy]);
+
+  const greetingMessage = busy
+    ? "Thinking..."
+    : doneLine
+      ? "I'm done!"
+      : bubble ?? (open ? "Chatting..." : null);
+
+  useEffect(() => {
     saveHistory({ messages, draft: input, aliases: [...refAliases.current], boardErrors: [...boardErrors] });
   }, [messages, input, boardErrors, saveHistory]);
 
@@ -423,34 +479,8 @@ function CanvasAiChatSession({ initialHistory, saveHistory, historyError }: {
     }
   };
 
-  return (
-    <Popover modal={false} open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <Button
-          type="button"
-          variant="ghost"
-          title="Canvas Piggy"
-          aria-label="Canvas Piggy"
-          className={cn(
-            "h-9 min-w-0 shrink-0 justify-start gap-1.5 rounded-lg border border-border bg-surface-elevated px-2 pr-2 text-sm font-medium text-foreground shadow-md ring-1 ring-foreground/10 hover:bg-muted hover:text-foreground [&_svg]:size-5",
-            busy && !open && "ring-2 ring-accent/35",
-          )}
-        >
-          <PiggyMascot mood={mood} iconClassName="size-8" />
-          <PiggyGreeting paused={open} />
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent
-        align="end"
-        side="bottom"
-        sideOffset={8}
-        onOpenAutoFocus={(event) => event.preventDefault()}
-        onCloseAutoFocus={(event) => event.preventDefault()}
-        onInteractOutside={(event) => event.preventDefault()}
-        onFocusOutside={(event) => event.preventDefault()}
-        onPointerDownOutside={(event) => event.preventDefault()}
-        className="z-[2000] flex w-[min(24rem,calc(100vw-1rem))] flex-col gap-0 overflow-hidden border border-border p-0 shadow-lg ring-1 ring-foreground/10"
-      >
+  const chatDock = (
+    <div className="pointer-events-auto fixed top-16 right-3 z-2000 flex w-[min(24rem,calc(100vw-1.5rem))] flex-col gap-0 overflow-hidden rounded-xl border border-border bg-background p-0 shadow-lg ring-1 ring-foreground/10">
         <PopoverHeader className="flex-row items-center gap-1.5 border-b border-accent/15 bg-linear-to-r from-accent-subtle/80 to-transparent px-3 py-2.5">
           <PopoverTitle className="flex min-w-0 flex-1 items-center gap-1.5">
             Canvas Piggy
@@ -485,6 +515,8 @@ function CanvasAiChatSession({ initialHistory, saveHistory, historyError }: {
         <PiggyTranscript
           ariaLabel="Canvas Piggy conversation"
           className="h-80"
+          onClearChat={clearChat}
+          canClearChat={messages.length > 0 || !!error}
         >
           {messages.length === 0 ? (
             <PiggyTranscriptItem messageId="piggy-empty">
@@ -610,7 +642,29 @@ function CanvasAiChatSession({ initialHistory, saveHistory, historyError }: {
             </InputGroupAddon>
           </InputGroup>
         </form>
-      </PopoverContent>
-    </Popover>
+    </div>
+  );
+
+  return (
+    <>
+      <Button
+        type="button"
+        variant="ghost"
+        title="Canvas Piggy"
+        aria-label="Canvas Piggy"
+        aria-expanded={open}
+        className={cn(
+          "h-9 min-w-0 shrink-0 justify-start gap-1.5 rounded-lg border border-border bg-surface-elevated px-2 pr-2 text-sm font-medium text-foreground shadow-md ring-1 ring-foreground/10 hover:bg-muted hover:text-foreground [&_svg]:size-5",
+          busy && !open && "ring-2 ring-accent/35",
+        )}
+        onClick={() => setOpen((current) => !current)}
+      >
+        <PiggyMascot mood={mood} iconClassName="size-8" />
+        <PiggyGreeting paused={open} message={greetingMessage} />
+      </Button>
+      {open ? (
+        dockReady ? createPortal(chatDock, document.body) : null
+      ) : null}
+    </>
   );
 }

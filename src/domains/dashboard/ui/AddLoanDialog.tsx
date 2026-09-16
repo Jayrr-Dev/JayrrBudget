@@ -70,6 +70,7 @@ import { errorMessage } from "@/shared/lib/error-message";
 import { api } from "@convex/_generated/api";
 import { useConvex, useMutation } from "convex/react";
 import { Info, UploadIcon } from "lucide-react";
+import { cn } from "cn";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -95,6 +96,14 @@ const emptyForm = {
 
 const UPLOAD_TOAST = "loan-document-upload";
 
+const LOAN_FORM_STEPS = [
+  { id: 1, title: "Loan details" },
+  { id: 2, title: "Balance and rate" },
+  { id: 3, title: "Payment schedule" },
+] as const;
+
+type LoanFormStep = (typeof LOAN_FORM_STEPS)[number]["id"];
+
 export function AddLoanDialog({ open, onOpenChange }: AddLoanDialogProps) {
   const router = useRouter();
   const client = useConvex();
@@ -104,9 +113,11 @@ export function AddLoanDialog({ open, onOpenChange }: AddLoanDialogProps) {
   const createCustomLoan = useMutation(api.dashboard.createCustomLoan);
   const linkLoanDocument = useMutation(api.loanDocuments.linkToAccount);
   const [form, setForm] = useState(emptyForm);
+  const [step, setStep] = useState<LoanFormStep>(1);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [pendingFileHash, setPendingFileHash] = useState<string | null>(null);
+  const stepMeta = LOAN_FORM_STEPS[step - 1];
   const typeMeta = loanTypeMeta(form.loanType);
   const busy = saving || uploading;
   const vaultPersist = flags.encryptedLedger;
@@ -125,10 +136,49 @@ export function AddLoanDialog({ open, onOpenChange }: AddLoanDialogProps) {
     }));
   }
 
-  function resetAndClose() {
+  function resetFormState() {
     setForm(emptyForm);
+    setStep(1);
     setPendingFileHash(null);
+  }
+
+  function resetAndClose() {
+    resetFormState();
     onOpenChange(false);
+  }
+
+  function stepError(current: LoanFormStep): string | null {
+    if (current === 1) {
+      if (!form.name.trim()) {
+        return "Name is required";
+      }
+      return null;
+    }
+    if (current === 2) {
+      const principalStart = Number(form.principalStart);
+      const annualRatePct = Number(form.annualRatePct);
+      if (
+        !Number.isFinite(principalStart) ||
+        principalStart <= 0 ||
+        !Number.isFinite(annualRatePct) ||
+        annualRatePct < 0
+      ) {
+        return "Check principal and annual rate";
+      }
+      return null;
+    }
+    const paymentAmount = Number(form.paymentAmount);
+    const paymentCount = Number(form.paymentCount);
+    if (
+      !Number.isFinite(paymentAmount) ||
+      paymentAmount <= 0 ||
+      !Number.isFinite(paymentCount) ||
+      paymentCount < 1 ||
+      !form.firstPaymentDate
+    ) {
+      return "Check payment amount, count, and first payment date";
+    }
+    return null;
   }
 
   async function onUploadDocument(file: File) {
@@ -230,29 +280,20 @@ export function AddLoanDialog({ open, onOpenChange }: AddLoanDialogProps) {
 
   async function onSubmit(event: React.FormEvent) {
     event.preventDefault();
+    const error = stepError(step);
+    if (error) {
+      toast.error(error);
+      return;
+    }
+    if (step < 3) {
+      setStep((step + 1) as LoanFormStep);
+      return;
+    }
+
     const principalStart = Number(form.principalStart);
     const annualRatePct = Number(form.annualRatePct);
     const paymentAmount = Number(form.paymentAmount);
     const paymentCount = Number(form.paymentCount);
-
-    if (!form.name.trim()) {
-      toast.error("Name is required");
-      return;
-    }
-    if (
-      !Number.isFinite(principalStart) ||
-      principalStart <= 0 ||
-      !Number.isFinite(annualRatePct) ||
-      annualRatePct < 0 ||
-      !Number.isFinite(paymentAmount) ||
-      paymentAmount <= 0 ||
-      !Number.isFinite(paymentCount) ||
-      paymentCount < 1 ||
-      !form.firstPaymentDate
-    ) {
-      toast.error("Check loan terms numbers and dates");
-      return;
-    }
 
     setSaving(true);
     try {
@@ -355,8 +396,7 @@ export function AddLoanDialog({ open, onOpenChange }: AddLoanDialogProps) {
       onOpenChange={(next) => {
         if (!busy) {
           if (!next) {
-            setForm(emptyForm);
-            setPendingFileHash(null);
+            resetFormState();
           }
           onOpenChange(next);
         }
@@ -402,70 +442,98 @@ export function AddLoanDialog({ open, onOpenChange }: AddLoanDialogProps) {
             </DialogDescription>
           </DialogHeader>
 
-          <div className="grid gap-4">
-            <Field
-              label="Loan type"
-              htmlFor="loan-type"
-              info={{
-                title: "Loan type",
-                body: "Sets the account subtype and the optional collateral field (vehicle, property, school, etc.).",
-              }}
-              action={
-                <OcrDocumentPickerButton
-                  disabled={busy}
-                  onFiles={onPickerFiles}
-                >
-                  {uploading ? (
-                    <>
-                      <Spinner className="size-3.5" />
-                      Scanning…
-                    </>
-                  ) : (
-                    <>
-                      <UploadIcon className="size-3.5" />
-                      Upload Document
-                    </>
+          <div className="grid gap-2">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-sm font-medium">{stepMeta?.title}</p>
+              <p className="text-xs text-muted-foreground tabular-nums">
+                Step {step} of {LOAN_FORM_STEPS.length}
+              </p>
+            </div>
+            <div className="flex gap-1" aria-hidden="true">
+              {LOAN_FORM_STEPS.map((item) => (
+                <span
+                  key={item.id}
+                  className={cn(
+                    "h-1 flex-1 rounded-full",
+                    item.id <= step ? "bg-primary" : "bg-muted",
                   )}
-                </OcrDocumentPickerButton>
-              }
-            >
-              <NativeSelect
-                id="loan-type"
-                className="w-full"
-                value={form.loanType}
-                onChange={(e) => onLoanTypeChange(e.target.value as LoanType)}
-                disabled={busy}
+                />
+              ))}
+            </div>
+          </div>
+
+          {step === 1 ? (
+            <div className="grid gap-4">
+              <Field
+                label="Loan type"
+                htmlFor="loan-type"
+                info={{
+                  title: "Loan type",
+                  body: "Sets the account subtype and the optional collateral field (vehicle, property, school, etc.).",
+                }}
+                action={
+                  <OcrDocumentPickerButton
+                    disabled={busy}
+                    onFiles={onPickerFiles}
+                  >
+                    {uploading ? (
+                      <>
+                        <Spinner className="size-3.5" />
+                        Scanning…
+                      </>
+                    ) : (
+                      <>
+                        <UploadIcon className="size-3.5" />
+                        Upload Document
+                      </>
+                    )}
+                  </OcrDocumentPickerButton>
+                }
               >
-                {LOAN_TYPES.map((option) => (
-                  <NativeSelectOption key={option.value} value={option.value}>
-                    {option.label}
-                  </NativeSelectOption>
-                ))}
-              </NativeSelect>
-            </Field>
-            <Field label="Name" htmlFor="loan-name">
-              <Input
-                id="loan-name"
-                value={form.name}
-                onChange={(e) => setField("name", e.target.value)}
-                placeholder={typeMeta.namePlaceholder}
-                required
-                autoFocus
-                disabled={busy}
-              />
-            </Field>
-            {typeMeta.showCollateral ? (
-              <Field label={typeMeta.collateralLabel} htmlFor="loan-collateral">
+                <NativeSelect
+                  id="loan-type"
+                  className="w-full"
+                  value={form.loanType}
+                  onChange={(e) => onLoanTypeChange(e.target.value as LoanType)}
+                  disabled={busy}
+                >
+                  {LOAN_TYPES.map((option) => (
+                    <NativeSelectOption key={option.value} value={option.value}>
+                      {option.label}
+                    </NativeSelectOption>
+                  ))}
+                </NativeSelect>
+              </Field>
+              <Field label="Name" htmlFor="loan-name">
                 <Input
-                  id="loan-collateral"
-                  value={form.vehicleLabel}
-                  onChange={(e) => setField("vehicleLabel", e.target.value)}
-                  placeholder={typeMeta.collateralPlaceholder}
+                  id="loan-name"
+                  value={form.name}
+                  onChange={(e) => setField("name", e.target.value)}
+                  placeholder={typeMeta.namePlaceholder}
+                  required
+                  autoFocus
                   disabled={busy}
                 />
               </Field>
-            ) : null}
-            <div className="grid grid-cols-2 gap-4">
+              {typeMeta.showCollateral ? (
+                <Field
+                  label={typeMeta.collateralLabel}
+                  htmlFor="loan-collateral"
+                >
+                  <Input
+                    id="loan-collateral"
+                    value={form.vehicleLabel}
+                    onChange={(e) => setField("vehicleLabel", e.target.value)}
+                    placeholder={typeMeta.collateralPlaceholder}
+                    disabled={busy}
+                  />
+                </Field>
+              ) : null}
+            </div>
+          ) : null}
+
+          {step === 2 ? (
+            <div className="grid gap-4">
               <Field
                 label="Principal"
                 htmlFor="loan-principal"
@@ -486,148 +554,176 @@ export function AddLoanDialog({ open, onOpenChange }: AddLoanDialogProps) {
                   disabled={busy}
                 />
               </Field>
-              <Field
-                label="Rate type"
-                htmlFor="loan-rate-type"
-                info={{
-                  title: "Rate type",
-                  body: "Fixed stays at the rate you enter. Variable can change; the schedule still uses your current rate as an estimate until you update it.",
-                }}
-              >
-                <NativeSelect
-                  id="loan-rate-type"
-                  className="w-full"
-                  value={form.rateType}
-                  onChange={(e) =>
-                    setField("rateType", e.target.value as RateType)
-                  }
-                  disabled={busy}
+              <div className="grid grid-cols-2 gap-4">
+                <Field
+                  label="Rate type"
+                  htmlFor="loan-rate-type"
+                  info={{
+                    title: "Rate type",
+                    body: "Fixed stays at the rate you enter. Variable can change; the schedule still uses your current rate as an estimate until you update it.",
+                  }}
                 >
-                  {RATE_TYPES.map((option) => (
-                    <NativeSelectOption key={option.value} value={option.value}>
-                      {option.label}
-                    </NativeSelectOption>
-                  ))}
-                </NativeSelect>
-              </Field>
+                  <NativeSelect
+                    id="loan-rate-type"
+                    className="w-full"
+                    value={form.rateType}
+                    onChange={(e) =>
+                      setField("rateType", e.target.value as RateType)
+                    }
+                    disabled={busy}
+                  >
+                    {RATE_TYPES.map((option) => (
+                      <NativeSelectOption
+                        key={option.value}
+                        value={option.value}
+                      >
+                        {option.label}
+                      </NativeSelectOption>
+                    ))}
+                  </NativeSelect>
+                </Field>
+                <Field label="Annual rate %" htmlFor="loan-rate">
+                  <Input
+                    id="loan-rate"
+                    type="number"
+                    inputMode="decimal"
+                    step="0.01"
+                    min="0"
+                    value={form.annualRatePct}
+                    onChange={(e) => setField("annualRatePct", e.target.value)}
+                    placeholder="7.99"
+                    required
+                    disabled={busy}
+                  />
+                </Field>
+              </div>
             </div>
-            <Field label="Annual rate %" htmlFor="loan-rate">
-              <Input
-                id="loan-rate"
-                type="number"
-                inputMode="decimal"
-                step="0.01"
-                min="0"
-                value={form.annualRatePct}
-                onChange={(e) => setField("annualRatePct", e.target.value)}
-                placeholder="7.99"
-                required
-                disabled={busy}
-              />
-            </Field>
-            <div className="grid grid-cols-2 gap-4">
-              <Field label="Payment" htmlFor="loan-payment">
-                <Input
-                  id="loan-payment"
-                  type="number"
-                  inputMode="decimal"
-                  step="0.01"
-                  min="0"
-                  value={form.paymentAmount}
-                  onChange={(e) => setField("paymentAmount", e.target.value)}
-                  required
-                  disabled={busy}
-                />
-              </Field>
-              <Field
-                label="# payments"
-                htmlFor="loan-count"
-                info={{
-                  title: "Number of payments",
-                  body: "Total payments left on the contract from the first payment date (not how many you have already made).",
-                }}
-              >
-                <Input
-                  id="loan-count"
-                  type="number"
-                  inputMode="numeric"
-                  step="1"
-                  min="1"
-                  value={form.paymentCount}
-                  onChange={(e) => setField("paymentCount", e.target.value)}
-                  required
-                  disabled={busy}
-                />
-              </Field>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <Field
-                label="Frequency"
-                htmlFor="loan-frequency"
-                info={{
-                  title: "Payment frequency",
-                  body: "How often the bank pulls the payment. This sets the payment calendar and the interest period rate. Defaults change with loan type.",
-                }}
-              >
-                <NativeSelect
-                  id="loan-frequency"
-                  className="w-full"
-                  value={form.paymentFrequency}
-                  onChange={(e) =>
-                    setField(
-                      "paymentFrequency",
-                      e.target.value as PaymentFrequency,
-                    )
-                  }
-                  disabled={busy}
+          ) : null}
+
+          {step === 3 ? (
+            <div className="grid gap-4">
+              <div className="grid grid-cols-2 gap-4">
+                <Field label="Payment" htmlFor="loan-payment">
+                  <Input
+                    id="loan-payment"
+                    type="number"
+                    inputMode="decimal"
+                    step="0.01"
+                    min="0"
+                    value={form.paymentAmount}
+                    onChange={(e) => setField("paymentAmount", e.target.value)}
+                    required
+                    disabled={busy}
+                  />
+                </Field>
+                <Field
+                  label="# payments"
+                  htmlFor="loan-count"
+                  info={{
+                    title: "Number of payments",
+                    body: "Total payments left on the contract from the first payment date (not how many you have already made).",
+                  }}
                 >
-                  {PAYMENT_FREQUENCIES.map((option) => (
-                    <NativeSelectOption key={option.value} value={option.value}>
-                      {option.label}
-                    </NativeSelectOption>
-                  ))}
-                </NativeSelect>
-              </Field>
-              <Field label="First payment" htmlFor="loan-first">
+                  <Input
+                    id="loan-count"
+                    type="number"
+                    inputMode="numeric"
+                    step="1"
+                    min="1"
+                    value={form.paymentCount}
+                    onChange={(e) => setField("paymentCount", e.target.value)}
+                    required
+                    disabled={busy}
+                  />
+                </Field>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <Field
+                  label="Frequency"
+                  htmlFor="loan-frequency"
+                  info={{
+                    title: "Payment frequency",
+                    body: "How often the bank pulls the payment. This sets the payment calendar and the interest period rate. Defaults change with loan type.",
+                  }}
+                >
+                  <NativeSelect
+                    id="loan-frequency"
+                    className="w-full"
+                    value={form.paymentFrequency}
+                    onChange={(e) =>
+                      setField(
+                        "paymentFrequency",
+                        e.target.value as PaymentFrequency,
+                      )
+                    }
+                    disabled={busy}
+                  >
+                    {PAYMENT_FREQUENCIES.map((option) => (
+                      <NativeSelectOption
+                        key={option.value}
+                        value={option.value}
+                      >
+                        {option.label}
+                      </NativeSelectOption>
+                    ))}
+                  </NativeSelect>
+                </Field>
+                <Field label="First payment" htmlFor="loan-first">
+                  <Input
+                    id="loan-first"
+                    type="date"
+                    value={form.firstPaymentDate}
+                    onChange={(e) =>
+                      setField("firstPaymentDate", e.target.value)
+                    }
+                    required
+                    disabled={busy}
+                  />
+                </Field>
+              </div>
+              <Field
+                label="PAD merchant (optional)"
+                htmlFor="loan-merchant"
+                info={{
+                  title: "PAD merchant",
+                  body: "Name on the auto-debit (PAD) in your chequing account. We use it to match real payments to this loan. Leave blank to use the loan name.",
+                }}
+              >
                 <Input
-                  id="loan-first"
-                  type="date"
-                  value={form.firstPaymentDate}
-                  onChange={(e) => setField("firstPaymentDate", e.target.value)}
-                  required
+                  id="loan-merchant"
+                  value={form.matchMerchantClean}
+                  onChange={(e) =>
+                    setField("matchMerchantClean", e.target.value)
+                  }
+                  placeholder="Defaults to name"
                   disabled={busy}
                 />
               </Field>
             </div>
-            <Field
-              label="PAD merchant (optional)"
-              htmlFor="loan-merchant"
-              info={{
-                title: "PAD merchant",
-                body: "Name on the auto-debit (PAD) in your chequing account. We use it to match real payments to this loan. Leave blank to use the loan name.",
-              }}
-            >
-              <Input
-                id="loan-merchant"
-                value={form.matchMerchantClean}
-                onChange={(e) => setField("matchMerchantClean", e.target.value)}
-                placeholder="Defaults to name"
-                disabled={busy}
-              />
-            </Field>
-          </div>
+          ) : null}
 
           <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              disabled={busy}
-              onClick={() => resetAndClose()}
-            >
-              Cancel
-            </Button>
+            {step === 1 ? (
+              <Button
+                type="button"
+                variant="outline"
+                disabled={busy}
+                onClick={() => resetAndClose()}
+              >
+                Cancel
+              </Button>
+            ) : (
+              <Button
+                type="button"
+                variant="outline"
+                disabled={busy}
+                onClick={() => setStep((step - 1) as LoanFormStep)}
+              >
+                Back
+              </Button>
+            )}
             <Button type="submit" disabled={busy}>
-              {saving ? "Saving…" : "Create Loan"}
+              {step < 3 ? "Next" : saving ? "Saving…" : "Create Loan"}
             </Button>
           </DialogFooter>
         </form>
