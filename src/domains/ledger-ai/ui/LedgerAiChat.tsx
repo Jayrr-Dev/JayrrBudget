@@ -105,6 +105,7 @@ function PiggyAboutInfo() {
           </PopoverDescription>
           <ul className="mt-1.5 list-disc space-y-1 pl-4 text-muted-foreground">
             <li>Advice from your spend, income, bills, and savings</li>
+            <li>Can hire up to two helper piggies; they talk through your private crew mail</li>
             <li>Recategorize your transactions</li>
             <li>Edit sections, categories, and subcategories</li>
             <li>Read and update your store sheet and notes</li>

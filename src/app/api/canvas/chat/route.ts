@@ -2,6 +2,7 @@ import { getBudgetContextForCanvas } from "@/domains/canvas/application/getBudge
 import type { CanvasSnapshot } from "@/domains/canvas/domain/canvasContext";
 import { CANVAS_SYSTEM_PROMPT } from "@/domains/canvas/domain/canvasSystemPrompt";
 import { createCanvasTools } from "@/domains/canvas/domain/canvasTools";
+import { createPiggyCrewTools } from "@/domains/ledger-ai/application/piggyCrew.server";
 import {
   createPiggyMemoryTools,
   loadPiggyUserContext,
@@ -75,6 +76,7 @@ export async function POST(request: Request) {
   return runMeteredOpenRouter(convex, loaded, async () => {
     let body: {
       messages?: UIMessage[];
+      id?: string;
       canvas?: CanvasSnapshot | null;
       budget?: unknown;
       useClientBudget?: boolean;
@@ -142,6 +144,7 @@ export async function POST(request: Request) {
       CANVAS_SYSTEM_PROMPT,
       "",
       "Coordinate space: x increases right, y increases down. Origin is top-left.",
+      "You may hire up to 2 helper piggies with hire_piggy, then ask_piggy_helper. They research numbers through crew mail. You still draw and talk to the user.",
       "",
       ...piggyUser.systemLines,
       "",
@@ -163,6 +166,15 @@ export async function POST(request: Request) {
       messages: modelMessages,
       tools: {
         ...createPiggyMemoryTools(convex),
+        ...createPiggyCrewTools({
+          client: convex,
+          chatId: body.id ?? "canvas",
+          modelId,
+          fallbacks,
+          billedTo: loaded.billedTo,
+          includeLedgerReads: !body.useClientBudget,
+          helperContext: JSON.stringify(budget),
+        }),
         ...createCanvasTools(canvas?.shapes.map((shape) => shape.id)),
       },
       stopWhen: stepCountIs(MAX_STEPS),

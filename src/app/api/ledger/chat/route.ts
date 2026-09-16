@@ -229,7 +229,7 @@ export async function POST(request: Request) {
       system,
       messages: modelMessages,
       tools,
-      stopWhen: stepCountIs(12),
+      stopWhen: stepCountIs(18),
       prepareStep: prepareCompactChatStep,
       temperature: 0.55,
       onError: ({ error }) => {

@@ -1,4 +1,5 @@
 import { createLedgerAiTools, type LedgerAiToolOptions } from "@/domains/ledger-ai/application/createLedgerAiTools";
+import { ASK_USER_TOOL_NAME } from "@/domains/ledger-ai/domain/askUserTool";
 import { persistAiUsage, type AiBilledTo } from "@/shared/ai/aiMeter.server";
 import { chatModel } from "@/shared/ai/openRouter";
 import { errorMessage } from "@/shared/lib/error-message";
@@ -61,13 +62,16 @@ async function runHelper(options: {
     body: options.task,
   });
 
+  const packed = createLedgerAiTools(options.client, {
+    allowLedgerWrites: false,
+    allowStoreSheetWrites: false,
+    includeLedgerReads: options.includeLedgerReads,
+    storeSheetSnapshot: options.storeSheetSnapshot,
+  });
+  const readTools = { ...packed };
+  delete readTools[ASK_USER_TOOL_NAME];
   const helperTools = {
-    ...createLedgerAiTools(options.client, {
-      allowLedgerWrites: false,
-      allowStoreSheetWrites: false,
-      includeLedgerReads: options.includeLedgerReads,
-      storeSheetSnapshot: options.storeSheetSnapshot,
-    }),
+    ...readTools,
     reply_to_lead: tool({
       description: "Send your findings back to lead Piggy through the crew mail table.",
       inputSchema: z.object({ body: z.string().min(1).max(4000) }),
@@ -132,7 +136,7 @@ async function runHelper(options: {
   return {
     helper: helper.name,
     slot: options.slot,
-    report: last?.body ?? report || "(helper sent no mail)",
+    report: (last?.body ?? report) || "(helper sent no mail)",
   };
 }
 

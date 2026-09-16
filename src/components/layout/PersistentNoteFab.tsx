@@ -1,6 +1,6 @@
 "use client";
 
-import { ChromeTab } from "@/components/layout/ChromeTab";
+import { ChromeTab, ChromeTabStrip } from "@/components/layout/ChromeTab";
 import {
   useVaultCacheDebugAdmin,
   VaultCacheDebugPanel,
@@ -230,10 +230,19 @@ function StoreSheetPanel({
         onPointerDownOutside={(event) => event.preventDefault()}
       >
         <div className="relative border-b border-[var(--border)] bg-[var(--muted)]/25">
-          <div
-            role="tablist"
-            aria-label="Store sheet tabs"
-            className="flex min-w-0 flex-nowrap items-end gap-0.5 overflow-x-auto px-0.5 pt-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          <ChromeTabStrip
+            ariaLabel="Store sheet tabs"
+            trailing={
+              <button
+                type="button"
+                aria-label="Add store sheet tab"
+                title="Add tab"
+                className="inline-flex size-5 shrink-0 items-center justify-center rounded-sm text-accent hover:bg-accent-subtle hover:text-accent"
+                onClick={() => actions.addTab()}
+              >
+                <PlusIcon className="size-3" strokeWidth={2} />
+              </button>
+            }
           >
             {tabs.map((tab) => (
               <StoreSheetTab
@@ -248,16 +257,7 @@ function StoreSheetPanel({
                 onReceive={() => actions.setReceiveTab(tab.id)}
               />
             ))}
-            <button
-              type="button"
-              aria-label="Add store sheet tab"
-              title="Add tab"
-              className="mb-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-sm text-accent hover:bg-accent-subtle hover:text-accent"
-              onClick={() => actions.addTab()}
-            >
-              <PlusIcon className="size-3" strokeWidth={2} />
-            </button>
-          </div>
+          </ChromeTabStrip>
         </div>
 
         {rows.length === 0 ? (
@@ -436,10 +436,24 @@ function NotesPanel({
         onOpenAutoFocus={(event) => event.preventDefault()}
       >
         <div className="relative border-b border-[var(--border)] bg-[var(--muted)]/25">
-          <div
-            role="tablist"
-            aria-label="Note tabs"
-            className="flex min-w-0 flex-nowrap items-end gap-0.5 overflow-x-auto px-0.5 pt-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          <ChromeTabStrip
+            ariaLabel="Note tabs"
+            trailing={
+              <button
+                type="button"
+                aria-label="Add note tab"
+                title="Add tab"
+                className="inline-flex size-5 shrink-0 items-center justify-center rounded-sm text-accent hover:bg-accent-subtle hover:text-accent"
+                onClick={() => {
+                  void actions.insertTab().then((created) => {
+                    setActiveId(created.id);
+                    setDraft(created.content);
+                  });
+                }}
+              >
+                <PlusIcon className="size-3" strokeWidth={2} />
+              </button>
+            }
           >
             {notes.map((note) => (
               <ChromeTab
@@ -452,21 +466,7 @@ function NotesPanel({
                 onRename={(name) => actions.renameTab(note.id, name)}
               />
             ))}
-            <button
-              type="button"
-              aria-label="Add note tab"
-              title="Add tab"
-              className="mb-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-sm text-accent hover:bg-accent-subtle hover:text-accent"
-              onClick={() => {
-                void actions.insertTab().then((created) => {
-                  setActiveId(created.id);
-                  setDraft(created.content);
-                });
-              }}
-            >
-              <PlusIcon className="size-3" strokeWidth={2} />
-            </button>
-          </div>
+          </ChromeTabStrip>
         </div>
 
         <div className="h-[min(320px,50vh)] w-full bg-[var(--background)]">

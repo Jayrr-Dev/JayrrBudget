@@ -121,6 +121,7 @@ function CanvasPiggyInfo() {
           </PopoverDescription>
           <ul className="mt-1.5 list-disc space-y-1 pl-4 text-muted-foreground">
             <li>Chat can see the budget numbers you send</li>
+            <li>Can hire up to two helper piggies; they talk through your private crew mail</li>
             <li>Piggy stamps a chart skeleton, then fills your numbers</li>
             <li>Thoughts and stamp notes show while Piggy works, then tuck away</li>
             <li>Ask for edits — Piggy moves or erases what’s there</li>
