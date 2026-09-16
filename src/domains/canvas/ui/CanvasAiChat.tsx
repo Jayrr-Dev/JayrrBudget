@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/popover";
 import {
   applyCanvasTool,
+  isCanvasToolName,
 } from "@/domains/canvas/application/applyCanvasTools";
 import { buildBudgetContextFromDashboard } from "@/domains/canvas/domain/budgetContext";
 import { getCanvasSnapshot } from "@/domains/canvas/domain/canvasContext";
@@ -340,6 +341,8 @@ function CanvasAiChatSession({ initialHistory, saveHistory, historyError }: {
     // arrives, so each piece lands on the board while Piggy keeps talking.
     async onToolCall({ toolCall }) {
       if (toolCall.dynamic) return;
+      // Memory tools run on the server; nothing to draw.
+      if (!isCanvasToolName(toolCall.toolName)) return;
 
       const fail = (reason: string) => {
         setBoardErrors((prev) =>

@@ -2,7 +2,7 @@
 
 import { Button } from "@/components/ui/button";
 import { EmptyPrompt } from "@/components/ui/empty-prompt";
-import { Spinner } from "@/components/ui/spinner";
+import { DecryptingStatus } from "@/domains/vault/ui/DecryptingStatus";
 import {
   ACCOUNT_SECTION_LABELS,
   detectCardNetwork,
@@ -384,13 +384,8 @@ function AccountDetailView({
 
 function SectionCardSpinner() {
   return (
-    <div
-      className="flex min-h-32 items-center justify-center rounded-xl border border-[var(--border)] bg-surface-elevated text-[var(--muted-foreground)]"
-      role="status"
-      aria-live="polite"
-      aria-label="Loading accounts"
-    >
-      <Spinner className="size-6" />
+    <div className="flex min-h-32 items-center justify-center rounded-xl border border-[var(--border)] bg-surface-elevated">
+      <DecryptingStatus />
     </div>
   );
 }
@@ -464,13 +459,8 @@ export function BankAccountsDashboard({
     return (
       <div className="space-y-8">
         <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-surface-elevated">
-          <div
-            className="flex min-h-64 items-center justify-center text-[var(--muted-foreground)]"
-            role="status"
-            aria-live="polite"
-            aria-label="Loading account"
-          >
-            <Spinner className="size-8" />
+          <div className="flex min-h-64 items-center justify-center">
+            <DecryptingStatus />
           </div>
         </div>
       </div>

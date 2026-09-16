@@ -1,6 +1,11 @@
 import { createLedgerAiTools } from "@/domains/ledger-ai/application/createLedgerAiTools";
 import { getLedgerAiContext } from "@/domains/ledger-ai/application/getLedgerAiContext";
 import {
+  createPiggyMemoryTools,
+  loadPiggyUserContext,
+  recordPiggySession,
+} from "@/domains/ledger-ai/application/piggyMemory.server";
+import {
   chatModel,
   getModelChain,
 } from "@/shared/ai/openRouter";
@@ -66,6 +71,7 @@ export async function POST(request: Request) {
 
     const useClientBudget = Boolean(body.useClientBudget);
     const client = await getAuthenticatedConvexClient();
+    const piggyUser = await loadPiggyUserContext(client);
     let context: unknown;
     if (useClientBudget) {
       let notes: unknown = [];
@@ -94,7 +100,9 @@ export async function POST(request: Request) {
       }
     }
 
-    const tools = createLedgerAiTools(client, {
+    const tools = {
+      ...createPiggyMemoryTools(client),
+      ...createLedgerAiTools(client, {
       allowLedgerWrites: !useClientBudget,
       allowStoreSheetWrites: !useClientBudget,
       storeSheetSnapshot: useClientBudget
@@ -115,7 +123,8 @@ export async function POST(request: Request) {
             receiveId: string;
           } | null)
         : null,
-    });
+      }),
+    };
 
     const [primary, ...fallbacks] = getModelChain();
     const modelId = primary ?? "google/gemini-3.8-flash";
@@ -146,6 +155,8 @@ export async function POST(request: Request) {
         ? "Encrypted vault is on. Answer from the budget and store sheet snapshots. You can still read and write notes. You cannot edit ledger rows or the store sheet from this chat."
         : "Write tools are available for this user's plaintext ledger, store sheet, and notes.",
       "",
+      ...piggyUser.systemLines,
+      "",
       "LEDGER DATA (JSON):",
       JSON.stringify(context),
     ].join("\n");
@@ -161,12 +172,15 @@ export async function POST(request: Request) {
         console.warn(`[ledger-ai] stream error: ${errorMessage(error)}`);
       },
       onFinish: async ({ usage }) => {
-        await persistAiUsage(convex, loaded.billedTo, {
-          source: "ledger-chat",
-          modelId,
-          usage,
-          ms: Date.now() - startedAt,
-        });
+        await Promise.all([
+          persistAiUsage(convex, loaded.billedTo, {
+            source: "ledger-chat",
+            modelId,
+            usage,
+            ms: Date.now() - startedAt,
+          }),
+          recordPiggySession(client, "ledger"),
+        ]);
       },
     });
 

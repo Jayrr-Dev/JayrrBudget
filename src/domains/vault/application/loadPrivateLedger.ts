@@ -5,6 +5,7 @@ import {
   type CachedCiphertextRecord,
 } from "@/crypto/ciphertextCache";
 import { decryptJson } from "@/crypto/envelope";
+import { asMasterWrapKey } from "@/crypto/masterKey";
 import { getVaultMasterKey } from "@/crypto/session";
 import type { EncryptedEnvelopeV1, EnvelopeKind } from "@/crypto/types";
 import type {
@@ -354,6 +355,51 @@ async function fetchCiphertextRecords(
   return records;
 }
 
+const DECRYPT_CONCURRENCY = 64;
+
+type DecryptedRow = { row: CachedCiphertextRecord; value: unknown };
+
+/** WebCrypto runs off the main thread; awaiting one row at a time wastes that. */
+async function decryptRecordsParallel(
+  records: CachedCiphertextRecord[],
+  userId: string,
+  masterKey: CryptoKey,
+): Promise<DecryptedRow[]> {
+  const wrapKey = await asMasterWrapKey(masterKey);
+  const live = records.filter((row) => !row.deleted);
+  const out: Array<DecryptedRow | null> = new Array(live.length).fill(null);
+  for (let start = 0; start < live.length; start += DECRYPT_CONCURRENCY) {
+    const chunk = live.slice(start, start + DECRYPT_CONCURRENCY);
+    await Promise.all(
+      chunk.map(async (row, offset) => {
+        const kind = row.kind as EnvelopeKind;
+        const envelope: EncryptedEnvelopeV1 = {
+          v: 1,
+          alg: "AES-256-GCM",
+          keyId: row.keyId,
+          kind,
+          recordId: row.recordId,
+          iv: row.iv,
+          wrappedDek: row.wrappedDek,
+          ciphertext: row.ciphertext,
+        };
+        try {
+          const value = await decryptJson<unknown>(
+            envelope,
+            { userId, recordId: row.recordId, kind, keyId: row.keyId },
+            masterKey,
+            wrapKey,
+          );
+          out[start + offset] = { row, value };
+        } catch {
+          // Stale key or corrupt row must not break the whole ledger.
+        }
+      }),
+    );
+  }
+  return out.filter((entry): entry is DecryptedRow => entry !== null);
+}
+
 async function decryptLedgerFromRecords(
   records: CachedCiphertextRecord[],
   userId: string,
@@ -373,33 +419,13 @@ async function decryptLedgerFromRecords(
   const ocrDocs: Array<NonNullable<ReturnType<typeof asOcrDoc>>> = [];
   const loanOcrDocs: Array<NonNullable<ReturnType<typeof asLoanOcrDoc>>> = [];
 
-  for (const row of records) {
-    if (row.deleted) continue;
+  const decrypted = await decryptRecordsParallel(records, userId, masterKey);
+
+  for (const { row, value } of decrypted) {
     const kind = row.kind as EnvelopeKind;
     const recordId = row.recordId;
     const revision = row.revision;
-    const envelope: EncryptedEnvelopeV1 = {
-      v: 1,
-      alg: "AES-256-GCM",
-      keyId: row.keyId,
-      kind,
-      recordId,
-      iv: row.iv,
-      wrappedDek: row.wrappedDek,
-      ciphertext: row.ciphertext,
-    };
-    try {
-      const value = await decryptJson<unknown>(
-        envelope,
-        {
-          userId,
-          recordId,
-          kind,
-          keyId: row.keyId,
-        },
-        masterKey,
-      );
-      if (kind === "tx" || kind === "tx_batch") {
+    if (kind === "tx" || kind === "tx_batch") {
         const tx = asTx(value, recordId, revision);
         if (tx) ledger.transactions.push(tx);
       } else if (kind === "account_meta") {
@@ -443,9 +469,6 @@ async function decryptLedgerFromRecords(
           }
         }
       }
-    } catch {
-      // Stale key or corrupt row must not break the whole ledger.
-    }
   }
 
   for (const ocr of ocrDocs) {
@@ -516,6 +539,24 @@ async function decryptLedgerFromRecords(
   return ledger;
 }
 
+type LedgerMemo = {
+  key: string;
+  masterKey: CryptoKey;
+  ledger: PrivateLedger;
+};
+
+/** Several `usePrivateLedger` hooks mount at once; share one decrypt per vault stamp. */
+const inflightLoads = new Map<string, Promise<PrivateLedger>>();
+let lastLedger: LedgerMemo | null = null;
+
+function memoKey(input: {
+  userId: string;
+  vaultId: string;
+  vaultUpdatedAt: number;
+}): string {
+  return `${input.userId}:${input.vaultId}:${input.vaultUpdatedAt}`;
+}
+
 /** Loads ciphertext (cache or network), then decrypts. Empty when locked. */
 export async function loadPrivateLedger(
   client: VaultListClient,
@@ -525,6 +566,50 @@ export async function loadPrivateLedger(
   if (!masterKey) return EMPTY;
 
   const vaultUpdatedAt = input.vaultUpdatedAt ?? 0;
+  if (vaultUpdatedAt <= 0) {
+    return loadPrivateLedgerUncached(client, { ...input, vaultUpdatedAt }, masterKey);
+  }
+
+  const key = memoKey({ ...input, vaultUpdatedAt });
+  if (lastLedger && lastLedger.key === key && lastLedger.masterKey === masterKey) {
+    logVaultCacheDebug("cache-hit", "Reused decrypted ledger in memory", {
+      vaultId: input.vaultId,
+      updatedAt: vaultUpdatedAt,
+    });
+    return lastLedger.ledger;
+  }
+
+  const inflight = inflightLoads.get(key);
+  if (inflight) {
+    logVaultCacheDebug("cache-hit", "Joined in-flight ledger decrypt", {
+      vaultId: input.vaultId,
+      updatedAt: vaultUpdatedAt,
+    });
+    return inflight;
+  }
+
+  const load = loadPrivateLedgerUncached(
+    client,
+    { ...input, vaultUpdatedAt },
+    masterKey,
+  )
+    .then((ledger) => {
+      lastLedger = { key, masterKey, ledger };
+      return ledger;
+    })
+    .finally(() => {
+      inflightLoads.delete(key);
+    });
+  inflightLoads.set(key, load);
+  return load;
+}
+
+async function loadPrivateLedgerUncached(
+  client: VaultListClient,
+  input: { userId: string; vaultId: string; vaultUpdatedAt: number },
+  masterKey: CryptoKey,
+): Promise<PrivateLedger> {
+  const vaultUpdatedAt = input.vaultUpdatedAt;
   let records: CachedCiphertextRecord[] | null = null;
   if (vaultUpdatedAt > 0) {
     const cached = await readVaultCiphertextCache(input.vaultId);

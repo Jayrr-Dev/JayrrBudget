@@ -25,8 +25,14 @@ export async function encryptJson(
   return { v: 1, alg: "AES-256-GCM", ...input, iv: ivBuffer, wrappedDek, ciphertext };
 }
 
-export async function decryptJson<T>(envelope: EncryptedEnvelopeV1, input: { userId: string; recordId: string; kind: EnvelopeKind; keyId: string }, masterKey: CryptoKey): Promise<T> {
-  const wrapKey = await asMasterWrapKey(masterKey);
+/** Pass `wrapKey` (from `asMasterWrapKey`) when decrypting many envelopes to skip the per-call key import. */
+export async function decryptJson<T>(
+  envelope: EncryptedEnvelopeV1,
+  input: { userId: string; recordId: string; kind: EnvelopeKind; keyId: string },
+  masterKey: CryptoKey,
+  wrapKey?: CryptoKey,
+): Promise<T> {
+  wrapKey ??= await asMasterWrapKey(masterKey);
   const dek = await crypto.subtle.unwrapKey("raw", envelope.wrappedDek, wrapKey, "AES-KW", { name: "AES-GCM", length: 256 }, false, ["decrypt"]);
   const plaintext = await crypto.subtle.decrypt({ name: "AES-GCM", iv: envelope.iv, additionalData: toArrayBuffer(aadFor(input)) }, dek, envelope.ciphertext);
   return JSON.parse(new TextDecoder().decode(plaintext)) as T;

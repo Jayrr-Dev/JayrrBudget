@@ -1,0 +1,75 @@
+.wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.art {
+  width: 3.5rem;
+  height: 3.5rem;
+}
+
+.coin {
+  animation: coin-drop 1.35s ease-in infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.label {
+  margin: 0;
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  color: var(--muted-foreground);
+}
+
+.dots::after {
+  content: "";
+  animation: decrypt-dots 1.2s steps(4, end) infinite;
+}
+
+@keyframes coin-drop {
+  0% {
+    transform: translateY(-18px);
+    opacity: 0;
+  }
+  18% {
+    opacity: 1;
+  }
+  70% {
+    transform: translateY(10px);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(16px);
+    opacity: 0;
+  }
+}
+
+@keyframes decrypt-dots {
+  0% {
+    content: "";
+  }
+  25% {
+    content: ".";
+  }
+  50% {
+    content: "..";
+  }
+  75% {
+    content: "...";
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .coin {
+    animation: none;
+    transform: translateY(4px);
+    opacity: 1;
+  }
+
+  .dots::after {
+    animation: none;
+    content: "...";
+  }
+}

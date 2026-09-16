@@ -503,6 +503,39 @@ export default defineSchema({
     updatedAt: v.number(),
   }).index("by_userId", ["userId"]),
 
+  /**
+   * Piggy's memory. One row per user; only the signed-in owner can read or write.
+   * Holds what Piggy learned about the person, not ledger rows.
+   */
+  piggyMemory: defineTable({
+    userId: v.id("users"),
+    /** Piggy's chosen nickname when the real name is hard to use. Null = use first name. */
+    nickname: v.union(v.string(), v.null()),
+    /** Household, job, location, pay cadence, currency: short facts about the person. */
+    basicInfo: v.array(v.string()),
+    /** Money goals, in the user's words. */
+    goals: v.array(v.string()),
+    /** Struggles and stress points around money or the app. */
+    painPoints: v.array(v.string()),
+    /** How they like Piggy to talk and what to avoid. */
+    preferences: v.array(v.string()),
+    /** Wins worth remembering and celebrating later. */
+    wins: v.array(v.string()),
+    /** Things to check on next session. */
+    followUps: v.array(v.string()),
+    /** One-line summary of the last chat. */
+    lastSessionSummary: v.union(v.string(), v.null()),
+    lastSessionAt: v.union(v.number(), v.null()),
+    lastSessionScope: v.union(
+      v.literal("ledger"),
+      v.literal("canvas"),
+      v.null(),
+    ),
+    sessionCount: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_userId", ["userId"]),
+
   /** Per-user AI preferences for that owner's statement PDF imports only. */
   userAiRules: defineTable({
     userId,

@@ -3,6 +3,11 @@ import type { CanvasSnapshot } from "@/domains/canvas/domain/canvasContext";
 import { CANVAS_SYSTEM_PROMPT } from "@/domains/canvas/domain/canvasSystemPrompt";
 import { createCanvasTools } from "@/domains/canvas/domain/canvasTools";
 import {
+  createPiggyMemoryTools,
+  loadPiggyUserContext,
+  recordPiggySession,
+} from "@/domains/ledger-ai/application/piggyMemory.server";
+import {
   chatModel,
   getModelChain,
 } from "@/shared/ai/openRouter";
@@ -85,6 +90,7 @@ export async function POST(request: Request) {
     }
 
     const canvas = body.canvas ?? null;
+    const piggyUser = await loadPiggyUserContext(convex);
     let budget: unknown;
     if (body.useClientBudget) {
       // Encrypted ledger: client already decrypted. Do not load plaintext dashboard.
@@ -119,6 +125,8 @@ export async function POST(request: Request) {
       "",
       "Coordinate space: x increases right, y increases down. Origin is top-left.",
       "",
+      ...piggyUser.systemLines,
+      "",
       "BUDGET DATA (JSON):",
       JSON.stringify(budget),
       "",
@@ -135,19 +143,25 @@ export async function POST(request: Request) {
       }),
       system,
       messages: modelMessages,
-      tools: createCanvasTools(canvas?.shapes.map((shape) => shape.id)),
+      tools: {
+        ...createPiggyMemoryTools(convex),
+        ...createCanvasTools(canvas?.shapes.map((shape) => shape.id)),
+      },
       stopWhen: stepCountIs(MAX_STEPS),
       temperature: 0.2,
       onError: ({ error }) => {
         console.warn(`[canvas] stream error: ${errorMessage(error)}`);
       },
       onFinish: async ({ usage }) => {
-        await persistAiUsage(convex, loaded.billedTo, {
-          source: "canvas-chat",
-          modelId,
-          usage,
-          ms: Date.now() - startedAt,
-        });
+        await Promise.all([
+          persistAiUsage(convex, loaded.billedTo, {
+            source: "canvas-chat",
+            modelId,
+            usage,
+            ms: Date.now() - startedAt,
+          }),
+          recordPiggySession(convex, "canvas"),
+        ]);
       },
     });
 
