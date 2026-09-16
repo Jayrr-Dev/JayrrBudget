@@ -2,8 +2,8 @@
 
 import { Button } from "@/components/ui/button";
 import { EmptyPrompt } from "@/components/ui/empty-prompt";
-import { Spinner } from "@/components/ui/spinner";
 import { DecryptingStatus } from "@/domains/vault/ui/DecryptingStatus";
+import { PiggyPageStatus } from "@/domains/ledger-ai/ui/PiggyPageStatus";
 import { usePrivateLedger } from "@/domains/vault/ui/usePrivateLedger";
 import {
   ACCOUNT_SECTION_LABELS,
@@ -388,7 +388,7 @@ function SectionCardSpinner() {
   const encrypted = usePrivateLedger().encryptedLedger;
   return (
     <div className="flex min-h-32 items-center justify-center rounded-xl border border-[var(--border)] bg-surface-elevated">
-      {encrypted ? <DecryptingStatus /> : <Spinner className="size-8" />}
+      {encrypted ? <DecryptingStatus /> : <PiggyPageStatus />}
     </div>
   );
 }
@@ -464,11 +464,7 @@ export function BankAccountsDashboard({
       <div className="space-y-8">
         <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-surface-elevated">
           <div className="flex min-h-64 items-center justify-center">
-            {encrypted ? (
-              <DecryptingStatus />
-            ) : (
-              <Spinner className="size-8" />
-            )}
+            {encrypted ? <DecryptingStatus /> : <PiggyPageStatus />}
           </div>
         </div>
       </div>

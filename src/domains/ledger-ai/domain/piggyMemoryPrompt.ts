@@ -101,7 +101,7 @@ export function buildPiggyMemoryLines(
 export const PIGGY_MEMORY_RULES = [
   "Memory: you have remember_about_user and forget_about_user. Memory is this user's only; it never contains other people.",
   "Save a fact when the user states a goal, a money struggle, a life detail that changes advice (job, family, pay day, currency), a preference about how you talk, or a win. One short line per fact, in plain words.",
-  "Do not save transaction rows, balances, or anything already in the ledger data. Do not save secrets like card numbers.",
-  "Before ending a longer chat, set lastSessionSummary in one sentence so next time you can pick up where you left off.",
+  "Do not save transaction rows, balances, or anything already in the budget data. Do not save secrets like card numbers.",
+  "The server auto-summarizes long chats. Still save lastSessionSummary when a goal or decision lands, so the next visit can pick up.",
   "If they ask you to forget something, use forget_about_user and confirm in one line.",
 ].join("\n");

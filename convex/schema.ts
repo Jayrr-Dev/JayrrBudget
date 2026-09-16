@@ -507,6 +507,31 @@ export default defineSchema({
    * Piggy's memory. One row per user; only the signed-in owner can read or write.
    * Holds what Piggy learned about the person, not ledger rows.
    */
+  /**
+   * Piggy crew: helper piggies and mail between them.
+   * Every row is locked to the signed-in user. Client never supplies userId.
+   * kind "helper": at most two per chat (slot 1 or 2).
+   * kind "mail": messages lead <-> helper for that chat.
+   */
+  piggyCrew: defineTable({
+    userId: v.id("users"),
+    chatId: v.string(),
+    kind: v.union(v.literal("helper"), v.literal("mail")),
+    slot: v.optional(v.union(v.literal("1"), v.literal("2"))),
+    name: v.optional(v.string()),
+    brief: v.optional(v.string()),
+    fromSlot: v.optional(
+      v.union(v.literal("lead"), v.literal("1"), v.literal("2")),
+    ),
+    toSlot: v.optional(
+      v.union(v.literal("lead"), v.literal("1"), v.literal("2")),
+    ),
+    body: v.optional(v.string()),
+    createdAt: v.number(),
+  })
+    .index("by_userId_chatId", ["userId", "chatId"])
+    .index("by_userId_chatId_kind", ["userId", "chatId", "kind"]),
+
   piggyMemory: defineTable({
     userId: v.id("users"),
     /** Piggy's chosen nickname when the real name is hard to use. Null = use first name. */

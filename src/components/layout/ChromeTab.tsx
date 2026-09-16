@@ -1,14 +1,110 @@
 "use client";
 
+import { Arrows } from "@/components/ui/arrows";
 import { cn } from "@/lib/utils";
 import {
+  useCallback,
   useEffect,
   useRef,
   useState,
   type KeyboardEvent,
   type ReactElement,
+  type ReactNode,
 } from "react";
 import { XIcon } from "lucide-react";
+
+const TAB_SCROLL_RATIO = 0.7;
+
+export function ChromeTabStrip({
+  ariaLabel,
+  trailing,
+  children,
+}: {
+  ariaLabel: string;
+  trailing?: ReactNode;
+  children: ReactNode;
+}) {
+  const scrollerRef = useRef<HTMLDivElement>(null);
+  const [overflow, setOverflow] = useState(false);
+  const [canLeft, setCanLeft] = useState(false);
+  const [canRight, setCanRight] = useState(false);
+
+  const syncOverflow = useCallback(() => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    const over = el.scrollWidth > el.clientWidth + 1;
+    setOverflow(over);
+    setCanLeft(el.scrollLeft > 1);
+    setCanRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 1);
+  }, []);
+
+  useEffect(() => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    syncOverflow();
+    const observer = new ResizeObserver(syncOverflow);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [syncOverflow, children]);
+
+  useEffect(() => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    const active = el.querySelector<HTMLElement>('[aria-selected="true"]');
+    active?.scrollIntoView({ inline: "nearest", block: "nearest" });
+    syncOverflow();
+  }, [children, syncOverflow]);
+
+  const scrollByPage = (direction: -1 | 1) => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    el.scrollBy({
+      left: direction * el.clientWidth * TAB_SCROLL_RATIO,
+      behavior: "smooth",
+    });
+  };
+
+  return (
+    <div className="flex min-w-0 items-end gap-0.5 px-0.5 pt-0.5">
+      {overflow ? (
+        <Arrows
+          variant="ghost"
+          shape="tower"
+          size="sm"
+          direction="left"
+          aria-label="Scroll tabs left"
+          className="mb-0.5 h-7"
+          disabled={!canLeft}
+          onClick={() => scrollByPage(-1)}
+        />
+      ) : null}
+      <div
+        ref={scrollerRef}
+        role="tablist"
+        aria-label={ariaLabel}
+        onScroll={syncOverflow}
+        className="flex min-w-0 flex-1 flex-nowrap items-end gap-0.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      >
+        {children}
+      </div>
+      {trailing ? (
+        <div className="mb-0.5 flex shrink-0 items-center gap-0.5">{trailing}</div>
+      ) : null}
+      {overflow ? (
+        <Arrows
+          variant="ghost"
+          shape="tower"
+          size="sm"
+          direction="right"
+          aria-label="Scroll tabs right"
+          className="mb-0.5 h-7"
+          disabled={!canRight}
+          onClick={() => scrollByPage(1)}
+        />
+      ) : null}
+    </div>
+  );
+}
 
 export function ChromeTab({
   name,

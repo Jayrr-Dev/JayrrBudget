@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "test:convex": "node scripts/run-convex-tests.mjs scripts/piggy-transactions.test.mts scripts/categorization-backend.test.ts",
     "convex:dev": "convex dev",
     "convex:deploy": "convex deploy",
     "db:export-turso": "tsx scripts/export-turso-to-jsonl.ts",

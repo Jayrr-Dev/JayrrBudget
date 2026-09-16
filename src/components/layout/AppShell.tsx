@@ -16,7 +16,7 @@ import {
   SidebarLink,
   useSidebar,
 } from "@/components/ui/sidebar";
-import { Spinner } from "@/components/ui/spinner";
+import { PiggyMascot } from "@/domains/ledger-ai/ui/PiggyMascot";
 import { clearPendingPasscode } from "@/crypto/pendingPasscode";
 import { lockVault } from "@/crypto/session";
 import { usePrefetchAnalysis } from "@/domains/analysis/queries/useAnalysisQuery";
@@ -136,9 +136,13 @@ function ModulesLoading() {
       aria-live="polite"
       aria-label="Loading modules"
     >
-      <Spinner className="size-5 text-[var(--sidebar-foreground)] opacity-80" />
+      <PiggyMascot
+        mood="thinking"
+        iconClassName="size-5"
+        className="text-[var(--sidebar-foreground)]"
+      />
       {showLabel ? (
-        <span className="text-xs whitespace-nowrap">Loading modules…</span>
+        <span className="text-xs whitespace-nowrap">Thinking</span>
       ) : null}
     </div>
   );
@@ -216,7 +220,7 @@ function SignOutButton() {
         <PopoverHeader>
           <PopoverTitle>Sign out?</PopoverTitle>
           <PopoverDescription className="text-[var(--muted-foreground)]">
-            You’ll need to sign in again to open your ledger.
+            You’ll need to sign in again to open your budget.
           </PopoverDescription>
         </PopoverHeader>
         <div className="flex justify-end gap-2">

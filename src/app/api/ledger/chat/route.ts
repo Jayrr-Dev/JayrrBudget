@@ -5,6 +5,7 @@ import {
   loadPiggyUserContext,
   recordPiggySession,
 } from "@/domains/ledger-ai/application/piggyMemory.server";
+import { createPiggyCrewTools } from "@/domains/ledger-ai/application/piggyCrew.server";
 import {
   chatModel,
   getModelChain,
@@ -19,6 +20,10 @@ import {
 } from "@/shared/convex/httpClient.server";
 import { errorMessage } from "@/shared/lib/error-message";
 import { api } from "@convex/_generated/api";
+import {
+  compactModelMessages,
+  prepareCompactChatStep,
+} from "@/shared/ai/compactChatContext";
 import {
   convertToModelMessages,
   stepCountIs,
@@ -51,6 +56,7 @@ export async function POST(request: Request) {
   return runMeteredOpenRouter(convex, loaded, async () => {
     let body: {
       messages?: UIMessage[];
+      id?: string;
       budget?: unknown;
       useClientBudget?: boolean;
       storeSheet?: unknown;
@@ -100,8 +106,38 @@ export async function POST(request: Request) {
       }
     }
 
+    const [primary, ...fallbacks] = getModelChain();
+    const modelId = primary ?? "google/gemini-3.8-flash";
+
     const tools = {
       ...createPiggyMemoryTools(client),
+      ...createPiggyCrewTools({
+        client,
+        chatId: body.id ?? "default",
+        modelId,
+        fallbacks,
+        billedTo: loaded.billedTo,
+        includeLedgerReads: !useClientBudget,
+        storeSheetSnapshot: useClientBudget
+          ? (body.storeSheet as {
+              tabs: Array<{
+                id: string;
+                name: string;
+                rows: Array<{
+                  id: string;
+                  name: string;
+                  spend: number;
+                  count: number;
+                  currency: string;
+                  parent?: string;
+                }>;
+              }>;
+              activeId: string;
+              receiveId: string;
+            } | null)
+          : null,
+        helperContext: useClientBudget ? JSON.stringify(context) : undefined,
+      }),
       ...createLedgerAiTools(client, {
       allowLedgerWrites: !useClientBudget,
       allowStoreSheetWrites: !useClientBudget,
@@ -126,13 +162,15 @@ export async function POST(request: Request) {
       }),
     };
 
-    const [primary, ...fallbacks] = getModelChain();
-    const modelId = primary ?? "google/gemini-3.8-flash";
     const startedAt = Date.now();
 
     let modelMessages;
     try {
-      modelMessages = await convertToModelMessages(messages);
+      // A user may type past an unanswered ask_user card; drop the dangling
+      // call rather than fail the whole request.
+      modelMessages = await convertToModelMessages(messages, {
+        ignoreIncompleteToolCalls: true,
+      });
     } catch (error) {
       return Response.json(
         { error: errorMessage(error, "Could not read chat messages.") },
@@ -140,20 +178,45 @@ export async function POST(request: Request) {
       );
     }
 
+    modelMessages = await compactModelMessages({
+      messages: modelMessages,
+      modelId,
+      fallbacks,
+      client,
+      billedTo: loaded.billedTo,
+      source: "ledger-chat",
+      onSummary: async (summary) => {
+        await client.mutation(api.piggyMemory.remember, {
+          lastSessionSummary: summary,
+        });
+      },
+    });
+
     const system = [
-      "You are Piggy, JayrrBudget's ledger helper: a cheerful piggy bank who loves tidy numbers.",
-      "Voice: warm, playful, a little cheeky. Keep replies short. One small pig or coin pun is fine; never stack them.",
-      "Celebrate good habits. Tease overspending gently. Never shame.",
-      "You may only read and change the signed-in user's own transactions, merchants, sections, categories, subcategories, store sheet, and notes.",
-      "Never invent other users' data. Never delete ledger rows unless the user clearly asks later; this chat has no delete tools for transactions.",
+      "You are Piggy, JayrrBudget's financial advisor in a piggy-bank mascot. Call it their budget or finances, never a ledger.",
+      "Job: give practical money advice from this user's real numbers. Look at spend, income, bills, debt, and savings before you recommend.",
+      "Voice: calm, clear, a little warm. Short replies. Advice first; one small pig or coin pun at most, never in a serious money warning.",
+      "Always ground advice in their data. If a number is missing, say so and ask one short question. Do not invent totals.",
+      "Give one next step they can take this week. Celebrate good habits. Flag overspending without shame.",
+      "You may hire up to 2 helper piggies with hire_piggy, then ask_piggy_helper. They only talk through the crew mail table for this user. You still speak to the user. Use helpers for parallel research (e.g. one on subscriptions, one on groceries), not for chatting with the user.",
+      "You are not a licensed planner, tax pro, or lawyer. Do not claim that. For tax, legal, or investment products, keep it general and suggest a human when it matters.",
+      "You may only read and change the signed-in user's own transactions, accounts, merchants, sections, categories, subcategories, store sheet, and notes. Every tool is already scoped to this user.",
+      "Never invent other users' data.",
       "For questions, use summarize_spend, search_transactions, list_store_sheet, or list_notes. Do not guess totals.",
-      "For ledger edits, search first, then update. For the store sheet, use add_store_sheet_row or remove_store_sheet_row. For notes, use write_note.",
-      "Confirm what changed in one short sentence.",
+      "Budget edits: search_transactions first to get transactionIds, then update_transaction (one row) or update_transactions (many ids). Both take description, date, amount, section, category, subcategory, spread, addTags, removeTags, merchant in one call. Only pass fields the user asked to change; pass null to clear.",
+      "Setting a subcategory fills in its category and section; setting a section drops a category that no longer fits. Use list_taxonomy to reuse existing names before inventing new ones.",
+      "To fix a whole payee, use recategorize_matching with merchant or query (dryRun: true to preview). rename_descriptions renames every row with an exact description match.",
+      "Taxonomy names and descriptions: create_section / update_section / create_category / update_category / create_subcategory / update_subcategory. Renames flow to linked transactions.",
+      "create_transaction adds a manual line; call list_accounts first. Positive amount = spend, negative = money in.",
+      "delete_transactions is permanent. Only use it when the user explicitly asks to delete, after you have listed the exact rows and they say yes. Then pass confirmed: true.",
+      "When the request is ambiguous or risky, call ask_user instead of guessing: which category or account, which of several matching rows, or a yes/no before a delete. Ask 1 to 3 short questions with 2 to 6 concrete choices. Offer real names from list_taxonomy or search results as choices. After the answers arrive, act on them without re-asking.",
+      "For the store sheet, use add_store_sheet_row or remove_store_sheet_row. For notes, use write_note.",
+      "Confirm what changed in one short sentence, including how many rows.",
       "Do not mention being an AI model. You are Piggy.",
-      "Cloud Processing notice: this chat receives readable ledger, store sheet, and note context. It is not end-to-end encrypted.",
+      "Cloud Processing notice: this chat receives readable budget, store sheet, and note context. It is not end-to-end encrypted.",
       useClientBudget
-        ? "Encrypted vault is on. Answer from the budget and store sheet snapshots. You can still read and write notes. You cannot edit ledger rows or the store sheet from this chat."
-        : "Write tools are available for this user's plaintext ledger, store sheet, and notes.",
+        ? "Encrypted vault is on. Answer from the budget and store sheet snapshots. You can still read and write notes. You cannot edit transactions or the store sheet from this chat."
+        : "Write tools are available for this user's plaintext budget, store sheet, and notes.",
       "",
       ...piggyUser.systemLines,
       "",
@@ -166,7 +229,8 @@ export async function POST(request: Request) {
       system,
       messages: modelMessages,
       tools,
-      stopWhen: stepCountIs(8),
+      stopWhen: stepCountIs(12),
+      prepareStep: prepareCompactChatStep,
       temperature: 0.55,
       onError: ({ error }) => {
         console.warn(`[ledger-ai] stream error: ${errorMessage(error)}`);

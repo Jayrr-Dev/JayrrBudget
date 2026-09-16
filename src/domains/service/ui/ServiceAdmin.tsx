@@ -1,5 +1,6 @@
 "use client";
 
+import { PageSpinner } from "@/components/ui/spinner";
 import { Button } from "@/components/ui/button";
 import { TitleInfo } from "@/domains/ops/ui/TitleInfo";
 import {
@@ -155,9 +156,7 @@ export function ServiceAdmin() {
   }, [team]);
 
   if (team === undefined || aiModels === undefined) {
-    return (
-      <p className="text-sm text-[var(--muted-foreground)]">Loading service…</p>
-    );
+    return <PageSpinner className="min-h-40 py-8" />;
   }
 
   const selectedCost = modelCostLabel(modelDraft);

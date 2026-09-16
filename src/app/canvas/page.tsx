@@ -1,18 +1,15 @@
 "use client";
 
-import dynamic from "next/dynamic";
 import { AppShell } from "@/components/layout/AppShell";
+import { PageSpinner } from "@/components/ui/spinner";
+import dynamic from "next/dynamic";
 
 const BudgetCanvas = dynamic(
   () =>
     import("@/domains/canvas/ui/BudgetCanvas").then((mod) => mod.BudgetCanvas),
   {
     ssr: false,
-    loading: () => (
-      <div className="flex h-full items-center justify-center rounded-xl border border-dashed border-[var(--border)] text-sm text-[var(--muted-foreground)]">
-        Loading canvas…
-      </div>
-    ),
+    loading: () => <PageSpinner className="h-full min-h-64 py-8" />,
   },
 );
 

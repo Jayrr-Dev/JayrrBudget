@@ -58,7 +58,7 @@ export function createPiggyMemoryTools(client: ConvexHttpClient) {
         preferences: factList.optional(),
         wins: factList.optional(),
         followUps: factList.optional(),
-        lastSessionSummary: z.string().max(400).optional(),
+        lastSessionSummary: z.string().max(800).optional(),
       }),
       execute: async (input) => {
         const saved = await client.mutation(api.piggyMemory.remember, input);

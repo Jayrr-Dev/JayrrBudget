@@ -117,7 +117,7 @@ function CanvasPiggyInfo() {
         <PopoverHeader className="gap-1.5">
           <PopoverTitle>Canvas Piggy</PopoverTitle>
           <PopoverDescription>
-            Piggy draws on the board from your budget numbers.
+            Piggy advises from your budget, then draws it on the board.
           </PopoverDescription>
           <ul className="mt-1.5 list-disc space-y-1 pl-4 text-muted-foreground">
             <li>Chat can see the budget numbers you send</li>
@@ -435,7 +435,6 @@ function CanvasAiChatSession({ initialHistory, saveHistory, historyError }: {
       >
         <PopoverHeader className="flex-row items-center gap-1.5 border-b border-accent/15 bg-linear-to-r from-accent-subtle/80 to-transparent px-3 py-2.5">
           <PopoverTitle className="flex min-w-0 flex-1 items-center gap-1.5">
-            <PiggyMascot mood={mood} iconClassName="size-14" />
             Canvas Piggy
             <CanvasPiggyInfo />
           </PopoverTitle>
@@ -458,7 +457,7 @@ function CanvasAiChatSession({ initialHistory, saveHistory, historyError }: {
 
         {blocked ? (
           <p className="border-b border-border bg-warning-subtle px-3 py-2 text-xs text-warning">
-            Turn on Cloud Processing in Modules before sending ledger data to
+            Turn on Cloud Processing in Modules before sending budget data to
             Piggy.
           </p>
         ) : null}

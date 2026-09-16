@@ -1,38 +1,42 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" fill="none" role="img" aria-labelledby="title desc">
   <title id="title">Kat</title>
-  <desc id="desc">Animated lavender cat face with pointed ears, forehead stripes, round eyes, a pink nose, and whiskers.</desc>
+  <desc id="desc">Animated lavender cat face with pointed ears, forehead stripes, round eyes, a pink nose, whiskers, and a scoop-neck blouse.</desc>
   <style>
     .cat{transform-origin:64px 116px;animation:tilt 3.6s ease-in-out infinite}
-    .eyes{transform-origin:64px 78px;animation:blink 5.4s infinite}
-    .whiskers{transform-origin:64px 96px;animation:twitch 6.8s ease-in-out infinite}
+    .eyes{transform-origin:64px 72px;animation:blink 5.4s infinite}
+    .whiskers{transform-origin:64px 90px;animation:twitch 6.8s ease-in-out infinite}
     @keyframes tilt{0%,100%{transform:translateY(0) rotate(0)}50%{transform:translateY(-2px) rotate(-2deg)}}
     @keyframes blink{0%,44%,48%,100%{transform:scaleY(1)}46%{transform:scaleY(.08)}}
     @keyframes twitch{0%,86%,100%{transform:translateY(0)}90%{transform:translateY(-1.2px)}94%{transform:translateY(.4px)}}
     @media(prefers-reduced-motion:reduce){.cat,.eyes,.whiskers{animation:none}}
   </style>
   <g class="cat" stroke="#60353d" stroke-linecap="round" stroke-linejoin="round" stroke-width="4.5">
+    <!-- Scoop-neck blouse, drawn first so the head sits over it. -->
+    <path fill="#c48aa8" d="M20 130c4-18 18-30 44-30s40 12 44 30Z"/>
+    <path fill="#f6f2e6" stroke="none" d="M46 108c6 12 10 16 18 16s12-4 18-16c-10-6-18-8-18-8s-8 2-18 8Z"/>
+    <path fill="#ef94af" stroke="none" d="M60 116h8l-4 10Z"/>
     <!-- Head with ears in one silhouette. -->
-    <path fill="#d7c4e6" d="M14 14C6 34 6 56 14 76c6 26 26 42 50 42s44-16 50-42c8-20 8-42 0-62L84 40c-14-4-26-4-40 0Z"/>
+    <path fill="#d7c4e6" d="M14 10C6 30 6 52 14 72c6 24 26 38 50 38s44-14 50-38c8-20 8-42 0-62L84 36c-14-4-26-4-40 0Z"/>
     <!-- Inner ears. -->
-    <path fill="#f4b4c4" stroke="none" d="M16 22 12 48 36 42Z"/>
-    <path fill="#f4b4c4" stroke="none" d="M112 22 116 48 92 42Z"/>
+    <path fill="#f4b4c4" stroke="none" d="M16 18 12 44 36 38Z"/>
+    <path fill="#f4b4c4" stroke="none" d="M112 18 116 44 92 38Z"/>
     <!-- Forehead stripes. -->
-    <path stroke="#b79ac8" stroke-width="4" d="M64 42v20M50 46c-4 6-6 12-6 18M78 46c4 6 6 12 6 18"/>
+    <path stroke="#b79ac8" stroke-width="4" d="M64 36v20M50 40c-4 6-6 12-6 18M78 40c4 6 6 12 6 18"/>
     <!-- Eyes with a small lash. -->
     <g class="eyes">
       <g fill="#3a2a30" stroke="none">
-        <circle cx="44" cy="78" r="6.5"/>
-        <circle cx="84" cy="78" r="6.5"/>
-        <circle cx="46.5" cy="75.5" r="2" fill="#fff5f3"/>
-        <circle cx="86.5" cy="75.5" r="2" fill="#fff5f3"/>
+        <circle cx="44" cy="72" r="6.5"/>
+        <circle cx="84" cy="72" r="6.5"/>
+        <circle cx="46.5" cy="69.5" r="2" fill="#fff5f3"/>
+        <circle cx="86.5" cy="69.5" r="2" fill="#fff5f3"/>
       </g>
-      <path stroke-width="3" d="M34 70l-4-3M94 70l4-3"/>
+      <path stroke-width="3" d="M34 64l-4-3M94 64l4-3"/>
     </g>
     <!-- Nose, mouth, whiskers. -->
     <g class="whiskers">
-      <path fill="#ef94af" d="M57 88c-2 0-3 2-2 4l6 8c2 2 4 2 6 0l6-8c1-2 0-4-2-4Z"/>
-      <path stroke-width="3.5" d="M64 100v4M52 106c4 4 8 4 12-2 4 6 8 6 12 2"/>
-      <path stroke="#b79ac8" stroke-width="3.5" d="M14 88l24-2M16 100l22-5M114 88l-24-2M112 100l-22-5"/>
+      <path fill="#ef94af" d="M57 82c-2 0-3 2-2 4l6 8c2 2 4 2 6 0l6-8c1-2 0-4-2-4Z"/>
+      <path stroke-width="3.5" d="M64 94v4M52 100c4 4 8 4 12-2 4 6 8 6 12 2"/>
+      <path stroke="#b79ac8" stroke-width="3.5" d="M14 82l24-2M16 94l22-5M114 82l-24-2M112 94l-22-5"/>
     </g>
   </g>
 </svg>

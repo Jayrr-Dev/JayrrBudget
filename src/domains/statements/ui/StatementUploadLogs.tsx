@@ -6,6 +6,7 @@ import type { DataTableFeatures } from "@/components/ui/data-table-features";
 import type { StatementUploadLog } from "@/domains/statements/domain/types";
 import { StatementUploadRowActions } from "@/domains/statements/ui/StatementUploadRowActions";
 import { DecryptingStatus } from "@/domains/vault/ui/DecryptingStatus";
+import { PageSpinner } from "@/components/ui/spinner";
 import type { PrivateStatementLog } from "@/domains/vault/domain/privateLedger";
 import { usePrivateLedger } from "@/domains/vault/ui/usePrivateLedger";
 import { api } from "@convex/_generated/api";
@@ -324,11 +325,7 @@ export function StatementUploadLogs() {
   }
 
   if (result === undefined) {
-    return (
-      <p className="text-sm text-[var(--muted-foreground)]">
-        Loading parse logs…
-      </p>
-    );
+    return <PageSpinner className="min-h-40 py-8" />;
   }
 
   if (!result.ok) {

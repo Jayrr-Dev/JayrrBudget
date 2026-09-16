@@ -3204,7 +3204,7 @@ function LeaderboardTable({
             <span className={`${rankCol} tabular-nums`}>#</span>
             <span className="min-w-0 truncate text-left">{nameLabel}</span>
             <span className="w-full text-left">Spend</span>
-            <span className="w-full text-left">Count</span>
+            <span className="w-full text-right">Count</span>
             <span className="w-full text-left">Share</span>
             {canExpand ? <span /> : null}
             {showTxns ? <span className="sr-only">Info</span> : null}
@@ -3246,7 +3246,7 @@ function LeaderboardTable({
                       align="left"
                     />
                   </span>
-                  <span className="text-left font-mono text-sm tabular-nums text-[var(--muted-foreground)]">
+                  <span className="text-right font-mono text-sm tabular-nums text-[var(--muted-foreground)]">
                     {formatCount(row.count ?? 0)}
                   </span>
                   <span className="text-left font-mono text-sm tabular-nums text-[var(--muted-foreground)]">
@@ -3341,7 +3341,7 @@ function LeaderboardTable({
                                 align="left"
                               />
                             </span>
-                            <span className="text-left font-mono tabular-nums text-[var(--muted-foreground)]">
+                            <span className="text-right font-mono tabular-nums text-[var(--muted-foreground)]">
                               {formatCount(vendor.count ?? 0)}
                             </span>
                             <span className="text-left font-mono tabular-nums text-[var(--muted-foreground)]">
@@ -3378,7 +3378,7 @@ function LeaderboardTable({
             <span className="text-left font-mono tabular-nums">
               <MoneyText amount={topTotal} currency={currency} align="left" />
             </span>
-            <span className="text-left font-mono tabular-nums">{topCount}</span>
+            <span className="text-right font-mono tabular-nums">{topCount}</span>
             <span className="text-left font-mono tabular-nums">
               {formatShare(topTotal, totalSpend)}
             </span>

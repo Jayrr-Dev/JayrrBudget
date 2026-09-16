@@ -1,10 +1,12 @@
 "use client";
 
+import { PageSpinner } from "@/components/ui/spinner";
 import { CanvasAiChat } from "@/domains/canvas/ui/CanvasAiChat";
 import { CanvasApiContext } from "@/domains/canvas/ui/canvasApiContext";
 import { api } from "@convex/_generated/api";
 import {
   JayrrDraw,
+  MainMenu,
   serializeAsJSON,
   type ExcalidrawImperativeAPI,
   type ExcalidrawInitialDataState,
@@ -141,8 +143,8 @@ export function BudgetCanvas() {
 
   if (!ready) {
     return (
-      <div className="flex h-full items-center justify-center rounded-xl border border-dashed border-[var(--border)] text-sm text-[var(--muted-foreground)]">
-        Loading canvas…
+      <div className="flex h-full items-center justify-center rounded-xl border border-dashed border-[var(--border)]">
+        <PageSpinner className="min-h-40 py-8" />
       </div>
     );
   }
@@ -157,7 +159,19 @@ export function BudgetCanvas() {
           theme="light"
           UIOptions={{ canvasActions: { toggleTheme: false } }}
           renderTopRightUI={() => <CanvasAiChat />}
-        />
+        >
+          <MainMenu>
+            <MainMenu.DefaultItems.LoadScene />
+            <MainMenu.DefaultItems.SaveToActiveFile />
+            <MainMenu.DefaultItems.Export />
+            <MainMenu.DefaultItems.SaveAsImage />
+            <MainMenu.DefaultItems.SearchMenu />
+            <MainMenu.DefaultItems.Help />
+            <MainMenu.DefaultItems.ClearCanvas />
+            <MainMenu.Separator />
+            <MainMenu.DefaultItems.ChangeCanvasBackground />
+          </MainMenu>
+        </JayrrDraw>
       </div>
     </CanvasApiContext.Provider>
   );

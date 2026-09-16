@@ -4,6 +4,7 @@ export {
   CaptureUpdateAction,
   convertToExcalidrawElements,
   Excalidraw,
+  MainMenu,
   newElementWith,
   serializeAsJSON,
 } from "@excalidraw/excalidraw";

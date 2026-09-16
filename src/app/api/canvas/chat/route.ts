@@ -22,6 +22,10 @@ import {
 import { errorMessage } from "@/shared/lib/error-message";
 import { api } from "@convex/_generated/api";
 import {
+  compactModelMessages,
+  prepareCompactChatStep,
+} from "@/shared/ai/compactChatContext";
+import {
   convertToModelMessages,
   stepCountIs,
   streamText,
@@ -120,6 +124,20 @@ export async function POST(request: Request) {
       );
     }
 
+    modelMessages = await compactModelMessages({
+      messages: modelMessages,
+      modelId,
+      fallbacks,
+      client: convex,
+      billedTo: loaded.billedTo,
+      source: "canvas-chat",
+      onSummary: async (summary) => {
+        await convex.mutation(api.piggyMemory.remember, {
+          lastSessionSummary: summary,
+        });
+      },
+    });
+
     const system = [
       CANVAS_SYSTEM_PROMPT,
       "",
@@ -148,6 +166,7 @@ export async function POST(request: Request) {
         ...createCanvasTools(canvas?.shapes.map((shape) => shape.id)),
       },
       stopWhen: stepCountIs(MAX_STEPS),
+      prepareStep: prepareCompactChatStep,
       temperature: 0.2,
       onError: ({ error }) => {
         console.warn(`[canvas] stream error: ${errorMessage(error)}`);

@@ -1,5 +1,6 @@
 "use client";
 
+import { PageSpinner } from "@/components/ui/spinner";
 import { Badge } from "@/components/ui/badge";
 import { DataTable } from "@/components/ui/data-table";
 import type { DataTableFeatures } from "@/components/ui/data-table-features";
@@ -102,9 +103,7 @@ export function ModuleManager() {
   }, [ensure]);
 
   if (modules === undefined) {
-    return (
-      <p className="text-sm text-[var(--muted-foreground)]">Loading modules…</p>
-    );
+    return <PageSpinner className="min-h-40 py-8" />;
   }
 
   return (

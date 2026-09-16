@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import type { DataTableFeatures } from "@/components/ui/data-table-features";
 import { EmptyPrompt } from "@/components/ui/empty-prompt";
+import { PageSpinner } from "@/components/ui/spinner";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -266,9 +267,7 @@ export function IssuesManager() {
 
       <div className="min-w-0 lg:col-span-2">
         {issues === undefined ? (
-          <p className="text-sm text-[var(--muted-foreground)]">
-            Loading issues…
-          </p>
+          <PageSpinner className="min-h-40 py-8" />
         ) : issues.length === 0 ? (
           <EmptyPrompt
             className="bg-[var(--surface)] py-10"

@@ -27,7 +27,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { Spinner } from "@/components/ui/spinner";
+import { PiggyPageStatus } from "@/domains/ledger-ai/ui/PiggyPageStatus";
 import {
   Table,
   TableBody,
@@ -1010,7 +1010,7 @@ export function DataTable<TData extends RowData>({
             </ul>
           ) : (
             <div className="flex min-h-40 items-center justify-center rounded-xl border border-[var(--border)] bg-surface-elevated px-4 py-10 text-center text-sm text-foreground-muted">
-              {isLoading ? (loadingSlot ?? <Spinner className="size-6" />) : "No results."}
+              {isLoading ? (loadingSlot ?? <PiggyPageStatus />) : "No results."}
             </div>
           )}
         </div>
@@ -1281,7 +1281,7 @@ export function DataTable<TData extends RowData>({
                   >
                     {isLoading ? (
                       <span className="inline-flex w-full items-center justify-center">
-                        {loadingSlot ?? <Spinner className="size-6" />}
+                        {loadingSlot ?? <PiggyPageStatus />}
                       </span>
                     ) : (
                       "No results."

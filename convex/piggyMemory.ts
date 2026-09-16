@@ -12,7 +12,7 @@ import { requireUser } from "./lib/auth";
 const MAX_ITEMS_PER_LIST = 20;
 const MAX_ITEM_LENGTH = 240;
 const MAX_NICKNAME_LENGTH = 24;
-const MAX_SUMMARY_LENGTH = 400;
+const MAX_SUMMARY_LENGTH = 800;
 
 const scopeValidator = v.union(v.literal("ledger"), v.literal("canvas"));
 

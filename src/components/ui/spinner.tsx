@@ -1,10 +1,19 @@
-import { cn } from "cn"
-import { Loader2Icon } from "lucide-react"
+"use client";
+
+import { PiggyPageStatus } from "@/domains/ledger-ai/ui/PiggyPageStatus";
+import { cn } from "cn";
+import { Loader2Icon } from "lucide-react";
 
 function Spinner({ className, ...props }: React.ComponentProps<"svg">) {
   return (
-    <Loader2Icon data-slot="spinner" role="status" aria-label="Loading" className={cn("size-4 animate-spin", className)} {...props} />
-  )
+    <Loader2Icon
+      data-slot="spinner"
+      role="status"
+      aria-label="Loading"
+      className={cn("size-4 animate-spin", className)}
+      {...props}
+    />
+  );
 }
 
 function PageSpinner({ className, ...props }: React.ComponentProps<"div">) {
@@ -12,17 +21,14 @@ function PageSpinner({ className, ...props }: React.ComponentProps<"div">) {
     <div
       data-slot="page-spinner"
       className={cn(
-        "flex min-h-[16rem] w-full items-center justify-center py-16 text-[var(--muted-foreground)]",
+        "flex min-h-64 w-full items-center justify-center py-16",
         className,
       )}
-      role="status"
-      aria-live="polite"
-      aria-label="Loading"
       {...props}
     >
-      <Spinner className="size-8" />
+      <PiggyPageStatus />
     </div>
-  )
+  );
 }
 
-export { PageSpinner, Spinner }
+export { PageSpinner, Spinner };

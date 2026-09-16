@@ -1,6 +1,6 @@
 "use client";
 
-import { ChromeTab } from "@/components/layout/ChromeTab";
+import { ChromeTab, ChromeTabStrip } from "@/components/layout/ChromeTab";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -31,8 +31,21 @@ import { dashboardFromPrivateLedger } from "@/domains/vault/application/dashboar
 import { usePrivateLedger } from "@/domains/vault/ui/usePrivateLedger";
 import { errorMessage } from "@/shared/lib/error-message";
 import { logAiUsageFromMessageMetadata } from "@/shared/debug/aiUsageDebug";
+import {
+  ASK_USER_TOOL_NAME,
+  isAskUserPart,
+  type AskUserOutput,
+  type PiggyUIMessage,
+} from "@/domains/ledger-ai/domain/askUserTool";
+import {
+  PiggyQuestionnaire,
+  PiggyQuestionnaireAnswers,
+} from "@/domains/ledger-ai/ui/PiggyQuestionnaire";
 import { useChat } from "@ai-sdk/react";
-import { DefaultChatTransport, type UIMessage } from "ai";
+import {
+  DefaultChatTransport,
+  lastAssistantMessageIsCompleteWithToolCalls,
+} from "ai";
 import { Info, PlusIcon, SendHorizonal } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type ReactElement } from "react";
 import { toast } from "sonner";
@@ -72,7 +85,7 @@ function PiggyAboutInfo() {
       <PopoverTrigger asChild>
         <button
           type="button"
-          className="mb-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-full text-accent hover:bg-accent-subtle hover:text-accent"
+          className="inline-flex size-5 shrink-0 items-center justify-center rounded-full text-accent hover:bg-accent-subtle hover:text-accent"
           aria-label="About Piggy"
         >
           <Info className="size-3.5" />
@@ -87,13 +100,15 @@ function PiggyAboutInfo() {
         <PopoverHeader className="gap-1.5">
           <PopoverTitle>Piggy</PopoverTitle>
           <PopoverDescription>
-            A cheerful piggy bank who can read and tidy your ledger, store
-            sheet, and notes.
+            A financial advisor mascot who uses your budget numbers, then can
+            tidy transactions, the store sheet, and notes.
           </PopoverDescription>
           <ul className="mt-1.5 list-disc space-y-1 pl-4 text-muted-foreground">
+            <li>Advice from your spend, income, bills, and savings</li>
             <li>Recategorize your transactions</li>
             <li>Edit sections, categories, and subcategories</li>
             <li>Read and update your store sheet and notes</li>
+            <li>Asks you a quick multiple-choice question when unsure</li>
             <li>Summarize spend by merchant or category</li>
             <li>Open extra tabs for separate chats</li>
             <li>Chats and drafts are saved on this browser for your account</li>
@@ -130,17 +145,21 @@ function PiggyChatPaneSession({
   active: boolean;
   open: boolean;
   blocked: boolean;
-  transport: DefaultChatTransport<UIMessage>;
+  transport: DefaultChatTransport<PiggyUIMessage>;
   onMoodChange?: (mood: PiggyMood) => void;
 }) {
   const [input, setInput] = useState(initialHistory.draft);
   const [inputFocused, setInputFocused] = useState(false);
 
-  const { messages, sendMessage, status, error } = useChat({
+  const { messages, sendMessage, status, error, addToolResult } =
+    useChat<PiggyUIMessage>({
     id: chatId,
-    messages: initialHistory.messages,
+    messages: initialHistory.messages as PiggyUIMessage[],
     throttle: 250,
     transport,
+    // ask_user has no server execute: once the user answers in the card,
+    // resume the model with the tool output.
+    sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
     onError: (err) => {
       toast.error("Piggy stumbled", {
         description: errorMessage(err, "Chat request failed"),
@@ -156,6 +175,16 @@ function PiggyChatPaneSession({
   }, [input, messages, saveHistory]);
 
   const busy = status === "submitted" || status === "streaming";
+  const lastMessage = messages.at(-1);
+  // Piggy is waiting on a questionnaire answer; hold the text box until then.
+  const awaitingAnswer =
+    !busy &&
+    lastMessage?.role === "assistant" &&
+    lastMessage.parts.some(
+      (part) => isAskUserPart(part) && part.state === "input-available",
+    );
+  const answerAsk = (toolCallId: string, output: AskUserOutput) =>
+    void addToolResult({ tool: ASK_USER_TOOL_NAME, toolCallId, output });
   const bornMessageIds = useRef(new Set(messages.map((message) => message.id)));
   const mood = piggyMoodFromChat({
     status,
@@ -174,7 +203,7 @@ function PiggyChatPaneSession({
     <div className="flex flex-col" hidden={!active}>
       {blocked ? (
         <p className="border-b border-border bg-warning-subtle px-3 py-2 text-xs text-warning">
-          Turn on Cloud Processing in Modules before sending ledger data to
+          Turn on Cloud Processing in Modules before sending budget data to
           Piggy.
         </p>
       ) : null}
@@ -198,11 +227,12 @@ function PiggyChatPaneSession({
         ) : (
           messages.map((message) => {
             const text = messageText(message.parts ?? []);
-            if (!text) return null;
+            const asks = message.parts.filter(isAskUserPart);
+            if (!text && asks.length === 0) return null;
             const assistantTalking =
               message.role === "assistant" &&
               status === "streaming" &&
-              message.id === messages.at(-1)?.id;
+              message.id === lastMessage?.id;
             return (
               <PiggyTranscriptItem
                 key={message.id}
@@ -215,19 +245,45 @@ function PiggyChatPaneSession({
                   <PiggyAssistantMessage
                     mood={assistantTalking ? mood : piggyMoodFromMessage(message)}
                   >
-                    <PiggyTextBubble>
-                      <PiggyCappedText
-                        text={text}
-                        live={!bornMessageIds.current.has(message.id)}
-                      />
-                    </PiggyTextBubble>
+                    {text ? (
+                      <PiggyTextBubble>
+                        <PiggyCappedText
+                          text={text}
+                          live={!bornMessageIds.current.has(message.id)}
+                        />
+                      </PiggyTextBubble>
+                    ) : null}
+                    {asks.map((part) => {
+                      if (part.state === "output-available") {
+                        return (
+                          <PiggyQuestionnaireAnswers
+                            key={part.toolCallId}
+                            output={part.output}
+                          />
+                        );
+                      }
+                      if (part.state !== "input-available") return null;
+                      return (
+                        <PiggyQuestionnaire
+                          key={part.toolCallId}
+                          input={part.input}
+                          onSubmit={(output) => answerAsk(part.toolCallId, output)}
+                          onDismiss={() =>
+                            answerAsk(part.toolCallId, {
+                              answers: [],
+                              dismissed: true,
+                            })
+                          }
+                        />
+                      );
+                    })}
                   </PiggyAssistantMessage>
                 )}
               </PiggyTranscriptItem>
             );
           })
         )}
-        {busy && (status === "submitted" || messages.at(-1)?.role !== "assistant" || !messageText(messages.at(-1)?.parts ?? [])) ? (
+        {busy && (status === "submitted" || lastMessage?.role !== "assistant" || !messageText(lastMessage?.parts ?? [])) ? (
           <PiggyTranscriptItem messageId="piggy-thinking">
             <PiggyAssistantMessage mood="thinking">
               <p role="status" className="py-2 text-xs text-muted-foreground">Piggy is thinking…</p>
@@ -250,7 +306,7 @@ function PiggyChatPaneSession({
         onSubmit={(event) => {
           event.preventDefault();
           const value = input.trim();
-          if (!value || busy || blocked) return;
+          if (!value || busy || blocked || awaitingAnswer) return;
           void sendMessage({ text: value });
           setInput("");
         }}
@@ -260,14 +316,16 @@ function PiggyChatPaneSession({
           onChange={(event) => setInput(event.target.value)}
           onFocus={() => setInputFocused(true)}
           onBlur={() => setInputFocused(false)}
-          placeholder={`Ask ${tabName}…`}
-          disabled={busy || blocked}
+          placeholder={
+            awaitingAnswer ? "Answer Piggy above, or Skip all" : `Ask ${tabName}…`
+          }
+          disabled={busy || blocked || awaitingAnswer}
           className="h-8"
         />
         <Button
           type="submit"
           size="icon-sm"
-          disabled={busy || blocked || !input.trim()}
+          disabled={busy || blocked || awaitingAnswer || !input.trim()}
           aria-label="Send"
         >
           <SendHorizonal className="size-3.5" />
@@ -320,7 +378,7 @@ function LedgerAiChatSession({
 
   const transport = useMemo(
     () =>
-      new DefaultChatTransport({
+      new DefaultChatTransport<PiggyUIMessage>({
         api: "/api/ledger/chat",
         prepareSendMessagesRequest: ({ messages, id, body }) => {
           const useClientBudget = encryptedLedger;
@@ -385,10 +443,27 @@ function LedgerAiChatSession({
         onOpenAutoFocus={(event) => event.preventDefault()}
       >
         <div className="relative border-b border-[var(--border)] bg-[var(--muted)]/25">
-          <div
-            role="tablist"
-            aria-label="Piggy chats"
-            className="flex min-w-0 flex-nowrap items-end gap-0.5 overflow-x-auto px-0.5 pt-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          <ChromeTabStrip
+            ariaLabel="Piggy chats"
+            trailing={
+              <>
+                <button
+                  type="button"
+                  aria-label="Add Piggy tab"
+                  title={
+                    tabs.length >= MAX_PIGGY_TABS
+                      ? `Up to ${MAX_PIGGY_TABS} chats`
+                      : "Add tab"
+                  }
+                  disabled={tabs.length >= MAX_PIGGY_TABS}
+                  className="inline-flex size-5 shrink-0 items-center justify-center rounded-sm text-accent hover:bg-accent-subtle hover:text-accent disabled:pointer-events-none disabled:opacity-40"
+                  onClick={addTab}
+                >
+                  <PlusIcon className="size-3" strokeWidth={2} />
+                </button>
+                <PiggyAboutInfo />
+              </>
+            }
           >
             {tabs.map((tab) => (
               <ChromeTab
@@ -401,27 +476,12 @@ function LedgerAiChatSession({
                 onRename={(name) => renameTab(tab.id, name)}
               />
             ))}
-            <button
-              type="button"
-              aria-label="Add Piggy tab"
-              title={
-                tabs.length >= MAX_PIGGY_TABS
-                  ? `Up to ${MAX_PIGGY_TABS} chats`
-                  : "Add tab"
-              }
-              disabled={tabs.length >= MAX_PIGGY_TABS}
-              className="mb-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-sm text-accent hover:bg-accent-subtle hover:text-accent disabled:pointer-events-none disabled:opacity-40"
-              onClick={addTab}
-            >
-              <PlusIcon className="size-3" strokeWidth={2} />
-            </button>
-            <PiggyAboutInfo />
-          </div>
+          </ChromeTabStrip>
         </div>
         <p className="sr-only">
-          Ask about your numbers, or change your own ledger, store sheet, and
-          notes. Recategorize transactions, edit sections and categories, or
-          summarize spend. Each tab is a separate chat.
+          Ask for money advice from your numbers, or change your own budget,
+          store sheet, and notes. Recategorize transactions, edit sections and
+          categories, or summarize spend. Each tab is a separate chat.
         </p>
 
         {historyError && <p role="status" className="px-3 py-2 text-xs text-warning">{historyError}</p>}

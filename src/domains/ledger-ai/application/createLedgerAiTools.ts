@@ -1,9 +1,53 @@
+import {
+  ASK_USER_TOOL_NAME,
+  askUserTool,
+} from "@/domains/ledger-ai/domain/askUserTool";
 import { invalidateConvexUserCache } from "@/shared/convex/cachedRead";
 import { api } from "@/shared/convex/httpClient";
 import type { Id } from "@convex/_generated/dataModel";
 import { tool } from "ai";
 import type { ConvexHttpClient } from "convex/browser";
 import { z } from "zod";
+
+/** Mirror of AI_BULK_LIMIT / AI_DELETE_LIMIT in convex/transactions.ts. */
+const MAX_BULK_IDS = 100;
+const MAX_DELETE_IDS = 25;
+
+const nullableName = z.string().nullable().optional();
+
+/** Editable transaction fields shared by update_transaction and update_transactions. */
+const transactionPatchSchema = {
+  description: z.string().optional(),
+  date: z.string().optional().describe("YYYY-MM-DD"),
+  amount: z
+    .number()
+    .optional()
+    .describe("Positive = spend, negative = money in"),
+  pending: z.boolean().optional(),
+  section: nullableName,
+  category: nullableName,
+  subcategory: nullableName,
+  spread: nullableName,
+  addTags: z.array(z.string()).optional(),
+  removeTags: z.array(z.string()).optional(),
+  merchant: nullableName.describe("Merchant name; null unlinks"),
+};
+
+type ToolPatch = z.infer<z.ZodObject<typeof transactionPatchSchema>>;
+type ConvexPatch = (typeof api.transactions.updateForAi._args)["patch"];
+
+/** Drop undefined keys and map `date` -> `posted` so Convex sees only real edits. */
+function toConvexPatch(patch: Partial<ToolPatch>): ConvexPatch {
+  const { date, ...rest } = patch;
+  const out: ConvexPatch = {};
+  if (date !== undefined) out.posted = date;
+  for (const [key, value] of Object.entries(rest)) {
+    if (value !== undefined) {
+      (out as Record<string, unknown>)[key] = value;
+    }
+  }
+  return out;
+}
 
 function sameName(a: string | null | undefined, b: string) {
   return (a ?? "").trim().toLowerCase() === b.trim().toLowerCase();
@@ -17,6 +61,8 @@ async function afterWrite<T>(value: T): Promise<T> {
 export type LedgerAiToolOptions = {
   allowLedgerWrites?: boolean;
   allowStoreSheetWrites?: boolean;
+  /** Search/summarize even when writes are off (helper piggies). */
+  includeLedgerReads?: boolean;
   storeSheetSnapshot?: {
     tabs: Array<{
       id: string;
@@ -48,6 +94,9 @@ function createWorkspaceTools(
   options: LedgerAiToolOptions,
 ) {
   return {
+    // Answered in the browser (no execute); see PiggyQuestionnaire.
+    [ASK_USER_TOOL_NAME]: askUserTool,
+
     list_store_sheet: tool({
       description:
         "Read the signed-in user's store sheet tabs and vendor lines (name, spend, count, currency).",
@@ -198,10 +247,7 @@ export function createLedgerAiTools(
     allowStoreSheetWrites: options.allowStoreSheetWrites ?? true,
     storeSheetSnapshot: options.storeSheetSnapshot,
   });
-  if (options.allowLedgerWrites === false) {
-    return workspace;
-  }
-  return {
+  const reads = {
     search_transactions: tool({
       description:
         "Search the signed-in user's transactions. Use before editing. Filter by text, merchant, taxonomy, or date (YYYY-MM-DD).",
@@ -219,7 +265,6 @@ export function createLedgerAiTools(
         return await client.query(api.transactions.searchForAi, input);
       },
     }),
-
     summarize_spend: tool({
       description:
         "Analyze the signed-in user's spend and income grouped by merchant, section, category, or subcategory. Optional YYYY-MM-DD range.",
@@ -232,7 +277,6 @@ export function createLedgerAiTools(
         return await client.query(api.transactions.summarizeForAi, input);
       },
     }),
-
     list_taxonomy: tool({
       description:
         "List the signed-in user's sections, categories, and subcategories (names and ids).",
@@ -261,71 +305,76 @@ export function createLedgerAiTools(
         };
       },
     }),
+    list_accounts: tool({
+      description:
+        "List the signed-in user's accounts (name, id, currency). Use before create_transaction.",
+      inputSchema: z.object({}),
+      execute: async () => {
+        return await client.query(api.transactions.accountsForAi, {});
+      },
+    }),
+  };
+  if (options.allowLedgerWrites === false) {
+    if (options.includeLedgerReads) {
+      return { ...reads, ...workspace };
+    }
+    return workspace;
+  }
+  return {
+    ...reads,
 
     update_transaction: tool({
       description:
-        "Edit one of the signed-in user's transactions: taxonomy, tag, and/or merchant. Look up transactionId with search_transactions first.",
+        "Edit one of the signed-in user's transactions in one call: description, date, amount, section/category/subcategory/spread, tags, merchant. Omit fields to leave them alone; pass null to clear. Look up transactionId with search_transactions first.",
       inputSchema: z.object({
         transactionId: z.string(),
-        section: z.string().nullable().optional(),
-        category: z.string().nullable().optional(),
-        subcategory: z.string().nullable().optional(),
-        spread: z.string().nullable().optional(),
-        tag: z.string().optional(),
-        merchant: z.string().optional(),
+        ...transactionPatchSchema,
       }),
-      execute: async (input) => {
-        const fields = [
-          ["section", input.section],
-          ["category", input.category],
-          ["subcategory", input.subcategory],
-          ["spread", input.spread],
-        ] as const;
-        const taxonomy: Record<string, string | null> = {};
-        for (const [field, value] of fields) {
-          if (value === undefined) continue;
-          taxonomy[field] = value;
-          await client.mutation(api.transactions.updateTaxonomy, {
-            transactionId: input.transactionId,
-            field,
-            value,
-          });
-        }
-        let tag: unknown = undefined;
-        if (input.tag?.trim()) {
-          tag = await client.mutation(api.transactions.addTag, {
-            transactionId: input.transactionId,
-            tag: input.tag.trim(),
-          });
-        }
-        let merchant: unknown = undefined;
-        if (input.merchant?.trim()) {
-          merchant = await client.mutation(api.merchants.upsertAndLink, {
-            name: input.merchant.trim(),
-            transactionIds: [input.transactionId],
-          });
-        }
-        return afterWrite({
-          transactionId: input.transactionId,
-          taxonomy,
-          tag,
-          merchant,
-        });
+      execute: async ({ transactionId, ...patch }) => {
+        return afterWrite(
+          await client.mutation(api.transactions.updateForAi, {
+            transactionId,
+            patch: toConvexPatch(patch),
+          }),
+        );
+      },
+    }),
+
+    update_transactions: tool({
+      description: `Apply the same edit to a list of the signed-in user's transactions by id (max ${MAX_BULK_IDS}). Same fields as update_transaction. Preview with search_transactions first.`,
+      inputSchema: z.object({
+        transactionIds: z.array(z.string()).min(1).max(MAX_BULK_IDS),
+        ...transactionPatchSchema,
+      }),
+      execute: async ({ transactionIds, ...patch }) => {
+        return afterWrite(
+          await client.mutation(api.transactions.bulkUpdateForAi, {
+            transactionIds,
+            patch: toConvexPatch(patch),
+          }),
+        );
       },
     }),
 
     recategorize_matching: tool({
-      description:
-        "Apply the same section/category/subcategory to matching transactions (max 25). Preview with search_transactions first.",
+      description: `Find transactions by merchant and/or text (optional date range), then apply one section/category/subcategory to all of them (max ${MAX_BULK_IDS}). Set dryRun to preview without writing.`,
       inputSchema: z.object({
         merchant: z.string().optional(),
         query: z.string().optional(),
-        section: z.string().optional(),
-        category: z.string().optional(),
-        subcategory: z.string().optional(),
+        startDate: z.string().optional(),
+        endDate: z.string().optional(),
+        section: z.string().nullable().optional(),
+        category: z.string().nullable().optional(),
+        subcategory: z.string().nullable().optional(),
+        dryRun: z.boolean().optional(),
       }),
       execute: async (input) => {
-        if (!input.section && !input.category && !input.subcategory) {
+        const patch = toConvexPatch({
+          section: input.section,
+          category: input.category,
+          subcategory: input.subcategory,
+        });
+        if (Object.keys(patch).length === 0) {
           return {
             error: "Provide at least one of section, category, subcategory.",
           };
@@ -339,37 +388,70 @@ export function createLedgerAiTools(
         const found = await client.query(api.transactions.searchForAi, {
           query: input.query,
           merchant: input.merchant,
-          limit: 25,
+          startDate: input.startDate,
+          endDate: input.endDate,
+          limit: MAX_BULK_IDS,
         });
-        let updated = 0;
-        for (const row of found.matches) {
-          if (input.section !== undefined) {
-            await client.mutation(api.transactions.updateTaxonomy, {
-              transactionId: row.transactionId,
-              field: "section",
-              value: input.section,
-            });
-          }
-          if (input.category !== undefined) {
-            await client.mutation(api.transactions.updateTaxonomy, {
-              transactionId: row.transactionId,
-              field: "category",
-              value: input.category,
-            });
-          }
-          if (input.subcategory !== undefined) {
-            await client.mutation(api.transactions.updateTaxonomy, {
-              transactionId: row.transactionId,
-              field: "subcategory",
-              value: input.subcategory,
-            });
-          }
-          updated += 1;
+        const transactionIds = found.matches.map((row) => row.transactionId);
+        if (input.dryRun || transactionIds.length === 0) {
+          return {
+            dryRun: true,
+            wouldUpdate: transactionIds.length,
+            truncated: found.truncated,
+            matches: found.matches,
+          };
         }
-        return afterWrite({
-          updated,
-          transactionIds: found.matches.map((row) => row.transactionId),
-        });
+        const result = await client.mutation(
+          api.transactions.bulkUpdateForAi,
+          { transactionIds, patch },
+        );
+        return afterWrite({ ...result, truncated: found.truncated });
+      },
+    }),
+
+    create_transaction: tool({
+      description:
+        "Add a manual transaction to one of the signed-in user's accounts. amount: positive = spend, negative = money in. date is YYYY-MM-DD.",
+      inputSchema: z.object({
+        account: z.string().describe("Account name or accountId"),
+        date: z.string(),
+        description: z.string(),
+        amount: z.number(),
+        currency: z.string().optional(),
+        section: z.string().optional(),
+        category: z.string().optional(),
+        subcategory: z.string().optional(),
+        merchant: z.string().optional(),
+        tags: z.array(z.string()).optional(),
+      }),
+      execute: async ({ date, ...rest }) => {
+        return afterWrite(
+          await client.mutation(api.transactions.createForAi, {
+            ...rest,
+            posted: date,
+          }),
+        );
+      },
+    }),
+
+    delete_transactions: tool({
+      description: `Permanently delete up to ${MAX_DELETE_IDS} of the signed-in user's transactions by id. Only after the user explicitly asks to delete and you have shown them which rows. confirmed must be true.`,
+      inputSchema: z.object({
+        transactionIds: z.array(z.string()).min(1).max(MAX_DELETE_IDS),
+        confirmed: z.boolean(),
+      }),
+      execute: async (input) => {
+        if (!input.confirmed) {
+          return {
+            error:
+              "Not deleted. Ask the user to confirm, then call again with confirmed: true.",
+          };
+        }
+        return afterWrite(
+          await client.mutation(api.transactions.deleteForAi, {
+            transactionIds: input.transactionIds,
+          }),
+        );
       },
     }),
 

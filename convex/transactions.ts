@@ -1,21 +1,47 @@
 import { v } from "convex/values";
-import type { Id } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
 import { mutation, query, type MutationCtx } from "./_generated/server";
 import { ensureUser, requireUser } from "./lib/auth";
 import { rememberCategorization } from "./lib/categorizationMemory";
-import { classifySpread } from "./lib/spreads";
+import { ensureMerchant, linkTxnsToMerchant } from "./lib/ensureMerchant";
+import { bumpMerchantTxnCount } from "./lib/merchantTxnCount";
 import { hasTag, joinTags, splitTags } from "./lib/tags";
-import { taxonomyDescription } from "./lib/taxonomyDescriptions";
+import {
+  applyTaxonomyPatch,
+  hasTaxonomyPatch,
+  resolveTaxonomyPath,
+  TaxonomyStore,
+  type TaxonomyPatch,
+} from "./lib/taxonomyPath";
 
-const TAXONOMY_FIELDS = [
-  "section",
-  "spread",
-  "category",
-  "subcategory",
-] as const;
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+/** Upper bound for one Piggy bulk edit / delete call. */
+export const AI_BULK_LIMIT = 100;
+export const AI_DELETE_LIMIT = 25;
 
 function norm(value: string | null | undefined) {
   return (value ?? "").trim().toLowerCase();
+}
+
+async function ownedTransaction(
+  ctx: MutationCtx,
+  userId: Id<"users">,
+  transactionId: string,
+) {
+  const id = transactionId.trim();
+  if (!id) return null;
+  return await ctx.db
+    .query("transactions")
+    .withIndex("by_userId_transactionId", (q) =>
+      q.eq("userId", userId).eq("transactionId", id),
+    )
+    .unique();
+}
+
+function splitDebitCredit(amount: number) {
+  if (amount > 0) return { debit: amount, credit: null };
+  if (amount < 0) return { debit: null, credit: -amount };
+  return { debit: null, credit: null };
 }
 
 export const taxonomy = query({
@@ -95,213 +121,6 @@ export const taxonomy = query({
   },
 });
 
-async function nextLegacyId(
-  ctx: MutationCtx,
-  table:
-    | "transactionSections"
-    | "transactionSpreads"
-    | "transactionCategories"
-    | "transactionSubcategories",
-  userId: Id<"users">,
-) {
-  const rows = await ctx.db
-    .query(table)
-    .withIndex("by_userId", (q) => q.eq("userId", userId))
-    .collect();
-  return rows.reduce((max, row) => Math.max(max, row.legacyId), 0) + 1;
-}
-
-type NamedTaxonomyPath = {
-  section: string | null;
-  sectionLegacyId: number | null;
-  category: string | null;
-  categoryLegacyId: number | null;
-  subcategory: string | null;
-  subcategoryLegacyId: number | null;
-  spread: string | null;
-  spreadLegacyId: number | null;
-};
-
-async function resolveNamedTaxonomyPath(
-  ctx: MutationCtx,
-  userId: Id<"users">,
-  input: {
-    section: string | null;
-    category: string | null;
-    subcategory: string | null;
-  },
-): Promise<NamedTaxonomyPath> {
-  const sectionName = input.section?.trim() || null;
-  const categoryName = input.category?.trim() || null;
-  const subcategoryName = input.subcategory?.trim() || null;
-
-  let section: string | null = null;
-  let sectionLegacyId: number | null = null;
-  let category: string | null = null;
-  let categoryLegacyId: number | null = null;
-  let subcategory: string | null = null;
-  let subcategoryLegacyId: number | null = null;
-
-  if (sectionName) {
-    const all = await ctx.db
-      .query("transactionSections")
-      .withIndex("by_userId", (q) => q.eq("userId", userId))
-      .collect();
-    const existing = all.find((row) => norm(row.name) === norm(sectionName));
-    if (existing) {
-      section = existing.name;
-      sectionLegacyId = existing.legacyId;
-    } else {
-      const legacyId = await nextLegacyId(ctx, "transactionSections", userId);
-      const trimmed = sectionName.trim();
-      await ctx.db.insert("transactionSections", {
-        userId,
-        legacyId,
-        name: trimmed,
-        description: taxonomyDescription("section", trimmed),
-      });
-      section = trimmed;
-      sectionLegacyId = legacyId;
-    }
-  }
-
-  if (categoryName) {
-    const all = await ctx.db
-      .query("transactionCategories")
-      .withIndex("by_userId", (q) => q.eq("userId", userId))
-      .collect();
-    const existing = all.find((row) => norm(row.name) === norm(categoryName));
-    if (existing) {
-      if (existing.sectionLegacyId == null && sectionLegacyId != null) {
-        await ctx.db.patch(existing._id, { sectionLegacyId });
-      }
-      category = existing.name;
-      categoryLegacyId = existing.legacyId;
-      if (sectionLegacyId == null && existing.sectionLegacyId != null) {
-        const sections = await ctx.db
-          .query("transactionSections")
-          .withIndex("by_userId", (q) => q.eq("userId", userId))
-          .collect();
-        const parent = sections.find(
-          (row) => row.legacyId === existing.sectionLegacyId,
-        );
-        if (parent) {
-          section = parent.name;
-          sectionLegacyId = parent.legacyId;
-        }
-      }
-    } else {
-      const legacyId = await nextLegacyId(ctx, "transactionCategories", userId);
-      const trimmed = categoryName.trim();
-      await ctx.db.insert("transactionCategories", {
-        userId,
-        legacyId,
-        name: trimmed,
-        sectionLegacyId,
-        description: taxonomyDescription("category", trimmed),
-      });
-      category = trimmed;
-      categoryLegacyId = legacyId;
-    }
-  }
-
-  if (subcategoryName) {
-    const all = await ctx.db
-      .query("transactionSubcategories")
-      .withIndex("by_userId", (q) => q.eq("userId", userId))
-      .collect();
-    const existing = all.find(
-      (row) => norm(row.name) === norm(subcategoryName),
-    );
-    if (existing) {
-      if (existing.categoryLegacyId == null && categoryLegacyId != null) {
-        await ctx.db.patch(existing._id, { categoryLegacyId });
-      }
-      subcategory = existing.name;
-      subcategoryLegacyId = existing.legacyId;
-      if (categoryLegacyId == null && existing.categoryLegacyId != null) {
-        const categories = await ctx.db
-          .query("transactionCategories")
-          .withIndex("by_userId", (q) => q.eq("userId", userId))
-          .collect();
-        const parentCat = categories.find(
-          (row) => row.legacyId === existing.categoryLegacyId,
-        );
-        if (parentCat) {
-          category = parentCat.name;
-          categoryLegacyId = parentCat.legacyId;
-          if (sectionLegacyId == null && parentCat.sectionLegacyId != null) {
-            const sections = await ctx.db
-              .query("transactionSections")
-              .withIndex("by_userId", (q) => q.eq("userId", userId))
-              .collect();
-            const parentSec = sections.find(
-              (row) => row.legacyId === parentCat.sectionLegacyId,
-            );
-            if (parentSec) {
-              section = parentSec.name;
-              sectionLegacyId = parentSec.legacyId;
-            }
-          }
-        }
-      }
-    } else {
-      const legacyId = await nextLegacyId(
-        ctx,
-        "transactionSubcategories",
-        userId,
-      );
-      const trimmed = subcategoryName.trim();
-      await ctx.db.insert("transactionSubcategories", {
-        userId,
-        legacyId,
-        name: trimmed,
-        categoryLegacyId,
-        description: taxonomyDescription("subcategory", trimmed),
-      });
-      subcategory = trimmed;
-      subcategoryLegacyId = legacyId;
-    }
-  }
-
-  const nextSpread = classifySpread({ section, category, subcategory });
-  let spread: string | null = null;
-  let spreadLegacyId: number | null = null;
-  if (nextSpread) {
-    const all = await ctx.db
-      .query("transactionSpreads")
-      .withIndex("by_userId", (q) => q.eq("userId", userId))
-      .collect();
-    const existing = all.find((row) => norm(row.name) === norm(nextSpread));
-    if (existing) {
-      spread = existing.name;
-      spreadLegacyId = existing.legacyId;
-    } else {
-      const legacyId = await nextLegacyId(ctx, "transactionSpreads", userId);
-      await ctx.db.insert("transactionSpreads", {
-        userId,
-        legacyId,
-        name: nextSpread,
-        targetPercent: 0,
-        description: "Custom",
-        sortOrder: 100,
-      });
-      spread = nextSpread;
-      spreadLegacyId = legacyId;
-    }
-  }
-
-  return {
-    section,
-    sectionLegacyId,
-    category,
-    categoryLegacyId,
-    subcategory,
-    subcategoryLegacyId,
-    spread,
-    spreadLegacyId,
-  };
-}
 
 export const addTag = mutation({
   args: {
@@ -416,321 +235,26 @@ export const updateTaxonomy = mutation({
     const user = await ensureUser(ctx);
     const transactionId = args.transactionId.trim();
     if (!transactionId) throw new Error("transactionId is required");
-    if (!(TAXONOMY_FIELDS as readonly string[]).includes(args.field)) {
-      throw new Error(
-        "field must be section, spread, category, or subcategory",
-      );
-    }
 
-    const rawValue = args.value?.trim() || null;
-    const row = await ctx.db
-      .query("transactions")
-      .withIndex("by_userId_transactionId", (q) =>
-        q.eq("userId", user._id).eq("transactionId", transactionId),
-      )
-      .unique();
+    const row = await ownedTransaction(ctx, user._id, transactionId);
     if (!row) throw new Error("Transaction not found");
 
-    let section = row.section;
-    let sectionLegacyId = row.sectionLegacyId;
-    let category = row.category;
-    let categoryLegacyId = row.categoryLegacyId;
-    let subcategory = row.subcategory;
-    let subcategoryLegacyId = row.subcategoryLegacyId;
-    let spread = row.spread;
-    let spreadLegacyId = row.spreadLegacyId;
-    const editingSpread = args.field === "spread";
-
-    const ensureSection = async (name: string) => {
-      const all = await ctx.db
-        .query("transactionSections")
-        .withIndex("by_userId", (q) => q.eq("userId", user._id))
-        .collect();
-      const existing = all.find((r) => norm(r.name) === norm(name));
-      if (existing) return existing;
-      const legacyId = await nextLegacyId(ctx, "transactionSections", user._id);
-      const trimmed = name.trim();
-      const id = await ctx.db.insert("transactionSections", {
-        userId: user._id,
-        legacyId,
-        name: trimmed,
-        description: taxonomyDescription("section", trimmed),
-      });
-      return { _id: id, legacyId, name: trimmed };
-    };
-
-    const ensureSpread = async (name: string) => {
-      const all = await ctx.db
-        .query("transactionSpreads")
-        .withIndex("by_userId", (q) => q.eq("userId", user._id))
-        .collect();
-      const existing = all.find((r) => norm(r.name) === norm(name));
-      if (existing) return existing;
-      const legacyId = await nextLegacyId(ctx, "transactionSpreads", user._id);
-      const id = await ctx.db.insert("transactionSpreads", {
-        userId: user._id,
-        legacyId,
-        name: name.trim(),
-        targetPercent: 0,
-        description: "Custom",
-        sortOrder: 100,
-      });
-      return { _id: id, legacyId, name: name.trim() };
-    };
-
-    const ensureCategory = async (name: string, sectionId: number | null) => {
-      const all = await ctx.db
-        .query("transactionCategories")
-        .withIndex("by_userId", (q) => q.eq("userId", user._id))
-        .collect();
-      const existing = all.find((r) => norm(r.name) === norm(name));
-      if (existing) {
-        if (existing.sectionLegacyId == null && sectionId != null) {
-          await ctx.db.patch(existing._id, { sectionLegacyId: sectionId });
-          return { ...existing, sectionLegacyId: sectionId };
-        }
-        return existing;
-      }
-      const legacyId = await nextLegacyId(
-        ctx,
-        "transactionCategories",
-        user._id,
-      );
-      const trimmed = name.trim();
-      const id = await ctx.db.insert("transactionCategories", {
-        userId: user._id,
-        legacyId,
-        name: trimmed,
-        sectionLegacyId: sectionId,
-        description: taxonomyDescription("category", trimmed),
-      });
-      return {
-        _id: id,
-        legacyId,
-        name: trimmed,
-        sectionLegacyId: sectionId,
-      };
-    };
-
-    const ensureSubcategory = async (
-      name: string,
-      categoryId: number | null,
-    ) => {
-      const all = await ctx.db
-        .query("transactionSubcategories")
-        .withIndex("by_userId", (q) => q.eq("userId", user._id))
-        .collect();
-      const existing = all.find((r) => norm(r.name) === norm(name));
-      if (existing) {
-        if (existing.categoryLegacyId == null && categoryId != null) {
-          await ctx.db.patch(existing._id, { categoryLegacyId: categoryId });
-          return { ...existing, categoryLegacyId: categoryId };
-        }
-        return existing;
-      }
-      const legacyId = await nextLegacyId(
-        ctx,
-        "transactionSubcategories",
-        user._id,
-      );
-      const trimmed = name.trim();
-      const id = await ctx.db.insert("transactionSubcategories", {
-        userId: user._id,
-        legacyId,
-        name: trimmed,
-        categoryLegacyId: categoryId,
-        description: taxonomyDescription("subcategory", trimmed),
-      });
-      return {
-        _id: id,
-        legacyId,
-        name: trimmed,
-        categoryLegacyId: categoryId,
-      };
-    };
-
-    const findSectionById = async (id: number) => {
-      const all = await ctx.db
-        .query("transactionSections")
-        .withIndex("by_userId", (q) => q.eq("userId", user._id))
-        .collect();
-      return all.find((r) => r.legacyId === id) ?? null;
-    };
-    const findCategoryById = async (id: number) => {
-      const all = await ctx.db
-        .query("transactionCategories")
-        .withIndex("by_userId", (q) => q.eq("userId", user._id))
-        .collect();
-      return all.find((r) => r.legacyId === id) ?? null;
-    };
-    const findCategoryByName = async (name: string) => {
-      const all = await ctx.db
-        .query("transactionCategories")
-        .withIndex("by_userId", (q) => q.eq("userId", user._id))
-        .collect();
-      return all.find((r) => norm(r.name) === norm(name)) ?? null;
-    };
-    const findSubcategoryById = async (id: number) => {
-      const all = await ctx.db
-        .query("transactionSubcategories")
-        .withIndex("by_userId", (q) => q.eq("userId", user._id))
-        .collect();
-      return all.find((r) => r.legacyId === id) ?? null;
-    };
-    const findSubcategoryByName = async (name: string) => {
-      const all = await ctx.db
-        .query("transactionSubcategories")
-        .withIndex("by_userId", (q) => q.eq("userId", user._id))
-        .collect();
-      return all.find((r) => norm(r.name) === norm(name)) ?? null;
-    };
-
-    if (args.field === "section") {
-      if (!rawValue) {
-        section = null;
-        sectionLegacyId = null;
-        category = null;
-        categoryLegacyId = null;
-        subcategory = null;
-        subcategoryLegacyId = null;
-      } else {
-        const match = await ensureSection(rawValue);
-        section = match.name;
-        sectionLegacyId = match.legacyId;
-        if (categoryLegacyId != null) {
-          const cat = await findCategoryById(categoryLegacyId);
-          if (
-            !cat ||
-            (cat.sectionLegacyId != null &&
-              cat.sectionLegacyId !== sectionLegacyId)
-          ) {
-            category = null;
-            categoryLegacyId = null;
-            subcategory = null;
-            subcategoryLegacyId = null;
-          }
-        } else if (category && norm(category)) {
-          const cat = await findCategoryByName(category);
-          if (
-            !cat ||
-            (cat.sectionLegacyId != null &&
-              cat.sectionLegacyId !== sectionLegacyId)
-          ) {
-            category = null;
-            categoryLegacyId = null;
-            subcategory = null;
-            subcategoryLegacyId = null;
-          }
-        }
-      }
-    } else if (args.field === "category") {
-      if (!rawValue) {
-        category = null;
-        categoryLegacyId = null;
-        subcategory = null;
-        subcategoryLegacyId = null;
-      } else {
-        const match = await ensureCategory(rawValue, sectionLegacyId);
-        category = match.name;
-        categoryLegacyId = match.legacyId;
-        if (match.sectionLegacyId != null) {
-          const parent = await findSectionById(match.sectionLegacyId);
-          if (parent) {
-            section = parent.name;
-            sectionLegacyId = parent.legacyId;
-          }
-        }
-        if (subcategoryLegacyId != null) {
-          const sub = await findSubcategoryById(subcategoryLegacyId);
-          if (
-            !sub ||
-            (sub.categoryLegacyId != null &&
-              sub.categoryLegacyId !== categoryLegacyId)
-          ) {
-            subcategory = null;
-            subcategoryLegacyId = null;
-          }
-        } else if (subcategory && norm(subcategory)) {
-          const sub = await findSubcategoryByName(subcategory);
-          if (
-            !sub ||
-            (sub.categoryLegacyId != null &&
-              sub.categoryLegacyId !== categoryLegacyId)
-          ) {
-            subcategory = null;
-            subcategoryLegacyId = null;
-          }
-        }
-      }
-    } else if (args.field === "subcategory") {
-      if (!rawValue) {
-        subcategory = null;
-        subcategoryLegacyId = null;
-      } else {
-        const match = await ensureSubcategory(rawValue, categoryLegacyId);
-        subcategory = match.name;
-        subcategoryLegacyId = match.legacyId;
-        if (match.categoryLegacyId != null) {
-          const parentCat = await findCategoryById(match.categoryLegacyId);
-          if (parentCat) {
-            category = parentCat.name;
-            categoryLegacyId = parentCat.legacyId;
-            if (parentCat.sectionLegacyId != null) {
-              const parentSec = await findSectionById(
-                parentCat.sectionLegacyId,
-              );
-              if (parentSec) {
-                section = parentSec.name;
-                sectionLegacyId = parentSec.legacyId;
-              }
-            }
-          }
-        }
-      }
-    } else if (args.field === "spread") {
-      if (!rawValue) {
-        spread = null;
-        spreadLegacyId = null;
-      } else {
-        const match = await ensureSpread(rawValue);
-        spread = match.name;
-        spreadLegacyId = match.legacyId;
-      }
-    }
-
-    if (!editingSpread) {
-      const nextSpread = classifySpread({ section, category, subcategory });
-      if (nextSpread) {
-        const match = await ensureSpread(nextSpread);
-        spread = match.name;
-        spreadLegacyId = match.legacyId;
-      } else {
-        spread = null;
-        spreadLegacyId = null;
-      }
-    }
-
-    await ctx.db.patch(row._id, {
-      section,
-      sectionLegacyId,
-      category,
-      categoryLegacyId,
-      subcategory,
-      subcategoryLegacyId,
-      spread,
-      spreadLegacyId,
-      updatedAt: Date.now(),
+    const store = new TaxonomyStore(ctx, user._id);
+    const path = await applyTaxonomyPatch(store, row, {
+      [args.field]: args.value,
     });
+
+    await ctx.db.patch(row._id, { ...path, updatedAt: Date.now() });
 
     const updated = await ctx.db.get(row._id);
     if (updated) await rememberCategorization(ctx, updated);
 
     return {
       transactionId,
-      section,
-      category,
-      subcategory,
-      spread,
+      section: path.section,
+      category: path.category,
+      subcategory: path.subcategory,
+      spread: path.spread,
     };
   },
 });
@@ -757,7 +281,10 @@ export const renameDescriptions = mutation({
     if (from === to && args.taxonomy === undefined) return { updated: 0 };
 
     const tax = args.taxonomy
-      ? await resolveNamedTaxonomyPath(ctx, user._id, args.taxonomy)
+      ? await resolveTaxonomyPath(
+          new TaxonomyStore(ctx, user._id),
+          args.taxonomy,
+        )
       : null;
 
     const rows = await ctx.db
@@ -772,18 +299,7 @@ export const renameDescriptions = mutation({
       await ctx.db.patch(row._id, {
         description: to,
         updatedAt: now,
-        ...(tax
-          ? {
-              section: tax.section,
-              sectionLegacyId: tax.sectionLegacyId,
-              category: tax.category,
-              categoryLegacyId: tax.categoryLegacyId,
-              subcategory: tax.subcategory,
-              subcategoryLegacyId: tax.subcategoryLegacyId,
-              spread: tax.spread,
-              spreadLegacyId: tax.spreadLegacyId,
-            }
-          : {}),
+        ...(tax ?? {}),
       });
       const updatedRow = await ctx.db.get(row._id);
       if (updatedRow) await rememberCategorization(ctx, updatedRow);
@@ -831,18 +347,11 @@ export const recategorizeByMerchant = mutation({
     const merchant = args.merchant.trim();
     if (!merchant) throw new Error("Merchant is required");
 
-    const tax = await resolveNamedTaxonomyPath(ctx, user._id, args.taxonomy);
-    const patch = {
-      section: tax.section,
-      sectionLegacyId: tax.sectionLegacyId,
-      category: tax.category,
-      categoryLegacyId: tax.categoryLegacyId,
-      subcategory: tax.subcategory,
-      subcategoryLegacyId: tax.subcategoryLegacyId,
-      spread: tax.spread,
-      spreadLegacyId: tax.spreadLegacyId,
-      updatedAt: Date.now(),
-    };
+    const tax = await resolveTaxonomyPath(
+      new TaxonomyStore(ctx, user._id),
+      args.taxonomy,
+    );
+    const patch = { ...tax, updatedAt: Date.now() };
 
     const merchantId = args.merchantId;
     let rows;
@@ -956,7 +465,10 @@ export const searchForAi = query({
   }),
   handler: async (ctx, args) => {
     const user = await requireUser(ctx);
-    const limit = Math.min(50, Math.max(1, Math.floor(args.limit ?? 25)));
+    const limit = Math.min(
+      AI_BULK_LIMIT,
+      Math.max(1, Math.floor(args.limit ?? 25)),
+    );
     const qText = args.query?.trim().toLowerCase() ?? "";
     const merchant = args.merchant?.trim().toLowerCase() ?? "";
     const section = args.section?.trim().toLowerCase() ?? "";
@@ -1097,5 +609,371 @@ export const summarizeForAi = query({
       incomeTotal: Number(incomeTotal.toFixed(2)),
       groups,
     };
+  },
+});
+
+/* ------------------------------------------------------------------ */
+/* Piggy (Ledger AI) write surface. Every call is owner-scoped.        */
+/* ------------------------------------------------------------------ */
+
+const nullableString = v.union(v.string(), v.null());
+
+/** One patch shape for single and bulk edits. `undefined` leaves a field alone. */
+const aiPatchValidator = v.object({
+  description: v.optional(v.string()),
+  posted: v.optional(v.string()),
+  amount: v.optional(v.number()),
+  pending: v.optional(v.boolean()),
+  section: v.optional(nullableString),
+  category: v.optional(nullableString),
+  subcategory: v.optional(nullableString),
+  spread: v.optional(nullableString),
+  addTags: v.optional(v.array(v.string())),
+  removeTags: v.optional(v.array(v.string())),
+  /** Merchant display name. `null` unlinks the row from its merchant. */
+  merchant: v.optional(nullableString),
+});
+
+type AiPatch = {
+  description?: string;
+  posted?: string;
+  amount?: number;
+  pending?: boolean;
+  addTags?: string[];
+  removeTags?: string[];
+  merchant?: string | null;
+} & TaxonomyPatch;
+
+type ResolvedMerchant = Doc<"merchants"> | null | undefined;
+
+function assertAiPatch(patch: AiPatch) {
+  if (patch.description !== undefined && !patch.description.trim()) {
+    throw new Error("Description cannot be empty");
+  }
+  if (patch.posted !== undefined && !DATE_RE.test(patch.posted.trim())) {
+    throw new Error("posted must be YYYY-MM-DD");
+  }
+  if (patch.amount !== undefined && !Number.isFinite(patch.amount)) {
+    throw new Error("amount must be a finite number");
+  }
+  if (patch.merchant !== undefined && patch.merchant !== null && !patch.merchant.trim()) {
+    throw new Error("merchant cannot be empty; pass null to unlink");
+  }
+  const touched = Object.values(patch).some((value) => value !== undefined);
+  if (!touched) throw new Error("Nothing to update");
+}
+
+/** Resolve the merchant once so bulk edits do not upsert per row. */
+async function resolveAiMerchant(
+  ctx: MutationCtx,
+  userId: Id<"users">,
+  merchant: string | null | undefined,
+): Promise<ResolvedMerchant> {
+  if (merchant === undefined) return undefined;
+  if (merchant === null) return null;
+  return await ensureMerchant(ctx, userId, { name: merchant });
+}
+
+function nextTags(current: string | null, patch: AiPatch) {
+  const remove = new Set((patch.removeTags ?? []).map((tag) => norm(tag)));
+  const kept = splitTags(current).filter((tag) => !remove.has(norm(tag)));
+  return joinTags([...kept, ...(patch.addTags ?? [])]);
+}
+
+/**
+ * Apply one AI patch to an owned row. Taxonomy cascades through the shared
+ * store, tags merge case-insensitively, and the merchant link is retargeted.
+ */
+async function applyAiPatch(
+  ctx: MutationCtx,
+  userId: Id<"users">,
+  store: TaxonomyStore,
+  row: Doc<"transactions">,
+  patch: AiPatch,
+  merchant: ResolvedMerchant,
+): Promise<string[]> {
+  const changed: string[] = [];
+  const next: Partial<Doc<"transactions">> = {};
+
+  if (patch.description !== undefined) {
+    const description = patch.description.trim();
+    if (description !== row.description) {
+      next.description = description;
+      if (row.originalDescription == null) {
+        next.originalDescription = row.description;
+      }
+      changed.push("description");
+    }
+  }
+  if (patch.posted !== undefined && patch.posted.trim() !== row.posted) {
+    next.posted = patch.posted.trim();
+    changed.push("posted");
+  }
+  if (patch.amount !== undefined && patch.amount !== row.amount) {
+    next.amount = patch.amount;
+    Object.assign(next, splitDebitCredit(patch.amount));
+    changed.push("amount");
+  }
+  if (patch.pending !== undefined && patch.pending !== row.pending) {
+    next.pending = patch.pending;
+    changed.push("pending");
+  }
+  if (hasTaxonomyPatch(patch)) {
+    Object.assign(next, await applyTaxonomyPatch(store, row, patch));
+    changed.push("taxonomy");
+  }
+  if (patch.addTags?.length || patch.removeTags?.length) {
+    const tags = nextTags(row.tags, patch);
+    if (tags !== row.tags) {
+      next.tags = tags;
+      changed.push("tags");
+    }
+  }
+  if (merchant === null && row.merchantId) {
+    next.merchantId = null;
+    next.merchantClean = null;
+    await bumpMerchantTxnCount(ctx, row.merchantId, -1);
+    changed.push("merchant");
+  }
+
+  if (Object.keys(next).length > 0) {
+    await ctx.db.patch(row._id, { ...next, updatedAt: Date.now() });
+  }
+
+  if (merchant) {
+    await linkTxnsToMerchant(ctx, userId, merchant, [row.transactionId]);
+    changed.push("merchant");
+  } else if (Object.keys(next).length > 0) {
+    const updated = await ctx.db.get(row._id);
+    if (updated) await rememberCategorization(ctx, updated);
+  }
+
+  return changed;
+}
+
+/** Edit one owned transaction in a single round trip. */
+export const updateForAi = mutation({
+  args: {
+    transactionId: v.string(),
+    patch: aiPatchValidator,
+  },
+  returns: v.object({
+    transaction: aiTxnRow,
+    changed: v.array(v.string()),
+  }),
+  handler: async (ctx, args) => {
+    const user = await requireUser(ctx);
+    assertAiPatch(args.patch);
+
+    const row = await ownedTransaction(ctx, user._id, args.transactionId);
+    if (!row) throw new Error("Transaction not found");
+
+    const merchant = await resolveAiMerchant(ctx, user._id, args.patch.merchant);
+    const store = new TaxonomyStore(ctx, user._id);
+    const changed = await applyAiPatch(ctx, user._id, store, row, args.patch, merchant);
+
+    const updated = await ctx.db.get(row._id);
+    if (!updated) throw new Error("Transaction update failed");
+    return { transaction: toAiTxn(updated), changed };
+  },
+});
+
+/** Apply one patch to many owned transactions (max AI_BULK_LIMIT). */
+export const bulkUpdateForAi = mutation({
+  args: {
+    transactionIds: v.array(v.string()),
+    patch: aiPatchValidator,
+  },
+  returns: v.object({
+    updated: v.number(),
+    missing: v.array(v.string()),
+    changed: v.array(v.string()),
+  }),
+  handler: async (ctx, args) => {
+    const user = await requireUser(ctx);
+    assertAiPatch(args.patch);
+
+    const ids = [...new Set(args.transactionIds.map((id) => id.trim()).filter(Boolean))];
+    if (ids.length === 0) throw new Error("transactionIds is required");
+    if (ids.length > AI_BULK_LIMIT) {
+      throw new Error(`Can edit at most ${AI_BULK_LIMIT} transactions at once`);
+    }
+
+    const merchant = await resolveAiMerchant(ctx, user._id, args.patch.merchant);
+    const store = new TaxonomyStore(ctx, user._id);
+    const changed = new Set<string>();
+    const missing: string[] = [];
+    let updated = 0;
+
+    for (const id of ids) {
+      const row = await ownedTransaction(ctx, user._id, id);
+      if (!row) {
+        missing.push(id);
+        continue;
+      }
+      for (const field of await applyAiPatch(ctx, user._id, store, row, args.patch, merchant)) {
+        changed.add(field);
+      }
+      updated += 1;
+    }
+
+    return { updated, missing, changed: [...changed] };
+  },
+});
+
+/** Delete owned transactions (max AI_DELETE_LIMIT). Merchant counts stay in sync. */
+export const deleteForAi = mutation({
+  args: { transactionIds: v.array(v.string()) },
+  returns: v.object({
+    deleted: v.number(),
+    missing: v.array(v.string()),
+  }),
+  handler: async (ctx, args) => {
+    const user = await requireUser(ctx);
+    const ids = [...new Set(args.transactionIds.map((id) => id.trim()).filter(Boolean))];
+    if (ids.length === 0) throw new Error("transactionIds is required");
+    if (ids.length > AI_DELETE_LIMIT) {
+      throw new Error(`Can delete at most ${AI_DELETE_LIMIT} transactions at once`);
+    }
+
+    const missing: string[] = [];
+    let deleted = 0;
+    for (const id of ids) {
+      const row = await ownedTransaction(ctx, user._id, id);
+      if (!row) {
+        missing.push(id);
+        continue;
+      }
+      await bumpMerchantTxnCount(ctx, row.merchantId, -1);
+      await ctx.db.delete(row._id);
+      deleted += 1;
+    }
+    return { deleted, missing };
+  },
+});
+
+/** Account names Piggy can target with createForAi. */
+export const accountsForAi = query({
+  args: {},
+  returns: v.array(
+    v.object({
+      accountId: v.string(),
+      name: v.string(),
+      type: v.union(v.string(), v.null()),
+      currency: v.union(v.string(), v.null()),
+    }),
+  ),
+  handler: async (ctx) => {
+    const user = await requireUser(ctx);
+    const accounts = await ctx.db
+      .query("accounts")
+      .withIndex("by_userId", (q) => q.eq("userId", user._id))
+      .collect();
+    return accounts
+      .map((row) => ({
+        accountId: row.accountId,
+        name: row.name,
+        type: row.type,
+        currency: row.isoCurrencyCode,
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  },
+});
+
+/** Add a manual line to one of the user's accounts. Positive amount = spend, negative = money in. */
+export const createForAi = mutation({
+  args: {
+    account: v.string(),
+    posted: v.string(),
+    description: v.string(),
+    amount: v.number(),
+    currency: v.optional(v.string()),
+    section: v.optional(v.string()),
+    category: v.optional(v.string()),
+    subcategory: v.optional(v.string()),
+    merchant: v.optional(v.string()),
+    tags: v.optional(v.array(v.string())),
+  },
+  returns: aiTxnRow,
+  handler: async (ctx, args) => {
+    const user = await requireUser(ctx);
+    const description = args.description.trim();
+    const posted = args.posted.trim();
+    const accountKey = args.account.trim();
+    if (!description) throw new Error("Description is required");
+    if (!DATE_RE.test(posted)) throw new Error("posted must be YYYY-MM-DD");
+    if (!Number.isFinite(args.amount)) throw new Error("amount must be a finite number");
+    if (!accountKey) throw new Error("account is required");
+
+    const accounts = await ctx.db
+      .query("accounts")
+      .withIndex("by_userId", (q) => q.eq("userId", user._id))
+      .collect();
+    const account =
+      accounts.find((row) => row.accountId === accountKey) ??
+      accounts.find((row) => norm(row.name) === norm(accountKey)) ??
+      accounts.find((row) => norm(row.officialName) === norm(accountKey));
+    if (!account) {
+      throw new Error(
+        `Account not found: ${accountKey}. Known accounts: ${accounts.map((row) => row.name).join(", ") || "none"}`,
+      );
+    }
+
+    const store = new TaxonomyStore(ctx, user._id);
+    const path = await resolveTaxonomyPath(store, {
+      section: args.section ?? null,
+      category: args.category ?? null,
+      subcategory: args.subcategory ?? null,
+    });
+
+    const now = Date.now();
+    const transactionId = `piggy-${now.toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+    const id = await ctx.db.insert("transactions", {
+      userId: user._id,
+      transactionId,
+      posted,
+      authorized: null,
+      account: account.name,
+      accountId: account.accountId,
+      description,
+      originalDescription: null,
+      merchantId: null,
+      merchantClean: null,
+      merchantName: null,
+      company: null,
+      brand: null,
+      ...path,
+      transactionType: null,
+      kind: null,
+      transactionTypeLegacyId: null,
+      kindLegacyId: null,
+      tags: joinTags(args.tags ?? []),
+      channel: null,
+      txnCode: null,
+      bankDirection: null,
+      crossCheck: null,
+      enrichment: null,
+      source: "piggy",
+      statementUploadId: null,
+      pending: false,
+      city: null,
+      region: null,
+      country: null,
+      website: null,
+      logoUrl: null,
+      currency: args.currency?.trim() || account.isoCurrencyCode || "CAD",
+      amount: args.amount,
+      ...splitDebitCredit(args.amount),
+      updatedAt: now,
+    });
+
+    if (args.merchant?.trim()) {
+      const merchant = await ensureMerchant(ctx, user._id, { name: args.merchant });
+      await linkTxnsToMerchant(ctx, user._id, merchant, [transactionId]);
+    }
+
+    const created = await ctx.db.get(id);
+    if (!created) throw new Error("Transaction insert failed");
+    return toAiTxn(created);
   },
 });

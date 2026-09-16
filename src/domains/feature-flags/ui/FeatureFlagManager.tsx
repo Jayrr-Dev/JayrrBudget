@@ -1,5 +1,6 @@
 "use client";
 
+import { PageSpinner } from "@/components/ui/spinner";
 import { api } from "@convex/_generated/api";
 import { useMutation, useQuery } from "convex/react";
 import { Info } from "lucide-react";
@@ -35,7 +36,7 @@ function FlagRow({ flagKey, enabled }: { flagKey: FeatureFlagKey; enabled: boole
 export function FeatureFlagManager() {
   const flags = useQuery(api.featureFlags.list, {});
   if (flags === undefined) {
-    return <p className="text-sm text-[var(--muted-foreground)]">Loading feature flags…</p>;
+    return <PageSpinner className="min-h-40 py-8" />;
   }
   const byKey = new Map(flags.map((row) => [row.key, row.enabled]));
   return (

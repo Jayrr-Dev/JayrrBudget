@@ -13,6 +13,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { PageSpinner } from "@/components/ui/spinner";
 import { EmptyPrompt } from "@/components/ui/empty-prompt";
 import { RowActionsMenu } from "@/components/ui/row-actions-menu";
 import { Input } from "@/components/ui/input";
@@ -1150,9 +1151,7 @@ export function ClassificationsPanel({
       </header>
 
       {catalog === undefined ? (
-        <p className="text-sm text-[var(--muted-foreground)]">
-          Loading classifications…
-        </p>
+        <PageSpinner className="min-h-40 py-8" />
       ) : (
         <div className="space-y-4">
           <ButtonGroup>
