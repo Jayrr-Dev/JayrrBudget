@@ -27,10 +27,8 @@ import {
   ocrDocument,
 } from "@/domains/statements/infrastructure/mistralOcr";
 import { parseStatementPaperFacts } from "@/domains/statements/infrastructure/openRouterParse";
-import {
-  OPENROUTER_NOT_CONFIGURED,
-  runWithOpenRouterKey,
-} from "@/shared/ai/openRouter";
+import { OPENROUTER_NOT_CONFIGURED } from "@/shared/ai/openRouter";
+import { runMeteredOpenRouter } from "@/shared/ai/aiMeter.server";
 import { resolveOpenRouterApiKey } from "@/shared/ai/resolveOpenRouter.server";
 import { invalidateConvexUserCache } from "@/shared/convex/cachedRead";
 import { api } from "@/shared/convex/httpClient";
@@ -87,8 +85,8 @@ export async function importBankStatement(params: {
     };
   }
 
-  const apiKey = await resolveOpenRouterApiKey(params.client);
-  if (!apiKey) {
+  const loaded = await resolveOpenRouterApiKey(params.client);
+  if (!loaded) {
     return {
       ok: false,
       status: 503,
@@ -97,7 +95,9 @@ export async function importBankStatement(params: {
     };
   }
 
-  return runWithOpenRouterKey(apiKey, () => importBankStatementWithKey(params));
+  return runMeteredOpenRouter(params.client, loaded, () =>
+    importBankStatementWithKey(params),
+  );
 }
 
 async function importBankStatementWithKey(

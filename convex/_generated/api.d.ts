@@ -10,6 +10,7 @@
 
 import type * as aiByok from "../aiByok.js";
 import type * as aiRules from "../aiRules.js";
+import type * as aiUsage from "../aiUsage.js";
 import type * as analysis from "../analysis.js";
 import type * as auth from "../auth.js";
 import type * as canvasScenes from "../canvasScenes.js";
@@ -21,6 +22,7 @@ import type * as email from "../email.js";
 import type * as featureFlags from "../featureFlags.js";
 import type * as http from "../http.js";
 import type * as issues from "../issues.js";
+import type * as lib_aiCostTable from "../lib/aiCostTable.js";
 import type * as lib_amortize from "../lib/amortize.js";
 import type * as lib_analysisTypes from "../lib/analysisTypes.js";
 import type * as lib_auth from "../lib/auth.js";
@@ -71,6 +73,7 @@ import type {
 declare const fullApi: ApiFromModules<{
   aiByok: typeof aiByok;
   aiRules: typeof aiRules;
+  aiUsage: typeof aiUsage;
   analysis: typeof analysis;
   auth: typeof auth;
   canvasScenes: typeof canvasScenes;
@@ -82,6 +85,7 @@ declare const fullApi: ApiFromModules<{
   featureFlags: typeof featureFlags;
   http: typeof http;
   issues: typeof issues;
+  "lib/aiCostTable": typeof lib_aiCostTable;
   "lib/amortize": typeof lib_amortize;
   "lib/analysisTypes": typeof lib_analysisTypes;
   "lib/auth": typeof lib_auth;

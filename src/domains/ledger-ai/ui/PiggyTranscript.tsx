@@ -92,8 +92,8 @@ export function PiggyAssistantMessage({
       align="start"
       className={cn("motion-safe:animate-piggy-pop", className)}
     >
-      <MessageAvatar className="size-7 self-start bg-accent-subtle">
-        <PiggyMascot mood={mood} iconClassName="size-3.5" />
+      <MessageAvatar className="size-10 self-start overflow-visible rounded-none bg-transparent">
+        <PiggyMascot mood={mood} iconClassName="size-10" />
       </MessageAvatar>
       <MessageContent className="gap-1.5">{children}</MessageContent>
     </Message>

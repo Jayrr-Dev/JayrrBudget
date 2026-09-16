@@ -3,9 +3,9 @@ import { getLedgerAiContext } from "@/domains/ledger-ai/application/getLedgerAiC
 import {
   chatModel,
   getModelChain,
-  runWithOpenRouterKey,
 } from "@/shared/ai/openRouter";
 import { aiUsageMessageMetadata } from "@/shared/ai/aiUsageMetadata";
+import { persistAiUsage, runMeteredOpenRouter } from "@/shared/ai/aiMeter.server";
 import { loadOpenRouterKeyOr503 } from "@/shared/ai/resolveOpenRouter.server";
 import { cachedConvexRead } from "@/shared/convex/cachedRead";
 import {
@@ -79,7 +79,7 @@ export async function POST(request: Request) {
   const loaded = await loadOpenRouterKeyOr503(convex);
   if (!loaded.ok) return loaded.response;
 
-  return runWithOpenRouterKey(loaded.apiKey, async () => {
+  return runMeteredOpenRouter(convex, loaded, async () => {
     let body: {
       messages?: UIMessage[];
       budget?: unknown;
@@ -195,6 +195,14 @@ export async function POST(request: Request) {
       temperature: 0.55,
       onError: ({ error }) => {
         console.warn(`[ledger-ai] stream error: ${errorMessage(error)}`);
+      },
+      onFinish: async ({ usage }) => {
+        await persistAiUsage(convex, loaded.billedTo, {
+          source: "ledger-chat",
+          modelId,
+          usage,
+          ms: Date.now() - startedAt,
+        });
       },
     });
 

@@ -1,5 +1,5 @@
 import { categorizeStatement } from "@/domains/statements/application/categorizeStatement";
-import { runWithOpenRouterKey } from "@/shared/ai/openRouter";
+import { runMeteredOpenRouter } from "@/shared/ai/aiMeter.server";
 import { loadOpenRouterKeyOr503 } from "@/shared/ai/resolveOpenRouter.server";
 import {
   AuthRequiredError,
@@ -25,7 +25,7 @@ export async function POST(
     const body = (await request.json().catch(() => ({}))) as {
       force?: boolean;
     };
-    return runWithOpenRouterKey(loaded.apiKey, async () =>
+    return runMeteredOpenRouter(client, loaded, async () =>
       Response.json(
         await categorizeStatement(client, uploadId, {
           force: body.force === true,

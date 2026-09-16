@@ -14,13 +14,8 @@ import {
   AI_COST_TABLE,
   formatRatePerMillion,
   formatUsd,
+  utcMonthKey,
 } from "@/shared/ai/aiCostTable";
-import {
-  clearAiUsageDebugEvents,
-  getAiUsageDebugEvents,
-  subscribeAiUsageDebug,
-  type AiUsageDebugEvent,
-} from "@/shared/debug/aiUsageDebug";
 import {
   clearVaultCacheDebugEvents,
   getVaultCacheDebugEvents,
@@ -92,7 +87,23 @@ function CacheEventRow({ event }: { event: VaultCacheDebugEvent }) {
   );
 }
 
-function AiUsageEventRow({ event }: { event: AiUsageDebugEvent }) {
+function AiUsageEventRow({
+  event,
+}: {
+  event: {
+    id: string;
+    source: string;
+    modelId: string;
+    billedTo: string;
+    inputTokens: number | null;
+    outputTokens: number | null;
+    totalTokens: number | null;
+    pages: number | null;
+    estimatedUsd: number | null;
+    ms: number | null;
+    createdAt: number;
+  };
+}) {
   const amount =
     event.pages != null && event.pages > 0
       ? `${event.pages} pg`
@@ -108,7 +119,7 @@ function AiUsageEventRow({ event }: { event: AiUsageDebugEvent }) {
     <li className="border-b border-[var(--border)]/60 py-1.5 last:border-0">
       <div className="flex items-baseline gap-2 font-mono text-[11px] leading-snug">
         <span className="shrink-0 text-[var(--muted-foreground)]">
-          {formatTime(event.at)}
+          {formatTime(event.createdAt)}
         </span>
         <span className="min-w-0 font-semibold text-[var(--foreground)]">
           {event.source}
@@ -123,11 +134,11 @@ function AiUsageEventRow({ event }: { event: AiUsageDebugEvent }) {
       <p className="mt-0.5 font-mono text-[10px] text-[var(--muted-foreground)]">
         {[
           event.modelId,
+          event.billedTo,
           event.inputTokens != null ? `in=${event.inputTokens}` : null,
           event.outputTokens != null ? `out=${event.outputTokens}` : null,
           event.pages != null ? `pages=${event.pages}` : null,
           event.ms != null ? `${event.ms}ms` : null,
-          event.detail,
         ]
           .filter(Boolean)
           .join(" · ")}
@@ -213,23 +224,26 @@ export function VaultCacheDebugPanel({
   onOpenChange: (open: boolean) => void;
 }) {
   const [tab, setTab] = useState("cache");
-  const [aiSubTab, setAiSubTab] = useState<"usage" | "cost">("usage");
+  const [aiSubTab, setAiSubTab] = useState<"usage" | "cost" | "team">("usage");
   const [capturing, setCapturing] = useState(isVaultCacheDebugCapturing);
   const [cacheEvents, setCacheEvents] = useState(() => [
     ...getVaultCacheDebugEvents(),
   ]);
-  const [aiEvents, setAiEvents] = useState(() => [...getAiUsageDebugEvents()]);
+  const { isAuthenticated } = useConvexAuth();
+  const monthKey = useMemo(() => utcMonthKey(Date.now()), []);
+  const aiEvents = useQuery(
+    api.aiUsage.myRecent,
+    isAuthenticated && open ? {} : "skip",
+  );
+  const teamMonth = useQuery(
+    api.aiUsage.adminMonth,
+    isAuthenticated && open && aiSubTab === "team" ? { monthKey } : "skip",
+  );
 
   useEffect(() => {
     return subscribeVaultCacheDebug(() => {
       setCapturing(isVaultCacheDebugCapturing());
       setCacheEvents([...getVaultCacheDebugEvents()]);
-    });
-  }, []);
-
-  useEffect(() => {
-    return subscribeAiUsageDebug(() => {
-      setAiEvents([...getAiUsageDebugEvents()]);
     });
   }, []);
 
@@ -240,12 +254,13 @@ export function VaultCacheDebugPanel({
   }, [open]);
 
   const aiTotals = useMemo(() => {
+    const events = aiEvents ?? [];
     let input = 0;
     let output = 0;
     let total = 0;
     let pages = 0;
     let estimatedUsd = 0;
-    for (const event of aiEvents) {
+    for (const event of events) {
       input += event.inputTokens ?? 0;
       output += event.outputTokens ?? 0;
       total +=
@@ -260,7 +275,7 @@ export function VaultCacheDebugPanel({
       total,
       pages,
       estimatedUsd,
-      calls: aiEvents.length,
+      calls: events.length,
     };
   }, [aiEvents]);
 
@@ -354,6 +369,19 @@ export function VaultCacheDebugPanel({
             </button>
             <button
               type="button"
+              aria-pressed={aiSubTab === "team"}
+              onClick={() => setAiSubTab("team")}
+              className={cn(
+                "rounded-md px-2 py-1 text-[11px] font-medium",
+                aiSubTab === "team"
+                  ? "bg-[var(--accent)]/15 text-[var(--accent)]"
+                  : "text-[var(--muted-foreground)] hover:bg-[var(--surface-2)]",
+              )}
+            >
+              Team
+            </button>
+            <button
+              type="button"
               aria-pressed={aiSubTab === "cost"}
               onClick={() => setAiSubTab("cost")}
               className={cn(
@@ -365,21 +393,47 @@ export function VaultCacheDebugPanel({
             >
               Cost
             </button>
-            {aiSubTab === "usage" ? (
-              <button
-                type="button"
-                onClick={() => clearAiUsageDebugEvents()}
-                className="ml-auto rounded-md px-2 py-1 text-[11px] text-[var(--muted-foreground)] hover:bg-[var(--surface-2)] hover:text-[var(--foreground)]"
-              >
-                Clear
-              </button>
-            ) : null}
           </div>
 
           {aiSubTab === "cost" ? (
             <div className="max-h-72 overflow-y-auto">
               <AiCostRatesTable />
             </div>
+          ) : aiSubTab === "team" ? (
+            <ul className="max-h-72 overflow-y-auto px-3 py-1">
+              {teamMonth === undefined ? (
+                <li className="py-6 text-center text-xs text-[var(--muted-foreground)]">
+                  Loading team month…
+                </li>
+              ) : teamMonth.length === 0 ? (
+                <li className="py-6 text-center text-xs text-[var(--muted-foreground)]">
+                  No recorded AI use this month.
+                </li>
+              ) : (
+                teamMonth.map((row) => (
+                  <li
+                    key={row.userId}
+                    className="border-b border-[var(--border)]/60 py-1.5 last:border-0"
+                  >
+                    <div className="flex items-baseline gap-2 font-mono text-[11px]">
+                      <span className="min-w-0 truncate">
+                        {row.email ?? row.name ?? row.userId}
+                      </span>
+                      <span className="ml-auto tabular-nums text-[var(--accent)]">
+                        {formatUsd(
+                          row.platform.estimatedUsd + row.byok.estimatedUsd,
+                        )}
+                      </span>
+                    </div>
+                    <p className="font-mono text-[10px] text-[var(--muted-foreground)]">
+                      app {formatUsd(row.platform.estimatedUsd)} · byok{" "}
+                      {formatUsd(row.byok.estimatedUsd)} ·{" "}
+                      {row.platform.callCount + row.byok.callCount} calls
+                    </p>
+                  </li>
+                ))
+              )}
+            </ul>
           ) : (
             <>
               <div className="border-b border-[var(--border)]/60 px-3 py-1.5 font-mono text-[10px] text-[var(--muted-foreground)]">
@@ -391,7 +445,11 @@ export function VaultCacheDebugPanel({
                 </span>
               </div>
               <ul className="max-h-56 overflow-y-auto px-3 py-1">
-                {aiEvents.length === 0 ? (
+                {aiEvents === undefined ? (
+                  <li className="py-6 text-center text-xs text-[var(--muted-foreground)]">
+                    Loading usage…
+                  </li>
+                ) : aiEvents.length === 0 ? (
                   <li className="py-6 text-center text-xs text-[var(--muted-foreground)]">
                     Send a Piggy / canvas chat, or upload a statement with
                     server OCR.

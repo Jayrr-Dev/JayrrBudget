@@ -1,4 +1,5 @@
 import { errorMessage, isRetryableAiError } from "@/shared/ai/errors";
+import { emitAiUsage } from "@/shared/ai/aiUsageSink";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { generateObject } from "ai";
 import { AsyncLocalStorage } from "node:async_hooks";
@@ -167,7 +168,7 @@ export async function generateObjectWithFallback<
   for (const [index, modelId] of models.entries()) {
     try {
       const started = Date.now();
-      const { object } = await withTimeout(
+      const generated = await withTimeout(
         params.logLabel,
         modelId,
         (abortSignal) =>
@@ -181,10 +182,15 @@ export async function generateObjectWithFallback<
           }),
         params.timeoutMs,
       );
-      console.info(
-        `[${params.logLabel}] model=${modelId} ok in ${Date.now() - started}ms`,
-      );
-      return { object: object as z.infer<SCHEMA>, modelId };
+      const ms = Date.now() - started;
+      console.info(`[${params.logLabel}] model=${modelId} ok in ${ms}ms`);
+      await emitAiUsage({
+        source: params.logLabel,
+        modelId,
+        usage: generated.usage,
+        ms,
+      });
+      return { object: generated.object as z.infer<SCHEMA>, modelId };
     } catch (error) {
       lastError = error;
       const message = errorMessage(error);

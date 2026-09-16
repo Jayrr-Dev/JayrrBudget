@@ -2,7 +2,7 @@ import {
   cleanSimilarMerchants,
   planSimilarMerchantMerges,
 } from "@/domains/merchants/application/cleanSimilarMerchants";
-import { runWithOpenRouterKey } from "@/shared/ai/openRouter";
+import { runMeteredOpenRouter } from "@/shared/ai/aiMeter.server";
 import { loadOpenRouterKeyOr503 } from "@/shared/ai/resolveOpenRouter.server";
 import {
   AuthRequiredError,
@@ -29,7 +29,7 @@ export async function POST(request: Request) {
     const client = await getAuthenticatedConvexClient();
     const loaded = await loadOpenRouterKeyOr503(client);
     if (!loaded.ok) return loaded.response;
-    return runWithOpenRouterKey(loaded.apiKey, async () => {
+    return runMeteredOpenRouter(client, loaded, async () => {
       const body = (await request.json().catch(() => ({}))) as ProbeBody;
       const probes = (body.merchants ?? [])
         .map((row) => {

@@ -5,11 +5,14 @@ import {
   IconBuildingStore,
   IconCategory,
   IconChartAreaLine,
+  IconCurrencyDollar,
   IconDatabase,
   IconFileUpload,
   IconLayoutBoard,
   IconLayoutDashboard,
   IconPuzzle,
+  IconServerCog,
+  IconUsers,
   type Icon,
 } from "@tabler/icons-react";
 
@@ -25,6 +28,9 @@ const ICON_MAP: Record<string, Icon> = {
   IconBug,
   IconDatabase,
   IconPuzzle,
+  IconServerCog,
+  IconUsers,
+  IconCurrencyDollar,
 };
 
 export function resolveModuleIcon(name: string): Icon {

@@ -15,6 +15,8 @@ import { buildBudgetContextFromDashboard } from "@/domains/canvas/domain/budgetC
 import { useFeatureFlag } from "@/domains/feature-flags/ui/useFeatureFlag";
 import {
   piggyMoodFromChat,
+  piggyMoodFromMessage,
+  PiggyMascot,
   type PiggyMood,
 } from "@/domains/ledger-ai/ui/PiggyMascot";
 import {
@@ -34,6 +36,9 @@ import { DefaultChatTransport, type UIMessage } from "ai";
 import { Info, PlusIcon, SendHorizonal } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactElement } from "react";
 import { toast } from "sonner";
+import type { ComponentProps } from "react";
+import { emptyPiggyHistory, restorePiggyHistory, restorePiggyChatIndex, type PiggyChatIndex, type PiggyHistory } from "../domain/piggyHistory";
+import { usePiggyHistory } from "./usePiggyHistory";
 
 const MAX_PIGGY_TABS = 8;
 
@@ -91,6 +96,7 @@ function PiggyAboutInfo() {
             <li>Read and update your store sheet and notes</li>
             <li>Summarize spend by merchant or category</li>
             <li>Open extra tabs for separate chats</li>
+            <li>Chats and drafts are saved on this browser for your account</li>
           </ul>
         </PopoverHeader>
       </PopoverContent>
@@ -98,7 +104,15 @@ function PiggyAboutInfo() {
   );
 }
 
-function PiggyChatPane({
+function PiggyChatPane(props: Omit<ComponentProps<typeof PiggyChatPaneSession>, "initialHistory" | "saveHistory">) {
+  const history = usePiggyHistory(`ledger:${props.chatId}`, restorePiggyHistory);
+  return <>
+    {history.error && <p role="status" className="px-3 py-2 text-xs text-warning">{history.error}</p>}
+    {history.ready ? <PiggyChatPaneSession key={`${history.owner}:${props.chatId}`} {...props} initialHistory={history.initial!} saveHistory={history.save} /> : <p className="p-3 text-xs text-muted-foreground">Loading saved chat…</p>}
+  </>;
+}
+
+function PiggyChatPaneSession({
   chatId,
   tabName,
   active,
@@ -106,7 +120,11 @@ function PiggyChatPane({
   blocked,
   transport,
   onMoodChange,
+  initialHistory,
+  saveHistory,
 }: {
+  initialHistory: PiggyHistory;
+  saveHistory: (value: PiggyHistory) => void;
   chatId: string;
   tabName: string;
   active: boolean;
@@ -115,11 +133,13 @@ function PiggyChatPane({
   transport: DefaultChatTransport<UIMessage>;
   onMoodChange?: (mood: PiggyMood) => void;
 }) {
-  const [input, setInput] = useState("");
+  const [input, setInput] = useState(initialHistory.draft);
   const [inputFocused, setInputFocused] = useState(false);
 
   const { messages, sendMessage, status, error } = useChat({
     id: chatId,
+    messages: initialHistory.messages,
+    throttle: 250,
     transport,
     onError: (err) => {
       toast.error("Piggy stumbled", {
@@ -131,10 +151,17 @@ function PiggyChatPane({
     },
   });
 
+  useEffect(() => {
+    saveHistory({ ...emptyPiggyHistory(), messages, draft: input });
+  }, [input, messages, saveHistory]);
+
   const busy = status === "submitted" || status === "streaming";
   const mood = piggyMoodFromChat({
     status,
     listening: inputFocused || input.trim().length > 0,
+    message: messages.at(-1),
+    error,
+    blocked,
   });
 
   useEffect(() => {
@@ -157,6 +184,7 @@ function PiggyChatPane({
       >
         {messages.length === 0 ? (
           <PiggyTranscriptItem messageId="piggy-empty">
+            <PiggyMascot mood="happy" iconClassName="mx-auto size-16" />
             <p className="px-1 py-2 text-xs text-muted-foreground">
               What&apos;s rattling in the bank? Try &quot;How much did I spend
               on groceries last month?&quot; or &quot;Move Uber Eats to Food /
@@ -181,7 +209,7 @@ function PiggyChatPane({
                   <PiggyUserMessage text={text} />
                 ) : (
                   <PiggyAssistantMessage
-                    mood={assistantTalking ? "talk" : "still"}
+                    mood={assistantTalking ? mood : piggyMoodFromMessage(message)}
                   >
                     <PiggyTextBubble>{text}</PiggyTextBubble>
                   </PiggyAssistantMessage>
@@ -190,11 +218,20 @@ function PiggyChatPane({
             );
           })
         )}
+        {busy && (status === "submitted" || messages.at(-1)?.role !== "assistant" || !messageText(messages.at(-1)?.parts ?? [])) ? (
+          <PiggyTranscriptItem messageId="piggy-thinking">
+            <PiggyAssistantMessage mood="thinking">
+              <p role="status" className="py-2 text-xs text-muted-foreground">Piggy is thinking…</p>
+            </PiggyAssistantMessage>
+          </PiggyTranscriptItem>
+        ) : null}
         {error ? (
           <PiggyTranscriptItem messageId="piggy-error">
-            <p className="rounded-lg border border-danger/20 bg-danger-subtle px-3 py-2 text-xs text-danger">
-              {error.message}
-            </p>
+            <PiggyAssistantMessage mood="sad">
+              <p className="rounded-lg border border-danger/20 bg-danger-subtle px-3 py-2 text-xs text-danger">
+                {error.message}
+              </p>
+            </PiggyAssistantMessage>
           </PiggyTranscriptItem>
         ) : null}
       </PiggyTranscript>
@@ -231,21 +268,41 @@ function PiggyChatPane({
   );
 }
 
-export function LedgerAiChat({
+export function LedgerAiChat(props: Omit<ComponentProps<typeof LedgerAiChatSession>, "initialIndex" | "saveIndex" | "historyError">) {
+  const history = usePiggyHistory("ledger-index", restorePiggyChatIndex);
+  if (!history.ready) return (
+    <Popover open={props.open} onOpenChange={props.onOpenChange}>
+      <PopoverTrigger asChild>{props.trigger}</PopoverTrigger>
+      <PopoverContent side={props.contentSide ?? "top"} align="end">
+        <p className="text-xs text-muted-foreground">Loading saved Piggy chats…</p>
+      </PopoverContent>
+    </Popover>
+  );
+  return <LedgerAiChatSession key={history.owner} {...props} initialIndex={history.initial!} saveIndex={history.save} historyError={history.error} />;
+}
+
+function LedgerAiChatSession({
   open,
   onOpenChange,
   onMoodChange,
   trigger,
   contentSide = "top",
+  initialIndex,
+  saveIndex,
+  historyError,
 }: {
+  historyError?: string;
+  initialIndex: PiggyChatIndex;
+  saveIndex: (value: PiggyChatIndex) => void;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onMoodChange?: (mood: PiggyMood) => void;
   trigger: ReactElement;
   contentSide?: "top" | "bottom";
 }) {
-  const [tabs, setTabs] = useState<PiggyTab[]>(() => [createPiggyTab("Piggy")]);
-  const [activeId, setActiveId] = useState(() => tabs[0]!.id);
+  const [tabs, setTabs] = useState<PiggyTab[]>(initialIndex.tabs);
+  const [activeId, setActiveId] = useState(initialIndex.activeId);
+  useEffect(() => { saveIndex({ tabs, activeId }); }, [tabs, activeId, saveIndex]);
   const encryptedLedger = useFeatureFlag("encryptedLedger");
   const cloudProcessing = useFeatureFlag("cloudProcessing");
   const privateLedger = usePrivateLedger();
@@ -358,6 +415,7 @@ export function LedgerAiChat({
           summarize spend. Each tab is a separate chat.
         </p>
 
+        {historyError && <p role="status" className="px-3 py-2 text-xs text-warning">{historyError}</p>}
         {tabs.map((tab) => (
           <PiggyChatPane
             key={tab.id}

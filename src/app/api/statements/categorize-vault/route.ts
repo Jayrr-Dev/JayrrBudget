@@ -1,5 +1,5 @@
 import { labelDescriptionGroups } from "@/domains/statements/application/categorizeStatement";
-import { runWithOpenRouterKey } from "@/shared/ai/openRouter";
+import { runMeteredOpenRouter } from "@/shared/ai/aiMeter.server";
 import { loadOpenRouterKeyOr503 } from "@/shared/ai/resolveOpenRouter.server";
 import {
   AuthRequiredError,
@@ -32,7 +32,7 @@ export async function POST(request: Request) {
         { status: 400 },
       );
     }
-    return runWithOpenRouterKey(loaded.apiKey, async () =>
+    return runMeteredOpenRouter(client, loaded, async () =>
       Response.json(
         await labelDescriptionGroups(client, transactions, {
           skipCache: body.skipCache === true,

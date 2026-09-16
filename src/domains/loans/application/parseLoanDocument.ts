@@ -10,10 +10,8 @@ import {
   isMistralConfigured,
   ocrDocument,
 } from "@/domains/statements/infrastructure/mistralOcr";
-import {
-  OPENROUTER_NOT_CONFIGURED,
-  runWithOpenRouterKey,
-} from "@/shared/ai/openRouter";
+import { OPENROUTER_NOT_CONFIGURED } from "@/shared/ai/openRouter";
+import { runMeteredOpenRouter } from "@/shared/ai/aiMeter.server";
 import { resolveOpenRouterApiKey } from "@/shared/ai/resolveOpenRouter.server";
 import { api } from "@/shared/convex/httpClient";
 import { errorMessage } from "@/shared/lib/error-message";
@@ -52,8 +50,8 @@ export async function parseLoanDocument(params: {
     };
   }
 
-  const apiKey = await resolveOpenRouterApiKey(params.client);
-  if (!apiKey) {
+  const loaded = await resolveOpenRouterApiKey(params.client);
+  if (!loaded) {
     return {
       ok: false,
       status: 503,
@@ -62,7 +60,9 @@ export async function parseLoanDocument(params: {
     };
   }
 
-  return runWithOpenRouterKey(apiKey, () => parseLoanDocumentWithKey(params));
+  return runMeteredOpenRouter(params.client, loaded, () =>
+    parseLoanDocumentWithKey(params),
+  );
 }
 
 type ParseLoanParams = {

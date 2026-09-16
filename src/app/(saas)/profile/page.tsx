@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/popover";
 import { PageSpinner } from "@/components/ui/spinner";
 import { ProfileAiByokCard } from "@/domains/ai-keys/ui/ProfileAiByokCard";
+import { ProfileAiUsageCard } from "@/domains/ai-keys/ui/ProfileAiUsageCard";
 import { resolveOcrMode } from "@/domains/statements/domain/ocrMode";
 import { ProfileOcrModeCard } from "@/domains/statements/ui/ProfileOcrModeCard";
 import { api } from "@convex/_generated/api";
@@ -167,6 +168,8 @@ export default function ProfilePage() {
       </form>
 
       <ProfileOcrModeCard ocrMode={resolveOcrMode(me.ocrMode)} />
+
+      <ProfileAiUsageCard />
 
       <ProfileAiByokCard />
 

@@ -5,8 +5,8 @@ import { createCanvasTools } from "@/domains/canvas/domain/canvasTools";
 import {
   chatModel,
   getModelChain,
-  runWithOpenRouterKey,
 } from "@/shared/ai/openRouter";
+import { persistAiUsage, runMeteredOpenRouter } from "@/shared/ai/aiMeter.server";
 import { aiUsageMessageMetadata } from "@/shared/ai/aiUsageMetadata";
 import { loadOpenRouterKeyOr503 } from "@/shared/ai/resolveOpenRouter.server";
 import { cachedConvexRead } from "@/shared/convex/cachedRead";
@@ -94,7 +94,7 @@ export async function POST(request: Request) {
   const loaded = await loadOpenRouterKeyOr503(convex);
   if (!loaded.ok) return loaded.response;
 
-  return runWithOpenRouterKey(loaded.apiKey, async () => {
+  return runMeteredOpenRouter(convex, loaded, async () => {
     let body: {
       messages?: UIMessage[];
       canvas?: CanvasSnapshot | null;
@@ -171,6 +171,14 @@ export async function POST(request: Request) {
       temperature: 0.2,
       onError: ({ error }) => {
         console.warn(`[canvas] stream error: ${errorMessage(error)}`);
+      },
+      onFinish: async ({ usage }) => {
+        await persistAiUsage(convex, loaded.billedTo, {
+          source: "canvas-chat",
+          modelId,
+          usage,
+          ms: Date.now() - startedAt,
+        });
       },
     });
 

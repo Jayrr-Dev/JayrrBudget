@@ -703,7 +703,7 @@ export function PersistentNoteFab({
           >
             <PiggyMascot
               mood={aiOpen ? piggyMood : "still"}
-              iconClassName="size-5 shrink-0"
+              iconClassName="size-8 shrink-0"
             />
             {aiOpen && !isNavbar ? (
               <span className="flex min-w-0 select-none items-center pr-0.5 text-[11px] font-medium tracking-tight whitespace-nowrap">

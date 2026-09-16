@@ -1,6 +1,7 @@
 "use client";
 
 import { PersistentNoteFab } from "@/components/layout/PersistentNoteFab";
+import { TrackingUsageHeartbeat } from "@/domains/user-metrics/ui/TrackingUsageHeartbeat";
 import {
   Popover,
   PopoverContent,
@@ -293,6 +294,7 @@ export function AppShell({
       )}
     >
       <WarmSaasQueries />
+      <TrackingUsageHeartbeat />
       <Sidebar open={open} setOpen={setOpen} animate>
         <SidebarBody
           className="w-full justify-between gap-8"

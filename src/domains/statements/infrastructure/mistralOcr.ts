@@ -1,4 +1,5 @@
 import { Mistral } from "@mistralai/mistralai";
+import { emitAiUsage } from "@/shared/ai/aiUsageSink";
 import {
   isImageFilename,
   isOcrDocumentFilename,
@@ -64,10 +65,17 @@ async function ocrViaFileUpload(params: {
     const pages = ocr.pages ?? [];
     const markdown = pagesToMarkdown(pages);
     assertReadableMarkdown(markdown);
+    const pageCount = pages.length;
+    await emitAiUsage({
+      source: "mistral-ocr",
+      modelId: "mistral-ocr-latest",
+      billedTo: "platform",
+      pages: pageCount,
+    });
 
     return {
       markdown,
-      pageCount: pages.length,
+      pageCount,
     };
   } finally {
     try {
@@ -100,9 +108,16 @@ async function ocrViaImageDataUrl(params: {
   const markdown = pagesToMarkdown(pages);
   assertReadableMarkdown(markdown);
 
+  const pageCount = Math.max(pages.length, 1);
+  await emitAiUsage({
+    source: "mistral-ocr",
+    modelId: "mistral-ocr-latest",
+    billedTo: "platform",
+    pages: pageCount,
+  });
   return {
     markdown,
-    pageCount: Math.max(pages.length, 1),
+    pageCount,
   };
 }
 

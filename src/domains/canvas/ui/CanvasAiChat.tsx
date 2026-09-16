@@ -18,7 +18,6 @@ import {
 } from "@/components/ui/popover";
 import {
   applyCanvasTool,
-  createCanvasRefAliases,
 } from "@/domains/canvas/application/applyCanvasTools";
 import { buildBudgetContextFromDashboard } from "@/domains/canvas/domain/budgetContext";
 import { getCanvasSnapshot } from "@/domains/canvas/domain/canvasContext";
@@ -30,7 +29,12 @@ import {
 } from "@/domains/canvas/ui/CanvasChatParts";
 import { useCanvasApi } from "@/domains/canvas/ui/canvasApiContext";
 import { useFeatureFlag } from "@/domains/feature-flags/ui/useFeatureFlag";
-import { PiggyMascot } from "@/domains/ledger-ai/ui/PiggyMascot";
+import {
+  PiggyMascot,
+  piggyMoodFromChat,
+  piggyMoodFromMessage,
+  type PiggyMood,
+} from "@/domains/ledger-ai/ui/PiggyMascot";
 import {
   PiggyAssistantMessage,
   PiggyTranscript,
@@ -52,8 +56,10 @@ import {
   type UIMessage,
 } from "ai";
 import { ArrowUp, Info, Square } from "lucide-react";
-import { useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { toast } from "sonner";
+import { restorePiggyHistory, type PiggyHistory } from "@/domains/ledger-ai/domain/piggyHistory";
+import { usePiggyHistory } from "@/domains/ledger-ai/ui/usePiggyHistory";
 
 const SUGGESTIONS = [
   "Sketch where my money goes",
@@ -116,6 +122,7 @@ function CanvasPiggyInfo() {
             <li>Open “Piggy’s thoughts” to see the plan behind a piece</li>
             <li>Ask for edits — Piggy moves or erases what’s there</li>
             <li>Enter sends, Shift+Enter adds a line</li>
+            <li>Chat and draft are saved on this browser for your account</li>
           </ul>
         </PopoverHeader>
       </PopoverContent>
@@ -126,8 +133,10 @@ function CanvasPiggyInfo() {
 function AssistantTurn({
   message,
   boardErrors,
+  mood,
 }: {
   message: UIMessage;
+  mood?: PiggyMood;
   /** toolCallId -> why the piece did not land on the board. */
   boardErrors: ReadonlyMap<string, string>;
 }) {
@@ -157,7 +166,7 @@ function AssistantTurn({
   if (visible.length === 0) return null;
 
   return (
-    <PiggyAssistantMessage>
+    <PiggyAssistantMessage mood={mood ?? piggyMoodFromMessage(message, boardErrors)}>
       {visible.map((block) => {
         if (block.kind === "text") {
           return (
@@ -187,9 +196,20 @@ function AssistantTurn({
 }
 
 export function CanvasAiChat() {
+  const history = usePiggyHistory("canvas", restorePiggyHistory);
+  if (!history.ready) return <Button variant="ghost" size="icon-lg" disabled aria-label="Loading saved Canvas Piggy chat"><PiggyMascot mood="thinking" /></Button>;
+  return <CanvasAiChatSession key={history.owner} initialHistory={history.initial!} saveHistory={history.save} historyError={history.error} />;
+}
+
+function CanvasAiChatSession({ initialHistory, saveHistory, historyError }: {
+  initialHistory: PiggyHistory;
+  saveHistory: (history: PiggyHistory) => void;
+  historyError?: string;
+}) {
   const api = useCanvasApi();
   const [open, setOpen] = useState(false);
-  const [input, setInput] = useState("");
+  const [input, setInput] = useState(initialHistory.draft);
+  const [inputFocused, setInputFocused] = useState(false);
   const encryptedLedger = useFeatureFlag("encryptedLedger");
   const cloudProcessing = useFeatureFlag("cloudProcessing");
   const privateLedger = usePrivateLedger();
@@ -224,12 +244,14 @@ export function CanvasAiChat() {
 
   // ref -> element id for this chat, so Piggy can point later arrows/frames/edits
   // at pieces drawn a few steps earlier without a fresh snapshot.
-  const refAliases = useRef(createCanvasRefAliases());
+  const refAliases = useRef(new Map(initialHistory.aliases));
   const [boardErrors, setBoardErrors] = useState<ReadonlyMap<string, string>>(
-    () => new Map(),
+    () => new Map(initialHistory.boardErrors),
   );
 
   const { messages, sendMessage, status, error, stop } = useChat({
+    messages: initialHistory.messages,
+    throttle: 250,
     transport,
     // Tools are acknowledged on the server so one stream carries the whole
     // board; this only kicks in if a request hit the step cap mid-drawing.
@@ -275,6 +297,14 @@ export function CanvasAiChat() {
   const blocked = encryptedLedger && !cloudProcessing;
   const last = messages.at(-1);
   const showThinking = busy && !hasVisibleParts(last);
+  const mood = piggyMoodFromChat({
+    status, listening: inputFocused || input.trim().length > 0,
+    message: last, error, blocked, boardErrors,
+  });
+
+  useEffect(() => {
+    saveHistory({ messages, draft: input, aliases: [...refAliases.current], boardErrors: [...boardErrors] });
+  }, [messages, input, boardErrors, saveHistory]);
 
   const submit = (text: string) => {
     const value = text.trim();
@@ -308,7 +338,7 @@ export function CanvasAiChat() {
             busy && !open && "ring-2 ring-accent/35",
           )}
         >
-          <PiggyMascot mood="still" iconClassName="size-5" />
+          <PiggyMascot mood={mood} iconClassName="size-8" />
         </Button>
       </PopoverTrigger>
       <PopoverContent
@@ -320,6 +350,7 @@ export function CanvasAiChat() {
       >
         <PopoverHeader className="flex-row items-center gap-1.5 border-b border-accent/15 bg-linear-to-r from-accent-subtle/80 to-transparent px-3 py-2.5">
           <PopoverTitle className="flex items-center gap-1.5">
+            <PiggyMascot mood={mood} iconClassName="size-10" />
             Canvas Piggy
             <CanvasPiggyInfo />
           </PopoverTitle>
@@ -335,6 +366,8 @@ export function CanvasAiChat() {
           </p>
         ) : null}
 
+        {historyError && <p role="status" className="px-3 py-2 text-xs text-warning">{historyError}</p>}
+
         <PiggyTranscript
           ariaLabel="Canvas Piggy conversation"
           className="h-80"
@@ -343,7 +376,7 @@ export function CanvasAiChat() {
             <PiggyTranscriptItem messageId="piggy-empty">
               <div className="flex h-full flex-col items-center justify-center gap-3 py-6 text-center">
                 <span className="flex size-12 items-center justify-center rounded-full bg-accent-subtle ring-4 ring-accent-subtle/50">
-                  <PiggyMascot mood="still" iconClassName="size-6" />
+                  <PiggyMascot mood="happy" iconClassName="size-12" />
                 </span>
                 <div className="space-y-1">
                   <p className="text-sm font-medium">
@@ -391,6 +424,7 @@ export function CanvasAiChat() {
                   <AssistantTurn
                     message={message}
                     boardErrors={boardErrors}
+                    mood={busy && message.id === last?.id ? mood : undefined}
                   />
                 </PiggyTranscriptItem>
               );
@@ -398,14 +432,18 @@ export function CanvasAiChat() {
           )}
           {showThinking ? (
             <PiggyTranscriptItem messageId="piggy-thinking">
-              <PiggyThinking label={thinkingLabel(status, last)} />
+              <PiggyAssistantMessage mood="thinking">
+                <PiggyThinking label={thinkingLabel(status, last)} />
+              </PiggyAssistantMessage>
             </PiggyTranscriptItem>
           ) : null}
           {error ? (
             <PiggyTranscriptItem messageId="piggy-error">
-              <p className="rounded-lg border border-danger/20 bg-danger-subtle px-3 py-2 text-xs text-danger">
-                {error.message}
-              </p>
+              <PiggyAssistantMessage mood="sad">
+                <p className="rounded-lg border border-danger/20 bg-danger-subtle px-3 py-2 text-xs text-danger">
+                  {error.message}
+                </p>
+              </PiggyAssistantMessage>
             </PiggyTranscriptItem>
           ) : null}
         </PiggyTranscript>
@@ -422,6 +460,8 @@ export function CanvasAiChat() {
               value={input}
               rows={1}
               onChange={(event) => setInput(event.target.value)}
+              onFocus={() => setInputFocused(true)}
+              onBlur={() => setInputFocused(false)}
               onKeyDown={onKeyDown}
               placeholder={busy ? "Piggy is busy…" : "Ask or draw…"}
               disabled={blocked}

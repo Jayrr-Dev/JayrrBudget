@@ -520,6 +520,73 @@ export default defineSchema({
     updatedAt: v.number(),
   }).index("by_userId_provider", ["userId", "provider"]),
 
+  /** One AI / OCR call. Cost is estimated from convex/lib/aiCostTable. */
+  aiUsageEvents: defineTable({
+    userId: v.id("users"),
+    source: v.string(),
+    modelId: v.string(),
+    billedTo: v.union(v.literal("platform"), v.literal("byok")),
+    inputTokens: v.union(v.number(), v.null()),
+    outputTokens: v.union(v.number(), v.null()),
+    totalTokens: v.union(v.number(), v.null()),
+    pages: v.union(v.number(), v.null()),
+    estimatedUsd: v.union(v.number(), v.null()),
+    ms: v.union(v.number(), v.null()),
+    createdAt: v.number(),
+  }).index("by_userId_createdAt", ["userId", "createdAt"]),
+
+  /** Per user / UTC month / who paid (app key vs user BYOK). */
+  aiUsageMonths: defineTable({
+    userId: v.id("users"),
+    monthKey: v.string(),
+    billedTo: v.union(v.literal("platform"), v.literal("byok")),
+    callCount: v.number(),
+    inputTokens: v.number(),
+    outputTokens: v.number(),
+    pages: v.number(),
+    estimatedUsd: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_userId_monthKey_billedTo", ["userId", "monthKey", "billedTo"])
+    .index("by_monthKey", ["monthKey"]),
+
+  /** Per-role AI plan: price, monthly platform cap, request rate. */
+  servicePlans: defineTable({
+    role: v.union(
+      v.literal("admin"),
+      v.literal("normal"),
+      v.literal("premium"),
+    ),
+    name: v.string(),
+    priceUsd: v.number(),
+    monthlyCapUsd: v.union(v.number(), v.null()),
+    rateMax: v.number(),
+    rateWindowMs: v.number(),
+    includedCanvas: v.boolean(),
+    updatedAt: v.number(),
+  }).index("by_role", ["role"]),
+
+  /** Sliding AI request window per user (rate limit). */
+  aiRateWindows: defineTable({
+    userId: v.id("users"),
+    windowStart: v.number(),
+    count: v.number(),
+  }).index("by_userId", ["userId"]),
+
+  /**
+   * One row per user per UTC day. Heartbeats add activeMs while the app
+   * is visible. Used for DAU / time-in-app on the Users dashboard.
+   */
+  usageDays: defineTable({
+    userId: v.id("users"),
+    dayKey: v.string(),
+    activeMs: v.number(),
+    ticks: v.number(),
+    lastHeartbeatAt: v.number(),
+  })
+    .index("by_userId_dayKey", ["userId", "dayKey"])
+    .index("by_dayKey", ["dayKey"]),
+
   /** Client-reported errors (Error Boundary + manual). */
   issues: defineTable({
     userId,
