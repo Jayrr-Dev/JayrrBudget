@@ -32,7 +32,9 @@ export const parsedStatementSchema = z.object({
     .trim()
     .min(1)
     .default("CAD")
-    .describe("Statement currency as its ISO 4217 three-letter code, for example CAD, USD, EUR, GBP, JPY, or AUD."),
+    .describe(
+      "Statement currency as its ISO 4217 three-letter code, for example CAD, USD, EUR, GBP, JPY, or AUD.",
+    ),
   statementPeriodStart: z
     .string()
     .nullable()
@@ -58,7 +60,9 @@ export const parsedStatementSchema = z.object({
       merchantName: z
         .string()
         .nullable()
-        .describe("Clean merchant/payee name without city/noise"),
+        .describe(
+          "Short brand/payee only (Aldo, Airbnb). Never city, FX amount, currency, @ rate, *refs, or websites.",
+        ),
       amount: z
         .number()
         .describe(

@@ -1,5 +1,5 @@
-import { generateObjectWithFallback, mapPool } from "@/shared/ai/openRouter";
 import { canonicalCategoryAiRules } from "@/domains/enrichment/domain/canonicalCategories";
+import { MERCHANT_CLEAN_AI_RULES } from "@/domains/enrichment/domain/merchantCleanAiRules";
 import {
   formatCategoryVocabularyForPrompt,
   type CategoryVocabulary,
@@ -14,6 +14,7 @@ import {
   type ParsedStatement,
 } from "@/domains/statements/domain/parsedStatement";
 import { formatUserAiRulesPromptBlock } from "@/domains/statements/domain/userAiRules";
+import { generateObjectWithFallback, mapPool } from "@/shared/ai/openRouter";
 import { z } from "zod";
 
 export {
@@ -71,7 +72,8 @@ const DEDUP_AND_META_RULES = [
   "openingBalance = Previous balance. closingBalance = Total balance / New balance.",
   "totalDebits = purchases/charges total when shown. totalCredits = payments/credits total when shown.",
   "Strip OCR dingbats (arrows, stars, warning marks) from description and merchantName.",
-  "Keep FX notes like 'USD 12.00 @ 1.42' in description; merchantName stays the brand.",
+  "Keep FX notes like 'USD 12.00 @ 1.42' in description only.",
+  MERCHANT_CLEAN_AI_RULES,
 ].join("\n");
 
 const MASK_RULES = [
@@ -100,6 +102,7 @@ const CATEGORY_HARD_RULES = [
   "Esso / Shell / Petro-Canada, even with 7-Eleven on the same line → Transport / Fuel / Gas Stations.",
   "Plain 7-Eleven with no fuel brand → Food / Groceries / Convenience Store.",
   "Netflix, Spotify, Disney+, Crave, and similar recurring digital charges → transactionCode subscription.",
+  "If no existing subcategory fits, emit a new short Title Case subcategory under an existing category. Never leave subcategory empty.",
   "Purchase refunds (Amazon CREDIT, return) stay under the original tree, transactionCode refund. Never Income.",
 ].join("\n");
 
@@ -151,7 +154,7 @@ export async function parseStatementWithOpenRouter(
         "accountType (pick one): chequing|checking, savings, credit|credit_card (Visa/Mastercard/Amex), lending|line_of_credit (LOC/HELOC/loan), other (TFSA/business/unclear).",
         ...hintBlock,
         BALANCE_AND_DEDUP_RULES,
-        "Keep description as full original text (minus dingbats); merchantName = cleaned brand.",
+        "Keep description as full original text (minus dingbats).",
         "Fill categories, paymentChannel, transactionCode, city/region, foreign amounts when present.",
         ...categoryBlock,
         ocrMarkdown.slice(0, 120_000),
@@ -192,7 +195,6 @@ export async function parseStatementWithOpenRouter(
         ...hintBlock,
         BALANCE_AND_DEDUP_RULES,
         "Keep description as full original text (minus dingbats).",
-        "merchantName = cleaned merchant without city noise.",
         "Fill category, paymentChannel, transactionCode, city/region, foreign amounts when present.",
         `This is page ${index + 1} of ${pages.length}.`,
         ...categoryBlock,

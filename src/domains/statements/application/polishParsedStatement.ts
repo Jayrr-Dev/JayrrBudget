@@ -1,3 +1,4 @@
+import { cleanMerchantDescriptor } from "@convex/lib/cleanMerchantDescriptor";
 import { normalizeStatementAccountType } from "@/domains/dashboard/domain/accountCategory";
 import { resolveAccountMask } from "@/domains/statements/application/accountMask";
 import {
@@ -223,7 +224,8 @@ function cleanTransactionText(parsed: ParsedStatement): ParsedStatement {
       ...txn,
       description: cleanStatementLine(txn.description),
       merchantName: txn.merchantName
-        ? cleanStatementLine(txn.merchantName)
+        ? cleanMerchantDescriptor(cleanStatementLine(txn.merchantName)) ??
+          cleanStatementLine(txn.merchantName)
         : txn.merchantName,
     })),
   };

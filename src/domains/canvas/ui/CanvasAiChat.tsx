@@ -132,7 +132,7 @@ export function CanvasAiChat() {
       <PopoverContent
         align="start"
         side="bottom"
-        className="z-[1000] w-[22rem] gap-3 p-3"
+        className="z-[1000] w-[22rem] gap-4 p-3"
       >
         <PopoverHeader className="gap-1">
           <PopoverTitle>Canvas AI</PopoverTitle>

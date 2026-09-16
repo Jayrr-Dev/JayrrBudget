@@ -21,7 +21,7 @@ export function LoansAiScene({ animate, onDone }: SceneProps) {
 
   return (
     <SceneFrame step={step} captions={CAPTIONS}>
-      <div className="flex h-full flex-col justify-center space-y-3">
+      <div className="flex h-full flex-col justify-center space-y-4">
         {/* Loan card */}
         <div className="rounded-md border border-[var(--border)] bg-[var(--surface)] p-3 shadow-sm">
           <div className="flex items-center justify-between gap-2 text-xs">
@@ -58,7 +58,7 @@ export function LoansAiScene({ animate, onDone }: SceneProps) {
         </div>
 
         {/* Cloud Processing toggle */}
-        <div className="flex items-center justify-between gap-3 rounded-md border border-[var(--border)] bg-[var(--surface)] px-3 py-2 shadow-sm">
+        <div className="flex items-center justify-between gap-4 rounded-md border border-[var(--border)] bg-[var(--surface)] px-3 py-2 shadow-sm">
           <span className="inline-flex min-w-0 items-center gap-1.5 text-xs text-[var(--foreground)]">
             <Sparkles
               className={

@@ -38,6 +38,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { downloadCsv, toCsv } from "@/shared/lib/csv";
 import {
   useTable,
@@ -177,8 +178,7 @@ function formatRangeLabel(from?: string, to?: string): string {
 function readDateWindow(value: unknown): DateWindowFilter {
   if (!isDateWindowActive(value)) return {};
   const legacy = value as DateWindowFilter & { month?: string };
-  const months =
-    value.months ?? (legacy.month ? [legacy.month] : undefined);
+  const months = value.months ?? (legacy.month ? [legacy.month] : undefined);
   return {
     ...(months?.length ? { months } : {}),
     ...(value.from ? { from: value.from } : {}),
@@ -214,6 +214,7 @@ export function DataTable<TData extends RowData>({
     pageSize,
   });
   const [legacyFilterValue, setLegacyFilterValue] = useState("");
+  const isMobile = useIsMobile();
 
   const useGlobalSearch = enableGlobalFilter;
   const showSearch = enableGlobalFilter || Boolean(searchKey);
@@ -449,7 +450,7 @@ export function DataTable<TData extends RowData>({
   return (
     <div className="space-y-4">
       {showToolbar ? (
-        <div className="flex flex-col gap-3">
+        <div className="flex flex-col gap-4">
           <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
             {showSearch ? (
               <Input
@@ -465,7 +466,7 @@ export function DataTable<TData extends RowData>({
                   }
                   setPagination((prev) => ({ ...prev, pageIndex: 0 }));
                 }}
-                className="max-w-sm"
+                className="w-full max-w-sm"
                 aria-label={searchPlaceholder}
               />
             ) : null}
@@ -536,9 +537,7 @@ export function DataTable<TData extends RowData>({
                     aria-label="Filter by month"
                     render={<Button type="button" variant="outline" />}
                   >
-                    {selectedMonth
-                      ? formatMonthLabel(selectedMonth)
-                      : "Month"}
+                    {selectedMonth ? formatMonthLabel(selectedMonth) : "Month"}
                   </DropdownMenuTrigger>
                   <DropdownMenuContent
                     align="start"
@@ -572,14 +571,17 @@ export function DataTable<TData extends RowData>({
                       variant="outline"
                       aria-label="Filter by date range"
                     >
-                      <CalendarIcon data-icon="inline-start" className="opacity-70" />
+                      <CalendarIcon
+                        data-icon="inline-start"
+                        className="opacity-70"
+                      />
                       {formatRangeLabel(dateWindow.from, dateWindow.to)}
                     </Button>
                   </PopoverTrigger>
-                  <PopoverContent align="start" className="w-auto gap-3 p-3">
+                  <PopoverContent align="start" className="w-auto gap-4 p-3">
                     <Calendar
                       mode="range"
-                      numberOfMonths={2}
+                      numberOfMonths={isMobile ? 1 : 2}
                       selected={dateRangeSelected}
                       onSelect={(range) => {
                         patchDateWindow({
@@ -612,219 +614,267 @@ export function DataTable<TData extends RowData>({
               </>
             ) : null}
             {activeFilterCount > 0 ? (
-              <Button
-                type="button"
-                variant="outline"
-                onClick={clearFilters}
-              >
+              <Button type="button" variant="outline" onClick={clearFilters}>
                 Clear filters
               </Button>
             ) : null}
           </div>
-          <p className="text-sm text-[var(--muted-foreground)]">
+          <p className="text-sm text-foreground-muted">
             Showing {filteredCount} of {totalCount}
             {activeFilterCount > 0 ? " (filtered)" : ""}
           </p>
         </div>
       ) : null}
-      <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)]">
-        <TooltipProvider>
-        <Table className="min-w-max table-fixed">
-          <TableHeader>
-            {table.getHeaderGroups().map((headerGroup) => (
-              <TableRow key={headerGroup.id}>
-                {headerGroup.headers.map((header) => {
-                  const canSort = header.column.getCanSort();
-                  const sorted = header.column.getIsSorted();
-                  const columnFilter = filtersByColumnId.get(header.column.id);
-                  const filterValue =
-                    (header.column.getFilterValue() as string | undefined) ??
-                    "all";
-                  const filterActive = Boolean(
-                    columnFilter && filterValue !== "all",
-                  );
-                  const columnMeta = header.column.columnDef.meta as
-                    | ColumnMeta
-                    | undefined;
-                  const width = columnMeta?.width;
-                  const inventBand = columnMeta?.band === "invent";
-                  const description = columnMeta?.description;
-                  const isAmount = header.column.id === "amount";
-                  const headerDef = header.column.columnDef.header;
-                  const customHeader = typeof headerDef === "function";
-                  const sortLabel =
-                    csvColumnLabel(header.column) ?? header.column.id;
-                  const labelNode = (
-                    <HeaderLabel description={description}>
-                      <span className="line-clamp-2 text-left leading-snug">
-                        {customHeader ? (
-                          sortLabel
-                        ) : (
-                          <table.FlexRender header={header} />
-                        )}
-                      </span>
-                    </HeaderLabel>
-                  );
-                  return (
-                    <TableHead
-                      key={header.id}
-                      style={
-                        width
-                          ? { width, minWidth: width, maxWidth: width }
-                          : undefined
-                      }
-                      className={[
-                        "h-auto min-h-10 whitespace-normal",
-                        width ? "overflow-hidden" : "",
-                        inventBand
-                          ? "border-l border-[var(--border)] bg-[var(--muted)]/35"
-                          : "",
-                      ]
-                        .filter(Boolean)
-                        .join(" ")}
+      <TooltipProvider>
+        <div className="md:hidden">
+          {table.getRowModel().rows?.length ? (
+            <ul className="space-y-4">
+              {table.getRowModel().rows.map((row) => {
+                const visibleCells = row.getVisibleCells();
+                const actionCells = visibleCells.filter(
+                  (cell) => cell.column.id === "actions",
+                );
+                const dataCells = visibleCells.filter(
+                  (cell) => cell.column.id !== "actions",
+                );
+                return (
+                  <li key={row.id}>
+                    <article
+                      data-state={row.getIsSelected() ? "selected" : undefined}
+                      className="rounded-xl border border-[var(--border)] bg-surface-elevated p-3"
                     >
-                      {header.isPlaceholder ? null : canSort || columnFilter ? (
-                        <div
-                          className={`-ml-2 inline-flex max-w-full items-center gap-0.5 ${
-                            isAmount ? "w-full justify-end" : ""
-                          }`}
-                        >
-                          {canSort ? (
-                            <button
-                              type="button"
-                              className="inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-md px-2 py-1 font-medium transition-colors hover:bg-[var(--muted)]"
-                              onClick={header.column.getToggleSortingHandler()}
-                            >
-                              {labelNode}
-                              {sorted === "asc" ? (
-                                <ArrowUpIcon className="size-3.5 shrink-0 opacity-70" />
-                              ) : sorted === "desc" ? (
-                                <ArrowDownIcon className="size-3.5 shrink-0 opacity-70" />
-                              ) : (
-                                <ArrowUpDownIcon className="size-3.5 shrink-0 opacity-40" />
-                              )}
-                            </button>
-                          ) : (
-                            <span className="px-2 py-1 font-medium">
-                              {labelNode}
-                            </span>
-                          )}
-                          {customHeader ? (
-                            <table.FlexRender header={header} />
-                          ) : null}
-                          {columnFilter ? (
-                            <DropdownMenu>
-                              <DropdownMenuTrigger
-                                className={`inline-flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-md transition-colors ${
-                                  filterActive
-                                    ? "bg-[var(--accent)] text-[var(--accent-foreground)] hover:bg-[var(--accent)]/90"
-                                    : "text-[var(--muted-foreground)] opacity-50 hover:bg-[var(--muted)] hover:opacity-80"
-                                }`}
-                                aria-label={`Filter ${columnFilter.label}`}
-                                aria-pressed={filterActive}
-                              >
-                                <ListFilterIcon className="size-3.5" />
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent
-                                align="start"
-                                className="max-h-72 min-w-44"
-                              >
-                                <DropdownMenuRadioGroup
-                                  value={filterValue}
-                                  onValueChange={(value) =>
-                                    setColumnFilterValue(
-                                      columnFilter.columnId,
-                                      value,
-                                    )
-                                  }
-                                >
-                                  <DropdownMenuLabel>
-                                    Filter {columnFilter.label}
-                                  </DropdownMenuLabel>
-                                  <DropdownMenuSeparator />
-                                  <DropdownMenuRadioItem value="all">
-                                    {columnFilter.allLabel ??
-                                      `All ${columnFilter.label.toLowerCase()}`}
-                                  </DropdownMenuRadioItem>
-                                  {optionsForFilter(columnFilter).map(
-                                    (option) => (
-                                      <DropdownMenuRadioItem
-                                        key={option.value}
-                                        value={option.value}
-                                      >
-                                        {option.label}
-                                      </DropdownMenuRadioItem>
-                                    ),
-                                  )}
-                                </DropdownMenuRadioGroup>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          ) : null}
+                      {actionCells.length > 0 ? (
+                        <div className="mb-2 flex justify-end gap-1">
+                          {actionCells.map((cell) => (
+                            <div key={cell.id}>
+                              <table.FlexRender cell={cell} />
+                            </div>
+                          ))}
                         </div>
-                      ) : (
-                        <HeaderLabel description={description}>
-                          <table.FlexRender header={header} />
-                        </HeaderLabel>
-                      )}
-                    </TableHead>
-                  );
-                })}
-              </TableRow>
-            ))}
-          </TableHeader>
-          <TableBody>
-            {table.getRowModel().rows?.length ? (
-              table.getRowModel().rows.map((row) => (
-                <TableRow
-                  key={row.id}
-                  data-state={row.getIsSelected() && "selected"}
-                >
-                  {row.getVisibleCells().map((cell) => {
-                    const cellMeta = cell.column.columnDef.meta as
-                      | { width?: string; band?: "read" | "invent" }
+                      ) : null}
+                      <dl className="grid grid-cols-[minmax(0,7.5rem)_minmax(0,1fr)] gap-x-3 gap-y-2">
+                        {dataCells.map((cell) => (
+                          <div key={cell.id} className="contents">
+                            <dt className="pt-0.5 text-xs font-medium text-foreground-muted">
+                              {csvColumnLabel(cell.column) ?? cell.column.id}
+                            </dt>
+                            <dd className="min-w-0 text-sm wrap-break-word [&_*]:whitespace-normal">
+                              <table.FlexRender cell={cell} />
+                            </dd>
+                          </div>
+                        ))}
+                      </dl>
+                    </article>
+                  </li>
+                );
+              })}
+            </ul>
+          ) : (
+            <div className="rounded-xl border border-[var(--border)] bg-surface-elevated px-4 py-10 text-center text-sm text-foreground-muted">
+              No results.
+            </div>
+          )}
+        </div>
+        <div className="hidden overflow-hidden rounded-xl border border-[var(--border)] bg-surface-elevated md:block">
+          <Table className="min-w-max table-fixed">
+            <TableHeader>
+              {table.getHeaderGroups().map((headerGroup) => (
+                <TableRow key={headerGroup.id}>
+                  {headerGroup.headers.map((header) => {
+                    const canSort = header.column.getCanSort();
+                    const sorted = header.column.getIsSorted();
+                    const columnFilter = filtersByColumnId.get(
+                      header.column.id,
+                    );
+                    const filterValue =
+                      (header.column.getFilterValue() as string | undefined) ??
+                      "all";
+                    const filterActive = Boolean(
+                      columnFilter && filterValue !== "all",
+                    );
+                    const columnMeta = header.column.columnDef.meta as
+                      | ColumnMeta
                       | undefined;
-                    const width = cellMeta?.width;
-                    const inventBand = cellMeta?.band === "invent";
+                    const width = columnMeta?.width;
+                    const inventBand = columnMeta?.band === "invent";
+                    const description = columnMeta?.description;
+                    const isAmount = header.column.id === "amount";
+                    const headerDef = header.column.columnDef.header;
+                    const customHeader = typeof headerDef === "function";
+                    const sortLabel =
+                      csvColumnLabel(header.column) ?? header.column.id;
+                    const labelNode = (
+                      <HeaderLabel description={description}>
+                        <span className="line-clamp-2 text-left leading-snug">
+                          {customHeader ? (
+                            sortLabel
+                          ) : (
+                            <table.FlexRender header={header} />
+                          )}
+                        </span>
+                      </HeaderLabel>
+                    );
                     return (
-                      <TableCell
-                        key={cell.id}
+                      <TableHead
+                        key={header.id}
                         style={
                           width
                             ? { width, minWidth: width, maxWidth: width }
                             : undefined
                         }
                         className={[
-                          "whitespace-normal align-top",
+                          "h-auto min-h-10 whitespace-normal",
                           width ? "overflow-hidden" : "",
                           inventBand
-                            ? "border-l border-[var(--border)] bg-[var(--muted)]/20"
+                            ? "border-l border-[var(--border)] bg-[var(--muted)]/35"
                             : "",
                         ]
                           .filter(Boolean)
                           .join(" ")}
                       >
-                        <table.FlexRender cell={cell} />
-                      </TableCell>
+                        {header.isPlaceholder ? null : canSort ||
+                          columnFilter ? (
+                          <div
+                            className={`-ml-2 inline-flex max-w-full items-center gap-0.5 ${
+                              isAmount ? "w-full justify-end" : ""
+                            }`}
+                          >
+                            {canSort ? (
+                              <button
+                                type="button"
+                                className="inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-md px-2 py-1 font-medium transition-colors hover:bg-[var(--muted)]"
+                                onClick={header.column.getToggleSortingHandler()}
+                              >
+                                {labelNode}
+                                {sorted === "asc" ? (
+                                  <ArrowUpIcon className="size-3.5 shrink-0 opacity-70" />
+                                ) : sorted === "desc" ? (
+                                  <ArrowDownIcon className="size-3.5 shrink-0 opacity-70" />
+                                ) : (
+                                  <ArrowUpDownIcon className="size-3.5 shrink-0 opacity-40" />
+                                )}
+                              </button>
+                            ) : (
+                              <span className="px-2 py-1 font-medium">
+                                {labelNode}
+                              </span>
+                            )}
+                            {customHeader ? (
+                              <table.FlexRender header={header} />
+                            ) : null}
+                            {columnFilter ? (
+                              <DropdownMenu>
+                                <DropdownMenuTrigger
+                                  className={`inline-flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-md transition-colors ${
+                                    filterActive
+                                      ? "bg-primary text-primary-foreground hover:bg-primary-hover"
+                                      : "text-foreground-muted opacity-50 hover:bg-[var(--muted)] hover:opacity-80"
+                                  }`}
+                                  aria-label={`Filter ${columnFilter.label}`}
+                                  aria-pressed={filterActive}
+                                >
+                                  <ListFilterIcon className="size-3.5" />
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent
+                                  align="start"
+                                  className="max-h-72 min-w-44"
+                                >
+                                  <DropdownMenuRadioGroup
+                                    value={filterValue}
+                                    onValueChange={(value) =>
+                                      setColumnFilterValue(
+                                        columnFilter.columnId,
+                                        value,
+                                      )
+                                    }
+                                  >
+                                    <DropdownMenuLabel>
+                                      Filter {columnFilter.label}
+                                    </DropdownMenuLabel>
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuRadioItem value="all">
+                                      {columnFilter.allLabel ??
+                                        `All ${columnFilter.label.toLowerCase()}`}
+                                    </DropdownMenuRadioItem>
+                                    {optionsForFilter(columnFilter).map(
+                                      (option) => (
+                                        <DropdownMenuRadioItem
+                                          key={option.value}
+                                          value={option.value}
+                                        >
+                                          {option.label}
+                                        </DropdownMenuRadioItem>
+                                      ),
+                                    )}
+                                  </DropdownMenuRadioGroup>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            ) : null}
+                          </div>
+                        ) : (
+                          <HeaderLabel description={description}>
+                            <table.FlexRender header={header} />
+                          </HeaderLabel>
+                        )}
+                      </TableHead>
                     );
                   })}
                 </TableRow>
-              ))
-            ) : (
-              <TableRow>
-                <TableCell
-                  colSpan={columns.length}
-                  className="h-24 text-center text-[var(--muted-foreground)]"
-                >
-                  No results.
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
-        </TooltipProvider>
-      </div>
-      <div className="flex items-center justify-between gap-2">
-        <p className="text-sm text-[var(--muted-foreground)]">
+              ))}
+            </TableHeader>
+            <TableBody>
+              {table.getRowModel().rows?.length ? (
+                table.getRowModel().rows.map((row) => (
+                  <TableRow
+                    key={row.id}
+                    data-state={row.getIsSelected() && "selected"}
+                  >
+                    {row.getVisibleCells().map((cell) => {
+                      const cellMeta = cell.column.columnDef.meta as
+                        | { width?: string; band?: "read" | "invent" }
+                        | undefined;
+                      const width = cellMeta?.width;
+                      const inventBand = cellMeta?.band === "invent";
+                      return (
+                        <TableCell
+                          key={cell.id}
+                          style={
+                            width
+                              ? { width, minWidth: width, maxWidth: width }
+                              : undefined
+                          }
+                          className={[
+                            "whitespace-normal align-top",
+                            width ? "overflow-hidden" : "",
+                            inventBand
+                              ? "border-l border-[var(--border)] bg-[var(--muted)]/20"
+                              : "",
+                          ]
+                            .filter(Boolean)
+                            .join(" ")}
+                        >
+                          <table.FlexRender cell={cell} />
+                        </TableCell>
+                      );
+                    })}
+                  </TableRow>
+                ))
+              ) : (
+                <TableRow>
+                  <TableCell
+                    colSpan={columns.length}
+                    className="h-24 text-center text-foreground-muted"
+                  >
+                    No results.
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </div>
+      </TooltipProvider>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-sm text-foreground-muted">
           Page {pagination.pageIndex + 1} of {Math.max(table.getPageCount(), 1)}
         </p>
         <div className="flex gap-2">

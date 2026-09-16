@@ -24,7 +24,7 @@ export function ClassificationScene({ animate, onDone }: SceneProps) {
 
   return (
     <SceneFrame step={step} captions={CAPTIONS}>
-      <div className="flex h-full flex-col items-start justify-center gap-3">
+      <div className="flex h-full flex-col items-start justify-center gap-4">
         {/* The transaction being filed */}
         <div className="flex w-full items-center justify-between gap-2 rounded-md border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-xs shadow-sm">
           <span className="min-w-0 truncate text-[var(--foreground)]">

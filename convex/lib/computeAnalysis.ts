@@ -1,15 +1,3 @@
-import {
-  classifyCashFlow,
-  spendCategoryLabel,
-} from "./cashFlow";
-import {
-  addDays,
-  addMonths,
-  monthKey,
-  periodKey,
-  periodLabel,
-  periodsBetween,
-} from "./periods";
 import type {
   AnalysisData,
   AnalysisPeriod,
@@ -18,15 +6,21 @@ import type {
   AnalysisSourceRow,
   AnalysisTxnPeek,
 } from "./analysisTypes";
+import { classifyCashFlow, spendCategoryLabel } from "./cashFlow";
 import { singularCategoryKey } from "./categoryKey";
+import { applyDescriptorInference } from "./descriptorCategoryFixes";
 import {
-  classifySpread,
-  SPREAD_DEFINITIONS,
-  type SpreadName,
-} from "./spreads";
+  addDays,
+  addMonths,
+  monthKey,
+  periodKey,
+  periodLabel,
+  periodsBetween,
+} from "./periods";
+import { classifySpread, SPREAD_DEFINITIONS, type SpreadName } from "./spreads";
 import { splitTags } from "./tags";
+import { cleanMerchantDescriptor } from "./cleanMerchantDescriptor";
 import { typeLabelsFromTxnCode } from "./txnCodes";
-
 
 const TOP_STACKED_CATEGORY_ROWS = 15;
 const TOP_STACKED_SECTION_ROWS = 12;
@@ -43,6 +37,30 @@ function peekKey(facet: string, ...parts: string[]) {
   return `${facet}:${parts.join("::")}`;
 }
 
+function addWantedKey(wanted: Set<string>, facet: string, ...parts: string[]) {
+  wanted.add(peekKey(facet, ...parts));
+}
+
+function addWantedRows(
+  wanted: Set<string>,
+  facet: string,
+  rows: AnalysisRankedItem[],
+) {
+  for (const row of rows) addWantedKey(wanted, facet, row.name);
+}
+
+function addWantedPairs(
+  wanted: Set<string>,
+  facet: string,
+  nested: Record<string, AnalysisRankedItem[]>,
+) {
+  for (const [parent, children] of Object.entries(nested)) {
+    for (const child of children) {
+      addWantedKey(wanted, facet, parent, child.name);
+    }
+  }
+}
+
 function pushPeek(
   map: Map<string, AnalysisTxnPeek[]>,
   key: string,
@@ -56,6 +74,16 @@ function pushPeek(
   // Newest-first input: once full, later (older) peeks are discarded.
   if (list.length >= PEEK_LIMIT) return;
   list.push(peek);
+}
+
+function pushWantedPeek(
+  map: Map<string, AnalysisTxnPeek[]>,
+  wanted: Set<string>,
+  key: string,
+  peek: AnalysisTxnPeek,
+) {
+  if (!wanted.has(key)) return;
+  pushPeek(map, key, peek);
 }
 
 function finalizePeeks(
@@ -124,9 +152,7 @@ function resolveCategory(input: {
   typeName: string | null;
 }) {
   return (
-    input.taxonomyCategory?.trim() ||
-    input.typeName?.trim() ||
-    UNCATEGORIZED
+    input.taxonomyCategory?.trim() || input.typeName?.trim() || UNCATEGORIZED
   );
 }
 
@@ -269,11 +295,9 @@ function merchantLabel(input: {
 }) {
   const company = input.companyName?.trim();
   if (company) return company;
-  const clean = input.merchantClean?.trim();
+  const clean = cleanMerchantDescriptor(input.merchantClean);
   if (clean) return clean;
-  const description = input.description?.trim();
-  if (!description) return "Unknown";
-  return description.replace(/\s+/g, " ").slice(0, 42);
+  return cleanMerchantDescriptor(input.description) ?? "Unknown";
 }
 
 /** Prefer merchant_clean for subcategory drilldowns. */
@@ -283,15 +307,13 @@ function merchantCleanLabel(input: {
   companyName?: string | null;
   brandName?: string | null;
 }) {
-  const clean = input.merchantClean?.trim();
+  const clean = cleanMerchantDescriptor(input.merchantClean);
   const company = input.companyName?.trim() || input.brandName?.trim() || null;
   // Generic payment labels (Loan Payment, Credit Memo) hide the real vendor.
   if (clean && !isGenericMerchantClean(clean)) return clean;
   if (company) return company;
   if (clean) return clean;
-  const description = input.description?.trim();
-  if (!description) return "Unknown";
-  return description.replace(/\s+/g, " ").slice(0, 42);
+  return cleanMerchantDescriptor(input.description) ?? "Unknown";
 }
 
 const GENERIC_MERCHANT_CLEANS = new Set([
@@ -449,11 +471,12 @@ function typeKey(value: string) {
 function spendTypeLabel(typeName: string | null, category: string) {
   if (typeName?.trim()) {
     const trimmed = typeName.trim();
+    const aliased = TYPE_ALIASES[typeKey(trimmed)] ?? trimmed;
     if (
-      typeKey(trimmed) !== typeKey(category) &&
-      singularCategoryKey(trimmed) !== singularCategoryKey(category)
+      typeKey(aliased) !== typeKey(category) &&
+      singularCategoryKey(aliased) !== singularCategoryKey(category)
     ) {
-      return trimmed;
+      return aliased;
     }
   }
   return "Unspecified";
@@ -874,697 +897,693 @@ export function computeAnalysis(args: {
   }
 
   // Newest posted first - peek caps keep recent txns when callers forget to order.
-  const orderedRows = filtered.slice().sort((a, b) =>
-    a.postedDate < b.postedDate ? 1 : a.postedDate > b.postedDate ? -1 : 0,
-  );
+  const orderedRows = filtered
+    .slice()
+    .sort((a, b) =>
+      a.postedDate < b.postedDate ? 1 : a.postedDate > b.postedDate ? -1 : 0,
+    )
+    .map(applyDescriptorInference);
 
   const startDate =
     range !== "all" ? rangeStartDate(latestDate, range) : earliestDate;
 
-const currency =
-      orderedRows.find((row) => row.currencyCode)?.currencyCode ?? "CAD";
+  const currency =
+    orderedRows.find((row) => row.currencyCode)?.currencyCode ?? "CAD";
 
-    let rangeEarliest: string | null = null;
-    let rangeLatest: string | null = null;
-    for (const row of orderedRows) {
-      const posted = row.postedDate;
-      if (!posted) continue;
-      if (!rangeEarliest || posted < rangeEarliest) rangeEarliest = posted;
-      if (!rangeLatest || posted > rangeLatest) rangeLatest = posted;
-    }
+  let rangeEarliest: string | null = null;
+  let rangeLatest: string | null = null;
+  for (const row of orderedRows) {
+    const posted = row.postedDate;
+    if (!posted) continue;
+    if (!rangeEarliest || posted < rangeEarliest) rangeEarliest = posted;
+    if (!rangeLatest || posted > rangeLatest) rangeLatest = posted;
+  }
 
-    const monthlyMap = new Map<
-      string,
-      { spend: number; income: number; transfers: number }
-    >();
-    const categorySpend = new Map<string, RankBucket>();
-    const categoryMonthSpend = new Map<string, Map<string, number>>();
-    const sectionSpend = new Map<string, RankBucket>();
-    const sectionMonthSpend = new Map<string, Map<string, number>>();
-    const spreadSpend = new Map<string, RankBucket>();
-    const spreadMonthSpend = new Map<string, Map<string, number>>();
-    const subcategorySpend = new Map<string, RankBucket>();
-    const subcategoryMonthSpend = new Map<string, Map<string, number>>();
-    const merchantSpend = new Map<string, RankBucket>();
-    const placeSpend = new Map<string, RankBucket>();
-    const channelSpend = new Map<string, RankBucket>();
-    const weekdaySpend = new Map<string, RankBucket>();
-    const accountSpend = new Map<string, RankBucket>();
-    const weekendSpend = new Map<string, RankBucket>();
-    const ticketSizeSpend = new Map<string, RankBucket>();
-    const dayOfMonthSpend = new Map<string, RankBucket>();
-    const countrySpend = new Map<string, RankBucket>();
-    const habitMerchantSpend = new Map<string, RankBucket>();
-    const typeByCategory = new Map<string, Map<string, RankBucket>>();
-    const categoryBySection = new Map<string, Map<string, RankBucket>>();
-    const categoryBySpread = new Map<string, Map<string, RankBucket>>();
-    const merchantByCategory = new Map<string, Map<string, RankBucket>>();
-    const vendorBySection = new Map<string, Map<string, RankBucket>>();
-    const vendorBySpread = new Map<string, Map<string, RankBucket>>();
-    const vendorByCategory = new Map<string, Map<string, RankBucket>>();
-    const merchantBySubcategory = new Map<string, Map<string, RankBucket>>();
-    const typeMonthByCategory = new Map<
-      string,
-      Map<string, Map<string, number>>
-    >();
-    const merchantMonthBySubcategory = new Map<
-      string,
-      Map<string, Map<string, number>>
-    >();
-    const tagSpend = new Map<string, RankBucket>();
-    const tagMonthSpend = new Map<string, Map<string, number>>();
-    const merchantByTag = new Map<string, Map<string, RankBucket>>();
-    const merchantMonthByTag = new Map<
-      string,
-      Map<string, Map<string, number>>
-    >();
-    const categoryByTag = new Map<string, Map<string, RankBucket>>();
-    const categoryMonthByTag = new Map<
-      string,
-      Map<string, Map<string, number>>
-    >();
-    const typeSpend = new Map<string, RankBucket>();
-    const typeMonthSpend = new Map<string, Map<string, number>>();
-    const merchantByType = new Map<string, Map<string, RankBucket>>();
-    const merchantMonthByType = new Map<
-      string,
-      Map<string, Map<string, number>>
-    >();
-    const categoryByType = new Map<string, Map<string, RankBucket>>();
-    const categoryMonthByType = new Map<
-      string,
-      Map<string, Map<string, number>>
-    >();
-    const merchantMonthSpend = new Map<string, Map<string, number>>();
-    const incomeSourceSpend = new Map<string, RankBucket>();
-    const incomeSourceMonthSpend = new Map<string, Map<string, number>>();
-    const incomeCategorySpend = new Map<string, RankBucket>();
-    const incomeCategoryMonthSpend = new Map<string, Map<string, number>>();
-    const incomeAccountSpend = new Map<string, RankBucket>();
-    const categoryByIncomeSource = new Map<string, Map<string, RankBucket>>();
-    const categoryMonthByIncomeSource = new Map<
-      string,
-      Map<string, Map<string, number>>
-    >();
-    const sourceByIncomeCategory = new Map<string, Map<string, RankBucket>>();
-    const subcategoryByMerchant = new Map<string, Map<string, RankBucket>>();
-    const subcategoryMonthByMerchant = new Map<
-      string,
-      Map<string, Map<string, number>>
-    >();
-    const categoryByMerchant = new Map<string, Map<string, RankBucket>>();
-    const txnPeekMap = new Map<string, AnalysisTxnPeek[]>();
-    type PeekSource = {
-      peek: AnalysisTxnPeek;
-      section: string;
-      category: string;
-      subcategory: string;
-      merchant: string;
-      spread: string | null;
-      tags: string[];
-      typeLabels: string[];
+  const monthlyMap = new Map<
+    string,
+    { spend: number; income: number; transfers: number }
+  >();
+  const categorySpend = new Map<string, RankBucket>();
+  const categoryMonthSpend = new Map<string, Map<string, number>>();
+  const sectionSpend = new Map<string, RankBucket>();
+  const sectionMonthSpend = new Map<string, Map<string, number>>();
+  const spreadSpend = new Map<string, RankBucket>();
+  const spreadMonthSpend = new Map<string, Map<string, number>>();
+  const subcategorySpend = new Map<string, RankBucket>();
+  const subcategoryMonthSpend = new Map<string, Map<string, number>>();
+  const merchantSpend = new Map<string, RankBucket>();
+  const placeSpend = new Map<string, RankBucket>();
+  const channelSpend = new Map<string, RankBucket>();
+  const weekdaySpend = new Map<string, RankBucket>();
+  const accountSpend = new Map<string, RankBucket>();
+  const weekendSpend = new Map<string, RankBucket>();
+  const ticketSizeSpend = new Map<string, RankBucket>();
+  const dayOfMonthSpend = new Map<string, RankBucket>();
+  const countrySpend = new Map<string, RankBucket>();
+  const habitMerchantSpend = new Map<string, RankBucket>();
+  const typeByCategory = new Map<string, Map<string, RankBucket>>();
+  const categoryBySection = new Map<string, Map<string, RankBucket>>();
+  const categoryBySpread = new Map<string, Map<string, RankBucket>>();
+  const merchantByCategory = new Map<string, Map<string, RankBucket>>();
+  const vendorBySection = new Map<string, Map<string, RankBucket>>();
+  const vendorBySpread = new Map<string, Map<string, RankBucket>>();
+  const vendorByCategory = new Map<string, Map<string, RankBucket>>();
+  const merchantBySubcategory = new Map<string, Map<string, RankBucket>>();
+  const typeMonthByCategory = new Map<
+    string,
+    Map<string, Map<string, number>>
+  >();
+  const merchantMonthBySubcategory = new Map<
+    string,
+    Map<string, Map<string, number>>
+  >();
+  const tagSpend = new Map<string, RankBucket>();
+  const tagMonthSpend = new Map<string, Map<string, number>>();
+  const merchantByTag = new Map<string, Map<string, RankBucket>>();
+  const merchantMonthByTag = new Map<
+    string,
+    Map<string, Map<string, number>>
+  >();
+  const categoryByTag = new Map<string, Map<string, RankBucket>>();
+  const categoryMonthByTag = new Map<
+    string,
+    Map<string, Map<string, number>>
+  >();
+  const typeSpend = new Map<string, RankBucket>();
+  const typeMonthSpend = new Map<string, Map<string, number>>();
+  const merchantByType = new Map<string, Map<string, RankBucket>>();
+  const merchantMonthByType = new Map<
+    string,
+    Map<string, Map<string, number>>
+  >();
+  const categoryByType = new Map<string, Map<string, RankBucket>>();
+  const categoryMonthByType = new Map<
+    string,
+    Map<string, Map<string, number>>
+  >();
+  const merchantMonthSpend = new Map<string, Map<string, number>>();
+  const incomeSourceSpend = new Map<string, RankBucket>();
+  const incomeSourceMonthSpend = new Map<string, Map<string, number>>();
+  const incomeCategorySpend = new Map<string, RankBucket>();
+  const incomeCategoryMonthSpend = new Map<string, Map<string, number>>();
+  const incomeAccountSpend = new Map<string, RankBucket>();
+  const categoryByIncomeSource = new Map<string, Map<string, RankBucket>>();
+  const categoryMonthByIncomeSource = new Map<
+    string,
+    Map<string, Map<string, number>>
+  >();
+  const sourceByIncomeCategory = new Map<string, Map<string, RankBucket>>();
+  const subcategoryByMerchant = new Map<string, Map<string, RankBucket>>();
+  const subcategoryMonthByMerchant = new Map<
+    string,
+    Map<string, Map<string, number>>
+  >();
+  const categoryByMerchant = new Map<string, Map<string, RankBucket>>();
+  const txnPeekMap = new Map<string, AnalysisTxnPeek[]>();
+  type PeekSource = {
+    peek: AnalysisTxnPeek;
+    section: string;
+    category: string;
+    subcategory: string;
+    merchant: string;
+    spread: string | null;
+    tags: string[];
+    typeLabels: string[];
+  };
+  const peekSources: PeekSource[] = [];
+
+  let totalSpend = 0;
+  let totalIncome = 0;
+  let internalTransfers = 0;
+  let transferCount = 0;
+  let spendCount = 0;
+  let refunds = 0;
+  let inboundTransfersIgnored = 0;
+
+  function addCategory(
+    name: string,
+    month: string,
+    spendDelta: number,
+    countDelta = 1,
+  ) {
+    addRank(categorySpend, name, spendDelta, countDelta);
+    const byMonth = categoryMonthSpend.get(name) ?? new Map();
+    byMonth.set(month, (byMonth.get(month) ?? 0) + spendDelta);
+    categoryMonthSpend.set(name, byMonth);
+  }
+
+  for (const row of orderedRows) {
+    const major = row.amount;
+    const amountMinor = Math.round(major * 100);
+    const abs = Math.abs(major);
+    if (abs === 0) continue;
+
+    const month = periodKey(row.postedDate, period);
+    const bucket = monthlyMap.get(month) ?? {
+      spend: 0,
+      income: 0,
+      transfers: 0,
     };
-    const peekSources: PeekSource[] = [];
+    const signals = {
+      amountMinor,
+      description: row.description,
+      accountType: row.accountType,
+      sectionName: row.sectionName,
+      categoryName: row.categoryName,
+      typeName: row.typeName,
+      transactionCode: row.transactionCode,
+    };
+    const kind = classifyCashFlow(signals);
+    const category = spendCategoryLabel(
+      signals,
+      resolveCategory({
+        taxonomyCategory: row.categoryName,
+        typeName: row.typeName,
+      }),
+    );
 
-    let totalSpend = 0;
-    let totalIncome = 0;
-    let internalTransfers = 0;
-    let transferCount = 0;
-    let spendCount = 0;
-    let refunds = 0;
-    let inboundTransfersIgnored = 0;
-
-    function addCategory(
-      name: string,
-      month: string,
-      spendDelta: number,
-      countDelta = 1,
-    ) {
-      addRank(categorySpend, name, spendDelta, countDelta);
-      const byMonth = categoryMonthSpend.get(name) ?? new Map();
-      byMonth.set(month, (byMonth.get(month) ?? 0) + spendDelta);
-      categoryMonthSpend.set(name, byMonth);
-    }
-
-    for (const row of orderedRows) {
-      const major = row.amount;
-      const amountMinor = Math.round(major * 100);
-      const abs = Math.abs(major);
-      if (abs === 0) continue;
-
-      const month = periodKey(row.postedDate, period);
-      const bucket = monthlyMap.get(month) ?? {
-        spend: 0,
-        income: 0,
-        transfers: 0,
-      };
-      const signals = {
-        amountMinor,
+    if (kind === "transfer_out") {
+      bucket.transfers += abs;
+      internalTransfers += abs;
+      transferCount += 1;
+    } else if (kind === "transfer_in") {
+      inboundTransfersIgnored += abs;
+    } else if (kind === "spend") {
+      bucket.spend += abs;
+      totalSpend += abs;
+      spendCount += 1;
+      addCategory(category, month, abs);
+      const place = placeLabel(row.city, row.region);
+      if (place) addRank(placeSpend, place, abs);
+      const country = countryLabel(row.country);
+      if (country) addRank(countrySpend, country, abs);
+      addRank(
+        channelSpend,
+        channelLabel(row.paymentChannel, row.enrichmentChannel),
+        abs,
+      );
+      const weekday = spendWeekday(row.postedDate, row.authorizedDate);
+      addRank(weekdaySpend, weekday, abs);
+      addRank(weekendSpend, weekendPart(weekday), abs);
+      addRank(ticketSizeSpend, ticketSizeLabel(abs), abs);
+      const dayLabel = dayOfMonthLabel(
+        row.authorizedDate?.trim() || row.postedDate,
+      );
+      if (dayLabel) addRank(dayOfMonthSpend, dayLabel, abs);
+      addRank(accountSpend, row.accountName?.trim() || "Unknown account", abs);
+      const type = spendTypeLabel(row.typeName, category);
+      const section = row.sectionName?.trim() || "Uncategorized";
+      addRank(sectionSpend, section, abs);
+      addMonthSpend(sectionMonthSpend, section, month, abs);
+      addRank(subcategorySpend, type, abs);
+      addMonthSpend(subcategoryMonthSpend, type, month, abs);
+      const merchant = merchantLabel({
+        companyName: row.companyName ?? row.brandName ?? null,
+        merchantClean: row.merchantClean,
         description: row.description,
-        accountType: row.accountType,
+      });
+      const cleanMerchant = merchantCleanLabel({
+        merchantClean: row.merchantClean,
+        description: row.description,
+        companyName: row.companyName ?? row.brandName ?? null,
+        brandName: row.brandName,
+      });
+      const spread = resolveSpreadName({
+        spreadName: row.spreadName,
         sectionName: row.sectionName,
         categoryName: row.categoryName,
-        typeName: row.typeName,
-        transactionCode: row.transactionCode,
-      };
-      const kind = classifyCashFlow(signals);
-      const category = spendCategoryLabel(
-        signals,
-        resolveCategory({
-          taxonomyCategory: row.categoryName,
-          typeName: row.typeName,
-        }),
-      );
-
-      if (kind === "transfer_out") {
-        bucket.transfers += abs;
-        internalTransfers += abs;
-        transferCount += 1;
-      } else if (kind === "transfer_in") {
-        inboundTransfersIgnored += abs;
-      } else if (kind === "spend") {
-        bucket.spend += abs;
-        totalSpend += abs;
-        spendCount += 1;
-        addCategory(category, month, abs);
-        const place = placeLabel(row.city, row.region);
-        if (place) addRank(placeSpend, place, abs);
-        const country = countryLabel(row.country);
-        if (country) addRank(countrySpend, country, abs);
-        addRank(
-          channelSpend,
-          channelLabel(row.paymentChannel, row.enrichmentChannel),
-          abs,
-        );
-        const weekday = spendWeekday(row.postedDate, row.authorizedDate);
-        addRank(weekdaySpend, weekday, abs);
-        addRank(weekendSpend, weekendPart(weekday), abs);
-        addRank(ticketSizeSpend, ticketSizeLabel(abs), abs);
-        const dayLabel = dayOfMonthLabel(
-          row.authorizedDate?.trim() || row.postedDate,
-        );
-        if (dayLabel) addRank(dayOfMonthSpend, dayLabel, abs);
-        addRank(
-          accountSpend,
-          row.accountName?.trim() || "Unknown account",
-          abs,
-        );
-        const type = spendTypeLabel(row.typeName, category);
-        const section = row.sectionName?.trim() || "Uncategorized";
-        addRank(sectionSpend, section, abs);
-        addMonthSpend(sectionMonthSpend, section, month, abs);
-        addRank(subcategorySpend, type, abs);
-        addMonthSpend(subcategoryMonthSpend, type, month, abs);
-        const merchant = merchantLabel({
-          companyName: row.companyName ?? row.brandName ?? null,
-          merchantClean: row.merchantClean,
-          description: row.description,
-        });
-        const cleanMerchant = merchantCleanLabel({
-          merchantClean: row.merchantClean,
-          description: row.description,
-          companyName: row.companyName ?? row.brandName ?? null,
-          brandName: row.brandName,
-        });
-        const spread = resolveSpreadName({
-          spreadName: row.spreadName,
-          sectionName: row.sectionName,
-          categoryName: row.categoryName,
-          subcategoryName: row.typeName,
-        });
-        if (spread) {
-          addRank(spreadSpend, spread, abs);
-          addMonthSpend(spreadMonthSpend, spread, month, abs);
-          nestedAdd(categoryBySpread, spread, category, abs);
-          nestedAdd(vendorBySpread, spread, cleanMerchant, abs);
-        }
-        addRank(merchantSpend, cleanMerchant, abs);
-        addRank(habitMerchantSpend, cleanMerchant, abs);
-        addMonthSpend(merchantMonthSpend, cleanMerchant, month, abs);
-        nestedAdd(subcategoryByMerchant, cleanMerchant, type, abs);
-        nestedMonthAdd(
-          subcategoryMonthByMerchant,
-          cleanMerchant,
-          type,
-          month,
-          abs,
-        );
-        nestedAdd(categoryByMerchant, cleanMerchant, category, abs);
-        nestedAdd(typeByCategory, category, type, abs);
-        nestedAdd(categoryBySection, section, category, abs);
-        nestedAdd(merchantByCategory, category, merchant, abs);
-        nestedAdd(vendorBySection, section, cleanMerchant, abs);
-        nestedAdd(vendorByCategory, category, cleanMerchant, abs);
-        nestedAdd(merchantBySubcategory, type, cleanMerchant, abs);
-        nestedMonthAdd(typeMonthByCategory, category, type, month, abs);
-        nestedMonthAdd(
-          merchantMonthBySubcategory,
-          type,
-          cleanMerchant,
-          month,
-          abs,
-        );
-        for (const tag of splitTags(row.tags)) {
-          addRank(tagSpend, tag, abs);
-          addMonthSpend(tagMonthSpend, tag, month, abs);
-          nestedAdd(merchantByTag, tag, cleanMerchant, abs);
-          nestedMonthAdd(merchantMonthByTag, tag, cleanMerchant, month, abs);
-          nestedAdd(categoryByTag, tag, category, abs);
-          nestedMonthAdd(categoryMonthByTag, tag, category, month, abs);
-        }
-        for (const typeLabel of typeLabelsFromTxnCode(row.transactionCode)) {
-          addRank(typeSpend, typeLabel, abs);
-          addMonthSpend(typeMonthSpend, typeLabel, month, abs);
-          nestedAdd(merchantByType, typeLabel, cleanMerchant, abs);
-          nestedMonthAdd(
-            merchantMonthByType,
-            typeLabel,
-            cleanMerchant,
-            month,
-            abs,
-          );
-          nestedAdd(categoryByType, typeLabel, category, abs);
-          nestedMonthAdd(categoryMonthByType, typeLabel, category, month, abs);
-        }
-        {
-          peekSources.push({
-            peek: {
-              date: row.postedDate,
-              description:
-                row.description?.trim() ||
-                row.merchantClean?.trim() ||
-                cleanMerchant,
-              amount: abs,
-            },
-            section,
-            category,
-            subcategory: type,
-            merchant: cleanMerchant,
-            spread,
-            tags: splitTags(row.tags),
-            typeLabels: typeLabelsFromTxnCode(row.transactionCode),
-          });
-        }
-      } else if (kind === "refund") {
-        bucket.spend -= abs;
-        totalSpend -= abs;
-        refunds += abs;
-        addCategory(category, month, -abs);
-        const type = spendTypeLabel(row.typeName, category);
-        const section = row.sectionName?.trim() || "Uncategorized";
-        const cleanMerchant = merchantCleanLabel({
-          merchantClean: row.merchantClean,
-          description: row.description,
-          companyName: row.companyName ?? row.brandName ?? null,
-          brandName: row.brandName,
-        });
-        addRank(merchantSpend, cleanMerchant, -abs);
-        addMonthSpend(merchantMonthSpend, cleanMerchant, month, -abs);
-        nestedAdd(subcategoryByMerchant, cleanMerchant, type, -abs);
-        nestedMonthAdd(
-          subcategoryMonthByMerchant,
-          cleanMerchant,
-          type,
-          month,
-          -abs,
-        );
-        nestedAdd(categoryByMerchant, cleanMerchant, category, -abs);
-        addRank(sectionSpend, section, -abs);
-        addMonthSpend(sectionMonthSpend, section, month, -abs);
-        addRank(subcategorySpend, type, -abs);
-        addMonthSpend(subcategoryMonthSpend, type, month, -abs);
-        const spread = resolveSpreadName({
-          spreadName: row.spreadName,
-          sectionName: row.sectionName,
-          categoryName: row.categoryName,
-          subcategoryName: row.typeName,
-        });
-        if (spread) {
-          addRank(spreadSpend, spread, -abs);
-          addMonthSpend(spreadMonthSpend, spread, month, -abs);
-          nestedAdd(categoryBySpread, spread, category, -abs);
-          nestedAdd(vendorBySpread, spread, cleanMerchant, -abs);
-        }
-        nestedAdd(typeByCategory, category, type, -abs);
-        nestedAdd(categoryBySection, section, category, -abs);
-        nestedAdd(vendorBySection, section, cleanMerchant, -abs);
-        nestedAdd(vendorByCategory, category, cleanMerchant, -abs);
-        nestedAdd(merchantBySubcategory, type, cleanMerchant, -abs);
-        nestedMonthAdd(
-          merchantMonthBySubcategory,
-          type,
-          cleanMerchant,
-          month,
-          -abs,
-        );
-        for (const tag of splitTags(row.tags)) {
-          addRank(tagSpend, tag, -abs);
-          addMonthSpend(tagMonthSpend, tag, month, -abs);
-          nestedAdd(merchantByTag, tag, cleanMerchant, -abs);
-          nestedMonthAdd(merchantMonthByTag, tag, cleanMerchant, month, -abs);
-          nestedAdd(categoryByTag, tag, category, -abs);
-          nestedMonthAdd(categoryMonthByTag, tag, category, month, -abs);
-        }
-        for (const typeLabel of typeLabelsFromTxnCode(row.transactionCode)) {
-          addRank(typeSpend, typeLabel, -abs);
-          addMonthSpend(typeMonthSpend, typeLabel, month, -abs);
-          nestedAdd(merchantByType, typeLabel, cleanMerchant, -abs);
-          nestedMonthAdd(
-            merchantMonthByType,
-            typeLabel,
-            cleanMerchant,
-            month,
-            -abs,
-          );
-          nestedAdd(categoryByType, typeLabel, category, -abs);
-          nestedMonthAdd(categoryMonthByType, typeLabel, category, month, -abs);
-        }
-        {
-          peekSources.push({
-            peek: {
-              date: row.postedDate,
-              description:
-                row.description?.trim() ||
-                row.merchantClean?.trim() ||
-                cleanMerchant,
-              amount: -abs,
-            },
-            section,
-            category,
-            subcategory: type,
-            merchant: cleanMerchant,
-            spread,
-            tags: splitTags(row.tags),
-            typeLabels: typeLabelsFromTxnCode(row.transactionCode),
-          });
-        }
-      } else {
-        bucket.income += abs;
-        totalIncome += abs;
-        const cleanMerchant = merchantCleanLabel({
-          merchantClean: row.merchantClean,
-          description: row.description,
-          companyName: row.companyName ?? row.brandName ?? null,
-          brandName: row.brandName,
-        });
-        const spread =
-          resolveSpreadName({
-            spreadName: row.spreadName,
-            sectionName: row.sectionName,
-            categoryName: row.categoryName,
-            subcategoryName: row.typeName,
-          }) ?? "Income";
+        subcategoryName: row.typeName,
+      });
+      if (spread) {
         addRank(spreadSpend, spread, abs);
         addMonthSpend(spreadMonthSpend, spread, month, abs);
         nestedAdd(categoryBySpread, spread, category, abs);
         nestedAdd(vendorBySpread, spread, cleanMerchant, abs);
-        const incomeCategory = row.categoryName?.trim() || category || "Income";
-        const incomeAccount = row.accountName?.trim() || "Unknown account";
-        addRank(incomeSourceSpend, cleanMerchant, abs);
-        addMonthSpend(incomeSourceMonthSpend, cleanMerchant, month, abs);
-        addRank(incomeCategorySpend, incomeCategory, abs);
-        addMonthSpend(incomeCategoryMonthSpend, incomeCategory, month, abs);
-        addRank(incomeAccountSpend, incomeAccount, abs);
-        nestedAdd(categoryByIncomeSource, cleanMerchant, incomeCategory, abs);
+      }
+      addRank(merchantSpend, cleanMerchant, abs);
+      addRank(habitMerchantSpend, cleanMerchant, abs);
+      addMonthSpend(merchantMonthSpend, cleanMerchant, month, abs);
+      nestedAdd(subcategoryByMerchant, cleanMerchant, type, abs);
+      nestedMonthAdd(
+        subcategoryMonthByMerchant,
+        cleanMerchant,
+        type,
+        month,
+        abs,
+      );
+      nestedAdd(categoryByMerchant, cleanMerchant, category, abs);
+      nestedAdd(typeByCategory, category, type, abs);
+      nestedAdd(categoryBySection, section, category, abs);
+      nestedAdd(merchantByCategory, category, merchant, abs);
+      nestedAdd(vendorBySection, section, cleanMerchant, abs);
+      nestedAdd(vendorByCategory, category, cleanMerchant, abs);
+      nestedAdd(merchantBySubcategory, type, cleanMerchant, abs);
+      nestedMonthAdd(typeMonthByCategory, category, type, month, abs);
+      nestedMonthAdd(
+        merchantMonthBySubcategory,
+        type,
+        cleanMerchant,
+        month,
+        abs,
+      );
+      for (const tag of splitTags(row.tags)) {
+        addRank(tagSpend, tag, abs);
+        addMonthSpend(tagMonthSpend, tag, month, abs);
+        nestedAdd(merchantByTag, tag, cleanMerchant, abs);
+        nestedMonthAdd(merchantMonthByTag, tag, cleanMerchant, month, abs);
+        nestedAdd(categoryByTag, tag, category, abs);
+        nestedMonthAdd(categoryMonthByTag, tag, category, month, abs);
+      }
+      for (const typeLabel of typeLabelsFromTxnCode(row.transactionCode)) {
+        addRank(typeSpend, typeLabel, abs);
+        addMonthSpend(typeMonthSpend, typeLabel, month, abs);
+        nestedAdd(merchantByType, typeLabel, cleanMerchant, abs);
         nestedMonthAdd(
-          categoryMonthByIncomeSource,
+          merchantMonthByType,
+          typeLabel,
           cleanMerchant,
-          incomeCategory,
           month,
           abs,
         );
-        nestedAdd(sourceByIncomeCategory, incomeCategory, cleanMerchant, abs);
-        {
-          peekSources.push({
-            peek: {
-              date: row.postedDate,
-              description:
-                row.description?.trim() ||
-                row.merchantClean?.trim() ||
-                cleanMerchant,
-              amount: -abs,
-            },
-            section: "Income",
-            category: incomeCategory,
-            subcategory: "",
-            merchant: cleanMerchant,
-            spread,
-            tags: [],
-            typeLabels: [],
-          });
-        }
+        nestedAdd(categoryByType, typeLabel, category, abs);
+        nestedMonthAdd(categoryMonthByType, typeLabel, category, month, abs);
       }
-
-      monthlyMap.set(month, bucket);
-    }
-
-    const monthKeys =
-      startDate && latestDate
-        ? periodsBetween(startDate, latestDate, period)
-        : [...monthlyMap.keys()].sort();
-
-    const monthly = monthKeys.map((month) => {
-      const bucket = monthlyMap.get(month) ?? {
-        spend: 0,
-        income: 0,
-        transfers: 0,
-      };
-      return {
+      {
+        peekSources.push({
+          peek: {
+            date: row.postedDate,
+            description:
+              row.description?.trim() ||
+              row.merchantClean?.trim() ||
+              cleanMerchant,
+            amount: abs,
+          },
+          section,
+          category,
+          subcategory: type,
+          merchant: cleanMerchant,
+          spread,
+          tags: splitTags(row.tags),
+          typeLabels: typeLabelsFromTxnCode(row.transactionCode),
+        });
+      }
+    } else if (kind === "refund") {
+      bucket.spend -= abs;
+      totalSpend -= abs;
+      refunds += abs;
+      addCategory(category, month, -abs);
+      const type = spendTypeLabel(row.typeName, category);
+      const section = row.sectionName?.trim() || "Uncategorized";
+      const cleanMerchant = merchantCleanLabel({
+        merchantClean: row.merchantClean,
+        description: row.description,
+        companyName: row.companyName ?? row.brandName ?? null,
+        brandName: row.brandName,
+      });
+      addRank(merchantSpend, cleanMerchant, -abs);
+      addMonthSpend(merchantMonthSpend, cleanMerchant, month, -abs);
+      nestedAdd(subcategoryByMerchant, cleanMerchant, type, -abs);
+      nestedMonthAdd(
+        subcategoryMonthByMerchant,
+        cleanMerchant,
+        type,
         month,
-        label: periodLabel(month, period),
-        spend: roundMoney(bucket.spend),
-        income: roundMoney(bucket.income),
-        transfers: roundMoney(bucket.transfers),
-      };
-    });
-
-    let peakSpendPeriod: string | null = null;
-    let peakSpendAmount = 0;
-    for (const point of monthly) {
-      if (point.spend > peakSpendAmount) {
-        peakSpendAmount = point.spend;
-        peakSpendPeriod = point.label;
+        -abs,
+      );
+      nestedAdd(categoryByMerchant, cleanMerchant, category, -abs);
+      addRank(sectionSpend, section, -abs);
+      addMonthSpend(sectionMonthSpend, section, month, -abs);
+      addRank(subcategorySpend, type, -abs);
+      addMonthSpend(subcategoryMonthSpend, type, month, -abs);
+      const spread = resolveSpreadName({
+        spreadName: row.spreadName,
+        sectionName: row.sectionName,
+        categoryName: row.categoryName,
+        subcategoryName: row.typeName,
+      });
+      if (spread) {
+        addRank(spreadSpend, spread, -abs);
+        addMonthSpend(spreadMonthSpend, spread, month, -abs);
+        nestedAdd(categoryBySpread, spread, category, -abs);
+        nestedAdd(vendorBySpread, spread, cleanMerchant, -abs);
+      }
+      nestedAdd(typeByCategory, category, type, -abs);
+      nestedAdd(categoryBySection, section, category, -abs);
+      nestedAdd(vendorBySection, section, cleanMerchant, -abs);
+      nestedAdd(vendorByCategory, category, cleanMerchant, -abs);
+      nestedAdd(merchantBySubcategory, type, cleanMerchant, -abs);
+      nestedMonthAdd(
+        merchantMonthBySubcategory,
+        type,
+        cleanMerchant,
+        month,
+        -abs,
+      );
+      for (const tag of splitTags(row.tags)) {
+        addRank(tagSpend, tag, -abs);
+        addMonthSpend(tagMonthSpend, tag, month, -abs);
+        nestedAdd(merchantByTag, tag, cleanMerchant, -abs);
+        nestedMonthAdd(merchantMonthByTag, tag, cleanMerchant, month, -abs);
+        nestedAdd(categoryByTag, tag, category, -abs);
+        nestedMonthAdd(categoryMonthByTag, tag, category, month, -abs);
+      }
+      for (const typeLabel of typeLabelsFromTxnCode(row.transactionCode)) {
+        addRank(typeSpend, typeLabel, -abs);
+        addMonthSpend(typeMonthSpend, typeLabel, month, -abs);
+        nestedAdd(merchantByType, typeLabel, cleanMerchant, -abs);
+        nestedMonthAdd(
+          merchantMonthByType,
+          typeLabel,
+          cleanMerchant,
+          month,
+          -abs,
+        );
+        nestedAdd(categoryByType, typeLabel, category, -abs);
+        nestedMonthAdd(categoryMonthByType, typeLabel, category, month, -abs);
+      }
+      {
+        peekSources.push({
+          peek: {
+            date: row.postedDate,
+            description:
+              row.description?.trim() ||
+              row.merchantClean?.trim() ||
+              cleanMerchant,
+            amount: -abs,
+          },
+          section,
+          category,
+          subcategory: type,
+          merchant: cleanMerchant,
+          spread,
+          tags: splitTags(row.tags),
+          typeLabels: typeLabelsFromTxnCode(row.transactionCode),
+        });
+      }
+    } else {
+      bucket.income += abs;
+      totalIncome += abs;
+      const cleanMerchant = merchantCleanLabel({
+        merchantClean: row.merchantClean,
+        description: row.description,
+        companyName: row.companyName ?? row.brandName ?? null,
+        brandName: row.brandName,
+      });
+      const spread =
+        resolveSpreadName({
+          spreadName: row.spreadName,
+          sectionName: row.sectionName,
+          categoryName: row.categoryName,
+          subcategoryName: row.typeName,
+        }) ?? "Income";
+      addRank(spreadSpend, spread, abs);
+      addMonthSpend(spreadMonthSpend, spread, month, abs);
+      nestedAdd(categoryBySpread, spread, category, abs);
+      nestedAdd(vendorBySpread, spread, cleanMerchant, abs);
+      const incomeCategory = row.categoryName?.trim() || category || "Income";
+      const incomeAccount = row.accountName?.trim() || "Unknown account";
+      addRank(incomeSourceSpend, cleanMerchant, abs);
+      addMonthSpend(incomeSourceMonthSpend, cleanMerchant, month, abs);
+      addRank(incomeCategorySpend, incomeCategory, abs);
+      addMonthSpend(incomeCategoryMonthSpend, incomeCategory, month, abs);
+      addRank(incomeAccountSpend, incomeAccount, abs);
+      nestedAdd(categoryByIncomeSource, cleanMerchant, incomeCategory, abs);
+      nestedMonthAdd(
+        categoryMonthByIncomeSource,
+        cleanMerchant,
+        incomeCategory,
+        month,
+        abs,
+      );
+      nestedAdd(sourceByIncomeCategory, incomeCategory, cleanMerchant, abs);
+      {
+        peekSources.push({
+          peek: {
+            date: row.postedDate,
+            description:
+              row.description?.trim() ||
+              row.merchantClean?.trim() ||
+              cleanMerchant,
+            amount: -abs,
+          },
+          section: "Income",
+          category: incomeCategory,
+          subcategory: "",
+          merchant: cleanMerchant,
+          spread,
+          tags: [],
+          typeLabels: [],
+        });
       }
     }
 
-    const periodsWithSpend = monthly.filter((point) => point.spend > 0).length;
-    const avgPeriodSpend =
-      periodsWithSpend > 0 ? totalSpend / periodsWithSpend : 0;
-    const periodBucketCount = Math.max(monthKeys.length, 1);
-    const transactionsPerPeriod = filtered.length / periodBucketCount;
-    const incomePerPeriod = totalIncome / periodBucketCount;
+    monthlyMap.set(month, bucket);
+  }
 
-    const categories = rankAll(categorySpend);
-    const sections = rankAll(sectionSpend);
-    const spreads = rankSpreads(spreadSpend);
-    const subcategories = rankAll(subcategorySpend);
+  const monthKeys =
+    startDate && latestDate
+      ? periodsBetween(startDate, latestDate, period)
+      : [...monthlyMap.keys()].sort();
 
-    const {
-      series: sectionSeries,
-      monthly: sectionMonthly,
-      other: sectionOther,
-      otherByPeriod: sectionOtherByPeriod,
-    } = buildStackedSeries(monthKeys, sectionMonthSpend, sections, period);
-    const incomeByPeriod = new Map(
-      monthKeys.map((key) => [key, monthlyMap.get(key)?.income ?? 0]),
-    );
-    const {
-      series: spreadSeries,
-      monthly: spreadMonthly,
-      other: spreadOther,
-      otherByPeriod: spreadOtherByPeriod,
-    } = buildSpreadMixSeries(
-      monthKeys,
-      spreadMonthSpend,
-      incomeByPeriod,
-      period,
-    );
-    const {
-      series: subcategorySeries,
-      monthly: subcategoryMonthly,
-      other: subcategoryOther,
-      otherByPeriod: subcategoryOtherByPeriod,
-    } = buildStackedSeries(
-      monthKeys,
-      subcategoryMonthSpend,
-      subcategories,
-      period,
-    );
+  const monthly = monthKeys.map((month) => {
+    const bucket = monthlyMap.get(month) ?? {
+      spend: 0,
+      income: 0,
+      transfers: 0,
+    };
+    return {
+      month,
+      label: periodLabel(month, period),
+      spend: roundMoney(bucket.spend),
+      income: roundMoney(bucket.income),
+      transfers: roundMoney(bucket.transfers),
+    };
+  });
 
-    const tags = rankAll(tagSpend);
+  let peakSpendPeriod: string | null = null;
+  let peakSpendAmount = 0;
+  for (const point of monthly) {
+    if (point.spend > peakSpendAmount) {
+      peakSpendAmount = point.spend;
+      peakSpendPeriod = point.label;
+    }
+  }
 
-    const {
-      series: tagSeries,
-      monthly: tagMonthly,
-      other: tagOther,
-      otherByPeriod: tagOtherByPeriod,
-    } = buildStackedSeries(monthKeys, tagMonthSpend, tags, period);
+  const periodsWithSpend = monthly.filter((point) => point.spend > 0).length;
+  const avgPeriodSpend =
+    periodsWithSpend > 0 ? totalSpend / periodsWithSpend : 0;
+  const periodBucketCount = Math.max(monthKeys.length, 1);
+  const transactionsPerPeriod = filtered.length / periodBucketCount;
+  const incomePerPeriod = totalIncome / periodBucketCount;
 
-    const types = rankAll(typeSpend);
+  const categories = rankAll(categorySpend);
+  const sections = rankAll(sectionSpend);
+  const spreads = rankSpreads(spreadSpend);
+  const subcategories = rankAll(subcategorySpend);
 
-    const {
-      series: typeSeries,
-      monthly: typeMonthly,
-      other: typeOther,
-      otherByPeriod: typeOtherByPeriod,
-    } = buildStackedSeries(monthKeys, typeMonthSpend, types, period);
+  const {
+    series: sectionSeries,
+    monthly: sectionMonthly,
+    other: sectionOther,
+    otherByPeriod: sectionOtherByPeriod,
+  } = buildStackedSeries(monthKeys, sectionMonthSpend, sections, period);
+  const incomeByPeriod = new Map(
+    monthKeys.map((key) => [key, monthlyMap.get(key)?.income ?? 0]),
+  );
+  const {
+    series: spreadSeries,
+    monthly: spreadMonthly,
+    other: spreadOther,
+    otherByPeriod: spreadOtherByPeriod,
+  } = buildSpreadMixSeries(monthKeys, spreadMonthSpend, incomeByPeriod, period);
+  const {
+    series: subcategorySeries,
+    monthly: subcategoryMonthly,
+    other: subcategoryOther,
+    otherByPeriod: subcategoryOtherByPeriod,
+  } = buildStackedSeries(
+    monthKeys,
+    subcategoryMonthSpend,
+    subcategories,
+    period,
+  );
 
-    const merchants = rankAll(merchantSpend);
+  const tags = rankAll(tagSpend);
 
-    const {
-      series: merchantSeries,
-      monthly: merchantMonthly,
-      other: merchantOther,
-      otherByPeriod: merchantOtherByPeriod,
-    } = buildStackedSeries(monthKeys, merchantMonthSpend, merchants, period);
+  const {
+    series: tagSeries,
+    monthly: tagMonthly,
+    other: tagOther,
+    otherByPeriod: tagOtherByPeriod,
+  } = buildStackedSeries(monthKeys, tagMonthSpend, tags, period);
 
-    const categoryStacked = buildNestedStackedBars(
-      categories,
-      typeByCategory,
-      TOP_STACKED_CATEGORY_ROWS,
-    );
-    const sectionStacked = buildNestedStackedBars(
-      sections,
-      categoryBySection,
-      TOP_STACKED_SECTION_ROWS,
-    );
-    const spreadStacked = buildNestedStackedBars(
-      spreads,
-      categoryBySpread,
-      TOP_STACKED_SPREAD_ROWS,
-    );
-    const subcategoryStacked = buildNestedStackedBars(
-      subcategories,
-      merchantBySubcategory,
-      TOP_FACET_BREAKDOWNS,
-    );
-    const tagStacked = buildNestedStackedBars(
-      tags,
-      categoryByTag,
-      TOP_FACET_BREAKDOWNS,
-    );
-    const tagKeyByName = new Map(
-      tagSeries
-        .filter((item) => item.key !== OTHER_KEY)
-        .map((item) => [item.label, item.key]),
-    );
-    const tagCategoryByPeriod = nestedItemsByPeriod(
-      monthKeys,
-      categoryMonthByTag,
-      tagKeyByName,
-    );
-    const typeStacked = buildNestedStackedBars(
-      types,
-      categoryByType,
-      TOP_FACET_BREAKDOWNS,
-    );
-    const typeKeyByName = new Map(
-      typeSeries
-        .filter((item) => item.key !== OTHER_KEY)
-        .map((item) => [item.label, item.key]),
-    );
-    const typeCategoryByPeriod = nestedItemsByPeriod(
-      monthKeys,
-      categoryMonthByType,
-      typeKeyByName,
-    );
-    const merchantStacked = buildNestedStackedBars(
-      merchants,
-      subcategoryByMerchant,
-      TOP_STACKED_MERCHANT_ROWS,
-    );
+  const types = rankAll(typeSpend);
 
-    const incomeSources = rankAll(incomeSourceSpend);
-    const {
-      series: incomeSourceSeries,
-      monthly: incomeSourceMonthly,
-      other: incomeSourceOther,
-      otherByPeriod: incomeSourceOtherByPeriod,
-    } = buildStackedSeries(
-      monthKeys,
-      incomeSourceMonthSpend,
-      incomeSources,
-      period,
-    );
-    const incomeSourceStacked = buildNestedStackedBars(
-      incomeSources,
-      categoryByIncomeSource,
-      TOP_STACKED_MERCHANT_ROWS,
-    );
-    const incomeCategories = rankAll(incomeCategorySpend);
-    const {
-      series: incomeCategorySeries,
-      monthly: incomeCategoryMonthly,
-      other: incomeCategoryOther,
-      otherByPeriod: incomeCategoryOtherByPeriod,
-    } = buildStackedSeries(
-      monthKeys,
-      incomeCategoryMonthSpend,
-      incomeCategories,
-      period,
-    );
-    const incomeCategoryStacked = buildNestedStackedBars(
-      incomeCategories,
-      sourceByIncomeCategory,
-      TOP_STACKED_CATEGORY_ROWS,
-    );
-    const incomeAccounts = rankAll(incomeAccountSpend);
+  const {
+    series: typeSeries,
+    monthly: typeMonthly,
+    other: typeOther,
+    otherByPeriod: typeOtherByPeriod,
+  } = buildStackedSeries(monthKeys, typeMonthSpend, types, period);
 
-    const {
-      series: categorySeries,
-      monthly: categoryMonthly,
-      other: categoryOther,
-      otherByPeriod: categoryOtherByPeriod,
-    } = buildStackedSeries(monthKeys, categoryMonthSpend, categories, period);
+  const merchants = rankAll(merchantSpend);
 
-    const weekdays = WEEKDAYS.map((name) => {
-      const bucket = weekdaySpend.get(name) ?? emptyBucket();
-      return {
-        name,
-        spend: roundMoney(bucket.spend),
-        count: bucket.count,
-      };
-    });
+  const {
+    series: merchantSeries,
+    monthly: merchantMonthly,
+    other: merchantOther,
+    otherByPeriod: merchantOtherByPeriod,
+  } = buildStackedSeries(monthKeys, merchantMonthSpend, merchants, period);
 
-    const weekendSplit = (["Weekday", "Weekend"] as const).map((name) => {
-      const bucket = weekendSpend.get(name) ?? emptyBucket();
-      return {
-        name,
-        spend: roundMoney(bucket.spend),
-        count: bucket.count,
-      };
-    });
+  const categoryStacked = buildNestedStackedBars(
+    categories,
+    typeByCategory,
+    TOP_STACKED_CATEGORY_ROWS,
+  );
+  const sectionStacked = buildNestedStackedBars(
+    sections,
+    categoryBySection,
+    TOP_STACKED_SECTION_ROWS,
+  );
+  const spreadStacked = buildNestedStackedBars(
+    spreads,
+    categoryBySpread,
+    TOP_STACKED_SPREAD_ROWS,
+  );
+  const subcategoryStacked = buildNestedStackedBars(
+    subcategories,
+    merchantBySubcategory,
+    TOP_FACET_BREAKDOWNS,
+  );
+  const tagStacked = buildNestedStackedBars(
+    tags,
+    categoryByTag,
+    TOP_FACET_BREAKDOWNS,
+  );
+  const tagKeyByName = new Map(
+    tagSeries
+      .filter((item) => item.key !== OTHER_KEY)
+      .map((item) => [item.label, item.key]),
+  );
+  const tagCategoryByPeriod = nestedItemsByPeriod(
+    monthKeys,
+    categoryMonthByTag,
+    tagKeyByName,
+  );
+  const typeStacked = buildNestedStackedBars(
+    types,
+    categoryByType,
+    TOP_FACET_BREAKDOWNS,
+  );
+  const typeKeyByName = new Map(
+    typeSeries
+      .filter((item) => item.key !== OTHER_KEY)
+      .map((item) => [item.label, item.key]),
+  );
+  const typeCategoryByPeriod = nestedItemsByPeriod(
+    monthKeys,
+    categoryMonthByType,
+    typeKeyByName,
+  );
+  const merchantStacked = buildNestedStackedBars(
+    merchants,
+    subcategoryByMerchant,
+    TOP_STACKED_MERCHANT_ROWS,
+  );
 
-    const ticketSizes = TICKET_SIZE_ORDER.map((name) => {
-      const bucket = ticketSizeSpend.get(name) ?? emptyBucket();
-      return {
-        name,
-        spend: roundMoney(bucket.spend),
-        count: bucket.count,
-      };
-    }).filter((item) => item.count > 0 || item.spend > 0);
+  const incomeSources = rankAll(incomeSourceSpend);
+  const {
+    series: incomeSourceSeries,
+    monthly: incomeSourceMonthly,
+    other: incomeSourceOther,
+    otherByPeriod: incomeSourceOtherByPeriod,
+  } = buildStackedSeries(
+    monthKeys,
+    incomeSourceMonthSpend,
+    incomeSources,
+    period,
+  );
+  const incomeSourceStacked = buildNestedStackedBars(
+    incomeSources,
+    categoryByIncomeSource,
+    TOP_STACKED_MERCHANT_ROWS,
+  );
+  const incomeCategories = rankAll(incomeCategorySpend);
+  const {
+    series: incomeCategorySeries,
+    monthly: incomeCategoryMonthly,
+    other: incomeCategoryOther,
+    otherByPeriod: incomeCategoryOtherByPeriod,
+  } = buildStackedSeries(
+    monthKeys,
+    incomeCategoryMonthSpend,
+    incomeCategories,
+    period,
+  );
+  const incomeCategoryStacked = buildNestedStackedBars(
+    incomeCategories,
+    sourceByIncomeCategory,
+    TOP_STACKED_CATEGORY_ROWS,
+  );
+  const incomeAccounts = rankAll(incomeAccountSpend);
 
-    const dayOfMonth = Array.from({ length: 31 }, (_, index) => {
-      const name = String(index + 1);
-      const bucket = dayOfMonthSpend.get(name) ?? emptyBucket();
-      return {
-        name,
-        spend: roundMoney(bucket.spend),
-        count: bucket.count,
-      };
-    });
+  const {
+    series: categorySeries,
+    monthly: categoryMonthly,
+    other: categoryOther,
+    otherByPeriod: categoryOtherByPeriod,
+  } = buildStackedSeries(monthKeys, categoryMonthSpend, categories, period);
 
-    const habitMerchants = [...habitMerchantSpend.entries()]
-      .map(([name, bucket]) => ({
-        name,
-        spend: roundMoney(bucket.spend),
-        count: bucket.count,
-      }))
-      .filter((item) => item.count >= 6 && item.spend > 0)
-      .sort((a, b) => b.count - a.count || b.spend - a.spend)
-      .slice(0, 12);
+  const weekdays = WEEKDAYS.map((name) => {
+    const bucket = weekdaySpend.get(name) ?? emptyBucket();
+    return {
+      name,
+      spend: roundMoney(bucket.spend),
+      count: bucket.count,
+    };
+  });
 
-    const breakdowns = categories.slice(0, TOP_CATEGORY_BREAKDOWNS).map((item) => {
+  const weekendSplit = (["Weekday", "Weekend"] as const).map((name) => {
+    const bucket = weekendSpend.get(name) ?? emptyBucket();
+    return {
+      name,
+      spend: roundMoney(bucket.spend),
+      count: bucket.count,
+    };
+  });
+
+  const ticketSizes = TICKET_SIZE_ORDER.map((name) => {
+    const bucket = ticketSizeSpend.get(name) ?? emptyBucket();
+    return {
+      name,
+      spend: roundMoney(bucket.spend),
+      count: bucket.count,
+    };
+  }).filter((item) => item.count > 0 || item.spend > 0);
+
+  const dayOfMonth = Array.from({ length: 31 }, (_, index) => {
+    const name = String(index + 1);
+    const bucket = dayOfMonthSpend.get(name) ?? emptyBucket();
+    return {
+      name,
+      spend: roundMoney(bucket.spend),
+      count: bucket.count,
+    };
+  });
+
+  const habitMerchants = [...habitMerchantSpend.entries()]
+    .map(([name, bucket]) => ({
+      name,
+      spend: roundMoney(bucket.spend),
+      count: bucket.count,
+    }))
+    .filter((item) => item.count >= 6 && item.spend > 0)
+    .sort((a, b) => b.count - a.count || b.spend - a.spend)
+    .slice(0, 12);
+
+  const breakdowns = categories
+    .slice(0, TOP_CATEGORY_BREAKDOWNS)
+    .map((item) => {
       const types = rankAll(typeByCategory.get(item.name) ?? new Map());
       const {
         series: typeSeries,
@@ -1589,9 +1608,9 @@ const currency =
       };
     });
 
-    const subcategoryBreakdowns = subcategories
-      .slice(0, TOP_FACET_BREAKDOWNS)
-      .map((item) => {
+  const subcategoryBreakdowns = subcategories
+    .slice(0, TOP_FACET_BREAKDOWNS)
+    .map((item) => {
       const merchants = rankAll(
         merchantBySubcategory.get(item.name) ?? new Map(),
       );
@@ -1617,57 +1636,57 @@ const currency =
       };
     });
 
-    const tagBreakdowns = tags.slice(0, TOP_FACET_BREAKDOWNS).map((item) => {
-      const merchants = rankAll(merchantByTag.get(item.name) ?? new Map());
-      const {
-        series: merchantSeries,
-        monthly: merchantMonthly,
-        other,
-        otherByPeriod,
-      } = buildStackedSeries(
-        monthKeys,
-        merchantMonthByTag.get(item.name) ?? new Map(),
-        merchants,
-        period,
-      );
-      return {
-        tag: item.name,
-        spend: item.spend,
-        merchants,
-        merchantSeries,
-        merchantMonthly,
-        other,
-        otherByPeriod,
-      };
-    });
+  const tagBreakdowns = tags.slice(0, TOP_FACET_BREAKDOWNS).map((item) => {
+    const merchants = rankAll(merchantByTag.get(item.name) ?? new Map());
+    const {
+      series: merchantSeries,
+      monthly: merchantMonthly,
+      other,
+      otherByPeriod,
+    } = buildStackedSeries(
+      monthKeys,
+      merchantMonthByTag.get(item.name) ?? new Map(),
+      merchants,
+      period,
+    );
+    return {
+      tag: item.name,
+      spend: item.spend,
+      merchants,
+      merchantSeries,
+      merchantMonthly,
+      other,
+      otherByPeriod,
+    };
+  });
 
-    const typeBreakdowns = types.slice(0, TOP_FACET_BREAKDOWNS).map((item) => {
-      const merchants = rankAll(merchantByType.get(item.name) ?? new Map());
-      const {
-        series: merchantSeries,
-        monthly: merchantMonthly,
-        other,
-        otherByPeriod,
-      } = buildStackedSeries(
-        monthKeys,
-        merchantMonthByType.get(item.name) ?? new Map(),
-        merchants,
-        period,
-      );
-      return {
-        type: item.name,
-        spend: item.spend,
-        merchants,
-        merchantSeries,
-        merchantMonthly,
-        other,
-        otherByPeriod,
-      };
-    });
+  const typeBreakdowns = types.slice(0, TOP_FACET_BREAKDOWNS).map((item) => {
+    const merchants = rankAll(merchantByType.get(item.name) ?? new Map());
+    const {
+      series: merchantSeries,
+      monthly: merchantMonthly,
+      other,
+      otherByPeriod,
+    } = buildStackedSeries(
+      monthKeys,
+      merchantMonthByType.get(item.name) ?? new Map(),
+      merchants,
+      period,
+    );
+    return {
+      type: item.name,
+      spend: item.spend,
+      merchants,
+      merchantSeries,
+      merchantMonthly,
+      other,
+      otherByPeriod,
+    };
+  });
 
-    const merchantBreakdowns = merchants
-      .slice(0, TOP_FACET_BREAKDOWNS)
-      .map((item) => {
+  const merchantBreakdowns = merchants
+    .slice(0, TOP_FACET_BREAKDOWNS)
+    .map((item) => {
       const types = rankAll(subcategoryByMerchant.get(item.name) ?? new Map());
       const categories = rankAll(
         categoryByMerchant.get(item.name) ?? new Map(),
@@ -1695,270 +1714,339 @@ const currency =
       };
     });
 
-    const incomeSourceBreakdowns = incomeSources
-      .slice(0, TOP_FACET_BREAKDOWNS)
-      .map((item) => {
-        const categories = rankAll(
-          categoryByIncomeSource.get(item.name) ?? new Map(),
-        );
-        const {
-          series: categorySeries,
-          monthly: categoryMonthly,
-          other,
-          otherByPeriod,
-        } = buildStackedSeries(
-          monthKeys,
-          categoryMonthByIncomeSource.get(item.name) ?? new Map(),
-          categories,
-          period,
-        );
-        return {
-          source: item.name,
-          spend: item.spend,
-          categories,
-          categorySeries,
-          categoryMonthly,
-          other,
-          otherByPeriod,
-        };
-      });
-
-    const topMerchantNames = new Set(
-      merchants.slice(0, TOP_FACET_BREAKDOWNS).map((item) => item.name),
-    );
-    const topSubcategoryNames = new Set(
-      subcategories.slice(0, TOP_FACET_BREAKDOWNS).map((item) => item.name),
-    );
-    const topCategoryNames = new Set(
-      categories.slice(0, TOP_CATEGORY_BREAKDOWNS).map((item) => item.name),
-    );
-    const topTagNames = new Set(
-      tags.slice(0, TOP_FACET_BREAKDOWNS).map((item) => item.name),
-    );
-    const topTypeNames = new Set(
-      types.slice(0, TOP_FACET_BREAKDOWNS).map((item) => item.name),
-    );
-    const sectionNames = new Set(sections.map((item) => item.name));
-    const spreadNames = new Set(spreads.map((item) => item.name));
-    const topIncomeSourceNames = new Set(
-      incomeSources.slice(0, TOP_FACET_BREAKDOWNS).map((item) => item.name),
-    );
-    const topIncomeCategoryNames = new Set(
-      incomeCategories.slice(0, TOP_FACET_BREAKDOWNS).map((item) => item.name),
-    );
-
-    for (const src of peekSources) {
+  const incomeSourceBreakdowns = incomeSources
+    .slice(0, TOP_FACET_BREAKDOWNS)
+    .map((item) => {
+      const categories = rankAll(
+        categoryByIncomeSource.get(item.name) ?? new Map(),
+      );
       const {
-        peek,
-        section,
-        category,
-        subcategory,
-        merchant,
-        spread,
-        tags: srcTags,
-        typeLabels,
-      } = src;
-      const keepSection = sectionNames.has(section);
-      const keepCategory = topCategoryNames.has(category);
-      const keepSubcategory = topSubcategoryNames.has(subcategory);
-      const keepMerchant = topMerchantNames.has(merchant);
-      const keepSpread = spread != null && spreadNames.has(spread);
-
-      if (keepSection) pushPeek(txnPeekMap, peekKey("section", section), peek);
-      if (keepCategory) pushPeek(txnPeekMap, peekKey("category", category), peek);
-      if (keepSubcategory)
-        pushPeek(txnPeekMap, peekKey("subcategory", subcategory), peek);
-      if (keepMerchant)
-        pushPeek(txnPeekMap, peekKey("merchant", merchant), peek);
-      if (keepSection && keepCategory)
-        pushPeek(
-          txnPeekMap,
-          peekKey("section-category", section, category),
-          peek,
-        );
-      if (keepSection && keepMerchant)
-        pushPeek(
-          txnPeekMap,
-          peekKey("section-merchant", section, merchant),
-          peek,
-        );
-      if (keepCategory && keepMerchant)
-        pushPeek(
-          txnPeekMap,
-          peekKey("category-merchant", category, merchant),
-          peek,
-        );
-      if (keepSubcategory && keepMerchant)
-        pushPeek(
-          txnPeekMap,
-          peekKey("subcategory-merchant", subcategory, merchant),
-          peek,
-        );
-      if (keepSpread) {
-        pushPeek(txnPeekMap, peekKey("spread", spread), peek);
-        if (keepCategory)
-          pushPeek(
-            txnPeekMap,
-            peekKey("spread-category", spread, category),
-            peek,
-          );
-        if (keepMerchant)
-          pushPeek(
-            txnPeekMap,
-            peekKey("spread-merchant", spread, merchant),
-            peek,
-          );
-      }
-      for (const tag of srcTags) {
-        if (!topTagNames.has(tag)) continue;
-        pushPeek(txnPeekMap, peekKey("tag", tag), peek);
-        if (keepMerchant)
-          pushPeek(txnPeekMap, peekKey("tag-merchant", tag, merchant), peek);
-      }
-      for (const typeLabel of typeLabels) {
-        if (!topTypeNames.has(typeLabel)) continue;
-        pushPeek(txnPeekMap, peekKey("type", typeLabel), peek);
-        if (keepMerchant)
-          pushPeek(
-            txnPeekMap,
-            peekKey("type-merchant", typeLabel, merchant),
-            peek,
-          );
-      }
-      const keepIncomeSource = topIncomeSourceNames.has(merchant);
-      const keepIncomeCategory = topIncomeCategoryNames.has(category);
-      if (keepIncomeSource) {
-        pushPeek(txnPeekMap, peekKey("income-source", merchant), peek);
-      }
-      if (keepIncomeCategory) {
-        pushPeek(txnPeekMap, peekKey("income-category", category), peek);
-      }
-      if (keepIncomeSource && keepIncomeCategory) {
-        pushPeek(
-          txnPeekMap,
-          peekKey("income-source-category", merchant, category),
-          peek,
-        );
-      }
-    }
-
-    return {
-        currency,
-        range,
-        period,
-        earliestDate: rangeEarliest,
-        latestDate: rangeLatest,
-        transactionCount: filtered.length,
-        summary: {
-          totalSpend: roundMoney(totalSpend),
-          totalIncome: roundMoney(totalIncome),
-          net: roundMoney(totalIncome - totalSpend),
-          avgPeriodSpend: roundMoney(avgPeriodSpend),
-          peakSpendPeriod,
-          peakSpendAmount: roundMoney(peakSpendAmount),
-          internalTransfers: roundMoney(internalTransfers),
-          transferCount,
-          spendCount,
-          transactionCount: filtered.length,
-          transactionsPerPeriod: roundMoney(transactionsPerPeriod),
-          incomePerPeriod: roundMoney(incomePerPeriod),
-          refunds: roundMoney(refunds),
-          inboundTransfersIgnored: roundMoney(inboundTransfersIgnored),
-        },
-        monthly,
-        txnPeeks: finalizePeeks(txnPeekMap),
-        sections,
-        sectionMonthly,
-        sectionSeries,
-        sectionOther,
-        sectionOtherByPeriod,
-        sectionStacked,
-        merchantsBySection: vendorsByName(
-          sections.map((item) => item.name),
-          vendorBySection,
-        ),
-        categoriesBySection: vendorsByName(
-          sections.map((item) => item.name),
-          categoryBySection,
-        ),
-        merchantsByCategory: vendorsByName(
-          categories.map((item) => item.name),
-          vendorByCategory,
-        ),
-        spreads,
-        spreadMonthly,
-        spreadSeries,
-        spreadOther,
-        spreadOtherByPeriod,
-        spreadStacked,
-        merchantsBySpread: vendorsByName(
-          spreads.map((item) => item.name),
-          vendorBySpread,
-        ),
-        categoriesBySpread: vendorsByName(
-          spreads.map((item) => item.name),
-          categoryBySpread,
-        ),
-        subcategories,
-        subcategoryMonthly,
-        subcategorySeries,
-        subcategoryOther,
-        subcategoryOtherByPeriod,
-        subcategoryStacked,
-        subcategoryBreakdowns,
-        tags,
-        tagMonthly,
-        tagSeries,
-        tagOther,
-        tagOtherByPeriod,
-        tagCategoryByPeriod,
-        tagStacked,
-        tagBreakdowns,
-        types,
-        typeMonthly,
-        typeSeries,
-        typeOther,
-        typeOtherByPeriod,
-        typeCategoryByPeriod,
-        typeStacked,
-        typeBreakdowns,
+        series: categorySeries,
+        monthly: categoryMonthly,
+        other,
+        otherByPeriod,
+      } = buildStackedSeries(
+        monthKeys,
+        categoryMonthByIncomeSource.get(item.name) ?? new Map(),
         categories,
-        categoryMonthly,
+        period,
+      );
+      return {
+        source: item.name,
+        spend: item.spend,
+        categories,
         categorySeries,
-        categoryOther,
-        categoryOtherByPeriod,
-        categoryStacked,
-        breakdowns,
-        merchants,
-        merchantMonthly,
-        merchantSeries,
-        merchantOther,
-        merchantOtherByPeriod,
-        merchantStacked,
-        merchantBreakdowns,
-        incomeSources,
-        incomeSourceMonthly,
-        incomeSourceSeries,
-        incomeSourceOther,
-        incomeSourceOtherByPeriod,
-        incomeSourceStacked,
-        incomeSourceBreakdowns,
-        incomeCategories,
-        incomeCategoryMonthly,
-        incomeCategorySeries,
-        incomeCategoryOther,
-        incomeCategoryOtherByPeriod,
-        incomeCategoryStacked,
-        incomeAccounts,
-        places: rankMap(placeSpend, 8),
-        channels: rankMap(channelSpend, 6),
-        weekdays,
-        accounts: rankMap(accountSpend, 8),
-        weekendSplit,
-        ticketSizes,
-        dayOfMonth,
-        habitMerchants,
-        countries: rankMap(countrySpend, 8),
+        categoryMonthly,
+        other,
+        otherByPeriod,
       };
+    });
 
+  const merchantsBySection = vendorsByName(
+    sections.map((item) => item.name),
+    vendorBySection,
+  );
+  const categoriesBySection = vendorsByName(
+    sections.map((item) => item.name),
+    categoryBySection,
+  );
+  const merchantsByCategory = vendorsByName(
+    categories.map((item) => item.name),
+    vendorByCategory,
+  );
+  const merchantsBySpread = vendorsByName(
+    spreads.map((item) => item.name),
+    vendorBySpread,
+  );
+  const categoriesBySpread = vendorsByName(
+    spreads.map((item) => item.name),
+    categoryBySpread,
+  );
+  const merchantsBySubcategory = vendorsByName(
+    subcategories.map((item) => item.name),
+    merchantBySubcategory,
+  );
+  const merchantsByTag = vendorsByName(
+    tags.map((item) => item.name),
+    merchantByTag,
+  );
+  const merchantsByType = vendorsByName(
+    types.map((item) => item.name),
+    merchantByType,
+  );
+  const categoriesByIncomeSource = vendorsByName(
+    incomeSources.map((item) => item.name),
+    categoryByIncomeSource,
+  );
+
+  const wantedPeekKeys = new Set<string>();
+  addWantedRows(wantedPeekKeys, "section", sections);
+  addWantedRows(wantedPeekKeys, "spread", spreads);
+  addWantedRows(wantedPeekKeys, "category", categories);
+  addWantedRows(wantedPeekKeys, "subcategory", subcategories);
+  addWantedRows(wantedPeekKeys, "tag", tags);
+  addWantedRows(wantedPeekKeys, "type", types);
+  addWantedRows(
+    wantedPeekKeys,
+    "merchant",
+    merchants.slice(0, TOP_FACET_BREAKDOWNS),
+  );
+  addWantedRows(wantedPeekKeys, "income-source", incomeSources);
+  addWantedRows(wantedPeekKeys, "income-category", incomeCategories);
+  addWantedPairs(wantedPeekKeys, "section-category", categoriesBySection);
+  addWantedPairs(wantedPeekKeys, "section-merchant", merchantsBySection);
+  addWantedPairs(wantedPeekKeys, "spread-category", categoriesBySpread);
+  addWantedPairs(wantedPeekKeys, "spread-merchant", merchantsBySpread);
+  addWantedPairs(wantedPeekKeys, "category-merchant", merchantsByCategory);
+  addWantedPairs(
+    wantedPeekKeys,
+    "subcategory-merchant",
+    merchantsBySubcategory,
+  );
+  addWantedPairs(wantedPeekKeys, "tag-merchant", merchantsByTag);
+  addWantedPairs(wantedPeekKeys, "type-merchant", merchantsByType);
+  addWantedPairs(
+    wantedPeekKeys,
+    "income-source-category",
+    categoriesByIncomeSource,
+  );
+  for (const nested of [
+    merchantsBySection,
+    merchantsBySpread,
+    merchantsByCategory,
+    merchantsBySubcategory,
+    merchantsByTag,
+    merchantsByType,
+  ]) {
+    for (const rows of Object.values(nested)) {
+      addWantedRows(wantedPeekKeys, "merchant", rows);
+    }
+  }
+
+  for (const src of peekSources) {
+    const {
+      peek,
+      section,
+      category,
+      subcategory,
+      merchant,
+      spread,
+      tags: srcTags,
+      typeLabels,
+    } = src;
+
+    pushWantedPeek(
+      txnPeekMap,
+      wantedPeekKeys,
+      peekKey("section", section),
+      peek,
+    );
+    pushWantedPeek(
+      txnPeekMap,
+      wantedPeekKeys,
+      peekKey("category", category),
+      peek,
+    );
+    pushWantedPeek(
+      txnPeekMap,
+      wantedPeekKeys,
+      peekKey("subcategory", subcategory),
+      peek,
+    );
+    pushWantedPeek(
+      txnPeekMap,
+      wantedPeekKeys,
+      peekKey("merchant", merchant),
+      peek,
+    );
+    pushWantedPeek(
+      txnPeekMap,
+      wantedPeekKeys,
+      peekKey("section-category", section, category),
+      peek,
+    );
+    pushWantedPeek(
+      txnPeekMap,
+      wantedPeekKeys,
+      peekKey("section-merchant", section, merchant),
+      peek,
+    );
+    pushWantedPeek(
+      txnPeekMap,
+      wantedPeekKeys,
+      peekKey("category-merchant", category, merchant),
+      peek,
+    );
+    pushWantedPeek(
+      txnPeekMap,
+      wantedPeekKeys,
+      peekKey("subcategory-merchant", subcategory, merchant),
+      peek,
+    );
+    if (spread != null) {
+      pushWantedPeek(
+        txnPeekMap,
+        wantedPeekKeys,
+        peekKey("spread", spread),
+        peek,
+      );
+      pushWantedPeek(
+        txnPeekMap,
+        wantedPeekKeys,
+        peekKey("spread-category", spread, category),
+        peek,
+      );
+      pushWantedPeek(
+        txnPeekMap,
+        wantedPeekKeys,
+        peekKey("spread-merchant", spread, merchant),
+        peek,
+      );
+    }
+    for (const tag of srcTags) {
+      pushWantedPeek(txnPeekMap, wantedPeekKeys, peekKey("tag", tag), peek);
+      pushWantedPeek(
+        txnPeekMap,
+        wantedPeekKeys,
+        peekKey("tag-merchant", tag, merchant),
+        peek,
+      );
+    }
+    for (const typeLabel of typeLabels) {
+      pushWantedPeek(
+        txnPeekMap,
+        wantedPeekKeys,
+        peekKey("type", typeLabel),
+        peek,
+      );
+      pushWantedPeek(
+        txnPeekMap,
+        wantedPeekKeys,
+        peekKey("type-merchant", typeLabel, merchant),
+        peek,
+      );
+    }
+    pushWantedPeek(
+      txnPeekMap,
+      wantedPeekKeys,
+      peekKey("income-source", merchant),
+      peek,
+    );
+    pushWantedPeek(
+      txnPeekMap,
+      wantedPeekKeys,
+      peekKey("income-category", category),
+      peek,
+    );
+    pushWantedPeek(
+      txnPeekMap,
+      wantedPeekKeys,
+      peekKey("income-source-category", merchant, category),
+      peek,
+    );
+  }
+
+  return {
+    currency,
+    range,
+    period,
+    earliestDate: rangeEarliest,
+    latestDate: rangeLatest,
+    transactionCount: filtered.length,
+    summary: {
+      totalSpend: roundMoney(totalSpend),
+      totalIncome: roundMoney(totalIncome),
+      net: roundMoney(totalIncome - totalSpend),
+      avgPeriodSpend: roundMoney(avgPeriodSpend),
+      peakSpendPeriod,
+      peakSpendAmount: roundMoney(peakSpendAmount),
+      internalTransfers: roundMoney(internalTransfers),
+      transferCount,
+      spendCount,
+      transactionCount: filtered.length,
+      transactionsPerPeriod: roundMoney(transactionsPerPeriod),
+      incomePerPeriod: roundMoney(incomePerPeriod),
+      refunds: roundMoney(refunds),
+      inboundTransfersIgnored: roundMoney(inboundTransfersIgnored),
+    },
+    monthly,
+    txnPeeks: finalizePeeks(txnPeekMap),
+    sections,
+    sectionMonthly,
+    sectionSeries,
+    sectionOther,
+    sectionOtherByPeriod,
+    sectionStacked,
+    merchantsBySection,
+    categoriesBySection,
+    merchantsByCategory,
+    spreads,
+    spreadMonthly,
+    spreadSeries,
+    spreadOther,
+    spreadOtherByPeriod,
+    spreadStacked,
+    merchantsBySpread,
+    categoriesBySpread,
+    subcategories,
+    subcategoryMonthly,
+    subcategorySeries,
+    subcategoryOther,
+    subcategoryOtherByPeriod,
+    subcategoryStacked,
+    subcategoryBreakdowns,
+    tags,
+    tagMonthly,
+    tagSeries,
+    tagOther,
+    tagOtherByPeriod,
+    tagCategoryByPeriod,
+    tagStacked,
+    tagBreakdowns,
+    types,
+    typeMonthly,
+    typeSeries,
+    typeOther,
+    typeOtherByPeriod,
+    typeCategoryByPeriod,
+    typeStacked,
+    typeBreakdowns,
+    categories,
+    categoryMonthly,
+    categorySeries,
+    categoryOther,
+    categoryOtherByPeriod,
+    categoryStacked,
+    breakdowns,
+    merchants,
+    merchantMonthly,
+    merchantSeries,
+    merchantOther,
+    merchantOtherByPeriod,
+    merchantStacked,
+    merchantBreakdowns,
+    incomeSources,
+    incomeSourceMonthly,
+    incomeSourceSeries,
+    incomeSourceOther,
+    incomeSourceOtherByPeriod,
+    incomeSourceStacked,
+    incomeSourceBreakdowns,
+    incomeCategories,
+    incomeCategoryMonthly,
+    incomeCategorySeries,
+    incomeCategoryOther,
+    incomeCategoryOtherByPeriod,
+    incomeCategoryStacked,
+    incomeAccounts,
+    places: rankMap(placeSpend, 8),
+    channels: rankMap(channelSpend, 6),
+    weekdays,
+    accounts: rankMap(accountSpend, 8),
+    weekendSplit,
+    ticketSizes,
+    dayOfMonth,
+    habitMerchants,
+    countries: rankMap(countrySpend, 8),
+  };
 }

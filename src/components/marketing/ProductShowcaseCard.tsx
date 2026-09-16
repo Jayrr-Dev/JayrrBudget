@@ -225,7 +225,7 @@ export function ProductShowcaseCard() {
               animate={{ opacity: 1, x: 0 }}
               exit={animate ? { opacity: 0, x: -24 } : undefined}
               transition={SLIDE_TRANSITION}
-              className="absolute inset-0 flex flex-col gap-3 sm:gap-4"
+              className="absolute inset-0 flex flex-col gap-4 sm:gap-4"
             >
               <div className="min-h-0 flex-1">
                 <slide.Scene animate={animate} onDone={goNext} />
@@ -235,7 +235,7 @@ export function ProductShowcaseCard() {
                 {slide.features.map(({ icon: Icon, label }) => (
                   <li
                     key={label}
-                    className="flex items-start gap-2.5 text-sm text-[var(--muted-foreground)]"
+                    className="flex items-start gap-2 text-sm text-[var(--muted-foreground)]"
                   >
                     <Icon className="mt-0.5 size-4 shrink-0 text-[var(--accent)]" />
                     <span className="leading-snug">{label}</span>

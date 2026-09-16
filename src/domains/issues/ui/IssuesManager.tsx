@@ -211,7 +211,7 @@ function ReportIssueForm() {
       <p className="mt-1 text-sm text-[var(--muted-foreground)]">
         Describe what went wrong or what you need help with.
       </p>
-      <div className="mt-4 grid gap-3">
+      <div className="mt-4 grid gap-4">
         <div className="grid gap-1.5">
           <Label htmlFor="issue-message">What happened</Label>
           <Input

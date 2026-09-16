@@ -21,7 +21,11 @@ import type {
 } from "@/domains/dashboard/domain/types";
 import { AccountPastTransactions } from "@/domains/dashboard/ui/AccountPastTransactions";
 import { AddLoanDialog } from "@/domains/dashboard/ui/AddLoanDialog";
-import { LOAN_TYPES, formatLoanRate, normalizeRateType } from "@/domains/loans/domain/loanTypes";
+import {
+  LOAN_TYPES,
+  formatLoanRate,
+  normalizeRateType,
+} from "@/domains/loans/domain/loanTypes";
 import { LoanDocumentOcrButton } from "@/domains/loans/ui/LoanDocumentOcrButton";
 import { StatementUpload } from "@/domains/statements/ui/StatementUpload";
 import { formatDisplayDate } from "@/shared/lib/format-date";
@@ -136,18 +140,20 @@ function LoanPaymentHistory({
   );
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
       <h2 className="text-lg font-semibold tracking-tight">Payment history</h2>
       <p className="text-sm text-[var(--muted-foreground)]">
         Contract schedule from {loan.firstPaymentDate}. Linked PADs show posted
         date; assumed rows fill gaps before import.
       </p>
-      <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)]">
-        <div className="overflow-x-auto">
+      <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-surface-elevated">
+        <div className="overflow-x-auto overscroll-x-contain">
           <table className="w-full min-w-[40rem] text-left text-sm">
             <thead className="border-b border-[var(--border)] text-xs text-[var(--muted-foreground)]">
               <tr>
-                <th className="px-3 py-2 font-medium">#</th>
+                <th className="sticky left-0 z-10 bg-surface-elevated px-3 py-2 font-medium">
+                  #
+                </th>
                 <th className="px-3 py-2 font-medium">Scheduled</th>
                 <th className="px-3 py-2 font-medium">Posted</th>
                 <th className="px-3 py-2 font-medium text-right">Payment</th>
@@ -162,7 +168,7 @@ function LoanPaymentHistory({
                   key={row.paymentNumber}
                   className="border-t border-[var(--border)]"
                 >
-                  <td className="px-3 py-2 tabular-nums">
+                  <td className="sticky left-0 z-10 bg-surface-elevated px-3 py-2 tabular-nums">
                     {row.paymentNumber}
                   </td>
                   <td className="px-3 py-2 font-mono tabular-nums">
@@ -230,28 +236,24 @@ function AccountDetailView({
           <span aria-hidden>←</span>
           All accounts
         </Button>
-        <header className="space-y-1">
-          <div className="flex flex-wrap items-center gap-3">
-            <h1 className="text-3xl font-semibold tracking-tight">
-              {account.name}
-            </h1>
-            {loan ? <LoanDocumentOcrButton accountId={account.accountId} /> : null}
+        <header className="space-y-2">
+          <div className="flex flex-wrap items-center gap-4">
+            <h1 className="type-page">{account.name}</h1>
+            {loan ? (
+              <LoanDocumentOcrButton accountId={account.accountId} />
+            ) : null}
           </div>
-          <p className="text-[var(--muted-foreground)]">
-            {accountSecondaryLine(account)}
-          </p>
+          <p className="type-muted">{accountSecondaryLine(account)}</p>
         </header>
       </div>
 
-      <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)]">
+      <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-surface-elevated">
         <div className="grid gap-2 px-4 py-5 sm:px-5 sm:py-6 lg:grid-cols-2 lg:gap-10">
           <div>
-            <p className="text-sm text-[var(--muted-foreground)]">
+            <p className="type-muted">
               {loan ? "Principal remaining" : "Balance"}
             </p>
-            <p className="mt-1 text-3xl font-semibold tracking-tight tabular-nums">
-              {formatMoney(balance, currency)}
-            </p>
+            <p className="type-stat mt-1">{formatMoney(balance, currency)}</p>
             <div className="mt-4 divide-y divide-[var(--border)]">
               {loan ? (
                 <>
@@ -314,8 +316,9 @@ function AccountDetailView({
                 {loan.vehicleLabel ? (
                   <DetailRow
                     label={
-                      LOAN_TYPES.find((t) => t.value === loan.loanType)
-                        ?.collateralLabel.replace(" (optional)", "") ?? "Note"
+                      LOAN_TYPES.find(
+                        (t) => t.value === loan.loanType,
+                      )?.collateralLabel.replace(" (optional)", "") ?? "Note"
                     }
                     value={loan.vehicleLabel}
                   />
@@ -449,14 +452,14 @@ export function BankAccountsDashboard({
   return (
     <div className="space-y-8">
       {!hasNonLending && accounts.length === 0 ? (
-        <div className="flex flex-col gap-4 rounded-xl border border-dashed border-[var(--border)] bg-[var(--surface)]/70 px-5 py-8 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-4 rounded-xl border border-dashed border-[var(--border)] bg-surface-elevated/70 px-5 py-8 sm:flex-row sm:items-center sm:justify-between">
           <div className="space-y-1">
             <h2 className="font-medium text-[var(--foreground)]">
               Start by importing a statement
             </h2>
             <p className="max-w-lg text-sm text-[var(--muted-foreground)]">
-              Upload a bank statement PDF to create your accounts and import
-              the transactions automatically.
+              Upload a bank statement PDF to create your accounts and import the
+              transactions automatically.
             </p>
           </div>
           <StatementUpload />
@@ -484,18 +487,16 @@ export function BankAccountsDashboard({
           </div>
           {section.accounts.length === 0 ? (
             section.id === "lending" ? (
-              <div className="rounded-xl border border-dashed border-[var(--border)] bg-[var(--surface)]/70 px-4 py-6 text-sm text-[var(--muted-foreground)]">
+              <div className="rounded-xl border border-dashed border-[var(--border)] bg-surface-elevated/70 px-4 py-6 text-sm text-[var(--muted-foreground)]">
                 No lending accounts yet. Use + to register a lending account.
               </div>
             ) : null
           ) : (
-            <ul className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)]">
+            <ul className="overflow-hidden rounded-xl border border-[var(--border)] bg-surface-elevated">
               {section.accounts.map((account, index) => (
                 <li
                   key={account.accountId}
-                  className={
-                    index > 0 ? "border-t border-[var(--border)]" : ""
-                  }
+                  className={index > 0 ? "border-t border-[var(--border)]" : ""}
                 >
                   <AccountRow
                     account={account}

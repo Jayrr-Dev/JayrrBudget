@@ -1,13 +1,17 @@
-import type { ConvexHttpClient } from "convex/browser";
-import { z } from "zod";
+import { MERCHANT_CLEAN_AI_RULES } from "@/domains/enrichment/domain/merchantCleanAiRules";
+import { generateObjectWithFallback, mapPool } from "@/shared/ai/openRouter";
 import { invalidateConvexUserCache } from "@/shared/convex/cachedRead";
 import { api } from "@/shared/convex/httpClient";
-import { generateObjectWithFallback, mapPool } from "@/shared/ai/openRouter";
 import {
   descriptionKey,
+  normalizedLabel,
+  taxonomyKey,
   type CategoryProfile,
 } from "@convex/lib/categorization";
+import { cleanMerchantDescriptor } from "@convex/lib/cleanMerchantDescriptor";
 import { TXN_CODES } from "@convex/lib/txnCodes";
+import type { ConvexHttpClient } from "convex/browser";
+import { z } from "zod";
 import type { CategorizationSummary } from "../domain/importResult";
 import { formatUserAiRulesCategorizeBlock } from "../domain/userAiRules";
 
@@ -27,12 +31,70 @@ export type LabeledTransaction = {
   subcategory: string | null;
 };
 
+type Path = {
+  key: string;
+  section: string;
+  category: string;
+  subcategory: string | null;
+};
+
 function normalizeTransactionType(value: string) {
   const label = value.trim().toLowerCase();
   if (label === "income") return "Income";
   if (label === "transfer" || label === "transfers") return "Transfer";
   if (label === "expense" || label === "expenses") return "Expense";
   return value;
+}
+
+function cleanProfileMerchant(profile: CategoryProfile): CategoryProfile {
+  return {
+    ...profile,
+    merchant:
+      cleanMerchantDescriptor(profile.merchant) ?? profile.merchant.trim(),
+  };
+}
+
+function normalizeNewSubcategory(
+  raw: string | null | undefined,
+  category: string,
+): string | null {
+  if (raw == null) return null;
+  const cleaned = raw.replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim();
+  if (!cleaned) return null;
+  if (/[@*]|\.com\b|\d{3,}/i.test(cleaned)) return null;
+  const words = cleaned.split(" ").slice(0, 5);
+  const titled = words
+    .map((word, index) => {
+      const lower = word.toLowerCase();
+      if (
+        index > 0 &&
+        (lower === "and" || lower === "of" || lower === "the" || lower === "de")
+      ) {
+        return lower;
+      }
+      return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+    })
+    .join(" ");
+  if (titled.length > 48) return null;
+  if (normalizedLabel(titled) === normalizedLabel(category)) return null;
+  return titled;
+}
+
+function findSubPath(
+  paths: Path[],
+  section: string,
+  category: string,
+  subcategory: string,
+) {
+  return (
+    paths.find(
+      (path) =>
+        normalizedLabel(path.section) === normalizedLabel(section) &&
+        normalizedLabel(path.category) === normalizedLabel(category) &&
+        path.subcategory != null &&
+        normalizedLabel(path.subcategory) === normalizedLabel(subcategory),
+    ) ?? null
+  );
 }
 
 function normalizeSpread(value: string) {
@@ -50,7 +112,12 @@ export async function labelDescriptionGroups(
   input: Array<{ transactionId: string; description: string; amount: number }>,
   options?: { skipCache?: boolean },
 ): Promise<{ summary: CategorizationSummary; labeled: LabeledTransaction[] }> {
-  const summary: CategorizationSummary = { ok: true, cached: 0, ai: 0, pending: 0 };
+  const summary: CategorizationSummary = {
+    ok: true,
+    cached: 0,
+    ai: 0,
+    pending: 0,
+  };
   const groups = new Map<string, Row[]>();
   for (const row of input) {
     const key = descriptionKey(row.description, row.amount);
@@ -64,7 +131,6 @@ export async function labelDescriptionGroups(
   if (!groups.size) return { summary, labeled };
   summary.pending = input.length;
 
-  type Path = { key: string; section: string; category: string; subcategory: string | null };
   await client.mutation(api.categorization.publishOwnVocabulary, {});
   const vocabulary: {
     paths: Path[];
@@ -86,7 +152,7 @@ export async function labelDescriptionGroups(
       for (const row of rows) {
         labeled.push({
           transactionId: row.transactionId,
-          profile: match.profile,
+          profile: cleanProfileMerchant(match.profile),
           section: path?.section ?? "",
           category: path?.category ?? "",
           subcategory: path?.subcategory ?? null,
@@ -121,31 +187,52 @@ export async function labelDescriptionGroups(
     }
 
     if (!paths.length) {
-      throw new Error("Category vocabulary is empty. Add categories before categorizing.");
+      throw new Error(
+        "Category vocabulary is empty. Add categories before categorizing.",
+      );
     }
     const aiRules = await client.query(api.aiRules.get, {});
     const ownerRules = formatUserAiRulesCategorizeBlock(aiRules.rules);
     const schema = z.object({
-      results: z.array(z.object({
-        id: z.number().int(),
-        merchant: z.string().min(1).max(160),
-        path: z.number().int().min(0).max(paths.length - 1),
-        spread: z.enum(vocabulary.spreads as [string, ...string[]]),
-        transactionType: z.enum(vocabulary.types as [string, ...string[]]),
-        txnCode: z.enum(TXN_CODES),
-        channel: z.enum(["online", "in_store", "other"]),
-        tags: z.array(z.string().min(1).max(40)).max(4),
-        confident: z.boolean(),
-      })),
+      results: z.array(
+        z.object({
+          id: z.number().int(),
+          merchant: z
+            .string()
+            .min(1)
+            .max(80)
+            .describe(
+              "Short brand/payee only. Never copy city, FX amount, currency, @ rate, *refs, or websites.",
+            ),
+          path: z
+            .number()
+            .int()
+            .min(0)
+            .max(paths.length - 1),
+          newSubcategory: z
+            .union([z.string().min(1).max(48), z.null()])
+            .describe(
+              "Null if an existing subcategory fits. Otherwise a short Title Case spend leaf under the chosen category, never the merchant name.",
+            ),
+          spread: z.enum(vocabulary.spreads as [string, ...string[]]),
+          transactionType: z.enum(vocabulary.types as [string, ...string[]]),
+          txnCode: z.enum(TXN_CODES),
+          channel: z.enum(["online", "in_store", "other"]),
+          tags: z.array(z.string().min(1).max(40)).max(4),
+          confident: z.boolean(),
+        }),
+      ),
     });
     const batches: string[][] = [];
-    for (let i = 0; i < unknown.length; i += 40) batches.push(unknown.slice(i, i + 40));
+    for (let i = 0; i < unknown.length; i += 40)
+      batches.push(unknown.slice(i, i + 40));
     const deadline = Date.now() + 240_000;
     await mapPool(batches, 3, async (batch) => {
       try {
         const remaining = deadline - Date.now();
         if (remaining < 1000) {
-          summary.error = "Categorization paused at its time limit. Retry the remaining transactions.";
+          summary.error =
+            "Categorization paused at its time limit. Retry the remaining transactions.";
           return;
         }
         const { object } = await generateObjectWithFallback({
@@ -157,13 +244,14 @@ export async function labelDescriptionGroups(
           prompt: [
             "Categorize bank statement descriptions. Description is the primary evidence.",
             "Return one result for each input id. Repeated descriptions are already grouped; classify each once.",
-            "merchant is the concise canonical merchant/payee name, preserving different services (Uber vs Uber Eats).",
+            MERCHANT_CLEAN_AI_RULES,
             "Section: the top bucket for this line (Finance, Income, Transfers, Home, Food, Lifestyle, Development, Technology, Transport, Health, Travel, Family). One section per line.",
             "Category: the kind of spend inside that bucket (Groceries, Restaurants, Software, Education, Pets, Flights). One category per line.",
             "Subcategory: the specific flavor under that category (Supermarket, Food Delivery, Bars & Pubs, Print & Ebooks). Prefer a subcategory when it fits. One path only.",
             "Tag: an extra sticker that can sit on many kinds of spend. It does not replace the path. Never use Travel as a tag.",
-            "Choose the best EXISTING path index from the catalog. Reuse section/category/subcategory exactly; never invent similar names.",
-            "Prefer a specific subcategory over the category-only path when it fits. Always pick the closest path even if uncertain.",
+            "Choose the best EXISTING path index for section and category. Prefer an existing subcategory leaf when it fits.",
+            "If no catalog subcategory under that category fits, set newSubcategory to a short Title Case spend flavor (2-4 words). Name the kind of spend, not the merchant (Vacation Rentals, not Airbnb).",
+            "Do not invent a new section or category. Do not copy a plural/typo of an existing leaf. Never leave the line as Unspecified when a new subcategory would name it.",
             "Refunds keep the purchase category with refund code, not Income. Card payments and self-transfers are transfers, not new spending or income.",
             "Distinguish payment, refund, subscription, fee, purchase. Never infer recurring status from merchant alone.",
             "Spread: Needs=essentials, Wants=discretionary, Savings=saving/investing, Income=real income. Use existing transaction types.",
@@ -182,34 +270,93 @@ export async function labelDescriptionGroups(
           new Set(ids).size !== batch.length ||
           ids.some((id) => id < 0 || id >= batch.length)
         ) {
-          throw new Error("AI returned missing or duplicate transaction groups");
+          throw new Error(
+            "AI returned missing or duplicate transaction groups",
+          );
         }
-        remember(object.results.flatMap((item) => {
+        const wanted = new Map<
+          string,
+          { section: string; category: string; subcategory: string }
+        >();
+        const resolved: Array<{
+          key: string;
+          parent: Path;
+          requested: string | null;
+          item: (typeof object.results)[number];
+        }> = [];
+        for (const item of object.results) {
           const key = batch[item.id];
-          const path = paths[item.path];
-          if (!key || !path) return [];
-          return [{
-            key,
-            profile: {
-              merchant: item.merchant,
-              pathKey: path.key,
-              spread: normalizeSpread(item.spread),
-              transactionType: normalizeTransactionType(item.transactionType),
-              txnCode: item.txnCode,
-              channel: item.channel,
-              tags: item.tags,
+          const parent = paths[item.path];
+          if (!key || !parent) continue;
+          const requested = normalizeNewSubcategory(
+            item.newSubcategory,
+            parent.category,
+          );
+          if (
+            requested &&
+            !findSubPath(paths, parent.section, parent.category, requested)
+          ) {
+            wanted.set(
+              taxonomyKey(parent.section, parent.category, requested),
+              {
+                section: parent.section,
+                category: parent.category,
+                subcategory: requested,
+              },
+            );
+          }
+          resolved.push({ key, parent, requested, item });
+        }
+        if (wanted.size) {
+          const ensured = await client.mutation(
+            api.categorization.ensurePaths,
+            {
+              paths: [...wanted.values()],
             },
-          }];
-        }), "ai");
+          );
+          for (const row of ensured) {
+            if (!paths.some((path) => path.key === row.key)) paths.push(row);
+          }
+        }
+        remember(
+          resolved.map(({ key, parent, requested, item }) => {
+            const path = requested
+              ? (findSubPath(
+                  paths,
+                  parent.section,
+                  parent.category,
+                  requested,
+                ) ?? parent)
+              : parent;
+            return {
+              key,
+              profile: cleanProfileMerchant({
+                merchant: item.merchant,
+                pathKey: path.key,
+                spread: normalizeSpread(item.spread),
+                transactionType: normalizeTransactionType(item.transactionType),
+                txnCode: item.txnCode,
+                channel: item.channel,
+                tags: item.tags,
+              }),
+            };
+          }),
+          "ai",
+        );
       } catch (error) {
-        summary.error = error instanceof Error ? error.message : "Categorization failed";
+        summary.error =
+          error instanceof Error ? error.message : "Categorization failed";
       }
     });
   } catch (error) {
-    summary.error = error instanceof Error ? error.message : "Categorization failed";
+    summary.error =
+      error instanceof Error ? error.message : "Categorization failed";
   }
 
-  return { summary: { ...summary, ok: summary.pending === 0 && !summary.error }, labeled };
+  return {
+    summary: { ...summary, ok: summary.pending === 0 && !summary.error },
+    labeled,
+  };
 }
 
 export async function categorizeStatement(
@@ -221,14 +368,12 @@ export async function categorizeStatement(
   const groups = new Map<string, Row[]>();
   let cursor: string | null = null;
   do {
-    const result: { page: Row[]; isDone: boolean; continueCursor: string } = await client.query(
-      api.categorization.pendingPage,
-      {
+    const result: { page: Row[]; isDone: boolean; continueCursor: string } =
+      await client.query(api.categorization.pendingPage, {
         uploadId,
         paginationOpts: { cursor, numItems: 200 },
         includeAll: force ? true : undefined,
-      },
-    );
+      });
     for (const row of result.page) {
       const group = groups.get(row.key);
       if (group) group.push(row);
@@ -247,9 +392,17 @@ export async function categorizeStatement(
     return summary;
   }
 
-  const byKey = new Map<string, { profile: CategoryProfile; rows: { transactionId: string; updatedAt: number }[] }>();
+  const byKey = new Map<
+    string,
+    {
+      profile: CategoryProfile;
+      rows: { transactionId: string; updatedAt: number }[];
+    }
+  >();
   for (const item of labeled) {
-    const row = pending.find((entry) => entry.transactionId === item.transactionId);
+    const row = pending.find(
+      (entry) => entry.transactionId === item.transactionId,
+    );
     if (!row || row.updatedAt == null) continue;
     const key = row.key;
     const group = byKey.get(key);

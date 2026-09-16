@@ -2,16 +2,6 @@
 
 import { PersistentNoteFab } from "@/components/layout/PersistentNoteFab";
 import {
-  useVaultPageLocked,
-  VaultLockedGate,
-} from "@/domains/vault/ui/VaultLockedGate";
-import {
-  Sidebar,
-  SidebarBody,
-  SidebarLink,
-  useSidebar,
-} from "@/components/ui/sidebar";
-import {
   Popover,
   PopoverContent,
   PopoverDescription,
@@ -19,15 +9,25 @@ import {
   PopoverTitle,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import {
+  Sidebar,
+  SidebarBody,
+  SidebarLink,
+  useSidebar,
+} from "@/components/ui/sidebar";
 import { Spinner } from "@/components/ui/spinner";
-import type { AppModuleRecord } from "@/domains/modules/domain/types";
-import { resolveModuleIcon } from "@/domains/modules/ui/moduleIcons";
-import { cn } from "@/lib/utils";
-import { budgetBrandLabel } from "@/shared/lib/budget-brand";
-import { api } from "@convex/_generated/api";
-import { useAuthActions } from "@convex-dev/auth/react";
 import { clearPendingPasscode } from "@/crypto/pendingPasscode";
 import { lockVault } from "@/crypto/session";
+import type { AppModuleRecord } from "@/domains/modules/domain/types";
+import { resolveModuleIcon } from "@/domains/modules/ui/moduleIcons";
+import {
+  useVaultPageLocked,
+  VaultLockedGate,
+} from "@/domains/vault/ui/VaultLockedGate";
+import { cn } from "@/lib/utils";
+import { budgetBrandLabel } from "@/shared/lib/budget-brand";
+import { useAuthActions } from "@convex-dev/auth/react";
+import { api } from "@convex/_generated/api";
 import { IconLogout, IconUser } from "@tabler/icons-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useConvexAuth, useQuery } from "convex/react";
@@ -52,7 +52,7 @@ function Brand({ label }: { label: string }) {
       className={cn(
         "mb-2 flex items-center rounded-lg",
         showLabel
-          ? "h-10 w-full gap-3 px-2.5"
+          ? "h-10 w-full gap-2 px-4"
           : "size-10 shrink-0 justify-center self-center px-0",
       )}
     >
@@ -142,7 +142,7 @@ function SidebarFooterLink() {
   return (
     <div
       className={cn(
-        "flex w-full flex-col gap-1 border-t border-[var(--sidebar-border)] pt-3",
+        "flex w-full flex-col gap-1 border-t border-[var(--sidebar-border)] pt-4",
         !showLabel && "items-center",
       )}
     >
@@ -176,7 +176,7 @@ function SignOutButton() {
           className={cn(
             "group/sidebar relative flex items-center rounded-lg transition-colors",
             showLabel
-              ? "h-10 w-full gap-3 px-2.5"
+              ? "h-10 w-full gap-2 px-4"
               : "size-10 shrink-0 justify-center self-center px-0",
             "text-[var(--sidebar-foreground)] hover:bg-[var(--sidebar-accent)]/70",
             openConfirm && "bg-[var(--sidebar-accent)]/70",
@@ -201,7 +201,7 @@ function SignOutButton() {
         side="right"
         align="end"
         sideOffset={8}
-        className="w-56 gap-3 bg-[var(--surface)] p-3 text-[var(--foreground)] ring-[var(--border)]"
+        className="w-56 gap-4 bg-surface-elevated p-4 text-foreground ring-border"
       >
         <PopoverHeader>
           <PopoverTitle>Sign out?</PopoverTitle>
@@ -214,7 +214,7 @@ function SignOutButton() {
             type="button"
             disabled={pending}
             onClick={() => setOpenConfirm(false)}
-            className="rounded-md px-2.5 py-1.5 text-sm text-[var(--muted-foreground)] hover:bg-[var(--surface-2)] hover:text-[var(--foreground)]"
+            className="rounded-md px-4 py-2 text-sm text-[var(--muted-foreground)] hover:bg-[var(--surface-2)] hover:text-[var(--foreground)]"
           >
             Cancel
           </button>
@@ -232,7 +232,7 @@ function SignOutButton() {
                 })
                 .catch(() => setPending(false));
             }}
-            className="rounded-md bg-[var(--accent)] px-2.5 py-1.5 text-sm font-medium text-[var(--accent-foreground)] disabled:opacity-60"
+            className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary-hover disabled:opacity-60"
           >
             {pending ? "Signing out…" : "Sign out"}
           </button>
@@ -294,7 +294,7 @@ export function AppShell({
           <SidebarFooterLink />
         </SidebarBody>
       </Sidebar>
-      <main className="flex max-h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+      <main className="flex max-h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background text-foreground">
         <div
           className={cn(
             "mx-auto w-full max-w-[90rem] min-h-0 flex-1 overflow-y-auto px-4 py-6 sm:px-8 sm:py-8",

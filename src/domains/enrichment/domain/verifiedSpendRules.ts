@@ -408,7 +408,7 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
     tree: {
       section: "Travel",
       category: "Lodging",
-      type: "Hotels & Vacation Rentals",
+      type: "Vacation Rentals",
     },
     patterns: [/airbnb/i, /hilton/i, /agoda/i, /the\s*crestmont/i],
   },
@@ -559,6 +559,9 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
       /\bamzn\b/i,
       /temu/i,
       /uniqlo/i,
+      /\baldo\b/i,
+      /rustan'?s/i,
+      /caminade/i,
       /\bmoma\b/i,
       /museum\s*store/i,
       /nyc\s*gifts/i,

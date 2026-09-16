@@ -84,7 +84,7 @@ export function StatementAiRulesDialog({ open, onOpenChange }: Props) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="gap-5 p-5 sm:max-w-md">
+      <DialogContent className="gap-6 p-6 sm:max-w-md">
         <DialogHeader className="gap-0 pr-8">
           <DialogTitle className="flex items-center gap-2">
             Upload Rules
@@ -128,7 +128,7 @@ export function StatementAiRulesDialog({ open, onOpenChange }: Props) {
         {loading ? (
           <p className="py-6 text-sm text-muted-foreground">Loading…</p>
         ) : (
-          <div className="space-y-5">
+          <div className="space-y-6">
             <div className="space-y-2">
               <div className="flex items-center gap-2">
                 <Input

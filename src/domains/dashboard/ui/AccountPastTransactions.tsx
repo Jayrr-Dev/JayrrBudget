@@ -149,7 +149,9 @@ function SortHeader({
   const active = sortKey === column;
   return (
     <th
-      className={`overflow-hidden py-3 font-semibold ${align === "right" ? "pl-3 text-right" : `${inset ? "pl-3" : ""} pr-3 text-left`}`}
+      className={`overflow-hidden py-3 font-semibold ${
+        column === "date" ? "sticky left-0 z-20 bg-surface-elevated" : ""
+      } ${align === "right" ? "pl-3 text-right" : `${inset ? "pl-3" : ""} pr-3 text-left`}`}
       aria-sort={
         active ? (sortDir === "asc" ? "ascending" : "descending") : "none"
       }
@@ -250,7 +252,7 @@ export function AccountPastTransactions({
 
   return (
     <section className="space-y-4">
-      <div className="flex flex-wrap items-end justify-between gap-3">
+      <div className="flex flex-wrap items-end justify-between gap-4">
         <h2 className="text-xl font-semibold tracking-wide text-[#1a2330] uppercase sm:text-2xl">
           Past transactions
           <span className="mt-1 block text-sm font-normal tracking-normal text-[#6b7280] normal-case sm:mt-0 sm:ml-2 sm:inline">
@@ -259,7 +261,7 @@ export function AccountPastTransactions({
         </h2>
       </div>
 
-      <div className="flex flex-col gap-3 border-b border-[#d8dee6] pb-4">
+      <div className="flex flex-col gap-4 border-b border-[#d8dee6] pb-4">
         <div className="flex flex-wrap items-center gap-2">
           <div className="relative min-w-[14rem] flex-1 sm:max-w-xs">
             <SearchIcon className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-[#6b7280]" />
@@ -284,7 +286,7 @@ export function AccountPastTransactions({
           ) : null}
         </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-xs font-medium tracking-wide text-[#6b7280] uppercase">
               Status
@@ -327,8 +329,8 @@ export function AccountPastTransactions({
         </div>
       </div>
 
-      <ScrollTopX>
-        <table className="w-full table-fixed border-collapse text-sm">
+      <ScrollTopX className="overscroll-x-contain">
+        <table className="w-full min-w-[40rem] table-fixed border-collapse text-sm">
           <colgroup>
             <col className="w-[10rem]" />
             <col />
@@ -394,7 +396,7 @@ export function AccountPastTransactions({
                     key={txn.transactionId}
                     className="border-b border-[#e5e9ef]"
                   >
-                    <td className="whitespace-nowrap py-3.5 pr-3 font-mono tabular-nums text-[#1a2330]">
+                    <td className="sticky left-0 z-10 whitespace-nowrap bg-surface-elevated py-3.5 pr-3 font-mono tabular-nums text-[#1a2330]">
                       {formatDisplayDate(txn.date)}
                     </td>
                     <td className="min-w-0 py-3.5 pr-3 pl-3 text-[#1a2330]">

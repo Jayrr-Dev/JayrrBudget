@@ -1,32 +1,38 @@
 "use client";
 
-import { useConvexAuth, useQuery } from "convex/react";
-import { api } from "@convex/_generated/api";
-import { useMemo } from "react";
-import { formatMoney, formatLedgerSpend } from "@/domains/dashboard/domain/money";
+import { PageSpinner } from "@/components/ui/spinner";
+import {
+  formatLedgerSpend,
+  formatMoney,
+} from "@/domains/dashboard/domain/money";
 import type {
   DashboardAccount,
   DashboardData,
   DashboardTransaction,
 } from "@/domains/dashboard/domain/types";
+import { useFeatureFlags } from "@/domains/feature-flags/ui/useFeatureFlag";
 import { StatementUpload } from "@/domains/statements/ui/StatementUpload";
 import { dashboardFromPrivateLedger } from "@/domains/vault/application/dashboardFromPrivateLedger";
 import { usePrivateLedger } from "@/domains/vault/ui/usePrivateLedger";
-import { PageSpinner } from "@/components/ui/spinner";
 import { formatDisplayDate } from "@/shared/lib/format-date";
+import { api } from "@convex/_generated/api";
+import { useConvexAuth, useQuery } from "convex/react";
+import { useMemo } from "react";
 
 export function useDashboard(transactionLimit: number | null = 250) {
   const { isAuthenticated, isLoading: authLoading } = useConvexAuth();
+  const flags = useFeatureFlags();
   const privateLedger = usePrivateLedger();
   const result = useQuery(
     api.dashboard.get,
-    isAuthenticated && !privateLedger.encryptedLedger
+    isAuthenticated && !flags.loading && !privateLedger.encryptedLedger
       ? { transactionLimit }
       : "skip",
   );
 
   const encryptedData = useMemo(() => {
-    if (!privateLedger.encryptedLedger || !privateLedger.unlocked) return undefined;
+    if (!privateLedger.encryptedLedger || !privateLedger.unlocked)
+      return undefined;
     const data = dashboardFromPrivateLedger(privateLedger.ledger);
     if (transactionLimit == null) return data;
     return {
@@ -34,16 +40,35 @@ export function useDashboard(transactionLimit: number | null = 250) {
       transactions: data.transactions.slice(0, transactionLimit),
       hasMoreTransactions: data.transactions.length > transactionLimit,
     };
-  }, [privateLedger.encryptedLedger, privateLedger.ledger, privateLedger.unlocked, transactionLimit]);
+  }, [
+    privateLedger.encryptedLedger,
+    privateLedger.ledger,
+    privateLedger.unlocked,
+    transactionLimit,
+  ]);
+
+  if (authLoading || flags.loading) {
+    return {
+      data: undefined,
+      error: null,
+      isPending: true,
+      isError: false,
+      isSuccess: false,
+      encryptedLedger: privateLedger.encryptedLedger,
+      locked: false,
+      reload: privateLedger.reload,
+    };
+  }
 
   if (privateLedger.encryptedLedger) {
     const locked = !privateLedger.vaultReady || !privateLedger.unlocked;
+    const pending = privateLedger.loading || locked;
     return {
-      data: locked ? undefined : encryptedData,
+      data: locked || privateLedger.loading ? undefined : encryptedData,
       error: privateLedger.error ? new Error(privateLedger.error) : null,
-      isPending: authLoading || privateLedger.loading,
+      isPending: pending,
       isError: Boolean(privateLedger.error),
-      isSuccess: Boolean(encryptedData) && !locked,
+      isSuccess: Boolean(encryptedData) && !locked && !pending,
       encryptedLedger: true as const,
       locked,
       reload: privateLedger.reload,
@@ -85,10 +110,7 @@ export function OverviewPanel({ data }: { data: DashboardData }) {
         label="Institutions"
         value={String(data.institutions.length)}
       />
-      <StatBadge
-        label="Total balance"
-        value={formatMoney(data.totalBalance)}
-      />
+      <StatBadge label="Total balance" value={formatMoney(data.totalBalance)} />
       <StatBadge
         label="Latest statement"
         value={formatDisplayDate(data.latestStatementDate)}
@@ -112,7 +134,7 @@ export function AccountsPanel({
       {accounts.length === 0 ? (
         <EmptyState text="No accounts yet. Upload a statement PDF to get started." />
       ) : (
-        <ul className="divide-y divide-[var(--border)] overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)]">
+        <ul className="divide-y divide-[var(--border)] overflow-hidden rounded-xl border border-[var(--border)] bg-surface-elevated">
           {accounts.map((account) => (
             <li
               key={account.accountId}
@@ -167,9 +189,8 @@ export function TransactionsList({
       {transactions.length === 0 ? (
         <EmptyState text="No transactions yet. Upload a statement PDF to import them." />
       ) : (
-        <ul className="divide-y divide-[var(--border)] overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)]">
+        <ul className="divide-y divide-[var(--border)] overflow-hidden rounded-xl border border-[var(--border)] bg-surface-elevated">
           {transactions.map((txn) => {
-            const isSpend = txn.amount > 0;
             const place = [txn.locationCity, txn.locationRegion]
               .filter(Boolean)
               .join(", ");
@@ -192,7 +213,11 @@ export function TransactionsList({
                       ? ` · ${txn.brandName}`
                       : ""}
                     {txn.sectionName || txn.categoryName || txn.subcategoryName
-                      ? ` · ${[txn.sectionName, txn.categoryName, txn.subcategoryName]
+                      ? ` · ${[
+                          txn.sectionName,
+                          txn.categoryName,
+                          txn.subcategoryName,
+                        ]
                           .filter(Boolean)
                           .join(" · ")}`
                       : ""}
@@ -208,15 +233,8 @@ export function TransactionsList({
                     </p>
                   ) : null}
                 </div>
-                <p
-                  className={`shrink-0 font-mono text-sm ${
-                    isSpend ? "text-[var(--spend)]" : "text-[var(--income)]"
-                  }`}
-                >
-                  {formatLedgerSpend(
-                    txn.amount,
-                    txn.isoCurrencyCode ?? "CAD",
-                  )}
+                <p className="shrink-0 font-mono text-sm text-foreground">
+                  {formatLedgerSpend(txn.amount, txn.isoCurrencyCode ?? "CAD")}
                 </p>
               </li>
             );
@@ -229,7 +247,7 @@ export function TransactionsList({
 
 function StatBadge({ label, value }: { label: string; value: string }) {
   return (
-    <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1 text-xs">
+    <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--border)] bg-surface-elevated px-2.5 py-1 text-xs">
       <span className="text-[var(--muted-foreground)]">{label}</span>
       <span className="font-semibold tracking-tight text-[var(--foreground)]">
         {value}
@@ -240,7 +258,7 @@ function StatBadge({ label, value }: { label: string; value: string }) {
 
 function EmptyState({ text }: { text: string }) {
   return (
-    <div className="rounded-xl border border-dashed border-[var(--border)] bg-[var(--surface)]/70 px-4 py-8 text-sm text-[var(--muted-foreground)]">
+    <div className="rounded-xl border border-dashed border-[var(--border)] bg-surface-elevated/70 px-4 py-8 text-sm text-[var(--muted-foreground)]">
       {text}
     </div>
   );

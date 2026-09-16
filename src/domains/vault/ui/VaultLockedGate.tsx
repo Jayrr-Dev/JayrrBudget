@@ -6,9 +6,7 @@ import { usePrivateLedger } from "@/domains/vault/ui/usePrivateLedger";
 
 export function useVaultPageLocked() {
   const privateLedger = usePrivateLedger();
-  return (
-    privateLedger.encryptedLedger && !privateLedger.unlocked
-  );
+  return privateLedger.encryptedLedger && !privateLedger.unlocked;
 }
 
 export function VaultLockedGate({ children }: { children: React.ReactNode }) {
@@ -20,7 +18,7 @@ export function VaultLockedGate({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex flex-1 items-center justify-center py-8">
       <div className="w-full max-w-md">
-        {privateLedger.loading && !privateLedger.vaultReady ? (
+        {privateLedger.loading ? (
           <div
             className="flex justify-center py-10 text-[var(--muted-foreground)]"
             role="status"

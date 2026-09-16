@@ -382,7 +382,7 @@ export function AddLoanDialog({ open, onOpenChange }: AddLoanDialogProps) {
             </DialogDescription>
           </DialogHeader>
 
-          <div className="grid gap-3">
+          <div className="grid gap-4">
             <Field
               label="Loan type"
               htmlFor="loan-type"
@@ -448,7 +448,7 @@ export function AddLoanDialog({ open, onOpenChange }: AddLoanDialogProps) {
                 />
               </Field>
             ) : null}
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 gap-4">
               <Field
                 label="Principal"
                 htmlFor="loan-principal"
@@ -508,7 +508,7 @@ export function AddLoanDialog({ open, onOpenChange }: AddLoanDialogProps) {
                 disabled={busy}
               />
             </Field>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 gap-4">
               <Field label="Payment" htmlFor="loan-payment">
                 <Input
                   id="loan-payment"
@@ -543,7 +543,7 @@ export function AddLoanDialog({ open, onOpenChange }: AddLoanDialogProps) {
                 />
               </Field>
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 gap-4">
               <Field
                 label="Frequency"
                 htmlFor="loan-frequency"

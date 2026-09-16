@@ -108,7 +108,7 @@ export function AnalysisScene({ animate, onDone }: SceneProps) {
         ))}
       </div>
 
-      <div className="mt-2 flex gap-3 text-[10px] text-[var(--muted-foreground)]">
+      <div className="mt-2 flex gap-4 text-[10px] text-[var(--muted-foreground)]">
         <span className="inline-flex items-center gap-1">
           <span className="size-2 rounded-sm bg-[var(--accent)]" />
           Spending

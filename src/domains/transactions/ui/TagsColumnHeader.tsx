@@ -193,7 +193,7 @@ export function CreateTagButton({
       </PopoverTrigger>
       <PopoverContent
         align="start"
-        className="w-80 gap-3 p-3"
+        className="w-80 gap-4 p-3"
         onClick={(event) => event.stopPropagation()}
         onPointerDown={(event) => event.stopPropagation()}
       >

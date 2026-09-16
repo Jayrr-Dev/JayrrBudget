@@ -238,10 +238,10 @@ export const SidebarLink = ({
       className={cn(
         "group/sidebar relative flex items-center rounded-lg transition-colors",
         showLabel
-          ? "h-10 w-full gap-3 px-2.5"
+          ? "h-10 w-full gap-2 px-4"
           : "size-10 shrink-0 justify-center self-center px-0",
         active
-          ? "bg-[var(--sidebar-accent)] text-[var(--sidebar-accent-foreground)]"
+          ? "bg-primary-subtle font-medium text-primary-subtle-foreground"
           : "text-[var(--sidebar-foreground)] hover:bg-[var(--sidebar-accent)]/70",
         className,
       )}

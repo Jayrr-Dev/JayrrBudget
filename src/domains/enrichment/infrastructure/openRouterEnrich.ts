@@ -9,6 +9,7 @@ import {
   type EnrichmentTxnInput,
   type MerchantEnrichmentBatch,
 } from "@/domains/enrichment/domain/enrichmentSchema";
+import { MERCHANT_CLEAN_AI_RULES } from "@/domains/enrichment/domain/merchantCleanAiRules";
 import { generateObjectWithFallback, mapPool } from "@/shared/ai/openRouter";
 
 function buildPrompt(txns: EnrichmentTxnInput[], catalog: EnrichmentCatalog) {
@@ -45,7 +46,8 @@ function buildPrompt(txns: EnrichmentTxnInput[], catalog: EnrichmentCatalog) {
     '- "Lemon Squeezy" / software checkout processors => type SaaS, tag Subscription',
     '- "Vercel" / "GitHub" / "Cloudflare" => type Dev Tools, tag Online',
     '- "Tutti Frutti Dessert Cafe" => company Tutti Frutti, foodType Dessert, storeType Cafe',
-    "- Strip noise: asterisks, store numbers into storeNumber, glued cities (city goes in location fields)",
+    MERCHANT_CLEAN_AI_RULES,
+    "- Put store numbers in storeNumber. Put city/region/country in location fields, never in merchantClean.",
     "- Section > Category > Type is spend tree. Company/brand is separate entity graph.",
     "- Amount convention: positive = money out (purchase/fee).",
     "- Software subscriptions are SaaS under Software, never Online Retail / Shopping.",

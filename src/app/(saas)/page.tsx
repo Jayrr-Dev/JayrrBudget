@@ -1,7 +1,7 @@
 "use client";
 
-import { BankAccountsDashboard } from "@/domains/dashboard/ui/BankAccountsDashboard";
 import { Spinner } from "@/components/ui/spinner";
+import { BankAccountsDashboard } from "@/domains/dashboard/ui/BankAccountsDashboard";
 import {
   LoadingSkeleton,
   useDashboard,
@@ -12,25 +12,25 @@ import { formatDisplayDate } from "@/shared/lib/format-date";
 export default function OverviewPage() {
   const dashboard = useDashboard();
   const data = dashboard.data;
-  const isInitialLoading = dashboard.isPending && !data;
+  const isInitialLoading = dashboard.isPending || (!data && !dashboard.isError);
 
   return (
     <div className="space-y-8">
       <header className="flex items-start justify-between gap-6 border-b border-[var(--border)] pb-6">
-        <div className="space-y-1">
-          <p className="text-sm tracking-[0.18em] text-[var(--muted-foreground)] uppercase">
+        <div className="space-y-2">
+          <p className="type-kicker">
             Accounts
           </p>
-          <h1 className="text-3xl font-semibold tracking-tight">Dashboard</h1>
-          <p className="max-w-xl text-[var(--muted-foreground)]">
+          <h1 className="type-page">Dashboard</h1>
+          <p className="type-lead max-w-xl">
             See balances across chequing, credit, and loan accounts.
           </p>
         </div>
         <div className="shrink-0 text-right">
-          <p className="text-sm tracking-[0.18em] text-[var(--muted-foreground)] uppercase">
+          <p className="type-kicker">
             Latest statement
           </p>
-          <p className="mt-1 flex min-h-7 items-center justify-end text-lg font-medium tracking-tight">
+          <p className="type-section mt-1 flex min-h-7 items-center justify-end">
             {isInitialLoading ? (
               <Spinner className="size-5" />
             ) : (
@@ -49,7 +49,7 @@ export default function OverviewPage() {
       {isInitialLoading ? (
         <LoadingSkeleton />
       ) : data ? (
-        <div className="space-y-10">
+        <div className="space-y-8">
           <BankAccountsDashboard
             accounts={data.accounts}
             transactions={data.transactions}

@@ -143,8 +143,8 @@ export type AnalysisData = {
   monthly: AnalysisMonthlyPoint[];
   /**
    * Lifestyle spend/refund peeks for leaderboard (i) popovers.
-   * Keys: `section:…`, `category:…`, `subcategory:…`, `merchant:…`,
-   * `tag:…`, `type:…`, `spread:…`, plus nested `subcategory-merchant:Sub::Merchant`, etc.
+   * Keys are built from the nested maps shipped with this payload
+   * (section/category/vendor tables), not from a separate global top-N cut.
    */
   txnPeeks: AnalysisTxnPeekEntry[];
   sections: AnalysisRankedItem[];

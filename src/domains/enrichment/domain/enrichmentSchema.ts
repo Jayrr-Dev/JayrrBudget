@@ -59,8 +59,12 @@ const nodeRefSchema = namedSlugSchema.extend({
 
 export const merchantEnrichmentItemSchema = z.object({
   transactionId: z.number().int().positive(),
-  merchantRaw: z.string(),
-  merchantClean: z.string(),
+  merchantRaw: z.string().describe("Original statement descriptor, unchanged."),
+  merchantClean: z
+    .string()
+    .describe(
+      "Short brand/payee only. Never city, FX amount, currency, @ rate, *refs, or websites.",
+    ),
   tokens: z.array(z.string()).default([]),
   company: entityRefSchema.nullable(),
   brand: entityRefSchema.nullable(),

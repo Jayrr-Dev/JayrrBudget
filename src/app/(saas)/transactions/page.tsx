@@ -14,11 +14,11 @@ export default function TransactionsPage() {
   return (
     <div className="space-y-8">
       <header className="flex flex-col gap-4 border-b border-[var(--border)] pb-6 sm:flex-row sm:items-end sm:justify-between">
-        <div className="space-y-1">
-          <h1 className="text-3xl font-semibold tracking-tight">
+        <div className="space-y-2">
+          <h1 className="type-page">
             Transactions
           </h1>
-          <p className="text-[var(--muted-foreground)]">
+          <p className="type-lead">
             Browse purchases and deposits. Bank details on the left; category
             and labels on the right.
             {data

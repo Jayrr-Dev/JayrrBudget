@@ -1,6 +1,5 @@
 "use client";
 
-import { Icon } from "@iconify/react";
 import { DataTable } from "@/components/ui/data-table";
 import type { DataTableFeatures } from "@/components/ui/data-table-features";
 import { formatMoney } from "@/domains/dashboard/domain/money";
@@ -9,16 +8,17 @@ import type {
   DashboardTransaction,
 } from "@/domains/dashboard/domain/types";
 import { queryKeys } from "@/domains/dashboard/queries/query-keys";
+import { LOG_MONEY_RANGE_OPTIONS } from "@/domains/transactions/domain/amountLogRange";
 import {
   historyMatchLabel,
   ledgerDebitCredit,
 } from "@/domains/transactions/domain/debitCredit";
-import { LOG_MONEY_RANGE_OPTIONS } from "@/domains/transactions/domain/amountLogRange";
 import { TagsCell } from "@/domains/transactions/ui/TagsCell";
 import { CreateTagButton } from "@/domains/transactions/ui/TagsColumnHeader";
 import { TaxonomyCell } from "@/domains/transactions/ui/TaxonomyCell";
 import { TransactionRowActions } from "@/domains/transactions/ui/TransactionRowActions";
 import { formatDisplayDate } from "@/shared/lib/format-date";
+import { Icon } from "@iconify/react";
 import { useIsFetching, useQueryClient } from "@tanstack/react-query";
 import { createColumnHelper } from "@tanstack/react-table";
 import { useMemo } from "react";
@@ -117,7 +117,7 @@ function buildColumns(
       header: "Posted",
       meta: bandMeta("9.5rem", "read", "Date the bank posted this line."),
       cell: ({ getValue }) => (
-        <span className="font-mono text-sm tabular-nums">
+        <span className="whitespace-nowrap font-mono text-xs tabular-nums">
           {formatDisplayDate(getValue())}
         </span>
       ),
@@ -126,7 +126,11 @@ function buildColumns(
     }),
     columnHelper.accessor("authorizedDate", {
       header: "Authorized",
-      meta: bandMeta("9.5rem", "read", "Purchase/auth date when it differs from posted."),
+      meta: bandMeta(
+        "9.5rem",
+        "read",
+        "Purchase/auth date when it differs from posted.",
+      ),
       cell: ({ getValue }) => {
         const value = getValue();
         if (value == null || value === "") {
@@ -135,7 +139,7 @@ function buildColumns(
           );
         }
         return (
-          <span className="font-mono text-sm tabular-nums">
+          <span className="whitespace-nowrap font-mono text-xs tabular-nums">
             {formatDisplayDate(value)}
           </span>
         );
@@ -185,7 +189,11 @@ function buildColumns(
     }),
     columnHelper.accessor("pending", {
       header: "Pending",
-      meta: bandMeta("5rem", "read", "True when the charge is not settled yet."),
+      meta: bandMeta(
+        "5rem",
+        "read",
+        "True when the charge is not settled yet.",
+      ),
       cell: ({ getValue }) => textOrDash(getValue() ? "true" : "false"),
       sortFn: "basic",
     }),
@@ -230,7 +238,7 @@ function buildColumns(
           );
         }
         return (
-          <div className="whitespace-nowrap text-right font-mono leading-snug text-[var(--spend)]">
+          <div className="whitespace-nowrap text-right font-mono leading-snug text-foreground">
             {formatMoney(debit, row.original.isoCurrencyCode ?? "CAD")}
           </div>
         );
@@ -240,7 +248,11 @@ function buildColumns(
     columnHelper.accessor((row) => ledgerDebitCredit(row).credit, {
       id: "credit",
       header: "Credit",
-      meta: bandMeta(creditWidth, "read", "Money in (deposits, refunds, payments)."),
+      meta: bandMeta(
+        creditWidth,
+        "read",
+        "Money in (deposits, refunds, payments).",
+      ),
       cell: ({ row }) => {
         const credit = ledgerDebitCredit(row.original).credit;
         if (credit == null) {
@@ -251,7 +263,7 @@ function buildColumns(
           );
         }
         return (
-          <div className="whitespace-nowrap text-right font-mono leading-snug text-[var(--income)]">
+          <div className="whitespace-nowrap text-right font-mono leading-snug text-foreground">
             {formatMoney(credit, row.original.isoCurrencyCode ?? "CAD")}
           </div>
         );
@@ -260,7 +272,11 @@ function buildColumns(
     }),
     columnHelper.accessor("amount", {
       header: "Amount",
-      meta: bandMeta(amountWidth, "read", "Signed amount. Positive = money out."),
+      meta: bandMeta(
+        amountWidth,
+        "read",
+        "Signed amount. Positive = money out.",
+      ),
       cell: ({ row, getValue }) => (
         <div className="whitespace-nowrap text-right font-mono text-sm leading-snug">
           {formatMoney(
@@ -274,14 +290,22 @@ function buildColumns(
     }),
     columnHelper.accessor("source", {
       header: "Source",
-      meta: bandMeta("9rem", "read", "Where this row came from (statement, CSV)."),
+      meta: bandMeta(
+        "9rem",
+        "read",
+        "Where this row came from (statement, CSV).",
+      ),
       cell: ({ getValue }) => textOrDash(getValue()),
       filterFn: "equalsString",
       sortFn: "text",
     }),
     columnHelper.accessor("transactionId", {
       header: "transactionId",
-      meta: bandMeta("20rem", "read", "Stable fingerprint for this ledger line."),
+      meta: bandMeta(
+        "20rem",
+        "read",
+        "Stable fingerprint for this ledger line.",
+      ),
       cell: ({ getValue }) => (
         <span className="line-clamp-2 block font-mono text-[11px] leading-snug break-all">
           {String(getValue())}
@@ -326,7 +350,11 @@ function buildColumns(
     ),
     columnHelper.accessor("sectionName", {
       header: "Section",
-      meta: bandMeta("14rem", "invent", "Top spend bucket (Lifestyle, Transport)."),
+      meta: bandMeta(
+        "14rem",
+        "invent",
+        "Top spend bucket (Lifestyle, Transport).",
+      ),
       cell: ({ row, getValue }) => (
         <TaxonomyCell
           transactionId={row.original.transactionId}
@@ -393,7 +421,11 @@ function buildColumns(
     }),
     columnHelper.accessor("transactionTypeName", {
       header: "Transaction type",
-      meta: bandMeta("10rem", "invent", "Cash-flow bucket: income / transfers / expenses."),
+      meta: bandMeta(
+        "10rem",
+        "invent",
+        "Cash-flow bucket: income / transfers / expenses.",
+      ),
       cell: ({ getValue }) => textOrDash(getValue()),
       filterFn: "equalsString",
       sortFn: "text",
@@ -530,6 +562,18 @@ export function TransactionsDataTable({
     <DataTable
       columns={columns}
       data={transactions}
+      initialColumnVisibility={{
+        accountId: false,
+        authorizedDate: false,
+        originalDescription: false,
+        pending: false,
+        locationCity: false,
+        locationRegion: false,
+        locationCountry: false,
+        isoCurrencyCode: false,
+        source: false,
+        transactionId: false,
+      }}
       initialSorting={[{ id: "date", desc: true }]}
       enableGlobalFilter
       globalFilterFn="fuzzy"

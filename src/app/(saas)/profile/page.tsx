@@ -1,8 +1,8 @@
 "use client";
 
-import { api } from "@convex/_generated/api";
 import { VaultSecurityCard } from "@/components/layout/VaultSecurityCard";
 import { PageSpinner } from "@/components/ui/spinner";
+import { api } from "@convex/_generated/api";
 import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import { useEffect, useState } from "react";
 
@@ -37,15 +37,16 @@ export default function ProfilePage() {
 
   return (
     <div className="mx-auto max-w-lg space-y-8">
-      <header className="space-y-1 border-b border-[var(--border)] pb-6">
-        <h1 className="text-3xl font-semibold tracking-tight">Profile</h1>
-        <p className="text-[var(--muted-foreground)]">
-          Your name, sign-in, and encryption settings. The same password protects ledger data on this device.
+      <header className="space-y-2 border-b border-[var(--border)] pb-6">
+        <h1 className="type-page">Profile</h1>
+        <p className="type-lead">
+          Your name, sign-in, and encryption settings. The same password
+          protects ledger data on this device.
         </p>
       </header>
 
       <form
-        className="space-y-4 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-5"
+        className="space-y-4 rounded-xl border border-border bg-surface-elevated p-6"
         onSubmit={(event) => {
           event.preventDefault();
           setError(null);
@@ -61,50 +62,50 @@ export default function ProfilePage() {
             .finally(() => setPending(false));
         }}
       >
-        <div className="grid grid-cols-2 gap-3">
-          <label className="block space-y-1 text-sm">
+        <div className="grid grid-cols-2 gap-4">
+          <label className="block space-y-2 text-sm">
             <span className="text-[var(--muted-foreground)]">First name</span>
             <input
               value={firstName}
               onChange={(event) => setFirstName(event.target.value)}
               required
               autoComplete="given-name"
-              className="w-full rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-[var(--foreground)] outline-none focus:border-[var(--accent)]"
+              className="w-full rounded-md border border-control-border bg-surface-elevated px-3 py-2 text-foreground outline-none focus:border-primary focus:outline-2 focus:outline-offset-1 focus:outline-ring"
             />
           </label>
-          <label className="block space-y-1 text-sm">
+          <label className="block space-y-2 text-sm">
             <span className="text-[var(--muted-foreground)]">Last name</span>
             <input
               value={lastName}
               onChange={(event) => setLastName(event.target.value)}
               required
               autoComplete="family-name"
-              className="w-full rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-[var(--foreground)] outline-none focus:border-[var(--accent)]"
+              className="w-full rounded-md border border-control-border bg-surface-elevated px-3 py-2 text-foreground outline-none focus:border-primary focus:outline-2 focus:outline-offset-1 focus:outline-ring"
             />
           </label>
         </div>
 
-        <label className="block space-y-1 text-sm">
+        <label className="block space-y-2 text-sm">
           <span className="text-[var(--muted-foreground)]">Email</span>
           <input
             value={me.email ?? ""}
             readOnly
-            className="w-full rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-[var(--muted-foreground)] outline-none"
+            className="w-full rounded-md border border-control-border bg-surface-subtle px-3 py-2 text-[var(--muted-foreground)] outline-none"
           />
         </label>
 
-        <label className="block space-y-1 text-sm">
+        <label className="block space-y-2 text-sm">
           <span className="text-[var(--muted-foreground)]">Role</span>
           <input
             value={me.role}
             readOnly
-            className="w-full rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 capitalize text-[var(--muted-foreground)] outline-none"
+            className="w-full rounded-md border border-control-border bg-surface-subtle px-3 py-2 capitalize text-[var(--muted-foreground)] outline-none"
           />
         </label>
 
         {error ? (
           <p
-            className="rounded-md border border-[var(--spend)]/30 bg-[var(--spend)]/5 px-3 py-2 text-sm text-[var(--spend)]"
+            className="rounded-md border border-danger/30 bg-danger-subtle px-3 py-2 text-sm text-danger"
             role="alert"
           >
             {error}
@@ -117,7 +118,7 @@ export default function ProfilePage() {
         <button
           type="submit"
           disabled={pending}
-          className="rounded-md bg-[var(--accent)] px-3 py-2 text-sm font-medium text-[var(--accent-foreground)] disabled:opacity-60"
+          className="rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary-hover disabled:opacity-60"
         >
           {pending ? "Saving…" : "Save changes"}
         </button>

@@ -38,7 +38,7 @@ function TableBrowser({ table }: { table: string }) {
   const pageEnd = Math.min(offset + PAGE_SIZE, total);
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-3">
+    <div className="flex min-h-0 flex-1 flex-col gap-4">
       <div className="flex shrink-0 flex-wrap items-center justify-between gap-2">
         <p className="text-sm text-[var(--muted-foreground)]">
           {browse.isPending
@@ -78,7 +78,7 @@ function TableBrowser({ table }: { table: string }) {
               {(data?.columns ?? []).map((col) => (
                 <th
                   key={col}
-                  className="border-b border-[var(--border)] px-3 py-2 font-mono font-medium whitespace-nowrap"
+                  className="border-b border-[var(--border)] px-3 py-2 font-mono font-medium whitespace-nowrap first:sticky first:left-0 first:z-20 first:bg-[var(--muted)]"
                 >
                   {col}
                 </th>
@@ -94,7 +94,7 @@ function TableBrowser({ table }: { table: string }) {
                 {(data?.columns ?? []).map((col) => (
                   <td
                     key={col}
-                    className="max-w-[280px] truncate border-b border-[var(--border)] px-3 py-2 font-mono whitespace-nowrap"
+                    className="max-w-[280px] truncate border-b border-[var(--border)] px-3 py-2 font-mono whitespace-nowrap first:sticky first:left-0 first:z-10 first:bg-[var(--background)]"
                     title={formatCell(row[col])}
                   >
                     {formatCell(row[col])}
@@ -192,11 +192,11 @@ export function DbExplorer() {
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-1 flex-col gap-3 overflow-hidden">
+    <div className="flex h-full min-h-0 flex-1 flex-col gap-4 overflow-hidden">
       <header className="flex shrink-0 flex-wrap items-end justify-between gap-2 border-b border-[var(--border)] pb-3">
         <div className="space-y-0.5">
-          <h1 className="text-2xl font-semibold tracking-tight">Database</h1>
-          <p className="text-sm text-[var(--muted-foreground)]">
+          <h1 className="type-page">Database</h1>
+          <p className="type-lead">
             Browse tables and their rows. Click a table name to open it.
           </p>
         </div>
@@ -214,8 +214,8 @@ export function DbExplorer() {
         ) : null}
       </header>
 
-      <div className="grid min-h-0 flex-1 gap-3 overflow-hidden lg:grid-cols-[280px_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)]">
-        <aside className="min-h-0 space-y-3 overflow-x-hidden overflow-y-auto lg:pr-1">
+      <div className="grid min-h-0 flex-1 gap-4 overflow-hidden lg:grid-cols-[280px_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)]">
+        <aside className="min-h-0 space-y-4 overflow-x-hidden overflow-y-auto lg:pr-1">
           <div className="space-y-1">
             <p className="mb-2 text-xs font-medium tracking-wide text-[var(--muted-foreground)] uppercase">
               Ledger

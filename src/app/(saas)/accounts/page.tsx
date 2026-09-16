@@ -5,8 +5,8 @@ import {
   BankAccountsLoadingSkeleton,
 } from "@/domains/dashboard/ui/BankAccountsDashboard";
 import { useDashboard } from "@/domains/dashboard/ui/DashboardPanels";
-import { Suspense } from "react";
 import { useSearchParams } from "next/navigation";
+import { Suspense } from "react";
 
 function AccountsContent() {
   const dashboard = useDashboard();
@@ -31,9 +31,9 @@ function AccountsContent() {
 
   return (
     <div className="space-y-8">
-      <header className="space-y-1 border-b border-[var(--border)] pb-6">
-        <h1 className="text-3xl font-semibold tracking-tight">Accounts</h1>
-        <p className="text-[var(--muted-foreground)]">
+      <header className="space-y-2 border-b border-[var(--border)] pb-6">
+        <h1 className="type-page">Accounts</h1>
+        <p className="type-lead">
           Open an account to see its balance and recent activity.
         </p>
       </header>
@@ -54,9 +54,9 @@ export default function AccountsPage() {
     <Suspense
       fallback={
         <div className="space-y-8">
-          <header className="space-y-1 border-b border-[var(--border)] pb-6">
-            <h1 className="text-3xl font-semibold tracking-tight">Accounts</h1>
-            <p className="text-[var(--muted-foreground)]">
+          <header className="space-y-2 border-b border-[var(--border)] pb-6">
+            <h1 className="type-page">Accounts</h1>
+            <p className="type-lead">
               Open an account to see its balance and recent activity.
             </p>
           </header>

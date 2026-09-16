@@ -34,7 +34,7 @@ function Table({
     <div
       data-slot="table-container"
       className={cn(
-        "relative w-full overflow-x-auto overflow-y-hidden [transform:rotateX(180deg)]",
+        "relative w-full min-w-0 overflow-x-auto overflow-y-hidden overscroll-x-contain [transform:rotateX(180deg)]",
         containerClassName,
       )}
     >
@@ -42,6 +42,8 @@ function Table({
         data-slot="table"
         className={cn(
           "w-full caption-bottom text-sm [transform:rotateX(180deg)]",
+          "[&_th:first-child]:sticky [&_th:first-child]:left-0 [&_th:first-child]:z-20 [&_th:first-child]:bg-surface-elevated",
+          "[&_td:first-child]:sticky [&_td:first-child]:left-0 [&_td:first-child]:z-10 [&_td:first-child]:bg-surface-elevated",
           className,
         )}
         {...props}
@@ -88,7 +90,7 @@ function TableRow({ className, ...props }: React.ComponentProps<"tr">) {
     <tr
       data-slot="table-row"
       className={cn(
-        "border-b transition-colors hover:bg-muted/50 has-aria-expanded:bg-muted/50 data-[state=selected]:bg-muted",
+        "border-b transition-colors hover:bg-muted/50 has-aria-expanded:bg-muted/50 data-[state=selected]:bg-primary-subtle",
         className,
       )}
       {...props}

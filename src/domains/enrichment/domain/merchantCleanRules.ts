@@ -1,3 +1,5 @@
+import { cleanMerchantDescriptor } from "@convex/lib/cleanMerchantDescriptor";
+
 /**
  * Deterministic merchant_clean → one canonical display name per real merchant.
  *
@@ -116,13 +118,16 @@ export function canonicalizeMerchantClean(
   const trimmed = merchantClean.trim();
   if (!trimmed) return null;
 
-  const key = trimmed.toLowerCase();
-  if (MERCHANT_CLEAN_ALIASES[key]) return MERCHANT_CLEAN_ALIASES[key];
+  const stripped = cleanMerchantDescriptor(trimmed) ?? trimmed;
+  const aliasKey = stripped.toLowerCase();
+  if (MERCHANT_CLEAN_ALIASES[aliasKey]) return MERCHANT_CLEAN_ALIASES[aliasKey];
+  const rawKey = trimmed.toLowerCase();
+  if (MERCHANT_CLEAN_ALIASES[rawKey]) return MERCHANT_CLEAN_ALIASES[rawKey];
 
   // Parameterized Internet Transfer to Card **** tails
-  if (/^internet\s+transfer(\s+to\s+card)?/i.test(key)) {
+  if (/^internet\s+transfer(\s+to\s+card)?/i.test(aliasKey)) {
     return "Internet Transfer";
   }
 
-  return trimmed;
+  return stripped;
 }

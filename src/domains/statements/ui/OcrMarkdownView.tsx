@@ -11,7 +11,7 @@ export function OcrMarkdownView({ markdown }: { markdown: string }) {
 
   return (
     <div className="max-h-[60vh] overflow-auto rounded-lg border border-[var(--border)] bg-[var(--background)] p-4 text-sm">
-      <div className="ocr-md space-y-3 text-[var(--foreground)] [&_h1]:text-xl [&_h1]:font-semibold [&_h2]:text-lg [&_h2]:font-semibold [&_h3]:text-base [&_h3]:font-semibold [&_p]:leading-relaxed [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_strong]:font-semibold [&_a]:underline">
+      <div className="ocr-md space-y-4 text-[var(--foreground)] [&_h1]:text-xl [&_h1]:font-semibold [&_h2]:text-lg [&_h2]:font-semibold [&_h3]:text-base [&_h3]:font-semibold [&_p]:leading-relaxed [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_strong]:font-semibold [&_a]:underline">
         <ReactMarkdown
           remarkPlugins={[remarkGfm]}
           components={{

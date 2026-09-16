@@ -4,12 +4,12 @@ import { IssuesManager } from "@/domains/issues/ui/IssuesManager";
 
 export default function IssuesPage() {
   return (
-    <div className="space-y-4">
-      <div>
-        <h1 className="font-heading text-2xl font-semibold tracking-tight">
+    <div className="space-y-6">
+      <div className="space-y-2">
+        <h1 className="type-page">
           Issues
         </h1>
-        <p className="mt-1 text-sm text-[var(--muted-foreground)]">
+        <p className="type-lead">
           Problems the app caught, plus ones you report yourself.
         </p>
       </div>

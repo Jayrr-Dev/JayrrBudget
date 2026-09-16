@@ -1,10 +1,10 @@
 "use client";
 
-import { Component, type ErrorInfo, type ReactNode } from "react";
-import { useMutation } from "convex/react";
-import { api } from "@convex/_generated/api";
-import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { api } from "@convex/_generated/api";
+import { useMutation } from "convex/react";
+import { Component, type ErrorInfo, type ReactNode } from "react";
+import { toast } from "sonner";
 
 type BoundaryProps = {
   children: ReactNode;
@@ -53,20 +53,18 @@ function ErrorFallback({
 
   return (
     <div className="flex min-h-[50vh] flex-col items-center justify-center px-6 py-16 text-center">
-      <p className="font-heading text-sm font-medium uppercase tracking-wide text-[var(--muted-foreground)]">
-        Something broke
-      </p>
-      <h1 className="mt-2 max-w-lg font-heading text-2xl font-semibold tracking-tight text-[var(--foreground)]">
+      <p className="type-kicker">Something broke</p>
+      <h1 className="type-page mt-2 max-w-lg">
         This screen hit an unexpected error
       </h1>
-      <p className="mt-3 max-w-md text-sm text-[var(--muted-foreground)]">
+      <p className="type-lead mt-3 max-w-md">
         Like a receipt that will not print. The page stopped mid-job. You can
         report it so it shows up under Issues, then try again.
       </p>
       <pre className="mt-6 max-h-40 w-full max-w-xl overflow-auto rounded-lg border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-left font-mono text-xs text-[var(--destructive)]">
         {error.message || String(error)}
       </pre>
-      <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+      <div className="mt-6 flex flex-wrap items-center justify-center gap-4">
         <Button
           type="button"
           onClick={() => void handleReport()}

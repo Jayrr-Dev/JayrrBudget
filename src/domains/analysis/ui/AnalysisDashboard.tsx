@@ -2,7 +2,6 @@
 
 import { badgeVariants } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { PageSpinner } from "@/components/ui/spinner";
 import {
   ChartContainer,
   ChartTooltip,
@@ -10,10 +9,15 @@ import {
   type ChartConfig,
 } from "@/components/ui/chart";
 import {
+  NativeSelect,
+  NativeSelectOption,
+} from "@/components/ui/native-select";
+import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { PageSpinner } from "@/components/ui/spinner";
 import {
   ScrollTopX,
   Table,
@@ -34,6 +38,7 @@ import {
 import {
   ANALYSIS_PERIOD_META,
   ANALYSIS_PERIOD_OPTIONS,
+  parseAnalysisPeriod,
 } from "@/domains/analysis/domain/periods";
 import type {
   AnalysisCategoryBreakdown,
@@ -59,18 +64,18 @@ import {
   type FacetPane,
 } from "@/domains/analysis/ui/analysisUiPrefs";
 import { formatMoney } from "@/domains/dashboard/domain/money";
-import { normalizeCurrencyCode } from "@/shared/lib/currency";
 import { useScratchNoteActions } from "@/domains/scratch-note/scratchNoteStore";
 import { analysisFromPrivateLedger } from "@/domains/vault/application/analysisFromPrivateLedger";
 import { usePrivateLedger } from "@/domains/vault/ui/usePrivateLedger";
 import { cn } from "@/lib/utils";
 import { downloadCsv, toCsv } from "@/shared/lib/csv";
+import { normalizeCurrencyCode } from "@/shared/lib/currency";
 import {
   formatDisplayDate,
   formatShortDisplayDate,
 } from "@/shared/lib/format-date";
-import { IconInfoCircle } from "@tabler/icons-react";
 import { api } from "@convex/_generated/api";
+import { IconInfoCircle } from "@tabler/icons-react";
 import { useQuery } from "@tanstack/react-query";
 import { useAction } from "convex/react";
 import { ChevronDownIcon, PlusIcon } from "lucide-react";
@@ -94,12 +99,12 @@ import {
 } from "recharts";
 
 const RANGE_OPTIONS: { value: AnalysisRange; label: string }[] = [
-  { value: "1w", label: "1 week" },
-  { value: "1m", label: "1 month" },
-  { value: "3m", label: "3 months" },
-  { value: "6m", label: "6 months" },
-  { value: "12m", label: "12 months" },
-  { value: "all", label: "All time" },
+  { value: "1w", label: "1W" },
+  { value: "1m", label: "1M" },
+  { value: "3m", label: "3M" },
+  { value: "6m", label: "6M" },
+  { value: "12m", label: "1Y" },
+  { value: "all", label: "All" },
 ];
 
 const TAB_OPTIONS: { value: AnalysisTab; label: string }[] = [
@@ -186,7 +191,9 @@ function useAnalysis(range: AnalysisRange, period: AnalysisPeriod) {
     ],
     staleTime: privateLedger.encryptedLedger ? 0 : 5 * 60_000,
     gcTime: 30 * 60_000,
-    enabled: !privateLedger.encryptedLedger || (privateLedger.unlocked && !privateLedger.loading),
+    enabled:
+      !privateLedger.encryptedLedger ||
+      (privateLedger.unlocked && !privateLedger.loading),
     queryFn: async () => {
       if (privateLedger.encryptedLedger) {
         return analysisFromPrivateLedger(privateLedger.ledger, range, period);
@@ -202,10 +209,16 @@ function useAnalysis(range: AnalysisRange, period: AnalysisPeriod) {
   });
   return {
     data: query.data,
-    isPending: query.isPending || (privateLedger.encryptedLedger && (privateLedger.loading || !privateLedger.unlocked)),
-    isError: query.isError || Boolean(privateLedger.encryptedLedger && privateLedger.error),
+    isPending:
+      query.isPending ||
+      (privateLedger.encryptedLedger &&
+        (privateLedger.loading || !privateLedger.unlocked)),
+    isError:
+      query.isError ||
+      Boolean(privateLedger.encryptedLedger && privateLedger.error),
     isFetching: query.isFetching,
-    error: query.error instanceof Error
+    error:
+      query.error instanceof Error
         ? query.error
         : privateLedger.error
           ? new Error(privateLedger.error)
@@ -238,10 +251,10 @@ function InfoTip({ label, children }: { label: string; children: string }) {
       <TooltipTrigger asChild>
         <button
           type="button"
-          className="inline-flex size-6 shrink-0 items-center justify-center rounded-md text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]"
+          className="inline-flex size-5 shrink-0 items-center justify-center rounded-md text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)] sm:size-6"
           aria-label={label}
         >
-          <IconInfoCircle className="size-4" />
+          <IconInfoCircle className="size-3.5 sm:size-4" />
         </button>
       </TooltipTrigger>
       <TooltipContent
@@ -265,14 +278,16 @@ function Stat({
   info?: string;
 }) {
   return (
-    <div className="rounded-xl border border-[var(--border)] bg-[var(--background)] px-4 py-3">
-      <div className="flex items-center gap-1">
-        <p className="text-xs tracking-[0.14em] text-[var(--muted-foreground)] uppercase">
+    <div className="rounded-lg border border-border bg-surface-elevated px-2.5 py-2 sm:rounded-xl sm:px-4 sm:py-3">
+      <div className="flex min-w-0 items-center gap-0.5 sm:gap-1">
+        <p className="type-kicker line-clamp-2 text-[0.65rem] leading-tight tracking-wide sm:text-sm sm:leading-normal">
           {label}
         </p>
         {info ? <InfoTip label={`${label} info`}>{info}</InfoTip> : null}
       </div>
-      <p className="mt-1 text-2xl font-semibold tracking-tight">{value}</p>
+      <p className="type-stat mt-0.5 text-[0.95rem] sm:mt-1 sm:text-lg">
+        {value}
+      </p>
     </div>
   );
 }
@@ -317,7 +332,7 @@ function ChartTitle({
   return (
     <div className="flex flex-wrap items-start justify-between gap-2">
       <div className="flex items-center gap-1">
-        <h2 className="text-lg font-semibold tracking-tight">{title}</h2>
+        <h2 className="type-section">{title}</h2>
         <InfoTip label={`${title} info`}>{info}</InfoTip>
       </div>
       {actions || exportButton ? (
@@ -428,16 +443,15 @@ function PieCenterTotal({
 
   return (
     <text textAnchor="middle" dominantBaseline="central">
-      <tspan x={cx} y={cy - 12} fill="var(--muted-foreground)" fontSize={12}>
-        Total
-      </tspan>
       <tspan
         x={cx}
-        y={cy + 10}
-        fill="var(--foreground)"
-        fontSize={16}
-        fontWeight={600}
+        y={cy - 14}
+        fill="var(--muted-foreground)"
+        className="type-caption"
       >
+        Total
+      </tspan>
+      <tspan x={cx} y={cy + 10} fill="var(--foreground)" className="type-stat">
         {formatMoney(total, currency)}
       </tspan>
     </text>
@@ -485,7 +499,7 @@ function PieDonutLabel({
           textAnchor="middle"
           dominantBaseline="central"
           pointerEvents="none"
-          className="text-[12px] font-semibold"
+          className="text-sm font-semibold"
         >
           {label}
         </text>
@@ -495,21 +509,21 @@ function PieDonutLabel({
       <g pointerEvents="none">
         <text
           x={x}
-          y={y - 7}
+          y={y - 8}
           fill={PIE_LABEL_INK}
           textAnchor="middle"
           dominantBaseline="central"
-          className="text-[12px] font-semibold"
+          className="text-sm font-semibold"
         >
           {label}
         </text>
         <text
           x={x}
-          y={y + 8}
+          y={y + 10}
           fill={PIE_LABEL_INK}
           textAnchor="middle"
           dominantBaseline="central"
-          className="text-[10px]"
+          className="text-sm"
         >
           {sliceName}
         </text>
@@ -565,12 +579,14 @@ function AreaTreemapCell({
   const label = String(name ?? "");
   const spend = Number(value ?? 0);
   const share = total > 0 ? spend / total : 0;
-  const showValue = width >= 48 && height >= 28;
-  const showName = width >= 64 && height >= 44;
-  const showPct = width >= 72 && height >= 58 && share > 0;
-  const maxChars = Math.max(4, Math.floor((width - 12) / 6.2));
+  const showValue = width >= 56 && height >= 32;
+  const showName = width >= 72 && height >= 48;
+  const showPct = width >= 88 && height >= 68 && share > 0;
+  const maxChars = Math.max(4, Math.floor((width - 12) / 7.4));
   const displayName =
-    label.length > maxChars ? `${label.slice(0, Math.max(3, maxChars - 1))}…` : label;
+    label.length > maxChars
+      ? `${label.slice(0, Math.max(3, maxChars - 1))}…`
+      : label;
 
   return (
     <g>
@@ -596,15 +612,17 @@ function AreaTreemapCell({
             style={{ color: "#111", WebkitTextFillColor: "#111" }}
           >
             {showValue ? (
-              <div className="text-[11px] leading-tight font-semibold">
+              <div className="text-sm leading-tight font-semibold">
                 {moneyTick(spend, currency)}
               </div>
             ) : null}
             {showName ? (
-              <div className="truncate text-[10px] leading-tight">{displayName}</div>
+              <div className="truncate text-sm leading-tight">
+                {displayName}
+              </div>
             ) : null}
             {showPct ? (
-              <div className="text-[10px] leading-tight opacity-70">
+              <div className="text-sm leading-tight font-normal opacity-70">
                 {formatPiePercent(share)}
               </div>
             ) : null}
@@ -675,15 +693,24 @@ function TimeSeriesTable({
 
   if (rows.length === 0) return null;
   return (
-    <div className="max-h-72 overflow-x-hidden overflow-y-auto rounded-lg border border-[var(--border)]">
-      <Table>
+    <div className="max-h-56 overflow-auto rounded-lg border border-[var(--border)] sm:max-h-72">
+      <Table
+        className={cn(
+          "text-[0.7rem] sm:text-sm",
+          "[&_th]:h-8 [&_th]:px-1.5 [&_th]:py-1 sm:[&_th]:h-10 sm:[&_th]:px-2 sm:[&_th]:py-0",
+          "[&_td]:px-1.5 [&_td]:py-1 sm:[&_td]:p-2",
+        )}
+      >
         <TableHeader>
           <TableRow>
-            <TableHead>Period</TableHead>
+            <TableHead className="min-w-[4.25rem]">Period</TableHead>
             {columns.map((column) => {
               const on = !filterable || keys.includes(column.key);
               return (
-                <TableHead key={column.key} className="text-right">
+                <TableHead
+                  key={column.key}
+                  className="max-w-[5.25rem] text-right whitespace-normal sm:max-w-none sm:whitespace-nowrap"
+                >
                   {filterable ? (
                     <button
                       type="button"
@@ -693,7 +720,7 @@ function TimeSeriesTable({
                         setKeys(nextVisibleKeys(allKeys, keys, column.key))
                       }
                       className={cn(
-                        "rounded-sm font-medium hover:bg-muted",
+                        "w-full rounded-sm text-right font-medium leading-tight hover:bg-muted",
                         !on && "opacity-40 line-through",
                       )}
                     >
@@ -719,7 +746,7 @@ function TimeSeriesTable({
                   <TableCell
                     key={column.key}
                     className={cn(
-                      "text-right font-mono tabular-nums",
+                      "text-right font-mono text-[0.7rem] tabular-nums sm:text-sm",
                       !on && "opacity-40",
                     )}
                   >
@@ -768,7 +795,7 @@ function TrendChart({
   );
 
   return (
-    <section className="space-y-3 rounded-xl border border-[var(--border)] bg-[var(--background)] p-4 sm:p-5">
+    <section className="space-y-3 rounded-xl border border-border bg-surface-elevated p-3 sm:space-y-4 sm:p-6">
       <ChartTitle
         title="Spending vs income"
         info="Lifestyle outflows and real income. Card payoffs count once, on the paying account. Visa 'payment thank you' credits are the other side of the same move. Relative stacks visible series to 100% for each period."
@@ -1061,15 +1088,15 @@ function MixTooltip({
       <div
         className={`${gridClass} max-h-64 overflow-y-auto pr-0.5`}
         onWheel={(event) => {
-          const el = event.currentTarget
-          if (el.scrollHeight <= el.clientHeight + 1) return
-          const delta = event.deltaY
-          const atTop = el.scrollTop <= 0
+          const el = event.currentTarget;
+          if (el.scrollHeight <= el.clientHeight + 1) return;
+          const delta = event.deltaY;
+          const atTop = el.scrollTop <= 0;
           const atBottom =
-            el.scrollTop + el.clientHeight >= el.scrollHeight - 1
+            el.scrollTop + el.clientHeight >= el.scrollHeight - 1;
           // Only trap wheel while the list can still scroll that way.
-          if ((delta < 0 && atTop) || (delta > 0 && atBottom)) return
-          event.stopPropagation()
+          if ((delta < 0 && atTop) || (delta > 0 && atBottom)) return;
+          event.stopPropagation();
         }}
       >
         {lines.map((line) => (
@@ -1096,7 +1123,7 @@ function MixTooltip({
         )}
       </div>
       {overlapping && rows.length > 1 ? (
-        <div className="border-t border-border/50 pt-1.5 text-[10px] leading-snug text-muted-foreground">
+        <div className="type-caption border-t border-border/50 pt-1.5">
           Tags can mark the same transactions. Amounts are not additive.
         </div>
       ) : null}
@@ -1188,10 +1215,10 @@ function calloutBoxWidth(label: string) {
   const padX = 4;
   const swatchGap = 4;
   const swatchSize = 8;
-  // 11px medium + swatch; stay generous so short names ("Needs") never ellipsis.
+  // 0.875rem medium + swatch; stay generous so short names ("Needs") never ellipsis.
   return Math.min(
-    Math.max(label.length * 8.2 + padX * 2 + swatchSize + swatchGap + 8, 64),
-    220,
+    Math.max(label.length * 9.2 + padX * 2 + swatchSize + swatchGap + 8, 72),
+    240,
   );
 }
 
@@ -1237,7 +1264,7 @@ function AreaCallout({
     ? Math.min(y + 18 + lift, y + 36)
     : Math.max(minLabelY, desiredLabelY);
   const padX = 4;
-  const boxH = 16;
+  const boxH = 22;
   const boxW = calloutBoxWidth(label);
   const textX = labelX + side * 5;
   const boxX = side === 1 ? textX - padX : textX - boxW + padX;
@@ -1255,15 +1282,13 @@ function AreaCallout({
       />
       <circle cx={anchorX} cy={anchorY} r={2.25} fill="#111" />
       <foreignObject x={boxX} y={boxY} width={boxW} height={boxH}>
-        <div className="flex h-full min-w-0 items-center justify-center gap-1 rounded-md bg-[var(--background)]/55 px-1 text-center text-[11px] leading-none font-medium whitespace-nowrap text-[#111] backdrop-blur-[3px]">
+        <div className="flex h-full min-w-0 items-center justify-center gap-1 rounded-md bg-[var(--background)]/55 px-1 text-center text-sm leading-none font-medium whitespace-nowrap text-[#111] backdrop-blur-[3px]">
           <span
             aria-hidden
             className="size-2 shrink-0 rounded-[2px] border border-black/15"
             style={{ backgroundColor: color }}
           />
-          <span className="min-w-0 overflow-hidden text-ellipsis">
-            {label}
-          </span>
+          <span className="min-w-0 overflow-hidden text-ellipsis">{label}</span>
         </div>
       </foreignObject>
     </g>
@@ -1299,7 +1324,7 @@ function OtherBreakdownTable({
           is of this pile.
         </p>
       </div>
-      <div className="max-h-72 overflow-x-hidden overflow-y-auto rounded-lg border border-[var(--border)]">
+      <div className="max-h-72 overflow-auto rounded-lg border border-[var(--border)]">
         <Table>
           <TableHeader>
             <TableRow>
@@ -1398,31 +1423,34 @@ function StackedMixChart({
 
   useEffect(() => {
     const dismiss = () => {
-      if (!tooltipOpenRef.current) return
-      tooltipOpenRef.current = false
-      setTooltipForcedOff(true)
-    }
+      if (!tooltipOpenRef.current) return;
+      tooltipOpenRef.current = false;
+      setTooltipForcedOff(true);
+    };
     const dismissIfOutside = (event: PointerEvent) => {
-      if (!tooltipOpenRef.current) return
-      const target = event.target
-      if (!(target instanceof Node)) return
-      if (chartShellRef.current?.contains(target)) return
-      dismiss()
-    }
+      if (!tooltipOpenRef.current) return;
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (chartShellRef.current?.contains(target)) return;
+      dismiss();
+    };
     const dismissOnEscape = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return
-      dismiss()
-    }
-    document.addEventListener("pointerdown", dismissIfOutside)
-    document.addEventListener("keydown", dismissOnEscape)
+      if (event.key !== "Escape") return;
+      dismiss();
+    };
+    document.addEventListener("pointerdown", dismissIfOutside);
+    document.addEventListener("keydown", dismissOnEscape);
     // Page actually moved - drop the click tooltip so it does not chase the cursor.
-    window.addEventListener("scroll", dismiss, { passive: true, capture: true })
+    window.addEventListener("scroll", dismiss, {
+      passive: true,
+      capture: true,
+    });
     return () => {
-      document.removeEventListener("pointerdown", dismissIfOutside)
-      document.removeEventListener("keydown", dismissOnEscape)
-      window.removeEventListener("scroll", dismiss, true)
-    }
-  }, [])
+      document.removeEventListener("pointerdown", dismissIfOutside);
+      document.removeEventListener("keydown", dismissOnEscape);
+      window.removeEventListener("scroll", dismiss, true);
+    };
+  }, []);
 
   const markTooltipOpen = () => {
     tooltipOpenRef.current = true;
@@ -1508,7 +1536,7 @@ function StackedMixChart({
   );
 
   return (
-    <section className="space-y-3 rounded-xl border border-[var(--border)] bg-[var(--background)] p-4 sm:p-5">
+    <section className="space-y-3 rounded-xl border border-border bg-surface-elevated p-3 sm:space-y-4 sm:p-6">
       <ChartTitle
         title={title}
         info={info}
@@ -1525,6 +1553,11 @@ function StackedMixChart({
             ...series.map((item) => Number(row[item.key] ?? 0)),
           ]),
         }}
+      />
+      <SeriesLegend
+        series={series}
+        value={visibleKeys}
+        onValueChange={setVisibleKeys}
       />
       <div ref={chartShellRef}>
         <ChartContainer
@@ -1677,11 +1710,6 @@ function StackedMixChart({
           )}
         </ChartContainer>
       </div>
-      <SeriesLegend
-        series={series}
-        value={visibleKeys}
-        onValueChange={setVisibleKeys}
-      />
       <TimeSeriesTable
         rows={chartRows}
         columns={series.map((item) => ({
@@ -1780,7 +1808,7 @@ function StackedRankedBarChart({
 }) {
   const { visibleKeys, visibleSeries, setVisibleKeys } =
     useVisibleSeries(series);
-  const [view, setView] = useState<BreakdownView>("bar");
+  const [view, setView] = useState<BreakdownView>("area");
   const config = useMemo(() => {
     const next: ChartConfig = {};
     series.forEach((item, index) => {
@@ -1813,7 +1841,7 @@ function StackedRankedBarChart({
   if (rows.length === 0 || series.length === 0) return null;
 
   return (
-    <section className="space-y-3 rounded-xl border border-[var(--border)] bg-[var(--background)] p-4 sm:p-5">
+    <section className="space-y-3 rounded-xl border border-border bg-surface-elevated p-3 sm:space-y-4 sm:p-6">
       <ChartTitle
         title={title}
         info={info}
@@ -2098,7 +2126,7 @@ function TaxonomyBreakdownTable({
   if (rows.length === 0) return null;
 
   return (
-    <section className="space-y-3 rounded-xl border border-[var(--border)] bg-[var(--background)] p-4 sm:p-5">
+    <section className="space-y-3 rounded-xl border border-border bg-surface-elevated p-3 sm:space-y-4 sm:p-6">
       <ChartTitle
         title={title}
         info={info}
@@ -2231,7 +2259,7 @@ function RankedBarChart({
   const nameMaxChars = labelWidth >= 140 ? 22 : 16;
 
   return (
-    <section className="space-y-3 rounded-xl border border-[var(--border)] bg-[var(--background)] p-4 sm:p-5">
+    <section className="space-y-3 rounded-xl border border-border bg-surface-elevated p-3 sm:space-y-4 sm:p-6">
       <ChartTitle
         title={title}
         info={info}
@@ -2284,8 +2312,8 @@ function RankedBarChart({
                   hideLabel
                   formatter={(value, _name, item) => {
                     const name = String(
-                      (item?.payload as AnalysisRankedItem | undefined)
-                        ?.name ?? "",
+                      (item?.payload as AnalysisRankedItem | undefined)?.name ??
+                        "",
                     );
                     const count = Number(
                       (item?.payload as AnalysisRankedItem | undefined)
@@ -2323,7 +2351,7 @@ function RankedBarChart({
               <LabelList
                 dataKey="spend"
                 position="right"
-                className="fill-[var(--muted-foreground)] text-[10px] tabular-nums"
+                className="fill-[var(--muted-foreground)] text-xs tabular-nums"
                 formatter={(value) => moneyTick(Number(value), currency)}
               />
             </Bar>
@@ -2358,7 +2386,7 @@ function WeekdayChart({ data }: { data: AnalysisData }) {
   if (data.weekdays.length === 0) return null;
 
   return (
-    <section className="space-y-3 rounded-xl border border-[var(--border)] bg-[var(--background)] p-4 sm:p-5">
+    <section className="space-y-3 rounded-xl border border-border bg-surface-elevated p-3 sm:space-y-4 sm:p-6">
       <ChartTitle
         title="Spend by weekday"
         info="Day you spent, from the authorized date when we have it. Posted date is the fallback. Weekend swipes no longer pile onto Monday."
@@ -2425,7 +2453,7 @@ function DayOfMonthChart({ data }: { data: AnalysisData }) {
   if (rows.every((row) => row.spend === 0)) return null;
 
   return (
-    <section className="space-y-3 rounded-xl border border-[var(--border)] bg-[var(--background)] p-4 sm:p-5">
+    <section className="space-y-3 rounded-xl border border-border bg-surface-elevated p-3 sm:space-y-4 sm:p-6">
       <ChartTitle
         title="Spend by day of month"
         info="Calendar day (1-31) of the authorized date when present. Spikes often line up with rent, loans, or payday shopping."
@@ -2522,7 +2550,7 @@ function FrequencyBarChart({
   const nameMaxChars = labelWidth >= 140 ? 22 : 16;
 
   return (
-    <section className="space-y-3 rounded-xl border border-[var(--border)] bg-[var(--background)] p-4 sm:p-5">
+    <section className="space-y-3 rounded-xl border border-border bg-surface-elevated p-3 sm:space-y-4 sm:p-6">
       <ChartTitle
         title={title}
         info={info}
@@ -2574,8 +2602,8 @@ function FrequencyBarChart({
                   hideLabel
                   formatter={(value, _name, item) => {
                     const name = String(
-                      (item?.payload as AnalysisRankedItem | undefined)
-                        ?.name ?? "",
+                      (item?.payload as AnalysisRankedItem | undefined)?.name ??
+                        "",
                     );
                     const spend = Number(
                       (item?.payload as AnalysisRankedItem | undefined)
@@ -2607,7 +2635,7 @@ function FrequencyBarChart({
               <LabelList
                 dataKey="count"
                 position="right"
-                className="fill-[var(--muted-foreground)] text-[10px] tabular-nums"
+                className="fill-[var(--muted-foreground)] text-xs tabular-nums"
               />
             </Bar>
           </BarChart>
@@ -2655,7 +2683,7 @@ function NetLineChart({
   } satisfies ChartConfig;
 
   return (
-    <section className="space-y-3 rounded-xl border border-[var(--border)] bg-[var(--background)] p-4 sm:p-5">
+    <section className="space-y-3 rounded-xl border border-border bg-surface-elevated p-3 sm:space-y-4 sm:p-6">
       <ChartTitle
         title="Net cash flow"
         info="Income minus lifestyle spend. Internal transfers excluded so paying a credit card does not look like extra income or extra spend."
@@ -2819,7 +2847,7 @@ function SegmentedControl<T extends string>({
     <div
       role="group"
       aria-label={ariaLabel}
-      className="inline-flex max-w-full flex-wrap gap-0.5 rounded-lg border border-[var(--border)] p-0.5"
+      className="inline-flex max-w-full flex-wrap gap-px rounded-md border border-[var(--border)] p-0.5 sm:gap-0.5 sm:rounded-lg"
     >
       {options.map((option) => (
         <Button
@@ -2828,7 +2856,7 @@ function SegmentedControl<T extends string>({
           size="xs"
           variant={value === option.value ? "default" : "ghost"}
           className={cn(
-            "px-2 font-normal",
+            "h-6 px-1.5 text-[0.7rem] font-normal sm:h-6 sm:px-2 sm:text-xs",
             value === option.value && "pointer-events-none",
           )}
           onClick={() => onChange(option.value)}
@@ -2856,7 +2884,7 @@ function FacetPaneShell({
   range: ReactNode;
 }) {
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
       <SegmentedControl
         ariaLabel="Facet view"
         options={FACET_PANE_OPTIONS}
@@ -2931,6 +2959,35 @@ function peeksFor(
   ...parts: string[]
 ): AnalysisTxnPeek[] {
   return txnPeekIndex(data).get(txnPeekKey(facet, ...parts)) ?? [];
+}
+
+function sortTxnPeeks(peeks: AnalysisTxnPeek[]) {
+  return peeks
+    .slice()
+    .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+}
+
+function mergeTxnPeeks(groups: AnalysisTxnPeek[][]) {
+  const seen = new Set<string>();
+  const merged: AnalysisTxnPeek[] = [];
+  for (const group of groups) {
+    for (const txn of group) {
+      const id = `${txn.date}\0${txn.description}\0${txn.amount}`;
+      if (seen.has(id)) continue;
+      seen.add(id);
+      merged.push(txn);
+      if (merged.length >= 48) return sortTxnPeeks(merged);
+    }
+  }
+  return sortTxnPeeks(merged);
+}
+
+function rowPeeksWithVendorFallback(
+  rowPeeks: AnalysisTxnPeek[],
+  vendorPeeks: AnalysisTxnPeek[],
+) {
+  if (rowPeeks.length > 0) return rowPeeks;
+  return vendorPeeks;
 }
 
 function RowTxnsPopover({
@@ -3070,7 +3127,7 @@ function LeaderboardTable({
   const grid = `grid w-full items-center gap-x-3 px-3 ${gridCols}`;
 
   return (
-    <section className="space-y-3 rounded-xl border border-[var(--border)] bg-[var(--background)] p-4 sm:p-5">
+    <section className="space-y-3 rounded-xl border border-border bg-surface-elevated p-3 sm:space-y-4 sm:p-6">
       <ChartTitle
         title={title}
         info={info}
@@ -3095,11 +3152,11 @@ function LeaderboardTable({
           <div
             className={`${grid} border-b border-[var(--border)] py-2 text-xs text-[var(--muted-foreground)]`}
           >
-            <span>#</span>
-            <span className="min-w-0 truncate">{nameLabel}</span>
-            <span className="text-right">Spend</span>
-            <span className="text-right">Count</span>
-            <span className="text-right">Share</span>
+            <span className="tabular-nums">#</span>
+            <span className="min-w-0 truncate text-left">{nameLabel}</span>
+            <span className="w-full text-right">Spend</span>
+            <span className="w-full text-right">Count</span>
+            <span className="w-full text-right">Share</span>
             {canExpand ? <span /> : null}
             {showTxns ? <span className="sr-only">Info</span> : null}
           </div>
@@ -3111,7 +3168,15 @@ function LeaderboardTable({
                 <RowTxnsPopover
                   label={row.name}
                   currency={currency}
-                  transactions={transactionsForRow?.(row.name) ?? []}
+                  transactions={rowPeeksWithVendorFallback(
+                    transactionsForRow?.(row.name) ?? [],
+                    mergeTxnPeeks(
+                      vendors.map(
+                        (vendor) =>
+                          transactionsForVendor?.(row.name, vendor.name) ?? [],
+                      ),
+                    ),
+                  )}
                 />
               ) : null;
               const mainCells = (
@@ -3155,7 +3220,7 @@ function LeaderboardTable({
                             current === row.name ? null : row.name,
                           )
                         }
-                        className="contents text-left"
+                        className="contents"
                       >
                         {mainCells}
                       </button>
@@ -3355,7 +3420,7 @@ function RangeLeaderboardTable({
     : "grid w-fit max-w-full grid-cols-[1.5rem_minmax(7rem,14rem)_7.25rem_7.25rem_7.25rem] items-center gap-x-4 px-3";
 
   return (
-    <section className="space-y-3 rounded-xl border border-[var(--border)] bg-[var(--background)] p-4 sm:p-5">
+    <section className="space-y-3 rounded-xl border border-border bg-surface-elevated p-3 sm:space-y-4 sm:p-6">
       <ChartTitle
         title={title}
         info={info}
@@ -3369,16 +3434,16 @@ function RangeLeaderboardTable({
           Nothing in this range.
         </p>
       ) : (
-        <div className="w-fit max-w-full overflow-x-hidden rounded-lg border border-[var(--border)]">
+        <div className="w-fit max-w-full overflow-x-auto rounded-lg border border-[var(--border)]">
           <ScrollTopX className="rounded-lg">
             <div
               className={`${grid} border-b border-[var(--border)] py-2 text-xs text-[var(--muted-foreground)]`}
             >
-              <span>#</span>
-              <span className="min-w-0 truncate">{nameLabel}</span>
-              <span className="text-right">High</span>
-              <span className="text-right">Mid</span>
-              <span className="text-right">Low</span>
+              <span className="tabular-nums">#</span>
+              <span className="min-w-0 truncate text-left">{nameLabel}</span>
+              <span className="w-full text-right">High</span>
+              <span className="w-full text-right">Mid</span>
+              <span className="w-full text-right">Low</span>
               {showTxns ? <span className="sr-only">Info</span> : null}
             </div>
             <div>
@@ -3469,7 +3534,7 @@ function AverageLeaderboardTable({
   const grid = `grid w-full items-center gap-x-3 px-3 ${gridCols}`;
 
   return (
-    <section className="space-y-3 rounded-xl border border-[var(--border)] bg-[var(--background)] p-4 sm:p-5">
+    <section className="space-y-3 rounded-xl border border-border bg-surface-elevated p-3 sm:space-y-4 sm:p-6">
       <ChartTitle
         title={title}
         info={info}
@@ -3491,10 +3556,14 @@ function AverageLeaderboardTable({
           <div
             className={`${grid} border-b border-[var(--border)] py-2 text-xs text-[var(--muted-foreground)]`}
           >
-            <span>#</span>
-            <span className="min-w-0 truncate">{nameLabel}</span>
-            <span className="text-right">{meta.avgCostLabel}</span>
-            <span className="text-right">{meta.avgCountLabel}</span>
+            <span className="tabular-nums">#</span>
+            <span className="min-w-0 truncate text-left">{nameLabel}</span>
+            <span className="w-full whitespace-nowrap text-right">
+              {meta.avgCostLabel}
+            </span>
+            <span className="w-full whitespace-nowrap text-right">
+              {meta.avgCountLabel}
+            </span>
             {canExpand ? <span /> : null}
             {showTxns ? <span className="sr-only">Info</span> : null}
           </div>
@@ -3542,7 +3611,7 @@ function AverageLeaderboardTable({
                             current === row.name ? null : row.name,
                           )
                         }
-                        className="contents text-left"
+                        className="contents"
                       >
                         {mainCells}
                       </button>
@@ -3553,7 +3622,18 @@ function AverageLeaderboardTable({
                       <RowTxnsPopover
                         label={row.name}
                         currency={currency}
-                        transactions={transactionsForRow?.(row.name) ?? []}
+                        transactions={rowPeeksWithVendorFallback(
+                          transactionsForRow?.(row.name) ?? [],
+                          mergeTxnPeeks(
+                            vendors.map(
+                              (vendor) =>
+                                transactionsForVendor?.(
+                                  row.name,
+                                  vendor.name,
+                                ) ?? [],
+                            ),
+                          ),
+                        )}
                       />
                     ) : null}
                   </div>
@@ -3685,7 +3765,7 @@ function MainTab({
   const periodMeta = ANALYSIS_PERIOD_META[period];
   return (
     <div className="space-y-6">
-      <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+      <section className="grid grid-cols-2 gap-2 sm:gap-4 lg:grid-cols-3 xl:grid-cols-4">
         <Stat
           label="Lifestyle spending"
           value={formatMoney(data.summary.totalSpend, data.currency)}
@@ -5010,7 +5090,7 @@ function MerchantDrilldown({
         title="Merchant detail"
         info="Filter by category, then pick a Merchant clean name. Subcategories come from transaction labels."
       />
-      <div className="space-y-3">
+      <div className="space-y-4">
         <div
           role="group"
           aria-label="Filter merchants by category"
@@ -5046,7 +5126,7 @@ function MerchantDrilldown({
             </Button>
           ))}
         </div>
-        <div className="max-h-[22rem] space-y-3 overflow-y-auto pr-1">
+        <div className="max-h-[22rem] space-y-4 overflow-y-auto pr-1">
           {merchantGroups.map((group) => (
             <div key={group.name} className="space-y-2">
               {categoryFilter === "all" ? (
@@ -5334,7 +5414,10 @@ function IncomeTab({
   onPaneChange: (value: FacetPane) => void;
 }) {
   const stacked = data.incomeSourceStacked ?? { rows: [], series: [] };
-  const categoryStacked = data.incomeCategoryStacked ?? { rows: [], series: [] };
+  const categoryStacked = data.incomeCategoryStacked ?? {
+    rows: [],
+    series: [],
+  };
   const breakdowns = data.incomeSourceBreakdowns ?? [];
   const sources = data.incomeSources ?? [];
   const incomeCategories = data.incomeCategories ?? [];
@@ -5376,7 +5459,7 @@ function IncomeTab({
       onPaneChange={onPaneChange}
       visualizations={
         <div className="space-y-6">
-          <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <section className="grid grid-cols-2 gap-2 sm:gap-4 lg:grid-cols-4">
             <Stat
               label="Income"
               value={formatMoney(total, data.currency)}
@@ -5384,7 +5467,10 @@ function IncomeTab({
             />
             <Stat
               label={periodMeta.incomeRateLabel}
-              value={formatMoney(data.summary.incomePerPeriod ?? 0, data.currency)}
+              value={formatMoney(
+                data.summary.incomePerPeriod ?? 0,
+                data.currency,
+              )}
               info={`Income divided by ${periodMeta.nounPlural} in this range (same buckets as the ${periodMeta.label.toLowerCase()} charts).`}
             />
             <Stat
@@ -5589,7 +5675,7 @@ function PatternsTab({ data }: { data: AnalysisData }) {
 
   return (
     <div className="space-y-6">
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2 sm:gap-4 lg:grid-cols-4">
         <Stat
           label="Weekend share"
           value={`${weekendShare}%`}
@@ -5787,52 +5873,44 @@ export function AnalysisDashboard() {
 
   return (
     <TooltipProvider>
-      <div className="space-y-8">
-        <header className="flex flex-col gap-4 border-b border-[var(--border)] pb-6 sm:flex-row sm:items-end sm:justify-between">
+      <div className="space-y-3">
+        <header className="flex flex-col gap-2 border-b border-[var(--border)] pb-2 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:pb-6">
           <div className="space-y-1">
-            <p className="text-sm tracking-[0.18em] text-[var(--muted-foreground)] uppercase">
-              Finance
-            </p>
+            <p className="type-kicker hidden sm:block">Finance</p>
             <div className="flex items-center gap-1">
-              <h1 className="text-3xl font-semibold tracking-tight">
-                Analysis
-              </h1>
+              <h1 className="type-page text-xl sm:text-[1.25rem]">Analysis</h1>
               <InfoTip label="Analysis info">
                 {data
                   ? `Covers ${formatDisplayDate(data.earliestDate)} to ${formatDisplayDate(data.latestDate)}. Spend = purchases and money sent out, minus refunds. Moving money between your own accounts (like paying a card from chequing) is not counted as spend.`
                   : "See where money goes over time. Transfers between your own accounts are left out of spend."}
               </InfoTip>
             </div>
-            <p className="max-w-xl text-[var(--muted-foreground)]">
+            <p className="type-lead sr-only sm:not-sr-only sm:max-w-xl">
               Charts and breakdowns of spending over time.
             </p>
           </div>
-          <div className="grid grid-cols-[1fr_auto_auto] items-stretch gap-x-2 gap-y-2">
-            <div className="justify-self-end">
-              <SegmentedControl
-                ariaLabel="Timeline"
-                options={RANGE_OPTIONS}
-                value={range}
-                onChange={setRange}
-              />
-            </div>
-            <span
-              aria-hidden
-              className="w-px shrink-0 self-stretch bg-[var(--border)]"
+          <div className="flex shrink-0 items-center justify-end gap-2">
+            <SegmentedControl
+              ariaLabel="Timeline"
+              options={RANGE_OPTIONS}
+              value={range}
+              onChange={setRange}
             />
-            <span className="flex items-center justify-end text-base font-medium leading-none tracking-wide text-[var(--muted-foreground)] uppercase">
-              Timeline
-            </span>
-            <div className="justify-self-end">
-              <PeriodViews value={period} onChange={setPeriod} />
-            </div>
-            <span
-              aria-hidden
-              className="w-px shrink-0 self-stretch bg-[var(--border)]"
-            />
-            <span className="flex items-center justify-end text-base font-medium leading-none tracking-wide text-[var(--muted-foreground)] uppercase">
-              Period
-            </span>
+            <NativeSelect
+              aria-label="Period"
+              size="sm"
+              value={period}
+              onChange={(event) =>
+                setPeriod(parseAnalysisPeriod(event.target.value))
+              }
+              className="[&_select]:h-6 [&_select]:rounded-md [&_select]:py-0 [&_select]:pr-7 [&_select]:pl-2 [&_select]:text-xs [&_[data-slot=native-select-icon]]:right-2 [&_[data-slot=native-select-icon]]:size-3.5"
+            >
+              {ANALYSIS_PERIOD_OPTIONS.map((option) => (
+                <NativeSelectOption key={option.value} value={option.value}>
+                  {option.label}
+                </NativeSelectOption>
+              ))}
+            </NativeSelect>
           </div>
         </header>
 

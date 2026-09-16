@@ -1,23 +1,9 @@
 "use client";
 
-import { Icon } from "@iconify/react";
-import { createColumnHelper } from "@tanstack/react-table";
-import { useMutation, useQuery } from "convex/react";
-import { Info } from "lucide-react";
-import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { api } from "@convex/_generated/api";
-import type { Id } from "@convex/_generated/dataModel";
-import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
 import { DataTable } from "@/components/ui/data-table";
 import type { DataTableFeatures } from "@/components/ui/data-table-features";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import {
   Dialog,
   DialogContent,
@@ -26,6 +12,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -39,6 +31,14 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { errorMessage } from "@/shared/lib/error-message";
+import { api } from "@convex/_generated/api";
+import type { Id } from "@convex/_generated/dataModel";
+import { Icon } from "@iconify/react";
+import { createColumnHelper } from "@tanstack/react-table";
+import { useMutation, useQuery } from "convex/react";
+import { Info } from "lucide-react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { toast } from "sonner";
 
 type Scope = "shared" | "user";
 type Tab = "sections" | "categories" | "subcategories" | "tags";
@@ -85,7 +85,10 @@ type FormState = {
 
 const sectionHelper = createColumnHelper<DataTableFeatures, SectionRow>();
 const categoryHelper = createColumnHelper<DataTableFeatures, CategoryRow>();
-const subcategoryHelper = createColumnHelper<DataTableFeatures, SubcategoryRow>();
+const subcategoryHelper = createColumnHelper<
+  DataTableFeatures,
+  SubcategoryRow
+>();
 const tagHelper = createColumnHelper<DataTableFeatures, SectionRow>();
 
 const selectClassName =
@@ -98,7 +101,9 @@ function sameLabel(left: string, right: string) {
 function childNamesCell(names: string[], emptyLabel: string) {
   if (names.length === 0) {
     return (
-      <span className="text-sm text-[var(--muted-foreground)]">{emptyLabel}</span>
+      <span className="text-sm text-[var(--muted-foreground)]">
+        {emptyLabel}
+      </span>
     );
   }
   return <span className="line-clamp-2 text-sm">{names.join(", ")}</span>;
@@ -154,19 +159,33 @@ function TitleInfo({ isAdmin }: { isAdmin: boolean }) {
         <PopoverHeader className="gap-1.5">
           <PopoverTitle>Classifications</PopoverTitle>
           <PopoverDescription>
-            Shared is the starter pack you get. User is any extra label that is only yours.
+            Shared is the starter pack you get. User is any extra label that is
+            only yours.
           </PopoverDescription>
           <ul className="mt-1.5 list-disc space-y-1 pl-4 text-muted-foreground">
-            <li>Section is the top bucket (Food, Lifestyle, Development, Travel)</li>
-            <li>Category is the kind of spend inside that bucket (Groceries, Software, Pets)</li>
-            <li>Subcategory is the specific flavor (Supermarket, Bars & Pubs, Audiobooks)</li>
+            <li>
+              Section is the top bucket (Food, Lifestyle, Development, Travel)
+            </li>
+            <li>
+              Category is the kind of spend inside that bucket (Groceries,
+              Software, Pets)
+            </li>
+            <li>
+              Subcategory is the specific flavor (Supermarket, Bars & Pubs,
+              Audiobooks)
+            </li>
             <li>Tag is an extra sticker that can sit on many kinds of spend</li>
             <li>Shared is the catalog every new user starts with</li>
             <li>User is any label you added that is not in shared</li>
-            <li>You can change your copy of a shared label. That stays on your list</li>
+            <li>
+              You can change your copy of a shared label. That stays on your
+              list
+            </li>
             <li>Rename a shared label and it moves to User</li>
             {isAdmin ? (
-              <li>Admins can add a liked user label to shared, or take one out</li>
+              <li>
+                Admins can add a liked user label to shared, or take one out
+              </li>
             ) : null}
           </ul>
         </PopoverHeader>
@@ -246,8 +265,7 @@ export function ClassificationsPanel() {
   }
 
   function subsForCategory(row: CategoryRow): FormSub[] {
-    const names =
-      row.subcategoryNames.length > 0 ? row.subcategoryNames : [""];
+    const names = row.subcategoryNames.length > 0 ? row.subcategoryNames : [""];
     return names.map((name) => {
       const mineRow = findMineSubcategory(row.name, name);
       return { id: mineRow?.id, name };
@@ -546,8 +564,7 @@ export function ClassificationsPanel() {
           kind === "subcategory"
             ? (row.id as Id<"transactionSubcategories">)
             : undefined,
-        tagId:
-          kind === "tag" ? (row.id as Id<"transactionTags">) : undefined,
+        tagId: kind === "tag" ? (row.id as Id<"transactionTags">) : undefined,
       });
       toast.success(
         result.added > 0
@@ -561,7 +578,11 @@ export function ClassificationsPanel() {
 
   async function unshare(
     kind: "section" | "category" | "subcategory" | "tag",
-    row: { name: string; sectionName?: string | null; categoryName?: string | null },
+    row: {
+      name: string;
+      sectionName?: string | null;
+      categoryName?: string | null;
+    },
   ) {
     const section =
       kind === "section" || kind === "tag" ? row.name : (row.sectionName ?? "");
@@ -634,7 +655,9 @@ export function ClassificationsPanel() {
             childNamesCell(getValue() ?? [], "No categories"),
           filterFn: (row, _columnId, filterValue) => {
             const names = row.original.categoryNames ?? [];
-            const needle = String(filterValue ?? "").trim().toLowerCase();
+            const needle = String(filterValue ?? "")
+              .trim()
+              .toLowerCase();
             if (!needle) return true;
             return names.some((name) => name.toLowerCase().includes(needle));
           },
@@ -707,7 +730,9 @@ export function ClassificationsPanel() {
             childNamesCell(getValue() ?? [], "Needs a subcategory"),
           filterFn: (row, _columnId, filterValue) => {
             const names = row.original.subcategoryNames ?? [];
-            const needle = String(filterValue ?? "").trim().toLowerCase();
+            const needle = String(filterValue ?? "")
+              .trim()
+              .toLowerCase();
             if (!needle) return true;
             return names.some((name) => name.toLowerCase().includes(needle));
           },
@@ -878,9 +903,7 @@ export function ClassificationsPanel() {
         const sectionId = form.parentId as Id<"transactionSections">;
         const subs = form.subs
           .map((sub) => ({
-            id: sub.id
-              ? (sub.id as Id<"transactionSubcategories">)
-              : undefined,
+            id: sub.id ? (sub.id as Id<"transactionSubcategories">) : undefined,
             name: sub.name.trim(),
           }))
           .filter((sub) => sub.name);
@@ -1018,7 +1041,9 @@ export function ClassificationsPanel() {
       {
         columnId: "categoryNames",
         label: "Category",
-        options: uniqueFilterOptions(sections.flatMap((row) => row.categoryNames ?? [])),
+        options: uniqueFilterOptions(
+          sections.flatMap((row) => row.categoryNames ?? []),
+        ),
         cascadeFrom: ["name"],
       },
     ],
@@ -1053,12 +1078,16 @@ export function ClassificationsPanel() {
       {
         columnId: "sectionName",
         label: "Section",
-        options: uniqueFilterOptions(subcategories.map((row) => row.sectionName)),
+        options: uniqueFilterOptions(
+          subcategories.map((row) => row.sectionName),
+        ),
       },
       {
         columnId: "categoryName",
         label: "Category",
-        options: uniqueFilterOptions(subcategories.map((row) => row.categoryName)),
+        options: uniqueFilterOptions(
+          subcategories.map((row) => row.categoryName),
+        ),
         cascadeFrom: ["sectionName"],
       },
       {
@@ -1074,7 +1103,7 @@ export function ClassificationsPanel() {
   return (
     <div className="space-y-8">
       <header className="border-b border-[var(--border)] pb-6">
-        <h1 className="flex items-center gap-2 text-3xl font-semibold tracking-tight">
+        <h1 className="type-page flex items-center gap-2">
           Classifications
           <TitleInfo isAdmin={isAdmin} />
         </h1>
@@ -1112,7 +1141,7 @@ export function ClassificationsPanel() {
             onValueChange={(value) => setTab(value as Tab)}
             className="gap-4"
           >
-            <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center justify-between gap-4">
               <TabsList>
                 <TabsTrigger value="sections">Sections</TabsTrigger>
                 <TabsTrigger value="categories">Categories</TabsTrigger>
@@ -1130,7 +1159,7 @@ export function ClassificationsPanel() {
               ) : null}
             </div>
 
-            <TabsContent value="sections" className="space-y-3">
+            <TabsContent value="sections" className="space-y-4">
               {sections.length === 0 ? (
                 <p className="text-sm text-[var(--muted-foreground)]">
                   {isUserScope
@@ -1151,7 +1180,7 @@ export function ClassificationsPanel() {
               )}
             </TabsContent>
 
-            <TabsContent value="categories" className="space-y-3">
+            <TabsContent value="categories" className="space-y-4">
               {categories.length === 0 ? (
                 <p className="text-sm text-[var(--muted-foreground)]">
                   {isUserScope
@@ -1172,7 +1201,7 @@ export function ClassificationsPanel() {
               )}
             </TabsContent>
 
-            <TabsContent value="subcategories" className="space-y-3">
+            <TabsContent value="subcategories" className="space-y-4">
               {subcategories.length === 0 ? (
                 <p className="text-sm text-[var(--muted-foreground)]">
                   {isUserScope
@@ -1193,7 +1222,7 @@ export function ClassificationsPanel() {
               )}
             </TabsContent>
 
-            <TabsContent value="tags" className="space-y-3">
+            <TabsContent value="tags" className="space-y-4">
               {tags.length === 0 ? (
                 <p className="text-sm text-[var(--muted-foreground)]">
                   {isUserScope
@@ -1224,12 +1253,12 @@ export function ClassificationsPanel() {
       >
         {form ? (
           <DialogContent
-            className="flex flex-col gap-3 overflow-visible sm:max-w-lg"
+            className="flex flex-col gap-4 overflow-visible sm:max-w-lg"
             showCloseButton
           >
             <form
               onSubmit={(event) => void onSubmit(event)}
-              className="flex flex-col gap-3"
+              className="flex flex-col gap-4"
             >
               <DialogHeader className="shrink-0">
                 <DialogTitle>
@@ -1247,7 +1276,7 @@ export function ClassificationsPanel() {
                 </DialogDescription>
               </DialogHeader>
 
-              <div className="grid shrink-0 gap-3 sm:grid-cols-2">
+              <div className="grid shrink-0 gap-4 sm:grid-cols-2">
                 {form.tab === "categories" ? (
                   <div className="space-y-1.5">
                     <Label htmlFor="classification-section">Section</Label>
@@ -1341,7 +1370,9 @@ export function ClassificationsPanel() {
                           size="icon-sm"
                           className="shrink-0"
                           onClick={() => {
-                            const next = form.subs.filter((_, i) => i !== index);
+                            const next = form.subs.filter(
+                              (_, i) => i !== index,
+                            );
                             setForm({
                               ...form,
                               subs: next.length > 0 ? next : [{ name: "" }],

@@ -1,13 +1,19 @@
 "use client";
 
+import { getVaultMasterKey, subscribeVaultSession } from "@/crypto/session";
+import { useFeatureFlag } from "@/domains/feature-flags/ui/useFeatureFlag";
+import {
+  hydrateVaultSession,
+  type VaultClient,
+} from "@/domains/vault/application/ensureVaultFromPasscode";
+import {
+  loadPrivateLedger,
+  type VaultListClient,
+} from "@/domains/vault/application/loadPrivateLedger";
+import type { PrivateLedger } from "@/domains/vault/domain/privateLedger";
 import { api } from "@convex/_generated/api";
 import { useConvex, useConvexAuth, useQuery } from "convex/react";
 import { useEffect, useRef, useState } from "react";
-import { getVaultMasterKey, subscribeVaultSession } from "@/crypto/session";
-import { hydrateVaultSession, type VaultClient } from "@/domains/vault/application/ensureVaultFromPasscode";
-import { useFeatureFlag } from "@/domains/feature-flags/ui/useFeatureFlag";
-import { loadPrivateLedger, type VaultListClient } from "@/domains/vault/application/loadPrivateLedger";
-import type { PrivateLedger } from "@/domains/vault/domain/privateLedger";
 
 const EMPTY: PrivateLedger = {
   transactions: [],
@@ -33,10 +39,14 @@ export function usePrivateLedger() {
   const { isAuthenticated } = useConvexAuth();
   const client = useConvex();
   const me = useQuery(api.users.me, isAuthenticated ? {} : "skip");
-  const vault = useQuery(api.vaults.get, isAuthenticated && encryptedLedger ? {} : "skip");
+  const vault = useQuery(
+    api.vaults.get,
+    isAuthenticated && encryptedLedger ? {} : "skip",
+  );
   const [unlocked, setUnlocked] = useState(Boolean(getVaultMasterKey()));
   const [ledger, setLedger] = useState<PrivateLedger>(EMPTY);
   const [loading, setLoading] = useState(false);
+  const [hydrating, setHydrating] = useState(() => !getVaultMasterKey());
   const [error, setError] = useState<string | null>(null);
   const [version, setVersion] = useState(ledgerEpoch);
   const vaultUpdatedAt = vault?.updatedAt ?? 0;
@@ -61,8 +71,18 @@ export function usePrivateLedger() {
 
   useEffect(() => {
     if (!encryptedLedger || !isAuthenticated) return;
-    if (getVaultMasterKey()) return;
-    void hydrateVaultSession(client as unknown as VaultClient);
+    if (getVaultMasterKey()) {
+      setHydrating(false);
+      return;
+    }
+    let cancelled = false;
+    setHydrating(true);
+    void hydrateVaultSession(client as unknown as VaultClient).finally(() => {
+      if (!cancelled) setHydrating(false);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [client, encryptedLedger, isAuthenticated, vaultId]);
 
   useEffect(() => {
@@ -78,10 +98,13 @@ export function usePrivateLedger() {
       if (!hasLedger.current) setLoading(true);
       setError(null);
       try {
-        const next = await loadPrivateLedger(client as unknown as VaultListClient, {
-          userId: String(me.userId),
-          vaultId,
-        });
+        const next = await loadPrivateLedger(
+          client as unknown as VaultListClient,
+          {
+            userId: String(me.userId),
+            vaultId,
+          },
+        );
         if (!cancelled) {
           hasLedger.current = true;
           setLedger(next);
@@ -89,7 +112,11 @@ export function usePrivateLedger() {
       } catch (cause) {
         if (!cancelled) {
           setLedger(EMPTY);
-          setError(cause instanceof Error ? cause.message : "Could not decrypt the ledger.");
+          setError(
+            cause instanceof Error
+              ? cause.message
+              : "Could not decrypt the ledger.",
+          );
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -101,6 +128,8 @@ export function usePrivateLedger() {
     };
   }, [client, encryptedLedger, me, unlocked, vaultId, vaultUpdatedAt, version]);
 
+  const decrypting = Boolean(unlocked && vaultId && !hasLedger.current);
+
   return {
     encryptedLedger,
     unlocked,
@@ -108,7 +137,13 @@ export function usePrivateLedger() {
     vaultId: vault?.vaultId ?? null,
     keyId: vault?.currentKeyId ?? null,
     userId: me ? String(me.userId) : null,
-    loading: encryptedLedger && (me === undefined || vault === undefined || loading),
+    loading:
+      encryptedLedger &&
+      (me === undefined ||
+        vault === undefined ||
+        loading ||
+        decrypting ||
+        hydrating),
     error,
     ledger,
     reload: bumpLedgerEpoch,

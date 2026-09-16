@@ -1,17 +1,5 @@
 "use client";
 
-import { Info } from "lucide-react";
-import { useQueryClient } from "@tanstack/react-query";
-import {
-  DashboardToolbar,
-  OverviewBadgesSkeleton,
-  OverviewPanel,
-  useDashboard,
-} from "@/domains/dashboard/ui/DashboardPanels";
-import { StatementUploadLogs } from "@/domains/statements/ui/StatementUploadLogs";
-import { statementQueryKeys } from "@/domains/statements/queries/query-keys";
-import { analysisQueryKeys } from "@/domains/analysis/queries/query-keys";
-import { queryKeys } from "@/domains/dashboard/queries/query-keys";
 import {
   Popover,
   PopoverContent,
@@ -20,6 +8,18 @@ import {
   PopoverTitle,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { analysisQueryKeys } from "@/domains/analysis/queries/query-keys";
+import { queryKeys } from "@/domains/dashboard/queries/query-keys";
+import {
+  DashboardToolbar,
+  OverviewBadgesSkeleton,
+  OverviewPanel,
+  useDashboard,
+} from "@/domains/dashboard/ui/DashboardPanels";
+import { statementQueryKeys } from "@/domains/statements/queries/query-keys";
+import { StatementUploadLogs } from "@/domains/statements/ui/StatementUploadLogs";
+import { useQueryClient } from "@tanstack/react-query";
+import { Info } from "lucide-react";
 
 export default function StatementsPage() {
   const dashboard = useDashboard();
@@ -30,14 +30,14 @@ export default function StatementsPage() {
   return (
     <div className="space-y-8">
       <header className="flex flex-col gap-4 border-b border-[var(--border)] pb-6 sm:flex-row sm:items-end sm:justify-between">
-        <div className="space-y-1">
-          <p className="text-sm tracking-[0.18em] text-[var(--muted-foreground)] uppercase">
+        <div className="space-y-2">
+          <p className="type-kicker">
             Statements
           </p>
-          <h1 className="text-3xl font-semibold tracking-tight">
+          <h1 className="type-page">
             Statement imports
           </h1>
-          <p className="max-w-xl text-[var(--muted-foreground)]">
+          <p className="type-lead max-w-xl">
             Upload bank PDFs, set upload rules, and check what got imported.
           </p>
         </div>

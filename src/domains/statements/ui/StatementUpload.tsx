@@ -720,7 +720,7 @@ export function StatementUpload({ onImported }: Props) {
 
           {ocrPicker.inputs}
 
-          <div className="space-y-3">
+          <div className="space-y-4">
             {ocrPicker.showCameraMenu ? (
               <DropdownMenu>
                 <DropdownMenuTrigger
