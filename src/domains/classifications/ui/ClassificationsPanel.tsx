@@ -3,6 +3,7 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
+import { EmptyPrompt } from "@/components/ui/empty-prompt";
 import { DataTable } from "@/components/ui/data-table";
 import type { DataTableFeatures } from "@/components/ui/data-table-features";
 import {
@@ -40,6 +41,7 @@ import { useMutation, useQuery } from "convex/react";
 import { Info } from "lucide-react";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { toast } from "sonner";
+import { useRouter } from "next/navigation";
 
 type Scope = "shared" | "user";
 type Tab = "sections" | "categories" | "subcategories" | "tags";
@@ -214,7 +216,14 @@ function emptyForm(tab: Tab): FormState {
   };
 }
 
-export function ClassificationsPanel() {
+export function ClassificationsPanel({
+  initialTab,
+  openCreate = false,
+}: {
+  initialTab?: Tab;
+  openCreate?: boolean;
+} = {}) {
+  const router = useRouter();
   const catalog = useQuery(api.classifications.catalog, {});
   const repairHierarchy = useMutation(api.classifications.repairHierarchy);
   const createSection = useMutation(api.classifications.createSection);
@@ -233,9 +242,11 @@ export function ClassificationsPanel() {
   const updateTag = useMutation(api.classifications.updateTag);
   const deleteTag = useMutation(api.classifications.deleteTag);
 
-  const [scope, setScope] = useState<Scope>("shared");
-  const [tab, setTab] = useState<Tab>("sections");
-  const [form, setForm] = useState<FormState | null>(null);
+  const [scope, setScope] = useState<Scope>(openCreate ? "user" : "shared");
+  const [tab, setTab] = useState<Tab>(initialTab ?? "sections");
+  const [form, setForm] = useState<FormState | null>(
+    openCreate ? emptyForm(initialTab ?? "tags") : null,
+  );
   const [saving, setSaving] = useState(false);
 
   const isAdmin = catalog?.isAdmin ?? false;
@@ -997,6 +1008,12 @@ export function ClassificationsPanel() {
           ? "subcategory"
           : "tag";
 
+  function startCreate(nextTab: Tab = tab) {
+    setScope("user");
+    setTab(nextTab);
+    setForm(emptyForm(nextTab));
+  }
+
   const sharedSections = (catalog?.shared.sections ?? []).map((row) => {
     const mineRow = findMineSection(row.name);
     const categoryNames = (catalog?.shared.categories ?? [])
@@ -1192,11 +1209,28 @@ export function ClassificationsPanel() {
 
             <TabsContent value="sections" className="space-y-4">
               {sections.length === 0 ? (
-                <p className="text-sm text-[var(--muted-foreground)]">
-                  {isUserScope
-                    ? "No user-only sections. Names that match shared stay under Shared."
-                    : "No shared sections yet."}
-                </p>
+                <EmptyPrompt
+                  className="py-10"
+                  title={
+                    isUserScope
+                      ? "No user-only sections"
+                      : "No shared sections yet"
+                  }
+                  description={
+                    isUserScope
+                      ? "Names that match shared stay under Shared."
+                      : "Add one on your User list."
+                  }
+                  action={
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={() => startCreate("sections")}
+                    >
+                      Add section
+                    </Button>
+                  }
+                />
               ) : (
                 <DataTable
                   columns={sectionColumns}
@@ -1213,11 +1247,28 @@ export function ClassificationsPanel() {
 
             <TabsContent value="categories" className="space-y-4">
               {categories.length === 0 ? (
-                <p className="text-sm text-[var(--muted-foreground)]">
-                  {isUserScope
-                    ? "No user-only categories. Names that match shared stay under Shared."
-                    : "No shared categories yet."}
-                </p>
+                <EmptyPrompt
+                  className="py-10"
+                  title={
+                    isUserScope
+                      ? "No user-only categories"
+                      : "No shared categories yet"
+                  }
+                  description={
+                    isUserScope
+                      ? "Names that match shared stay under Shared."
+                      : "Add one on your User list."
+                  }
+                  action={
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={() => startCreate("categories")}
+                    >
+                      Add category
+                    </Button>
+                  }
+                />
               ) : (
                 <DataTable
                   columns={categoryColumns}
@@ -1234,11 +1285,28 @@ export function ClassificationsPanel() {
 
             <TabsContent value="subcategories" className="space-y-4">
               {subcategories.length === 0 ? (
-                <p className="text-sm text-[var(--muted-foreground)]">
-                  {isUserScope
-                    ? "No user-only subcategories. Names that match shared stay under Shared."
-                    : "No shared subcategories yet."}
-                </p>
+                <EmptyPrompt
+                  className="py-10"
+                  title={
+                    isUserScope
+                      ? "No user-only subcategories"
+                      : "No shared subcategories yet"
+                  }
+                  description={
+                    isUserScope
+                      ? "Names that match shared stay under Shared."
+                      : "Add one on your User list."
+                  }
+                  action={
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={() => startCreate("subcategories")}
+                    >
+                      Add subcategory
+                    </Button>
+                  }
+                />
               ) : (
                 <DataTable
                   columns={subcategoryColumns}
@@ -1255,11 +1323,26 @@ export function ClassificationsPanel() {
 
             <TabsContent value="tags" className="space-y-4">
               {tags.length === 0 ? (
-                <p className="text-sm text-[var(--muted-foreground)]">
-                  {isUserScope
-                    ? "No user-only tags. Names that match shared stay under Shared."
-                    : "No shared tags yet."}
-                </p>
+                <EmptyPrompt
+                  className="py-10"
+                  title={
+                    isUserScope ? "No user-only tags" : "No shared tags yet"
+                  }
+                  description={
+                    isUserScope
+                      ? "Names that match shared stay under Shared."
+                      : "Add one on your User list."
+                  }
+                  action={
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={() => startCreate("tags")}
+                    >
+                      Add tag
+                    </Button>
+                  }
+                />
               ) : (
                 <DataTable
                   columns={tagColumns}

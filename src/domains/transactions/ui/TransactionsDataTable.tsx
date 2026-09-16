@@ -29,14 +29,17 @@ const columnHelper = createColumnHelper<
 type ColumnBand = "read" | "invent";
 
 function bandMeta(
-  width: string,
+  width: string | undefined,
   band: ColumnBand,
   description: string,
   label?: string,
 ) {
-  return label
-    ? { width, band, description, label }
-    : { width, band, description };
+  return {
+    ...(width ? { width } : {}),
+    band,
+    description,
+    ...(label ? { label } : {}),
+  };
 }
 
 function textOrDash(value: string | number | boolean | null | undefined) {
@@ -57,31 +60,7 @@ function uniqueSorted(values: Array<string | null | undefined>) {
     .map((value) => ({ value, label: value }));
 }
 
-/** Fit money cols to longest value + header chrome (sort / filter). */
-function autoMoneyWidth(
-  header: string,
-  formatted: string[],
-  { filter = false }: { filter?: boolean } = {},
-) {
-  const chromeCh = filter ? 6 : 3;
-  let maxCh = header.length + chromeCh;
-  for (const value of formatted) {
-    maxCh = Math.max(maxCh, value.length + 1);
-  }
-  return `${Math.max(maxCh, 8)}ch`;
-}
-
-function buildColumns(
-  accountNameById: Map<string, string>,
-  transactions: DashboardTransaction[],
-) {
-  const amountLabels: string[] = [];
-  for (const txn of transactions) {
-    const ccy = txn.isoCurrencyCode ?? "CAD";
-    amountLabels.push(formatMoney(Number(txn.amount), ccy));
-  }
-  const amountWidth = autoMoneyWidth("Amount", amountLabels, { filter: true });
-
+function buildColumns(accountNameById: Map<string, string>) {
   // Left = paper facts (AI read from statement). Right = AI invent / labels.
   return columnHelper.columns([
     columnHelper.display({
@@ -139,11 +118,22 @@ function buildColumns(
         }),
         columnHelper.accessor("amount", {
           header: "Amount",
-          meta: bandMeta(
-            amountWidth,
-            "read",
-            "Signed amount. Positive = money out.",
-          ),
+          meta: {
+            ...bandMeta(
+              undefined,
+              "read",
+              "Signed amount. Positive = money out.",
+            ),
+            autoWidth: (_value, row) => {
+              const txn = row as DashboardTransaction;
+              return formatMoney(
+                Number(txn.amount),
+                txn.isoCurrencyCode ?? "CAD",
+              );
+            },
+            autoWidthPadCh: 3,
+            autoWidthMinCh: 16,
+          },
           cell: ({ row, getValue }) => (
             <MoneyText
               amount={Number(getValue())}
@@ -162,11 +152,15 @@ function buildColumns(
       columns: columnHelper.columns([
         columnHelper.accessor("sectionName", {
           header: "Section",
-          meta: bandMeta(
-            "14rem",
-            "invent",
-            "Top spend bucket (Lifestyle, Transport).",
-          ),
+          meta: {
+            ...bandMeta(
+              undefined,
+              "invent",
+              "Top spend bucket (Lifestyle, Transport).",
+            ),
+            autoWidth: true,
+            autoWidthPadCh: 8,
+          },
           cell: ({ row, getValue }) => (
             <TaxonomyCell
               transactionId={row.original.transactionId}
@@ -179,7 +173,11 @@ function buildColumns(
         }),
         columnHelper.accessor("categoryName", {
           header: "Category",
-          meta: bandMeta("20rem", "invent", "Mid spend bucket under Section."),
+          meta: {
+            ...bandMeta(undefined, "invent", "Mid spend bucket under Section."),
+            autoWidth: true,
+            autoWidthPadCh: 8,
+          },
           cell: ({ row, getValue }) => (
             <TaxonomyCell
               transactionId={row.original.transactionId}
@@ -193,11 +191,15 @@ function buildColumns(
         }),
         columnHelper.accessor("subcategoryName", {
           header: "Subcategories",
-          meta: bandMeta(
-            "20rem",
-            "invent",
-            "Fine spend label (leaf category).",
-          ),
+          meta: {
+            ...bandMeta(
+              undefined,
+              "invent",
+              "Fine spend label (leaf category).",
+            ),
+            autoWidth: true,
+            autoWidthPadCh: 8,
+          },
           cell: ({ row, getValue }) => (
             <TaxonomyCell
               transactionId={row.original.transactionId}
@@ -263,7 +265,10 @@ function buildColumns(
             header: "Name",
             meta: bandMeta("22rem", "read", "Friendly account name."),
             cell: ({ getValue }) => (
-              <span className="block truncate text-sm" title={String(getValue())}>
+              <span
+                className="block truncate text-sm"
+                title={String(getValue())}
+              >
                 {String(getValue())}
               </span>
             ),
@@ -556,8 +561,8 @@ export function TransactionsDataTable({
   }, [accounts]);
 
   const columns = useMemo(
-    () => buildColumns(accountNameById, transactions),
-    [accountNameById, transactions],
+    () => buildColumns(accountNameById),
+    [accountNameById],
   );
 
   const descriptionOptions = useMemo(

@@ -62,6 +62,8 @@ import {
 import { useMemo, useState, type ReactNode } from "react";
 import type { DateRange } from "react-day-picker";
 
+type AutoWidthFormat = (value: unknown, row: unknown) => string;
+
 type ColumnMeta = {
   width?: string;
   band?: "read" | "invent";
@@ -72,13 +74,132 @@ type ColumnMeta = {
   wrap?: boolean;
   /** Skip max-width so table-fixed leftover space can go to this column. */
   grow?: boolean;
+  /**
+   * Size the column to the longest formatted cell (plus header chrome).
+   * `true` uses String(value). Pass a formatter for money / labels.
+   */
+  autoWidth?: boolean | AutoWidthFormat;
+  /** Extra `ch` on the longest cell (clear button, padding). Default 1. */
+  autoWidthPadCh?: number;
+  autoWidthMinCh?: number;
+  autoWidthMaxCh?: number;
 };
+
+type NestedColumnDef<TData extends RowData> = ColumnDef<
+  DataTableFeatures,
+  TData
+> & {
+  columns?: NestedColumnDef<TData>[];
+  accessorKey?: string;
+  accessorFn?: (row: TData, index: number) => unknown;
+  enableSorting?: boolean;
+};
+
+function autoWidthCellText(value: unknown): string {
+  if (value == null || value === "") return "";
+  if (typeof value === "string") return value;
+  if (typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => autoWidthCellText(item)).join(", ");
+  }
+  return "";
+}
+
+function leafColumnDefs<TData extends RowData>(
+  columns: NestedColumnDef<TData>[],
+): NestedColumnDef<TData>[] {
+  const leaves: NestedColumnDef<TData>[] = [];
+  for (const column of columns) {
+    if (column.columns?.length) {
+      leaves.push(...leafColumnDefs(column.columns));
+      continue;
+    }
+    leaves.push(column);
+  }
+  return leaves;
+}
+
+function columnDefId<TData extends RowData>(
+  column: NestedColumnDef<TData>,
+): string | undefined {
+  if (column.id) return column.id;
+  if (column.accessorKey != null) return String(column.accessorKey);
+  return undefined;
+}
+
+function columnDefValue<TData extends RowData>(
+  column: NestedColumnDef<TData>,
+  row: TData,
+  index: number,
+): unknown {
+  if (typeof column.accessorFn === "function") {
+    return column.accessorFn(row, index);
+  }
+  const key = column.accessorKey ?? column.id;
+  if (!key) return undefined;
+  return (row as Record<string, unknown>)[key];
+}
+
+function computeAutoWidths<TData extends RowData>(
+  columns: ColumnDef<DataTableFeatures, TData>[],
+  data: TData[],
+  filterColumnIds: Set<string>,
+): Map<string, string> {
+  const widths = new Map<string, string>();
+  for (const column of leafColumnDefs(columns as NestedColumnDef<TData>[])) {
+    const meta = column.meta as ColumnMeta | undefined;
+    if (!meta?.autoWidth) continue;
+    const columnId = columnDefId(column);
+    if (!columnId) continue;
+
+    const format: AutoWidthFormat =
+      typeof meta.autoWidth === "function" ? meta.autoWidth : autoWidthCellText;
+    const padCh = meta.autoWidthPadCh ?? 1;
+    const minCh = meta.autoWidthMinCh ?? 8;
+    const headerLabel =
+      meta.label ??
+      (typeof column.header === "string" ? column.header : columnId);
+    const headerChromeCh = filterColumnIds.has(columnId)
+      ? 6
+      : column.enableSorting === false
+        ? 0
+        : 3;
+    let maxCh = headerLabel.length + headerChromeCh;
+
+    for (let index = 0; index < data.length; index += 1) {
+      const row = data[index];
+      if (row == null) continue;
+      const text = format(columnDefValue(column, row, index), row);
+      maxCh = Math.max(maxCh, text.length + padCh);
+    }
+
+    if (meta.autoWidthMaxCh != null) {
+      maxCh = Math.min(maxCh, meta.autoWidthMaxCh);
+    }
+    widths.set(columnId, `${Math.max(maxCh, minCh)}ch`);
+  }
+  return widths;
+}
 
 function columnSizeStyle(meta: ColumnMeta | undefined) {
   const width = meta?.width;
   if (!width) return undefined;
-  if (meta?.grow) return { width, minWidth: width };
+  // Grow cols must not set `width` on cells. table-fixed treats that as a
+  // specified column width and stretches actions with leftover space.
+  if (meta?.grow) return { minWidth: width };
   return { width, minWidth: width, maxWidth: width };
+}
+
+function withAutoWidth(
+  meta: ColumnMeta | undefined,
+  columnId: string,
+  autoWidths: Map<string, string>,
+): ColumnMeta | undefined {
+  const width = autoWidths.get(columnId);
+  if (!width) return meta;
+  return { ...meta, width };
 }
 
 function HeaderLabel({
@@ -380,6 +501,11 @@ export function DataTable<TData extends RowData>({
     }
     return map;
   }, [filters]);
+
+  const autoWidths = useMemo(
+    () => computeAutoWidths(columns, data, new Set(filtersByColumnId.keys())),
+    [columns, data, filtersByColumnId],
+  );
 
   const activeFilterValue = (columnId: string) => {
     const hit = columnFilters.find((filter) => filter.id === columnId);
@@ -810,11 +936,18 @@ export function DataTable<TData extends RowData>({
           >
             <colgroup>
               {table.getVisibleLeafColumns().map((column) => {
-                const width = (column.columnDef.meta as ColumnMeta | undefined)
-                  ?.width;
-                return (
-                  <col key={column.id} style={width ? { width } : undefined} />
+                const meta = withAutoWidth(
+                  column.columnDef.meta as ColumnMeta | undefined,
+                  column.id,
+                  autoWidths,
                 );
+                const width = meta?.width;
+                // Omit width on grow cols so leftover space does not
+                // scale the actions column (table-fixed + w-full).
+                if (!width || meta?.grow) {
+                  return <col key={column.id} />;
+                }
+                return <col key={column.id} style={{ width }} />;
               })}
             </colgroup>
             <TableHeader>
@@ -846,19 +979,23 @@ export function DataTable<TData extends RowData>({
                         columnFilter && filterValue !== "all",
                       );
                       const showGroupTitle = isGroupParent;
-                      const columnMeta = renderColumn.columnDef.meta as
-                        | ColumnMeta
-                        | undefined;
-                      const groupLeafWidth =
+                      const columnMeta = withAutoWidth(
+                        renderColumn.columnDef.meta as ColumnMeta | undefined,
+                        renderColumn.id,
+                        autoWidths,
+                      );
+                      const groupLeafMeta =
                         showGroupTitle && header.colSpan === 1
-                          ? (
+                          ? withAutoWidth(
                               header.subHeaders[0]?.column.columnDef.meta as
                                 | ColumnMeta
-                                | undefined
-                            )?.width
+                                | undefined,
+                              header.subHeaders[0]?.column.id ?? "",
+                              autoWidths,
+                            )
                           : undefined;
                       const width = showGroupTitle
-                        ? groupLeafWidth
+                        ? groupLeafMeta?.width
                         : columnMeta?.width;
                       const inventBand = columnMeta?.band === "invent";
                       const description = columnMeta?.description;
@@ -896,7 +1033,7 @@ export function DataTable<TData extends RowData>({
                           className={[
                             "h-auto min-h-10 whitespace-nowrap",
                             width ? "overflow-hidden" : "",
-                            isActionsCol ? "px-0" : "",
+                            isActionsCol ? "w-10 max-w-10 px-0" : "",
                             showGroupTitle
                               ? "bg-[var(--muted)]/40 text-center text-xs font-semibold tracking-wide uppercase"
                               : "",
@@ -1011,9 +1148,11 @@ export function DataTable<TData extends RowData>({
                     data-state={row.getIsSelected() && "selected"}
                   >
                     {row.getVisibleCells().map((cell) => {
-                      const cellMeta = cell.column.columnDef.meta as
-                        | ColumnMeta
-                        | undefined;
+                      const cellMeta = withAutoWidth(
+                        cell.column.columnDef.meta as ColumnMeta | undefined,
+                        cell.column.id,
+                        autoWidths,
+                      );
                       const width = cellMeta?.width;
                       const inventBand = cellMeta?.band === "invent";
                       const isActionsCol = cell.column.id === "actions";
@@ -1032,7 +1171,7 @@ export function DataTable<TData extends RowData>({
                               ? "whitespace-normal align-top"
                               : "overflow-hidden text-ellipsis whitespace-nowrap align-middle",
                             width ? "overflow-hidden" : "",
-                            isActionsCol ? "px-0" : "",
+                            isActionsCol ? "w-10 max-w-10 px-0" : "",
                             inventBand
                               ? "border-l border-[var(--border)] bg-[var(--muted)]/20"
                               : "",

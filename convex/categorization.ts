@@ -16,6 +16,7 @@ import {
   taxonomyKey,
 } from "./lib/categorization";
 import { ensureMerchant } from "./lib/ensureMerchant";
+import { retargetTxnMerchant } from "./lib/merchantTxnCount";
 import { SEED_CATEGORY_PATHS } from "./lib/seedCategoryPaths";
 import { ensureSeedSharedTags, sortSharedTagNames } from "./lib/seedSharedTags";
 import { SPREAD_NAMES } from "./lib/spreads";
@@ -568,6 +569,7 @@ export const apply = mutation({
         if (!args.overwrite && isCategorized(row)) continue;
         if (descriptionKey(row.description, row.amount) !== group.key)
           throw new Error("Description changed");
+        const previous = row.merchantId ?? null;
         await ctx.db.patch(row._id, {
           ...ids,
           merchantId: merchant._id,
@@ -584,6 +586,7 @@ export const apply = mutation({
             : {}),
           updatedAt: Date.now(),
         });
+        await retargetTxnMerchant(ctx, previous, merchant._id);
         groupApplied++;
         applied++;
       }
@@ -652,6 +655,7 @@ export const recategorize = mutation({
       await loadTagCatalog(ctx, user._id),
     );
     if (resolvedTags) await rememberUserTags(ctx, user._id, resolvedTags);
+    const previous = row.merchantId ?? null;
     await ctx.db.patch(row._id, {
       ...ids,
       merchantId: merchant._id,
@@ -668,6 +672,7 @@ export const recategorize = mutation({
         : {}),
       updatedAt: Date.now(),
     });
+    await retargetTxnMerchant(ctx, previous, merchant._id);
     const stored = resolvedTags ? { ...p, tags: resolvedTags } : p;
     const rule = await ctx.db
       .query("categorizationRules")

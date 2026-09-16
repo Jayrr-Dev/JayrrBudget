@@ -2,38 +2,42 @@ import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { requireUser } from "./lib/auth";
 import { isCategorized } from "./lib/categorization";
+import { bumpMerchantTxnCount } from "./lib/merchantTxnCount";
 
 const MANUAL_INSTITUTION_ID = "manual-statements";
 
-function toLog(row: {
-  uploadId: number;
-  filename: string;
-  status: string;
-  institutionName: string | null;
-  accountName: string | null;
-  accountMask: string | null;
-  currency: string | null;
-  pageCount: number | null;
-  transactionCount: number | null;
-  insertedCount: number | null;
-  updatedCount: number | null;
-  skippedCount: number | null;
-  statementPeriodStart: string | null;
-  statementPeriodEnd: string | null;
-  openingBalance: number | null;
-  closingBalance: number | null;
-  totalDebits: number | null;
-  totalCredits: number | null;
-  transactionSum: number | null;
-  computedClosing: number | null;
-  balanceDelta: number | null;
-  balanceOk: boolean | null;
-  error: string | null;
-  ocrMarkdown?: string | null;
-  ocrStorageId?: unknown;
-  createdAt: number;
-  completedAt: number | null;
-}, categorization?: { categorized: boolean; categorizedCount: number }) {
+function toLog(
+  row: {
+    uploadId: number;
+    filename: string;
+    status: string;
+    institutionName: string | null;
+    accountName: string | null;
+    accountMask: string | null;
+    currency: string | null;
+    pageCount: number | null;
+    transactionCount: number | null;
+    insertedCount: number | null;
+    updatedCount: number | null;
+    skippedCount: number | null;
+    statementPeriodStart: string | null;
+    statementPeriodEnd: string | null;
+    openingBalance: number | null;
+    closingBalance: number | null;
+    totalDebits: number | null;
+    totalCredits: number | null;
+    transactionSum: number | null;
+    computedClosing: number | null;
+    balanceDelta: number | null;
+    balanceOk: boolean | null;
+    error: string | null;
+    ocrMarkdown?: string | null;
+    ocrStorageId?: unknown;
+    createdAt: number;
+    completedAt: number | null;
+  },
+  categorization?: { categorized: boolean; categorizedCount: number },
+) {
   return {
     id: row.uploadId,
     filename: row.filename,
@@ -247,7 +251,9 @@ export const list = query({
         .withIndex("by_userId", (q) => q.eq("userId", user._id))
         .collect();
       const uploads = [];
-      for (const row of rows.slice().sort((a, b) => b.createdAt - a.createdAt)) {
+      for (const row of rows
+        .slice()
+        .sort((a, b) => b.createdAt - a.createdAt)) {
         const txs = await ctx.db
           .query("transactions")
           .withIndex("by_userId_statementUploadId", (q) =>
@@ -415,9 +421,7 @@ export const importPaperFacts = mutation({
     }
 
     const accountName =
-      args.accountName ||
-      args.institutionName ||
-      `Statement ${args.filename}`;
+      args.accountName || args.institutionName || `Statement ${args.filename}`;
 
     const existingAccount = await ctx.db
       .query("accounts")
@@ -667,6 +671,7 @@ export const remove = mutation({
     }
 
     for (const txn of toDelete) {
+      await bumpMerchantTxnCount(ctx, txn.merchantId, -1);
       await ctx.db.delete(txn._id);
     }
 

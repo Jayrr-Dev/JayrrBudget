@@ -25,16 +25,17 @@ import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { useMutation, useQuery } from "convex/react";
 import { Info } from "lucide-react";
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { toast } from "sonner";
+
+const LOGO_MAX_BYTES = 2 * 1024 * 1024;
+const LOGO_ACCEPT = "image/png,image/jpeg,image/webp,image/gif,image/svg+xml";
 
 export type EditableMerchant = {
   id: string;
   name: string;
-  company: string | null;
-  brand: string | null;
-  website: string | null;
   logoUrl: string | null;
+  logoSrc?: string | null;
 };
 
 type Props = {
@@ -58,31 +59,18 @@ function impactCopy(
   return `${affectedCount} ${noun} will be affected.`;
 }
 
-function Field({
-  label,
-  htmlFor,
-  children,
-}: {
-  label: string;
-  htmlFor: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="grid gap-1.5">
-      <Label htmlFor={htmlFor}>{label}</Label>
-      {children}
-    </div>
-  );
-}
-
 export function EditMerchantDialog({ merchant, open, onOpenChange }: Props) {
   const update = useMutation(api.merchants.update);
+  const generateLogoUploadUrl = useMutation(
+    api.merchants.generateLogoUploadUrl,
+  );
   const privateLedger = usePrivateLedger();
+  const fileRef = useRef<HTMLInputElement>(null);
   const [name, setName] = useState("");
-  const [company, setCompany] = useState("");
-  const [brand, setBrand] = useState("");
-  const [website, setWebsite] = useState("");
   const [logoUrl, setLogoUrl] = useState("");
+  const [previewSrc, setPreviewSrc] = useState<string | null>(null);
+  const [pendingStorageId, setPendingStorageId] =
+    useState<Id<"_storage"> | null>(null);
   const [busy, setBusy] = useState(false);
 
   const convexImpactArgs =
@@ -124,11 +112,46 @@ export function EditMerchantDialog({ merchant, open, onOpenChange }: Props) {
   useEffect(() => {
     if (!open || !merchant) return;
     setName(merchant.name);
-    setCompany(merchant.company ?? "");
-    setBrand(merchant.brand ?? "");
-    setWebsite(merchant.website ?? "");
     setLogoUrl(merchant.logoUrl ?? "");
+    setPreviewSrc(merchant.logoSrc ?? merchant.logoUrl ?? null);
+    setPendingStorageId(null);
   }, [open, merchant]);
+
+  async function onPickLogo(file: File | undefined) {
+    if (!file || privateLedger.encryptedLedger) return;
+    if (!file.type.startsWith("image/")) {
+      toast.error("Choose an image file");
+      return;
+    }
+    if (file.size > LOGO_MAX_BYTES) {
+      toast.error("Logo must be 2 MB or smaller");
+      return;
+    }
+    setBusy(true);
+    const localUrl = URL.createObjectURL(file);
+    setPreviewSrc(localUrl);
+    try {
+      const uploadUrl = await generateLogoUploadUrl();
+      const response = await fetch(uploadUrl, {
+        method: "POST",
+        headers: { "Content-Type": file.type },
+        body: file,
+      });
+      if (!response.ok) {
+        throw new Error("Upload failed");
+      }
+      const payload = (await response.json()) as { storageId?: string };
+      if (!payload.storageId) {
+        throw new Error("Upload failed");
+      }
+      setPendingStorageId(payload.storageId as Id<"_storage">);
+    } catch (error) {
+      setPreviewSrc(merchant?.logoSrc ?? merchant?.logoUrl ?? null);
+      toast.error(errorMessage(error, "Could not upload logo"));
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function onSubmit(event: FormEvent) {
     event.preventDefault();
@@ -143,10 +166,8 @@ export function EditMerchantDialog({ merchant, open, onOpenChange }: Props) {
       const result = await update({
         merchantId: merchant.id as Id<"merchants">,
         name: trimmed,
-        company: company.trim() || null,
-        brand: brand.trim() || null,
-        website: website.trim() || null,
         logoUrl: logoUrl.trim() || null,
+        logoStorageId: pendingStorageId ?? undefined,
       });
       if (result.merged) {
         toast.success(`Merged into ${result.merchant.name}`, {
@@ -201,7 +222,8 @@ export function EditMerchantDialog({ merchant, open, onOpenChange }: Props) {
                       Change this payee. Linked ledger rows follow.
                     </PopoverDescription>
                     <ul className="mt-1.5 list-disc space-y-1 pl-4 text-muted-foreground">
-                      <li>Name, company, brand, website, and logo</li>
+                      <li>Name and logo only</li>
+                      <li>Upload an image or paste a logo URL</li>
                       <li>
                         Same name as another merchant merges this row into that
                         one
@@ -217,7 +239,8 @@ export function EditMerchantDialog({ merchant, open, onOpenChange }: Props) {
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4">
-            <Field label="Name" htmlFor="merchant-name">
+            <div className="grid gap-1.5">
+              <Label htmlFor="merchant-name">Name</Label>
               <Input
                 id="merchant-name"
                 value={name}
@@ -226,43 +249,58 @@ export function EditMerchantDialog({ merchant, open, onOpenChange }: Props) {
                 autoFocus
                 disabled={busy}
               />
-            </Field>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="Company" htmlFor="merchant-company">
-                <Input
-                  id="merchant-company"
-                  value={company}
-                  onChange={(event) => setCompany(event.target.value)}
-                  disabled={busy}
-                />
-              </Field>
-              <Field label="Brand" htmlFor="merchant-brand">
-                <Input
-                  id="merchant-brand"
-                  value={brand}
-                  onChange={(event) => setBrand(event.target.value)}
-                  disabled={busy}
-                />
-              </Field>
             </div>
-            <Field label="Website" htmlFor="merchant-website">
-              <Input
-                id="merchant-website"
-                value={website}
-                onChange={(event) => setWebsite(event.target.value)}
-                placeholder="https://"
-                disabled={busy}
-              />
-            </Field>
-            <Field label="Logo URL" htmlFor="merchant-logo">
+            <div className="grid gap-1.5">
+              <Label>Logo</Label>
+              <div className="flex items-center gap-3">
+                <div className="flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-control-border bg-surface-elevated">
+                  {previewSrc ? (
+                    <img
+                      src={previewSrc}
+                      alt=""
+                      className="size-full object-contain"
+                    />
+                  ) : (
+                    <span className="text-xs text-muted-foreground">None</span>
+                  )}
+                </div>
+                <input
+                  ref={fileRef}
+                  type="file"
+                  accept={LOGO_ACCEPT}
+                  className="sr-only"
+                  disabled={busy || privateLedger.encryptedLedger}
+                  onChange={(event) => {
+                    void onPickLogo(event.target.files?.[0]);
+                    event.target.value = "";
+                  }}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={busy || privateLedger.encryptedLedger}
+                  onClick={() => fileRef.current?.click()}
+                >
+                  Upload image
+                </Button>
+              </div>
+            </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor="merchant-logo">Logo URL</Label>
               <Input
                 id="merchant-logo"
                 value={logoUrl}
-                onChange={(event) => setLogoUrl(event.target.value)}
+                onChange={(event) => {
+                  const next = event.target.value;
+                  setLogoUrl(next);
+                  if (!pendingStorageId) {
+                    setPreviewSrc(next.trim() || null);
+                  }
+                }}
                 placeholder="https://"
                 disabled={busy}
               />
-            </Field>
+            </div>
           </div>
           <DialogFooter className="sm:items-center sm:justify-between">
             {impactLabel ? (

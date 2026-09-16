@@ -350,6 +350,9 @@ export default defineSchema({
     brand: v.union(v.string(), v.null()),
     website: v.union(v.string(), v.null()),
     logoUrl: v.union(v.string(), v.null()),
+    logoStorageId: v.optional(v.id("_storage")),
+    /** Cached linked transaction count. Maintained on write; backfill via syncTransactionCounts. */
+    transactionCount: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })

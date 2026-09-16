@@ -1,6 +1,7 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
+import { EmptyPrompt } from "@/components/ui/empty-prompt";
 import { Spinner } from "@/components/ui/spinner";
 import {
   ACCOUNT_SECTION_LABELS,
@@ -558,9 +559,20 @@ export function BankAccountsDashboard({
           </div>
           {section.accounts.length === 0 ? (
             section.id === "lending" ? (
-              <div className="rounded-xl border border-dashed border-[var(--border)] bg-surface-elevated/70 px-4 py-6 text-sm text-[var(--muted-foreground)]">
-                No lending accounts yet. Use + to register a lending account.
-              </div>
+              <EmptyPrompt
+                className="bg-surface-elevated/70 py-6"
+                title="No lending accounts yet"
+                description="Register a loan with amortization terms."
+                action={
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => setAddLoanOpen(true)}
+                  >
+                    Register lending account
+                  </Button>
+                }
+              />
             ) : null
           ) : (
             <ul className="overflow-hidden rounded-xl border border-[var(--border)] bg-surface-elevated">

@@ -12,10 +12,13 @@ import type { DashboardData } from "@/domains/dashboard/domain/types";
 import { queryKeys } from "@/domains/dashboard/queries/query-keys";
 import type { TransactionTaxonomy } from "@/domains/transactions/application/getTransactionTaxonomy";
 import type { TaxonomyField } from "@/domains/transactions/application/updateTransactionTaxonomy";
-import { patchEncryptedTransaction, vaultWriteReady } from "@/domains/vault/application/saveEncryptedLedger";
+import {
+  patchEncryptedTransaction,
+  vaultWriteReady,
+} from "@/domains/vault/application/saveEncryptedLedger";
 import { usePrivateLedger } from "@/domains/vault/ui/usePrivateLedger";
-import { useConvex } from "convex/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useConvex } from "convex/react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
@@ -210,7 +213,9 @@ export function TaxonomyCell({
         client,
       });
       if (write) {
-        const tx = privateLedger.ledger.transactions.find((row) => row.recordId === input.transactionId);
+        const tx = privateLedger.ledger.transactions.find(
+          (row) => row.recordId === input.transactionId,
+        );
         if (!tx) throw new Error("Encrypted transaction not found.");
         const patch: Record<string, string | null> = {};
         if (input.field === "section") {
@@ -282,7 +287,7 @@ export function TaxonomyCell({
     >
       <ComboboxInput
         placeholder={placeholder}
-        className="h-8 w-full min-w-[8rem] border-transparent bg-transparent shadow-none hover:border-[var(--border)] hover:bg-[var(--muted)]/40"
+        className="h-8 w-full min-w-0 border-transparent bg-transparent shadow-none hover:border-[var(--border)] hover:bg-[var(--muted)]/40"
         showClear={Boolean(selected)}
       />
       <ComboboxContent className="w-56">

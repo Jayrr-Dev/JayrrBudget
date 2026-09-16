@@ -2,6 +2,7 @@
 
 import { DataTable } from "@/components/ui/data-table";
 import type { DataTableFeatures } from "@/components/ui/data-table-features";
+import { EmptyPrompt } from "@/components/ui/empty-prompt";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -9,35 +10,33 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { PageSpinner } from "@/components/ui/spinner";
+import {
+  peekMerchants,
+  rememberMerchants,
+} from "@/domains/dashboard/ui/ledgerQuerySnapshot";
 import { EditMerchantDialog } from "@/domains/merchants/ui/EditMerchantDialog";
 import { usePrivateLedger } from "@/domains/vault/ui/usePrivateLedger";
 import { api } from "@convex/_generated/api";
 import { Icon } from "@iconify/react";
 import { createColumnHelper } from "@tanstack/react-table";
-import { useQuery } from "convex/react";
-import { useMemo, useState } from "react";
-import {
-  peekMerchants,
-  rememberMerchants,
-} from "@/domains/dashboard/ui/ledgerQuerySnapshot";
+import { useMutation, useQuery } from "convex/react";
+import { useEffect, useMemo, useState } from "react";
+
+const MERCHANT_TXN_COUNT_KEY = "jayrr-budget.merchant-txn-counts-v1";
 
 type MerchantRow = {
   id: string;
   slug: string;
   name: string;
-  company: string | null;
-  brand: string | null;
-  website: string | null;
   logoUrl: string | null;
+  logoSrc?: string | null;
+  transactionCount: number;
   createdAt: number;
   updatedAt: number;
 };
 
 const HIDDEN_COLUMNS = {
   slug: false,
-  company: false,
-  brand: false,
-  website: false,
 };
 
 const columnHelper = createColumnHelper<DataTableFeatures, MerchantRow>();
@@ -87,7 +86,7 @@ function MerchantsTable({ rows }: { rows: MerchantRow[] }) {
             <div className="flex items-center justify-center">
               <DropdownMenu>
                 <DropdownMenuTrigger
-                  className="inline-flex size-6 max-w-6 shrink-0 cursor-pointer items-center justify-center rounded-[min(var(--radius-md),12px)] text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]"
+                  className="inline-flex size-6 cursor-pointer items-center justify-center rounded-[min(var(--radius-md),12px)] text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]"
                   aria-label={`Actions for ${row.original.name}`}
                 >
                   <Icon icon="basil:menu-outline" className="size-4" />
@@ -105,7 +104,30 @@ function MerchantsTable({ rows }: { rows: MerchantRow[] }) {
           ),
           enableSorting: false,
           enableHiding: false,
-          meta: { label: "Actions", width: "2rem" },
+          meta: { label: "Actions", width: "2.5rem" },
+        }),
+        columnHelper.display({
+          id: "logo",
+          header: "Logo",
+          cell: ({ row }) => {
+            const src = row.original.logoSrc ?? row.original.logoUrl;
+            if (!src) {
+              return (
+                <span className="text-sm text-[var(--muted-foreground)]">
+                  -
+                </span>
+              );
+            }
+            return (
+              <img
+                src={src}
+                alt=""
+                className="size-8 rounded-md object-contain"
+              />
+            );
+          },
+          enableSorting: false,
+          meta: { label: "Logo", width: "3.5rem" },
         }),
         columnHelper.accessor("name", {
           header: "Merchant",
@@ -113,6 +135,16 @@ function MerchantsTable({ rows }: { rows: MerchantRow[] }) {
           filterFn: "includesString",
           sortFn: "text",
           meta: { width: "18rem", nowrap: true, grow: true },
+        }),
+        columnHelper.accessor("transactionCount", {
+          header: "Txns",
+          cell: ({ getValue }) => (
+            <span className="text-sm tabular-nums">
+              {(getValue() ?? 0).toLocaleString()}
+            </span>
+          ),
+          sortFn: "basic",
+          meta: { width: "5.5rem", nowrap: true },
         }),
         columnHelper.accessor("updatedAt", {
           header: "Updated",
@@ -130,27 +162,6 @@ function MerchantsTable({ rows }: { rows: MerchantRow[] }) {
           filterFn: "includesString",
           sortFn: "text",
           meta: { width: "14rem", nowrap: true },
-        }),
-        columnHelper.accessor("company", {
-          header: "Company",
-          cell: ({ getValue }) => cellText(getValue()),
-          filterFn: "equalsString",
-          sortFn: "text",
-          meta: { width: "14rem", nowrap: true },
-        }),
-        columnHelper.accessor("brand", {
-          header: "Brand",
-          cell: ({ getValue }) => cellText(getValue()),
-          filterFn: "fuzzy",
-          sortFn: "text",
-          meta: { width: "12rem", nowrap: true },
-        }),
-        columnHelper.accessor("website", {
-          header: "Website",
-          cell: ({ getValue }) => cellText(getValue()),
-          filterFn: "includesString",
-          sortFn: "text",
-          meta: { width: "16rem", nowrap: true },
         }),
       ]),
     [],
@@ -183,38 +194,84 @@ function MerchantsTable({ rows }: { rows: MerchantRow[] }) {
 
 export function MerchantsPanel() {
   const privateLedger = usePrivateLedger();
+  const syncMerchantTxnCounts = useMutation(
+    api.merchants.syncTransactionCounts,
+  );
   const merchants = useQuery(
     api.merchants.list,
     privateLedger.encryptedLedger ? "skip" : {},
   );
 
+  useEffect(() => {
+    if (privateLedger.encryptedLedger) return;
+    let cancelled = false;
+    void (async () => {
+      let alreadyCounted = false;
+      let cursor: string | null = null;
+      try {
+        const stored = localStorage.getItem(MERCHANT_TXN_COUNT_KEY);
+        alreadyCounted = stored === "done";
+        if (!alreadyCounted && stored) cursor = stored;
+      } catch {
+        // ignore
+      }
+      if (alreadyCounted) return;
+      try {
+        for (let i = 0; i < 40; i += 1) {
+          if (cancelled) return;
+          const result = await syncMerchantTxnCounts({
+            limit: 40,
+            cursor,
+          });
+          cursor = result.continueCursor;
+          try {
+            localStorage.setItem(
+              MERCHANT_TXN_COUNT_KEY,
+              result.isDone ? "done" : (result.continueCursor ?? ""),
+            );
+          } catch {
+            // ignore
+          }
+          if (result.isDone) break;
+        }
+      } catch (error) {
+        console.warn("[merchants] txn count sync failed", error);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [privateLedger.encryptedLedger, syncMerchantTxnCounts]);
+
   const encryptedRows = useMemo(() => {
     if (!privateLedger.encryptedLedger || !privateLedger.unlocked)
       return [] as MerchantRow[];
+    const counts = new Map<string, number>();
+    for (const tx of privateLedger.ledger.transactions) {
+      const name = tx.merchantClean ?? tx.merchantName ?? tx.description;
+      if (!name) continue;
+      counts.set(name, (counts.get(name) ?? 0) + 1);
+    }
     const fromRecords = privateLedger.ledger.merchants.map((merchant) => ({
       id: merchant.recordId,
       slug: merchant.merchantId,
       name: merchant.name,
-      company: merchant.company ?? null,
-      brand: merchant.brand ?? null,
-      website: merchant.website ?? null,
       logoUrl: null as string | null,
+      logoSrc: null as string | null,
+      transactionCount: counts.get(merchant.name) ?? 0,
       createdAt: merchant.createdAt ?? 0,
       updatedAt: merchant.updatedAt ?? merchant.createdAt ?? 0,
     }));
     if (fromRecords.length) return fromRecords;
     const names = new Map<string, MerchantRow>();
-    for (const tx of privateLedger.ledger.transactions) {
-      const name = tx.merchantClean ?? tx.merchantName ?? tx.description;
-      if (!name || names.has(name)) continue;
+    for (const [name, transactionCount] of counts) {
       names.set(name, {
         id: name,
         slug: name.toLowerCase().replace(/\s+/g, "-"),
         name,
-        company: null,
-        brand: null,
-        website: null,
         logoUrl: null,
+        logoSrc: null,
+        transactionCount,
         createdAt: 0,
         updatedAt: 0,
       });
@@ -232,9 +289,13 @@ export function MerchantsPanel() {
     }
     if (encryptedRows.length === 0) {
       return (
-        <p className="text-sm text-[var(--muted-foreground)]">
-          No merchants yet.
-        </p>
+        <EmptyPrompt
+          className="py-10"
+          title="No merchants yet"
+          description="They appear after ledger rows have merchant labels."
+          href="/statements"
+          actionLabel="Upload statement"
+        />
       );
     }
     return <MerchantsTable rows={encryptedRows} />;
@@ -251,9 +312,13 @@ export function MerchantsPanel() {
 
   if (merchantRows.length === 0) {
     return (
-      <p className="text-sm text-[var(--muted-foreground)]">
-        No merchants yet. They appear after ledger rows have merchant labels.
-      </p>
+      <EmptyPrompt
+        className="py-10"
+        title="No merchants yet"
+        description="They appear after ledger rows have merchant labels."
+        href="/statements"
+        actionLabel="Upload statement"
+      />
     );
   }
 

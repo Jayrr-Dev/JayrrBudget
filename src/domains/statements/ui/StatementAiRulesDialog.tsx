@@ -132,6 +132,7 @@ export function StatementAiRulesDialog({ open, onOpenChange }: Props) {
             <div className="space-y-2">
               <div className="flex items-center gap-2">
                 <Input
+                  id="upload-rule-input"
                   value={nextRule}
                   onChange={(event) => setNextRule(event.target.value)}
                   placeholder="Add a rule…"
@@ -173,8 +174,18 @@ export function StatementAiRulesDialog({ open, onOpenChange }: Props) {
             </div>
 
             {draft.length === 0 ? (
-              <div className="flex min-h-24 items-center justify-center rounded-lg border border-dashed border-border/70 px-4 py-6">
+              <div className="flex min-h-24 flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-border/70 px-4 py-6">
                 <p className="text-sm text-muted-foreground">No rules yet</p>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() =>
+                    document.getElementById("upload-rule-input")?.focus()
+                  }
+                >
+                  Add a rule
+                </Button>
               </div>
             ) : (
               <ul className="max-h-56 space-y-1 overflow-y-auto rounded-lg border border-border/60 p-1.5">

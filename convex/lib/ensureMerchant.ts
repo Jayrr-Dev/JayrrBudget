@@ -1,7 +1,8 @@
 import type { Doc, Id } from "../_generated/dataModel";
-import type { MutationCtx } from "../_generated/server";
-import { merchantSlug } from "./merchantSlug";
+import type { MutationCtx, QueryCtx } from "../_generated/server";
 import { rememberCategorization } from "./categorizationMemory";
+import { merchantSlug } from "./merchantSlug";
+import { retargetTxnMerchant } from "./merchantTxnCount";
 
 export type MerchantFields = {
   name: string;
@@ -15,6 +16,17 @@ export type MerchantFields = {
 function trimOrNull(value: string | null | undefined): string | null {
   const trimmed = value?.trim();
   return trimmed ? trimmed : null;
+}
+
+export async function merchantLogoSrc(
+  ctx: QueryCtx | MutationCtx,
+  merchant: Pick<Doc<"merchants">, "logoUrl" | "logoStorageId">,
+): Promise<string | null> {
+  if (merchant.logoStorageId) {
+    const stored = await ctx.storage.getUrl(merchant.logoStorageId);
+    if (stored) return stored;
+  }
+  return merchant.logoUrl;
 }
 
 /**
@@ -62,9 +74,7 @@ export async function ensureMerchant(
 
   const existing = await ctx.db
     .query("merchants")
-    .withIndex("by_userId_slug", (q) =>
-      q.eq("userId", userId).eq("slug", slug),
-    )
+    .withIndex("by_userId_slug", (q) => q.eq("userId", userId).eq("slug", slug))
     .unique();
 
   if (existing) {
@@ -91,6 +101,7 @@ export async function ensureMerchant(
     brand,
     website,
     logoUrl,
+    transactionCount: 0,
     createdAt: now,
     updatedAt: now,
   });
@@ -115,15 +126,17 @@ export async function linkTxnsToMerchant(
       )
       .unique();
     if (!txn) continue;
+    const previous = txn.merchantId ?? null;
     await ctx.db.patch(txn._id, {
       merchantId: merchant._id,
       merchantClean: merchant.name,
       company: merchant.company ?? txn.company,
       brand: merchant.brand ?? txn.brand,
       website: merchant.website ?? txn.website,
-      logoUrl: merchant.logoUrl ?? txn.logoUrl,
+      logoUrl: (await merchantLogoSrc(ctx, merchant)) ?? txn.logoUrl,
       updatedAt: Date.now(),
     });
+    await retargetTxnMerchant(ctx, previous, merchant._id);
     const updated = await ctx.db.get(txn._id);
     if (updated) await rememberCategorization(ctx, updated);
     linked += 1;
@@ -149,25 +162,25 @@ async function applyMerchantToTxn(
   txn: Doc<"transactions">,
   merchant: Doc<"merchants">,
 ) {
+  const previous = txn.merchantId ?? null;
   await ctx.db.patch(txn._id, {
     merchantId: merchant._id,
     merchantClean: merchant.name,
     company: merchant.company,
     brand: merchant.brand,
     website: merchant.website,
-    logoUrl: merchant.logoUrl,
+    logoUrl: await merchantLogoSrc(ctx, merchant),
     updatedAt: Date.now(),
   });
+  await retargetTxnMerchant(ctx, previous, merchant._id);
   const updated = await ctx.db.get(txn._id);
   if (updated) await rememberCategorization(ctx, updated);
 }
 
 export type MerchantEditFields = {
   name: string;
-  company: string | null;
-  brand: string | null;
-  website: string | null;
-  logoUrl: string | null;
+  logoUrl?: string | null;
+  logoStorageId?: Id<"_storage"> | null;
 };
 
 /** Patch a merchant. Same slug as another payee merges into that row and relinks ledger lines. */
@@ -197,21 +210,25 @@ export async function updateMerchantOrMerge(
   }
 
   const now = Date.now();
-  const patch = {
+  const patch: Partial<Doc<"merchants">> = {
     name,
     slug,
-    company: trimOrNull(fields.company),
-    brand: trimOrNull(fields.brand),
-    website: trimOrNull(fields.website),
-    logoUrl: trimOrNull(fields.logoUrl),
     updatedAt: now,
   };
+  if (fields.logoUrl !== undefined) {
+    patch.logoUrl = trimOrNull(fields.logoUrl);
+  }
+  if (fields.logoStorageId !== undefined) {
+    const nextStorageId = fields.logoStorageId ?? undefined;
+    if (source.logoStorageId && source.logoStorageId !== nextStorageId) {
+      await ctx.storage.delete(source.logoStorageId);
+    }
+    patch.logoStorageId = nextStorageId;
+  }
 
   const clash = await ctx.db
     .query("merchants")
-    .withIndex("by_userId_slug", (q) =>
-      q.eq("userId", userId).eq("slug", slug),
-    )
+    .withIndex("by_userId_slug", (q) => q.eq("userId", userId).eq("slug", slug))
     .unique();
 
   const merge = Boolean(clash && clash._id !== source._id);

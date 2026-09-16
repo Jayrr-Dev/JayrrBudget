@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import type { DataTableFeatures } from "@/components/ui/data-table-features";
+import { EmptyPrompt } from "@/components/ui/empty-prompt";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -269,14 +270,22 @@ export function IssuesManager() {
             Loading issues…
           </p>
         ) : issues.length === 0 ? (
-          <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] px-5 py-10 text-center">
-            <h2 className="font-heading text-lg font-semibold tracking-tight">
-              No issues yet
-            </h2>
-            <p className="mt-2 text-sm text-[var(--muted-foreground)]">
-              Submitted reports and crash-screen filings show up here.
-            </p>
-          </div>
+          <EmptyPrompt
+            className="bg-[var(--surface)] py-10"
+            title="No issues yet"
+            description="Submitted reports and crash-screen filings show up here."
+            action={
+              <Button
+                type="button"
+                size="sm"
+                onClick={() =>
+                  document.getElementById("issue-message")?.focus()
+                }
+              >
+                Report an issue
+              </Button>
+            }
+          />
         ) : (
           <DataTable
             columns={columns}

@@ -3,7 +3,11 @@ import { internalMutation, mutation, query, type MutationCtx, type QueryCtx } fr
 import type { Doc, Id } from "./_generated/dataModel";
 import { requireRole, requireUser, userRole } from "./lib/auth";
 import { normalizedLabel, taxonomyKey } from "./lib/categorization";
-import { CATEGORY_RENAMES, SEED_CATEGORY_PATHS } from "./lib/seedCategoryPaths";
+import {
+  CATEGORY_RENAMES,
+  SEED_CATEGORY_PATHS,
+  SUBCATEGORY_RENAMES,
+} from "./lib/seedCategoryPaths";
 import { ensureSeedSharedTags, sortSharedTagNames } from "./lib/seedSharedTags";
 import {
   ensureMissingSeedPathsForUser,
@@ -39,7 +43,8 @@ const categoryDoc = v.object({
 const ORPHAN_CATEGORY_TO_SECTION: Record<string, string> = {
   streaming: "Technology",
   recreational: "Lifestyle",
-  "mobile & wireless": "Technology",
+  "mobile & wireless": "Home",
+  mobile: "Home",
 };
 
 const ORPHAN_SUB_TO_CATEGORY: Record<string, string> = {
@@ -47,13 +52,13 @@ const ORPHAN_SUB_TO_CATEGORY: Record<string, string> = {
   "dine-in": "Restaurants",
   "hotels & vacation rentals": "Lodging",
   "board game cafes": "Recreational",
-  "theme parks": "Attractions & Tours",
-  tours: "Attractions & Tours",
+  "theme parks": "Attractions",
+  tours: "Attractions",
   recreation: "Recreational",
   pickleball: "Recreational",
   "driving range": "Recreational",
   golf: "Recreational",
-  "cellphone plan": "Mobile & Wireless",
+  "cellphone plan": "Mobile",
   "car insurance": "Insurance",
   fuel: "Fuel",
   prescriptions: "Medical",
@@ -462,6 +467,18 @@ export const reconcileSharedPaths = internalMutation({
         await ctx.db.patch(category._id, {
           name: rename.to,
           description: taxonomyDescription("category", rename.to),
+        });
+      }
+      const subs = await ctx.db
+        .query("transactionSubcategories")
+        .withIndex("by_userId", (q) => q.eq("userId", user._id))
+        .collect();
+      for (const sub of subs) {
+        const rename = SUBCATEGORY_RENAMES.find((row) => row.from === sub.name);
+        if (!rename) continue;
+        await ctx.db.patch(sub._id, {
+          name: rename.to,
+          description: taxonomyDescription("subcategory", rename.to),
         });
       }
       await remountFoodSectionForUser(ctx, user._id);

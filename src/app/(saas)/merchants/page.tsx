@@ -36,9 +36,10 @@ function MerchantsTitleInfo() {
           </PopoverDescription>
           <ul className="mt-1.5 list-disc space-y-1 pl-4 text-muted-foreground">
             <li>One row per payee after a statement labels it</li>
+            <li>Txns is the cached count of linked ledger rows</li>
             <li>Edit from the actions menu; linked ledger rows follow</li>
             <li>Rename to an existing merchant to merge them</li>
-            <li>Slug, company, and brand live under Columns</li>
+            <li>Add a logo with an upload or a URL</li>
           </ul>
         </PopoverHeader>
       </PopoverContent>

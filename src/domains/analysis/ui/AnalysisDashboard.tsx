@@ -2,6 +2,7 @@
 
 import { badgeVariants } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { EmptyPrompt } from "@/components/ui/empty-prompt";
 import {
   ChartContainer,
   ChartTooltip,
@@ -770,12 +771,12 @@ function TimeSeriesTable({
 
 function EmptyState() {
   return (
-    <div className="rounded-xl border border-dashed border-[var(--border)] px-6 py-16 text-center">
-      <p className="text-lg font-medium">No transactions in this range</p>
-      <p className="mt-1 text-sm text-[var(--muted-foreground)]">
-        Import statements, then spending trends show up here.
-      </p>
-    </div>
+    <EmptyPrompt
+      title="No transactions in this range"
+      description="Import statements, then spending trends show up here."
+      href="/statements"
+      actionLabel="Upload statement"
+    />
   );
 }
 
@@ -3925,6 +3926,17 @@ function SectionsTab({
   const periodCount = Math.max(data.monthly.length, 1);
   const periodMeta = ANALYSIS_PERIOD_META[period];
 
+  if (data.sections.length === 0) {
+    return (
+      <EmptyPrompt
+        title="No sections in this range"
+        description="Create sections, then assign them on transactions."
+        href="/classifications?tab=sections&create=1"
+        actionLabel="Create section"
+      />
+    );
+  }
+
   return (
     <FacetPaneShell
       pane={pane}
@@ -4240,6 +4252,17 @@ function CategoriesTab({
     })),
   );
 
+  if (data.categories.length === 0) {
+    return (
+      <EmptyPrompt
+        title="No categories in this range"
+        description="Create categories, then assign them on transactions."
+        href="/classifications?tab=categories&create=1"
+        actionLabel="Create category"
+      />
+    );
+  }
+
   return (
     <FacetPaneShell
       pane={pane}
@@ -4483,6 +4506,17 @@ function SubcategoriesTab({
     })),
   );
 
+  if (data.subcategories.length === 0) {
+    return (
+      <EmptyPrompt
+        title="No subcategories in this range"
+        description="Create subcategories, then assign them on transactions."
+        href="/classifications?tab=subcategories&create=1"
+        actionLabel="Create subcategory"
+      />
+    );
+  }
+
   return (
     <FacetPaneShell
       pane={pane}
@@ -4719,12 +4753,12 @@ function TagsTab({
 
   if (tags.length === 0) {
     return (
-      <div className="rounded-xl border border-dashed border-[var(--border)] px-6 py-16 text-center">
-        <p className="text-lg font-medium">No tags in this range</p>
-        <p className="mt-1 text-sm text-[var(--muted-foreground)]">
-          Tags on transactions show up here the same way subcategories do.
-        </p>
-      </div>
+      <EmptyPrompt
+        title="No tags in this range"
+        description="Create tags, then stick them on transactions. They chart here the same way subcategories do."
+        href="/classifications?tab=tags&create=1"
+        actionLabel="Create tag"
+      />
     );
   }
 
@@ -4921,12 +4955,12 @@ function TypesTab({
 
   if (types.length === 0) {
     return (
-      <div className="rounded-xl border border-dashed border-[var(--border)] px-6 py-16 text-center">
-        <p className="text-lg font-medium">No codes in this range</p>
-        <p className="mt-1 text-sm text-[var(--muted-foreground)]">
-          Lines need a code (purchase, payment, fee, subscription, …).
-        </p>
-      </div>
+      <EmptyPrompt
+        title="No codes in this range"
+        description="Import a statement so lines get a code (purchase, payment, fee, subscription)."
+        href="/statements"
+        actionLabel="Upload statement"
+      />
     );
   }
 
@@ -5285,12 +5319,12 @@ function MerchantsTab({
 
   if (merchants.length === 0) {
     return (
-      <div className="rounded-xl border border-dashed border-[var(--border)] px-6 py-16 text-center">
-        <p className="text-lg font-medium">No merchants in this range</p>
-        <p className="mt-1 text-sm text-[var(--muted-foreground)]">
-          Merchant clean names show up here the same way subcategories do.
-        </p>
-      </div>
+      <EmptyPrompt
+        title="No merchants in this range"
+        description="Import statements so payee names land here the same way subcategories do."
+        href="/statements"
+        actionLabel="Upload statement"
+      />
     );
   }
 
@@ -5509,13 +5543,12 @@ function IncomeTab({
 
   if (sources.length === 0) {
     return (
-      <div className="rounded-xl border border-dashed border-[var(--border)] px-6 py-16 text-center">
-        <p className="text-lg font-medium">No income in this range</p>
-        <p className="mt-1 text-sm text-[var(--muted-foreground)]">
-          Payroll, cashback, and e-transfers in show up here. Card payment
-          credits stay out.
-        </p>
-      </div>
+      <EmptyPrompt
+        title="No income in this range"
+        description="Upload a statement with payroll, cashback, or e-transfers in. Card payment credits stay out."
+        href="/statements"
+        actionLabel="Upload statement"
+      />
     );
   }
 

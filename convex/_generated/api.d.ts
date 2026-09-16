@@ -37,6 +37,7 @@ import type * as lib_loanCompute from "../lib/loanCompute.js";
 import type * as lib_loanTypes from "../lib/loanTypes.js";
 import type * as lib_matchLoanPayments from "../lib/matchLoanPayments.js";
 import type * as lib_merchantSlug from "../lib/merchantSlug.js";
+import type * as lib_merchantTxnCount from "../lib/merchantTxnCount.js";
 import type * as lib_moduleCatalog from "../lib/moduleCatalog.js";
 import type * as lib_paymentFrequency from "../lib/paymentFrequency.js";
 import type * as lib_periods from "../lib/periods.js";
@@ -95,6 +96,7 @@ declare const fullApi: ApiFromModules<{
   "lib/loanTypes": typeof lib_loanTypes;
   "lib/matchLoanPayments": typeof lib_matchLoanPayments;
   "lib/merchantSlug": typeof lib_merchantSlug;
+  "lib/merchantTxnCount": typeof lib_merchantTxnCount;
   "lib/moduleCatalog": typeof lib_moduleCatalog;
   "lib/paymentFrequency": typeof lib_paymentFrequency;
   "lib/periods": typeof lib_periods;

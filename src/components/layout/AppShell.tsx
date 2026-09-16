@@ -18,6 +18,8 @@ import {
 import { Spinner } from "@/components/ui/spinner";
 import { clearPendingPasscode } from "@/crypto/pendingPasscode";
 import { lockVault } from "@/crypto/session";
+import { WarmSaasQueries } from "@/domains/dashboard/ui/WarmSaasQueries";
+import { clearLedgerQuerySnapshots } from "@/domains/dashboard/ui/ledgerQuerySnapshot";
 import type { AppModuleRecord } from "@/domains/modules/domain/types";
 import { resolveModuleIcon } from "@/domains/modules/ui/moduleIcons";
 import {
@@ -29,8 +31,6 @@ import { budgetBrandLabel } from "@/shared/lib/budget-brand";
 import { useAuthActions } from "@convex-dev/auth/react";
 import { api } from "@convex/_generated/api";
 import { IconLogout, IconUser } from "@tabler/icons-react";
-import { WarmSaasQueries } from "@/domains/dashboard/ui/WarmSaasQueries";
-import { clearLedgerQuerySnapshots } from "@/domains/dashboard/ui/ledgerQuerySnapshot";
 import { useQueryClient } from "@tanstack/react-query";
 import { useConvexAuth, useQuery } from "convex/react";
 import { motion } from "motion/react";

@@ -1,5 +1,6 @@
 "use client";
 
+import { EmptyPrompt } from "@/components/ui/empty-prompt";
 import { PageSpinner } from "@/components/ui/spinner";
 import {
   formatLedgerSpend,
@@ -10,6 +11,10 @@ import type {
   DashboardData,
   DashboardTransaction,
 } from "@/domains/dashboard/domain/types";
+import {
+  peekDashboard,
+  rememberDashboard,
+} from "@/domains/dashboard/ui/ledgerQuerySnapshot";
 import { useFeatureFlags } from "@/domains/feature-flags/ui/useFeatureFlag";
 import { StatementUpload } from "@/domains/statements/ui/StatementUpload";
 import { dashboardFromPrivateLedger } from "@/domains/vault/application/dashboardFromPrivateLedger";
@@ -18,10 +23,6 @@ import { formatDisplayDate } from "@/shared/lib/format-date";
 import { api } from "@convex/_generated/api";
 import { useConvexAuth, useQuery } from "convex/react";
 import { useMemo } from "react";
-import {
-  peekDashboard,
-  rememberDashboard,
-} from "@/domains/dashboard/ui/ledgerQuerySnapshot";
 
 export function useDashboard(transactionLimit: number | null = 250) {
   const { isAuthenticated, isLoading: authLoading } = useConvexAuth();
@@ -85,7 +86,8 @@ export function useDashboard(transactionLimit: number | null = 250) {
   const live = result?.ok ? result.data : undefined;
   if (live) rememberDashboard(transactionLimit, live);
   const cached =
-    live ?? (result === undefined ? peekDashboard(transactionLimit) : undefined);
+    live ??
+    (result === undefined ? peekDashboard(transactionLimit) : undefined);
 
   return {
     data: cached,
@@ -144,7 +146,12 @@ export function AccountsPanel({
         {compact ? "Accounts" : "All accounts"}
       </h2>
       {accounts.length === 0 ? (
-        <EmptyState text="No accounts yet. Upload a statement PDF to get started." />
+        <EmptyPrompt
+          className="bg-surface-elevated/70 py-8"
+          title="No accounts yet"
+          description="Upload a statement PDF to get started."
+          action={<StatementUpload />}
+        />
       ) : (
         <ul className="divide-y divide-[var(--border)] overflow-hidden rounded-xl border border-[var(--border)] bg-surface-elevated">
           {accounts.map((account) => (
@@ -199,7 +206,12 @@ export function TransactionsList({
             : "Transactions"}
       </h2>
       {transactions.length === 0 ? (
-        <EmptyState text="No transactions yet. Upload a statement PDF to import them." />
+        <EmptyPrompt
+          className="bg-surface-elevated/70 py-8"
+          title="No transactions yet"
+          description="Upload a statement PDF to import them."
+          action={<StatementUpload />}
+        />
       ) : (
         <ul className="divide-y divide-[var(--border)] overflow-hidden rounded-xl border border-[var(--border)] bg-surface-elevated">
           {transactions.map((txn) => {
@@ -265,14 +277,6 @@ function StatBadge({ label, value }: { label: string; value: string }) {
         {value}
       </span>
     </span>
-  );
-}
-
-function EmptyState({ text }: { text: string }) {
-  return (
-    <div className="rounded-xl border border-dashed border-[var(--border)] bg-surface-elevated/70 px-4 py-8 text-sm text-[var(--muted-foreground)]">
-      {text}
-    </div>
   );
 }
 

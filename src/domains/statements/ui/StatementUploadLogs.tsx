@@ -25,6 +25,34 @@ function formatWhen(iso: string) {
   });
 }
 
+function parseYmd(value: string) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  if (!year || !month || !day) return null;
+  return new Date(Date.UTC(year, month - 1, day));
+}
+
+function compactMd(date: Date, withYear: boolean) {
+  const md = `${date.getUTCMonth() + 1}/${date.getUTCDate()}`;
+  if (!withYear) return md;
+  return `${md}/${String(date.getUTCFullYear()).slice(-2)}`;
+}
+
+function compactPeriod(
+  start: string | null | undefined,
+  end: string | null | undefined,
+) {
+  if (!start || !end) return null;
+  const startDate = parseYmd(start);
+  const endDate = parseYmd(end);
+  if (!startDate || !endDate) return `${start}–${end}`;
+  const sameYear = startDate.getUTCFullYear() === endDate.getUTCFullYear();
+  return `${compactMd(startDate, !sameYear)}–${compactMd(endDate, !sameYear)}`;
+}
+
 function statusVariant(status: string) {
   if (status === "completed") return "secondary" as const;
   if (status === "failed") return "destructive" as const;
@@ -99,15 +127,13 @@ const columns = columnHelper.columns([
     id: "categorized",
     header: "Categories",
     enableHiding: false,
-    meta: { width: "10rem", nowrap: true },
+    meta: { width: "4.5rem", nowrap: true },
     cell: ({ row }) => {
       const { categorized, categorizedCount, transactionCount } = row.original;
       const total = transactionCount ?? 0;
       if (total === 0) {
         return (
-          <span className="text-xs text-[var(--muted-foreground)]">
-            No txns
-          </span>
+          <span className="text-xs text-[var(--muted-foreground)]">—</span>
         );
       }
       const label = categorized ? "Categorized" : "Not categorized";
@@ -116,28 +142,28 @@ const columns = columnHelper.columns([
           className="block truncate text-sm"
           title={`${label} · ${categorizedCount}/${total}`}
         >
-          {label} · {categorizedCount}/{total}
+          {categorizedCount}/{total}
         </span>
       );
     },
   }),
   columnHelper.accessor("pageCount", {
-    header: "Pages",
+    header: "Pg",
     enableHiding: false,
-    meta: { width: "5rem", nowrap: true },
+    meta: { width: "3.5rem", nowrap: true, label: "Pages" },
     cell: ({ getValue }) => String(getValue() ?? "-"),
   }),
   columnHelper.display({
     id: "counts",
     header: "Txns",
     enableHiding: false,
-    meta: { width: "10rem", nowrap: true },
+    meta: { width: "3.5rem", nowrap: true },
     cell: ({ row }) => {
-      const { transactionCount, insertedCount, updatedCount } = row.original;
-      const label = `${transactionCount ?? 0} · ${insertedCount ?? 0} new · ${updatedCount ?? 0} existing`;
+      const { insertedCount, transactionCount, updatedCount } = row.original;
+      const title = `${transactionCount ?? 0} total · ${insertedCount ?? 0} new · ${updatedCount ?? 0} existing`;
       return (
-        <span className="block truncate text-sm" title={label}>
-          {label}
+        <span className="block truncate text-sm" title={title}>
+          {insertedCount ?? 0}
         </span>
       );
     },
@@ -146,28 +172,22 @@ const columns = columnHelper.columns([
     id: "balance",
     header: "Statement",
     enableHiding: false,
-    meta: { width: "14rem", nowrap: true },
+    meta: { width: "10.5rem", nowrap: true },
     cell: ({ row }) => {
       const {
-        openingBalance,
-        closingBalance,
         balanceOk,
         balanceDelta,
         statementPeriodStart,
         statementPeriodEnd,
       } = row.original;
-      const period =
-        statementPeriodStart && statementPeriodEnd
-          ? `${statementPeriodStart} → ${statementPeriodEnd}`
-          : null;
-      const range = `${openingBalance != null ? openingBalance.toFixed(2) : "-"} → ${closingBalance != null ? closingBalance.toFixed(2) : "-"}`;
+      const period = compactPeriod(statementPeriodStart, statementPeriodEnd);
       const check =
         balanceOk === true
           ? "Balanced"
           : balanceOk === false
-            ? `Off by ${balanceDelta != null ? balanceDelta.toFixed(2) : "?"}`
+            ? `Unbalanced ${balanceDelta != null ? balanceDelta.toFixed(2) : "?"}`
             : "No check";
-      const label = [period, range, check].filter(Boolean).join(" · ");
+      const label = [period, check].filter(Boolean).join(" · ");
       return (
         <span className="block truncate text-sm" title={label}>
           {label}

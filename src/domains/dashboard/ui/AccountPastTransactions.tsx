@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/table";
 import type { DashboardTransaction } from "@/domains/dashboard/domain/types";
 import { MoneyText } from "@/domains/dashboard/ui/MoneyText";
+import { inferredBankDirection } from "@/domains/transactions/domain/debitCredit";
 import { formatDisplayDate } from "@/shared/lib/format-date";
 import { isValid, parseISO, subMonths, subWeeks } from "date-fns";
 import {
@@ -57,6 +58,29 @@ function rangeStart(key: RangeKey, now: Date) {
     case "12m":
       return subMonths(now, 12);
   }
+}
+
+function txnFlow(txn: DashboardTransaction) {
+  const labeled = String(txn.bankDirection ?? "").toLowerCase();
+  if (labeled === "credit" || labeled === "debit") return labeled;
+  return inferredBankDirection(txn.amount);
+}
+
+function flowMoneyProps(txn: DashboardTransaction) {
+  const flow = txnFlow(txn);
+  if (flow === "credit") {
+    return {
+      signMark: "plus" as const,
+      className: "text-[var(--income)]",
+    };
+  }
+  if (flow === "debit") {
+    return {
+      signMark: "auto" as const,
+      className: "text-[var(--spend)]",
+    };
+  }
+  return { signMark: "auto" as const, className: undefined };
 }
 
 function txnLabel(txn: DashboardTransaction) {
@@ -396,7 +420,11 @@ export function AccountPastTransactions({
                     </span>
                   </TableCell>
                   <TableCell className="px-3 py-2">
-                    <MoneyText amount={txn.amount} currency={currency} />
+                    <MoneyText
+                      amount={txn.amount}
+                      currency={currency}
+                      {...flowMoneyProps(txn)}
+                    />
                   </TableCell>
                   <TableCell className="px-3 py-2">
                     <MoneyText

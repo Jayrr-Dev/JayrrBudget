@@ -1,14 +1,21 @@
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import {
+  mutation,
+  query,
+  type MutationCtx,
+  type QueryCtx,
+} from "./_generated/server";
 import { requireUser } from "./lib/auth";
 import {
   ensureMerchant,
   linkTxnsToMerchant,
   merchantLabelFromTxn,
+  merchantLogoSrc,
   updateMerchantOrMerge,
 } from "./lib/ensureMerchant";
+import { countTxnsForMerchant, retargetTxnMerchant } from "./lib/merchantTxnCount";
 import { merchantSlug } from "./lib/merchantSlug";
-import type { Id } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
 
 const merchantDoc = v.object({
   id: v.id("merchants"),
@@ -19,23 +26,16 @@ const merchantDoc = v.object({
   brand: v.union(v.string(), v.null()),
   website: v.union(v.string(), v.null()),
   logoUrl: v.union(v.string(), v.null()),
+  logoSrc: v.union(v.string(), v.null()),
+  transactionCount: v.number(),
   createdAt: v.number(),
   updatedAt: v.number(),
 });
 
-function toMerchantDoc(row: {
-  _id: Id<"merchants">;
-  _creationTime?: number;
-  slug: string;
-  name: string;
-  rawName: string | null;
-  company: string | null;
-  brand: string | null;
-  website: string | null;
-  logoUrl: string | null;
-  createdAt: number;
-  updatedAt: number;
-}) {
+async function toMerchantDoc(
+  ctx: QueryCtx | MutationCtx,
+  row: Doc<"merchants">,
+) {
   const createdAt = row.createdAt > 0 ? row.createdAt : (row._creationTime ?? 0);
   const updatedAt = row.updatedAt > 0 ? row.updatedAt : createdAt;
   return {
@@ -47,6 +47,8 @@ function toMerchantDoc(row: {
     brand: row.brand,
     website: row.website,
     logoUrl: row.logoUrl,
+    logoSrc: await merchantLogoSrc(ctx, row),
+    transactionCount: row.transactionCount ?? 0,
     createdAt,
     updatedAt,
   };
@@ -62,9 +64,11 @@ export const list = query({
       .query("merchants")
       .withIndex("by_userId", (q) => q.eq("userId", user._id))
       .collect();
-    return rows
-      .sort((a, b) => a.name.localeCompare(b.name))
-      .map(toMerchantDoc);
+    return await Promise.all(
+      rows
+        .sort((a, b) => a.name.localeCompare(b.name))
+        .map((row) => toMerchantDoc(ctx, row)),
+    );
   },
 });
 
@@ -156,9 +160,11 @@ export const resolveCorpus = query({
     return {
       unlabeled,
       samples,
-      merchants: merchants
-        .sort((a, b) => a.name.localeCompare(b.name))
-        .map(toMerchantDoc),
+      merchants: await Promise.all(
+        merchants
+          .sort((a, b) => a.name.localeCompare(b.name))
+          .map((row) => toMerchantDoc(ctx, row)),
+      ),
     };
   },
 });
@@ -184,7 +190,7 @@ export const upsert = mutation({
       website: args.website,
       logoUrl: args.logoUrl,
     });
-    return toMerchantDoc(row);
+    return await toMerchantDoc(ctx, row);
   },
 });
 
@@ -257,15 +263,23 @@ export const editImpact = query({
   },
 });
 
+/** Upload URL for a merchant logo image. */
+export const generateLogoUploadUrl = mutation({
+  args: {},
+  returns: v.string(),
+  handler: async (ctx) => {
+    await requireUser(ctx);
+    return await ctx.storage.generateUploadUrl();
+  },
+});
+
 /** Edit merchant fields. Matching name/slug merges into the other payee and relinks rows. */
 export const update = mutation({
   args: {
     merchantId: v.id("merchants"),
     name: v.string(),
-    company: v.optional(v.union(v.string(), v.null())),
-    brand: v.optional(v.union(v.string(), v.null())),
-    website: v.optional(v.union(v.string(), v.null())),
     logoUrl: v.optional(v.union(v.string(), v.null())),
+    logoStorageId: v.optional(v.union(v.id("_storage"), v.null())),
   },
   returns: v.object({
     merchant: merchantDoc,
@@ -277,13 +291,11 @@ export const update = mutation({
     const user = await requireUser(ctx);
     const result = await updateMerchantOrMerge(ctx, user._id, args.merchantId, {
       name: args.name,
-      company: args.company ?? null,
-      brand: args.brand ?? null,
-      website: args.website ?? null,
-      logoUrl: args.logoUrl ?? null,
+      logoUrl: args.logoUrl,
+      logoStorageId: args.logoStorageId,
     });
     return {
-      merchant: toMerchantDoc(result.merchant),
+      merchant: await toMerchantDoc(ctx, result.merchant),
       merged: result.merged,
       mergedFromName: result.mergedFromName,
       transactionsUpdated: result.transactionsUpdated,
@@ -349,7 +361,7 @@ export const upsertAndLink = mutation({
       merchant,
       args.transactionIds,
     );
-    return { merchant: toMerchantDoc(merchant), linked };
+    return { merchant: await toMerchantDoc(ctx, merchant), linked };
   },
 });
 
@@ -418,6 +430,7 @@ export const backfillFromTransactions = mutation({
         website: merchant.website ?? txn.website,
         logoUrl: merchant.logoUrl ?? txn.logoUrl,
       });
+      await retargetTxnMerchant(ctx, txn.merchantId, merchant._id);
       transactionsLinked += 1;
     }
 
@@ -427,6 +440,47 @@ export const backfillFromTransactions = mutation({
       transactionsLinked,
       skippedNoLabel,
       remaining: page.isDone ? 0 : 1,
+      isDone: page.isDone,
+      continueCursor: page.isDone ? null : page.continueCursor,
+    };
+  },
+});
+
+/**
+ * Recompute cached transactionCount from the merchantId index.
+ * Paginated. Safe to re-run.
+ */
+export const syncTransactionCounts = mutation({
+  args: {
+    limit: v.optional(v.number()),
+    cursor: v.optional(v.union(v.string(), v.null())),
+  },
+  returns: v.object({
+    scanned: v.number(),
+    updated: v.number(),
+    isDone: v.boolean(),
+    continueCursor: v.union(v.string(), v.null()),
+  }),
+  handler: async (ctx, args) => {
+    const user = await requireUser(ctx);
+    const limit = Math.min(Math.max(args.limit ?? 40, 1), 100);
+    const page = await ctx.db
+      .query("merchants")
+      .withIndex("by_userId", (q) => q.eq("userId", user._id))
+      .paginate({ numItems: limit, cursor: args.cursor ?? null });
+
+    let updated = 0;
+    for (const merchant of page.page) {
+      const count = await countTxnsForMerchant(ctx, user._id, merchant._id);
+      if (merchant.transactionCount !== count) {
+        await ctx.db.patch(merchant._id, { transactionCount: count });
+        updated += 1;
+      }
+    }
+
+    return {
+      scanned: page.page.length,
+      updated,
       isDone: page.isDone,
       continueCursor: page.isDone ? null : page.continueCursor,
     };
