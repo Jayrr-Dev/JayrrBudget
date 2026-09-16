@@ -1,7 +1,7 @@
 import { getBudgetContextForCanvas } from "@/domains/canvas/application/getBudgetContextForCanvas";
 import type { CanvasSnapshot } from "@/domains/canvas/domain/canvasContext";
 import { CANVAS_SYSTEM_PROMPT } from "@/domains/canvas/domain/canvasSystemPrompt";
-import { canvasClientTools } from "@/domains/canvas/domain/canvasTools";
+import { createCanvasTools } from "@/domains/canvas/domain/canvasTools";
 import {
   chatModel,
   getModelChain,
@@ -23,7 +23,11 @@ import {
 } from "ai";
 
 export const runtime = "nodejs";
-export const maxDuration = 120;
+// One stream now carries the whole board (draw, explain, draw…), so give it room.
+export const maxDuration = 300;
+
+/** Pieces per request: title + ~20 pieces + arrows + frame + wrap-up. */
+const MAX_STEPS = 30;
 
 const RATE_WINDOW_MS = 60_000;
 const RATE_MAX = 20;
@@ -152,11 +156,16 @@ export async function POST(request: Request) {
     ].join("\n");
 
     const result = streamText({
-      model: chatModel(modelId, fallbacks),
+      // Reasoning streams back as "Piggy's thoughts"; one tool call per step so
+      // pieces land on the board one at a time with an explanation between them.
+      model: chatModel(modelId, fallbacks, {
+        reasoningEffort: "low",
+        parallelToolCalls: false,
+      }),
       system,
       messages: modelMessages,
-      tools: canvasClientTools,
-      stopWhen: stepCountIs(6),
+      tools: createCanvasTools(canvas?.shapes.map((shape) => shape.id)),
+      stopWhen: stepCountIs(MAX_STEPS),
       temperature: 0.2,
       onError: ({ error }) => {
         console.warn(`[canvas] stream error: ${errorMessage(error)}`);

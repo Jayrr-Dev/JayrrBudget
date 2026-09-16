@@ -84,10 +84,23 @@ function objectModel(modelId: string, fallbacks: string[]) {
   return getOpenRouter()(modelId, settings);
 }
 
-export function chatModel(modelId: string, fallbacks: string[]) {
+type ChatModelOptions = {
+  /** Ask the model to think first and stream the summary back as reasoning parts. */
+  reasoningEffort?: "minimal" | "low" | "medium" | "high";
+  /** false = one tool call per step, so the UI can show work landing piece by piece. */
+  parallelToolCalls?: boolean;
+};
+
+export function chatModel(
+  modelId: string,
+  fallbacks: string[],
+  options: ChatModelOptions = {},
+) {
   const settings: {
     provider: { allow_fallbacks: boolean; require_parameters: boolean };
     models?: string[];
+    reasoning?: { effort: NonNullable<ChatModelOptions["reasoningEffort"]> };
+    parallelToolCalls?: boolean;
   } = {
     provider: {
       allow_fallbacks: true,
@@ -96,6 +109,12 @@ export function chatModel(modelId: string, fallbacks: string[]) {
   };
   if (fallbacks.length > 0) {
     settings.models = fallbacks;
+  }
+  if (options.reasoningEffort) {
+    settings.reasoning = { effort: options.reasoningEffort };
+  }
+  if (options.parallelToolCalls !== undefined) {
+    settings.parallelToolCalls = options.parallelToolCalls;
   }
   return getOpenRouter()(modelId, settings);
 }

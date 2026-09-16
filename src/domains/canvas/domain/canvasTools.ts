@@ -62,7 +62,7 @@ const refField = z
   .string()
   .optional()
   .describe(
-    "Temporary id unique within this call. Arrows use it in from/to; frames use it in children.",
+    'Short name that becomes the element id (e.g. "title", "rent_bar"). Reuse it in later calls: arrows from/to, frame children, update/delete ids. Must be unique on the board.',
   );
 
 const labelFields = {
@@ -132,13 +132,13 @@ const arrowSchema = z.object({
     .string()
     .optional()
     .describe(
-      "ref (this call) or existing element id the arrow starts at. Anchor point is computed for you.",
+      "ref (this or an earlier call) or existing element id the arrow starts at. Anchor point is computed for you.",
     ),
   to: z
     .string()
     .optional()
     .describe(
-      "ref (this call) or existing element id the arrow points to. Anchor point is computed for you.",
+      "ref (this or an earlier call) or existing element id the arrow points to. Anchor point is computed for you.",
     ),
   route: z
     .enum(["straight", "elbow", "curved"])
@@ -197,7 +197,7 @@ const frameSchema = z.object({
     .array(z.string())
     .min(1)
     .describe(
-      "refs (this call) or existing ids. Frame bounds are computed from children plus padding.",
+      "refs (this or earlier calls) or existing ids. Frame bounds are computed from children plus padding.",
     ),
   padding: z
     .number()
@@ -215,7 +215,9 @@ const createElementSchema = z.discriminatedUnion("type", [
 ]);
 
 const updateElementSchema = z.object({
-  id: z.string().describe("Existing element id from the canvas snapshot."),
+  id: z
+    .string()
+    .describe("Element id from the canvas snapshot, or the ref you drew it with."),
   x: z.number().optional(),
   y: z.number().optional(),
   w: z.number().optional(),
@@ -231,37 +233,113 @@ const updateElementSchema = z.object({
   opacity: styleFields.opacity,
 });
 
-/** Client-executed canvas tools (no server execute). */
-export const canvasClientTools = {
-  create_shapes: tool({
-    description:
-      "Draw elements on the Excalidraw board: rectangle/ellipse/diamond containers with labels, standalone text, sticky notes, arrows bound to shapes (from/to), lines (axes, dividers, timelines), and frames that group children under a title. Put shapes BEFORE the arrows and frames that reference them.",
-    inputSchema: z.object({
-      elements: z.array(createElementSchema).min(1).max(120),
-    }),
-  }),
-  update_shapes: tool({
-    description:
-      "Move, resize, restyle, or relabel existing elements by id. Bound arrows follow moved shapes.",
-    inputSchema: z.object({
-      elements: z.array(updateElementSchema).min(1).max(80),
-    }),
-  }),
-  delete_shapes: tool({
-    description: "Delete elements by id from the board.",
-    inputSchema: z.object({
-      ids: z.array(z.string()).min(1).max(120),
-    }),
-  }),
-  clear_page: tool({
-    description: "Delete every element on the board. Use only when asked.",
-    inputSchema: z.object({
-      confirm: z.literal(true),
-    }),
-  }),
-};
+function withWarnings<T extends object>(result: T, warnings: string[]) {
+  return warnings.length > 0 ? { ...result, warnings } : result;
+}
 
-export type CanvasClientTools = typeof canvasClientTools;
+/**
+ * Canvas tools for one chat request. The board lives in the browser, so the
+ * client applies each call the moment its input arrives; `execute` only
+ * acknowledges on the server so the model keeps streaming (draw, explain,
+ * draw…) without a round trip. It tracks ids seen in this request so it can
+ * still warn about dangling refs and reused names.
+ *
+ * @param knownIds ids on the board when the request started (from the snapshot).
+ */
+export function createCanvasTools(knownIds: Iterable<string> = []) {
+  const known = new Set(knownIds);
+
+  return {
+    create_shapes: tool({
+      description:
+        "Draw ONE idea on the Excalidraw board: a title, one labeled box, one bar with its value, one arrow, one frame. Elements: rectangle/ellipse/diamond containers with labels, standalone text, sticky notes, arrows bound to shapes (from/to), lines (axes, dividers, timelines), frames that group children under a title. Refs become element ids and stay valid in later calls. Put shapes BEFORE the arrows and frames that reference them.",
+      inputSchema: z.object({
+        elements: z.array(createElementSchema).min(1).max(120),
+      }),
+      execute: async ({ elements }) => {
+        const warnings: string[] = [];
+        const refs: string[] = [];
+        for (const element of elements) {
+          if (!element.ref) continue;
+          if (known.has(element.ref) || refs.includes(element.ref)) {
+            warnings.push(
+              `Ref "${element.ref}" is already taken; the board gave this element a random id. Use a fresh ref next time.`,
+            );
+            continue;
+          }
+          refs.push(element.ref);
+          known.add(element.ref);
+        }
+        for (const element of elements) {
+          if (element.type === "arrow") {
+            for (const [side, target] of [
+              ["from", element.from],
+              ["to", element.to],
+            ] as const) {
+              if (target && !known.has(target)) {
+                warnings.push(`Arrow "${side}" target "${target}" is unknown.`);
+              }
+            }
+          } else if (element.type === "frame") {
+            for (const child of element.children) {
+              if (!known.has(child)) {
+                warnings.push(
+                  `Frame "${element.name}" child "${child}" is unknown.`,
+                );
+              }
+            }
+          }
+        }
+        return withWarnings(
+          { ok: true as const, count: elements.length, refs },
+          warnings,
+        );
+      },
+    }),
+    update_shapes: tool({
+      description:
+        "Move, resize, restyle, or relabel existing elements by id or ref. Bound arrows follow moved shapes.",
+      inputSchema: z.object({
+        elements: z.array(updateElementSchema).min(1).max(80),
+      }),
+      execute: async ({ elements }) => {
+        const missing = elements
+          .map((element) => element.id)
+          .filter((id) => !known.has(id));
+        return withWarnings(
+          { ok: true as const, count: elements.length },
+          missing.map((id) => `"${id}" is not on the board.`),
+        );
+      },
+    }),
+    delete_shapes: tool({
+      description: "Delete elements by id or ref from the board.",
+      inputSchema: z.object({
+        ids: z.array(z.string()).min(1).max(120),
+      }),
+      execute: async ({ ids }) => {
+        const missing = ids.filter((id) => !known.has(id));
+        for (const id of ids) known.delete(id);
+        return withWarnings(
+          { ok: true as const, deleted: ids.length },
+          missing.map((id) => `"${id}" is not on the board.`),
+        );
+      },
+    }),
+    clear_page: tool({
+      description: "Delete every element on the board. Use only when asked.",
+      inputSchema: z.object({
+        confirm: z.literal(true),
+      }),
+      execute: async () => {
+        known.clear();
+        return { ok: true as const };
+      },
+    }),
+  };
+}
+
+export type CanvasTools = ReturnType<typeof createCanvasTools>;
 export type CreateElementInput = z.infer<typeof createElementSchema>;
 export type UpdateElementInput = z.infer<typeof updateElementSchema>;
 export type CanvasContainerInput = z.infer<typeof containerSchema>;

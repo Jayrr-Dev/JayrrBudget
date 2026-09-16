@@ -29,7 +29,10 @@ import {
   PopoverTitle,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { applyCanvasTool } from "@/domains/canvas/application/applyCanvasTools";
+import {
+  applyCanvasTool,
+  createCanvasRefAliases,
+} from "@/domains/canvas/application/applyCanvasTools";
 import { buildBudgetContextFromDashboard } from "@/domains/canvas/domain/budgetContext";
 import { getCanvasSnapshot } from "@/domains/canvas/domain/canvasContext";
 import {
@@ -59,7 +62,7 @@ import {
   type UIMessage,
 } from "ai";
 import { ArrowUp, Info, Square } from "lucide-react";
-import { useMemo, useState, type KeyboardEvent } from "react";
+import { useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { toast } from "sonner";
 
 const SUGGESTIONS = [
@@ -119,8 +122,9 @@ function CanvasPiggyInfo() {
           </PopoverDescription>
           <ul className="mt-1.5 list-disc space-y-1 pl-4 text-muted-foreground">
             <li>Chat can see the budget numbers you send</li>
-            <li>Sketches, notes, arrows, and frames land on the board</li>
-            <li>Ask for edits — Piggy moves or erases by id</li>
+            <li>Pieces land on the board one at a time, each with a note</li>
+            <li>Open “Piggy’s thoughts” to see the plan behind a piece</li>
+            <li>Ask for edits — Piggy moves or erases what’s there</li>
             <li>Enter sends, Shift+Enter adds a line</li>
           </ul>
         </PopoverHeader>
@@ -132,9 +136,12 @@ function CanvasPiggyInfo() {
 function AssistantTurn({
   message,
   talking,
+  boardErrors,
 }: {
   message: UIMessage;
   talking: boolean;
+  /** toolCallId -> why the piece did not land on the board. */
+  boardErrors: ReadonlyMap<string, string>;
 }) {
   // Group consecutive text parts so streaming chunks render as one bubble.
   const blocks: Array<
@@ -184,7 +191,13 @@ function AssistantTurn({
             return <ReasoningBlock key={block.key} part={block.part} />;
           }
           if (isToolUIPart(block.part)) {
-            return <ToolActivity key={block.key} part={block.part} />;
+            return (
+              <ToolActivity
+                key={block.key}
+                part={block.part}
+                boardError={boardErrors.get(block.part.toolCallId)}
+              />
+            );
           }
           return null;
         })}
@@ -230,52 +243,51 @@ export function CanvasAiChat() {
     [api, encryptedLedger, privateLedger.ledger, privateLedger.unlocked],
   );
 
-  const { messages, sendMessage, addToolOutput, status, error, stop } = useChat(
-    {
-      transport,
-      sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
-      onError: (err) => {
-        toast.error("Piggy stumbled", {
-          description: errorMessage(err, "Chat request failed"),
-        });
-      },
-      async onToolCall({ toolCall }) {
-        if (toolCall.dynamic) return;
-
-        try {
-          if (!api) {
-            addToolOutput({
-              tool: toolCall.toolName,
-              toolCallId: toolCall.toolCallId,
-              state: "output-error",
-              errorText: "Canvas is still loading",
-            });
-            return;
-          }
-          const output = applyCanvasTool(
-            api,
-            toolCall.toolName,
-            toolCall.input,
-          );
-          addToolOutput({
-            tool: toolCall.toolName,
-            toolCallId: toolCall.toolCallId,
-            output,
-          });
-        } catch (err) {
-          addToolOutput({
-            tool: toolCall.toolName,
-            toolCallId: toolCall.toolCallId,
-            state: "output-error",
-            errorText: errorMessage(err, "Tool failed"),
-          });
-          toast.error("Canvas tool failed", {
-            description: errorMessage(err, "Tool failed"),
-          });
-        }
-      },
-    },
+  // ref -> element id for this chat, so Piggy can point later arrows/frames/edits
+  // at pieces drawn a few steps earlier without a fresh snapshot.
+  const refAliases = useRef(createCanvasRefAliases());
+  const [boardErrors, setBoardErrors] = useState<ReadonlyMap<string, string>>(
+    () => new Map(),
   );
+
+  const { messages, sendMessage, status, error, stop } = useChat({
+    transport,
+    // Tools are acknowledged on the server so one stream carries the whole
+    // board; this only kicks in if a request hit the step cap mid-drawing.
+    sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
+    onError: (err) => {
+      toast.error("Piggy stumbled", {
+        description: errorMessage(err, "Chat request failed"),
+      });
+    },
+    // Fires as soon as a tool call's input is complete, before the server ack
+    // arrives, so each piece lands on the board while Piggy keeps talking.
+    async onToolCall({ toolCall }) {
+      if (toolCall.dynamic) return;
+
+      const fail = (reason: string) => {
+        setBoardErrors((prev) =>
+          new Map(prev).set(toolCall.toolCallId, reason),
+        );
+        toast.error("That stroke slipped", { description: reason });
+      };
+
+      if (!api) {
+        fail("Canvas is still loading");
+        return;
+      }
+      try {
+        applyCanvasTool(
+          api,
+          toolCall.toolName,
+          toolCall.input,
+          refAliases.current,
+        );
+      } catch (err) {
+        fail(errorMessage(err, "Tool failed"));
+      }
+    },
+  });
 
   const busy = status === "submitted" || status === "streaming";
   const blocked = encryptedLedger && !cloudProcessing;
@@ -422,6 +434,7 @@ export function CanvasAiChat() {
                             talking={
                               status === "streaming" && message.id === last?.id
                             }
+                            boardErrors={boardErrors}
                           />
                         </MessageScrollerItem>
                       );

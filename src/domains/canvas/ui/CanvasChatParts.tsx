@@ -43,21 +43,21 @@ type ToolMeta = {
 const TOOL_META: Record<string, ToolMeta> = {
   create_shapes: {
     icon: PencilLine,
-    preparing: "Sketching a plan…",
-    running: "Drawing {n} shapes…",
-    done: "Drew {n} shapes",
+    preparing: "Sketching the next piece…",
+    running: "Drawing {n} shape(s)…",
+    done: "Drew {n} shape(s)",
   },
   update_shapes: {
     icon: Move,
     preparing: "Eyeing the board…",
-    running: "Nudging {n} shapes…",
-    done: "Updated {n} shapes",
+    running: "Nudging {n} shape(s)…",
+    done: "Updated {n} shape(s)",
   },
   delete_shapes: {
     icon: Eraser,
     preparing: "Picking what to erase…",
-    running: "Erasing {n} shapes…",
-    done: "Erased {n} shapes",
+    running: "Erasing {n} shape(s)…",
+    done: "Erased {n} shape(s)",
   },
   clear_page: {
     icon: Trash2,
@@ -77,17 +77,22 @@ const FALLBACK_META: ToolMeta = {
 function countOf(value: unknown): number | null {
   if (!value || typeof value !== "object") return null;
   const record = value as Record<string, unknown>;
+  for (const key of ["count", "deleted"]) {
+    if (typeof record[key] === "number") return record[key];
+  }
   for (const key of ["elements", "ids", "createdIds", "updated"]) {
     const list = record[key];
     if (Array.isArray(list)) return list.length;
   }
-  if (typeof record.deleted === "number") return record.deleted;
   return null;
 }
 
+/** "Drew {n} shape(s)" -> "Drew 1 shape" / "Drew 3 shapes" / "Drew shapes". */
 function fill(template: string, n: number | null) {
-  if (n === null) return template.replace(" {n}", "").replace("{n} ", "");
-  return template.replace("{n}", String(n));
+  const plural = n === null || n !== 1;
+  const text = template.replace("(s)", plural ? "s" : "");
+  if (n === null) return text.replace(" {n}", "").replace("{n} ", "");
+  return text.replace("{n}", String(n));
 }
 
 export function toolNameFromPart(type: string) {
@@ -97,8 +102,11 @@ export function toolNameFromPart(type: string) {
 /** One row per tool call: what Piggy is doing on the board right now. */
 export function ToolActivity({
   part,
+  boardError,
 }: {
   part: ToolUIPart | DynamicToolUIPart;
+  /** Set when the server acknowledged the call but the board failed to apply it. */
+  boardError?: string;
 }) {
   const name =
     part.type === "dynamic-tool" ? part.toolName : toolNameFromPart(part.type);
@@ -107,7 +115,7 @@ export function ToolActivity({
 
   let label: string;
   let tone: "busy" | "done" | "error";
-  switch (part.state) {
+  switch (boardError ? "output-error" : part.state) {
     case "input-streaming":
       label = meta.preparing;
       tone = "busy";
@@ -134,7 +142,10 @@ export function ToolActivity({
   return (
     <div
       data-tone={tone}
-      title={part.state === "output-error" ? part.errorText : undefined}
+      title={
+        boardError ??
+        (part.state === "output-error" ? part.errorText : undefined)
+      }
       className={cn(
         "inline-flex w-fit max-w-full items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs motion-safe:animate-piggy-pop",
         tone === "busy" && "border-accent/20 bg-accent-subtle/50 text-accent",

@@ -69,8 +69,38 @@ type PendingBinding = {
   targetId: string;
 };
 
+/**
+ * ref -> element id, remembered for the whole chat. A ref is used as the id
+ * when it is free; when the model reuses a ref the alias points at the newest
+ * element so later arrows, frames, updates, and deletes hit the right shape.
+ */
+export type CanvasRefAliases = Map<string, string>;
+
+export function createCanvasRefAliases(): CanvasRefAliases {
+  return new Map();
+}
+
 function newShapeId() {
   return crypto.randomUUID();
+}
+
+function liveElement(
+  byId: ReadonlyMap<string, ExcalidrawElement>,
+  id: string | undefined,
+) {
+  if (!id) return undefined;
+  const element = byId.get(id);
+  return element && !element.isDeleted ? element : undefined;
+}
+
+/** Turn a ref or id from the model into a live element id. */
+function resolveAlias(
+  aliases: CanvasRefAliases,
+  byId: ReadonlyMap<string, ExcalidrawElement>,
+  refOrId: string,
+) {
+  const aliased = aliases.get(refOrId);
+  return aliased && liveElement(byId, aliased) ? aliased : refOrId;
 }
 
 function fontFamily(font: CanvasFontName | undefined) {
@@ -207,7 +237,10 @@ class CreateBatch {
   private readonly groupIds = new Map<string, string>();
   private readonly boxes = new Map<string, Box>();
   private readonly batchIds = new Set<string>();
+  /** Every id already in the scene, deleted ones included (ids must stay unique). */
+  private readonly takenIds: Set<string>;
   private readonly existing: Map<string, ExcalidrawElement>;
+  private readonly aliases: CanvasRefAliases;
 
   readonly skeletons: Skeleton[] = [];
   readonly createdIds: string[] = [];
@@ -217,19 +250,31 @@ class CreateBatch {
   /** Arrow ends that target pre-existing elements; bound after conversion. */
   readonly pendingBindings: PendingBinding[] = [];
 
-  constructor(existing: readonly ExcalidrawElement[]) {
+  constructor(
+    existing: readonly ExcalidrawElement[],
+    aliases: CanvasRefAliases,
+  ) {
+    this.takenIds = new Set(existing.map((e) => e.id));
     this.existing = new Map(
       existing.filter((e) => !e.isDeleted).map((e) => [e.id, e]),
     );
+    this.aliases = aliases;
+  }
+
+  /** Use the ref as the id when nothing on the board has it yet. */
+  private pickId(ref: string | undefined) {
+    if (ref && !this.takenIds.has(ref) && !this.batchIds.has(ref)) return ref;
+    return newShapeId();
   }
 
   /** First pass: assign ids so arrows/frames can reference later items. */
   assignIds(inputs: CreateElementInput[]) {
     return inputs.map((input) => {
-      const id = newShapeId();
+      const duplicate = input.ref ? this.refToId.has(input.ref) : false;
+      const id = this.pickId(duplicate ? undefined : input.ref);
       this.batchIds.add(id);
       if (input.ref) {
-        if (this.refToId.has(input.ref)) {
+        if (duplicate) {
           this.warnings.push(
             `Duplicate ref "${input.ref}"; later one ignored.`,
           );
@@ -241,8 +286,15 @@ class CreateBatch {
     });
   }
 
+  /** Make this call's refs resolvable by later calls in the same chat. */
+  commitAliases() {
+    for (const [ref, id] of this.refToId) this.aliases.set(ref, id);
+  }
+
   resolveId(refOrId: string): string | undefined {
     if (this.refToId.has(refOrId)) return this.refToId.get(refOrId);
+    const aliased = this.aliases.get(refOrId);
+    if (aliased && this.existing.has(aliased)) return aliased;
     if (this.batchIds.has(refOrId) || this.existing.has(refOrId))
       return refOrId;
     return undefined;
@@ -553,9 +605,10 @@ function buildFrame(batch: CreateBatch, id: string, input: CanvasFrameInput) {
 export function applyCreateShapes(
   api: ExcalidrawImperativeAPI,
   inputs: CreateElementInput[],
+  aliases: CanvasRefAliases = createCanvasRefAliases(),
 ) {
   const existing = api.getSceneElementsIncludingDeleted();
-  const batch = new CreateBatch(existing);
+  const batch = new CreateBatch(existing, aliases);
 
   // Frames must be built last so child boxes exist; arrows after shapes.
   const assigned = batch.assignIds(inputs);
@@ -621,6 +674,7 @@ export function applyCreateShapes(
     elements: [...nextExisting, ...createdById.values()],
     captureUpdate: CaptureUpdateAction.IMMEDIATELY,
   });
+  batch.commitAliases();
 
   return {
     ok: true as const,
@@ -632,16 +686,21 @@ export function applyCreateShapes(
 export function applyUpdateShapes(
   api: ExcalidrawImperativeAPI,
   inputs: UpdateElementInput[],
+  aliases: CanvasRefAliases = createCanvasRefAliases(),
 ) {
   const updated: string[] = [];
   const missing: string[] = [];
   const elements = api.getSceneElementsIncludingDeleted();
   const nextById = new Map(elements.map((element) => [element.id, element]));
 
-  for (const input of inputs) {
+  for (const rawInput of inputs) {
+    const input = {
+      ...rawInput,
+      id: resolveAlias(aliases, nextById, rawInput.id),
+    };
     const existing = nextById.get(input.id);
     if (!existing || existing.isDeleted) {
-      missing.push(input.id);
+      missing.push(rawInput.id);
       continue;
     }
 
@@ -708,9 +767,14 @@ export function applyUpdateShapes(
   return { ok: true as const, updated, missing };
 }
 
-export function applyDeleteShapes(api: ExcalidrawImperativeAPI, ids: string[]) {
-  const idSet = new Set(ids);
+export function applyDeleteShapes(
+  api: ExcalidrawImperativeAPI,
+  ids: string[],
+  aliases: CanvasRefAliases = createCanvasRefAliases(),
+) {
   const elements = api.getSceneElementsIncludingDeleted();
+  const byId = new Map(elements.map((element) => [element.id, element]));
+  const idSet = new Set(ids.map((id) => resolveAlias(aliases, byId, id)));
   let deleted = 0;
   const next = elements.map((element) => {
     const doomed =
@@ -746,22 +810,27 @@ export function applyClearPage(api: ExcalidrawImperativeAPI) {
   return { ok: true as const, deleted };
 }
 
+type ToolHandler = (
+  api: ExcalidrawImperativeAPI,
+  input: unknown,
+  aliases: CanvasRefAliases,
+) => unknown;
+
 const canvasToolHandlers = {
-  create_shapes: (api: ExcalidrawImperativeAPI, input: unknown) => {
+  create_shapes: (api, input, aliases) => {
     const { elements } = input as { elements: CreateElementInput[] };
-    return applyCreateShapes(api, elements);
+    return applyCreateShapes(api, elements, aliases);
   },
-  update_shapes: (api: ExcalidrawImperativeAPI, input: unknown) => {
+  update_shapes: (api, input, aliases) => {
     const { elements } = input as { elements: UpdateElementInput[] };
-    return applyUpdateShapes(api, elements);
+    return applyUpdateShapes(api, elements, aliases);
   },
-  delete_shapes: (api: ExcalidrawImperativeAPI, input: unknown) => {
+  delete_shapes: (api, input, aliases) => {
     const { ids } = input as { ids: string[] };
-    return applyDeleteShapes(api, ids);
+    return applyDeleteShapes(api, ids, aliases);
   },
-  clear_page: (api: ExcalidrawImperativeAPI, _input?: unknown) =>
-    applyClearPage(api),
-} as const;
+  clear_page: (api) => applyClearPage(api),
+} satisfies Record<string, ToolHandler>;
 
 export type CanvasToolName = keyof typeof canvasToolHandlers;
 
@@ -769,14 +838,15 @@ export function isCanvasToolName(name: string): name is CanvasToolName {
   return name in canvasToolHandlers;
 }
 
-/** Run a client canvas tool by name. Unknown tools return an error object. */
+/** Run a canvas tool on the board by name. Unknown tools return an error object. */
 export function applyCanvasTool(
   api: ExcalidrawImperativeAPI,
   toolName: string,
   input: unknown,
+  aliases: CanvasRefAliases = createCanvasRefAliases(),
 ) {
   if (!isCanvasToolName(toolName)) {
     return { ok: false as const, error: `Unknown tool ${toolName}` };
   }
-  return canvasToolHandlers[toolName](api, input);
+  return canvasToolHandlers[toolName](api, input, aliases);
 }
