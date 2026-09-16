@@ -162,16 +162,19 @@ export function OcrDocumentPickerButton({
     <>
       {inputs}
       <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button
-            type="button"
-            variant={variant}
-            size={size}
-            className={className}
-            disabled={disabled}
-          >
-            {children}
-          </Button>
+        <DropdownMenuTrigger
+          disabled={disabled}
+          render={
+            <Button
+              type="button"
+              variant={variant}
+              size={size}
+              className={className}
+              disabled={disabled}
+            />
+          }
+        >
+          {children}
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="min-w-44">
           <DropdownMenuItem className="cursor-pointer" onClick={openCamera}>

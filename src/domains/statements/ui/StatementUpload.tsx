@@ -723,50 +723,55 @@ export function StatementUpload({ onImported }: Props) {
           <div className="space-y-3">
             {ocrPicker.showCameraMenu ? (
               <DropdownMenu>
-                <DropdownMenuTrigger asChild disabled={busy}>
-                  <div
-                    role="button"
-                    tabIndex={busy ? -1 : 0}
-                    aria-disabled={busy}
-                    aria-label="Upload statement files or take a photo"
-                    onDragEnter={(event) => {
-                      event.preventDefault();
-                      if (!busy) setDragOver(true);
-                    }}
-                    onDragOver={(event) => {
-                      event.preventDefault();
-                      if (!busy) setDragOver(true);
-                    }}
-                    onDragLeave={(event) => {
-                      event.preventDefault();
-                      setDragOver(false);
-                    }}
-                    onDrop={(event) => {
-                      event.preventDefault();
-                      setDragOver(false);
-                      if (busy) return;
-                      addFiles(event.dataTransfer.files);
-                    }}
-                    className={cn(
-                      "flex w-full flex-col items-center justify-center gap-2 rounded-xl border border-dashed px-4 py-8 text-center transition-colors outline-none",
-                      "focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50",
-                      busy ? "pointer-events-none opacity-60" : "cursor-pointer",
-                      dragOver
-                        ? "border-foreground/40 bg-muted/60"
-                        : "border-border bg-muted/20 hover:bg-muted/40",
-                    )}
-                  >
-                    <span className="flex size-9 items-center justify-center rounded-lg bg-background text-foreground ring-1 ring-border">
-                      <UploadIcon className="size-4" />
-                    </span>
-                    <span className="text-sm font-medium">
-                      {OCR_UPLOAD_HINT_POINTER}
-                    </span>
-                    <span className="text-xs text-muted-foreground">
-                      PDF or photo · take photo or choose file · up to {MAX_FILES}{" "}
-                      · 20MB each
-                    </span>
-                  </div>
+                <DropdownMenuTrigger
+                  disabled={busy}
+                  render={
+                    <div
+                      role="button"
+                      tabIndex={busy ? -1 : 0}
+                      aria-disabled={busy}
+                      aria-label="Upload statement files or take a photo"
+                      onDragEnter={(event) => {
+                        event.preventDefault();
+                        if (!busy) setDragOver(true);
+                      }}
+                      onDragOver={(event) => {
+                        event.preventDefault();
+                        if (!busy) setDragOver(true);
+                      }}
+                      onDragLeave={(event) => {
+                        event.preventDefault();
+                        setDragOver(false);
+                      }}
+                      onDrop={(event) => {
+                        event.preventDefault();
+                        setDragOver(false);
+                        if (busy) return;
+                        addFiles(event.dataTransfer.files);
+                      }}
+                      className={cn(
+                        "flex w-full flex-col items-center justify-center gap-2 rounded-xl border border-dashed px-4 py-8 text-center transition-colors outline-none",
+                        "focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50",
+                        busy
+                          ? "pointer-events-none opacity-60"
+                          : "cursor-pointer",
+                        dragOver
+                          ? "border-foreground/40 bg-muted/60"
+                          : "border-border bg-muted/20 hover:bg-muted/40",
+                      )}
+                    />
+                  }
+                >
+                  <span className="flex size-9 items-center justify-center rounded-lg bg-background text-foreground ring-1 ring-border">
+                    <UploadIcon className="size-4" />
+                  </span>
+                  <span className="text-sm font-medium">
+                    {OCR_UPLOAD_HINT_POINTER}
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    PDF or photo · take photo or choose file · up to {MAX_FILES}{" "}
+                    · 20MB each
+                  </span>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent
                   align="center"
