@@ -1,0 +1,165 @@
+/* Map Excalidraw chrome to JayrrBudget tokens. Drawing palette stays native. */
+
+.jayrr-excalidraw .excalidraw {
+  --ui-font:
+    var(--font-sans-body), ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--ui-font);
+
+  --default-bg-color: var(--background);
+  --island-bg-color: var(--surface-elevated);
+  --island-bg-color-alt: var(--surface);
+  --popup-bg-color: var(--surface-elevated);
+  --popup-secondary-bg-color: var(--surface-subtle);
+  --popup-text-color: var(--foreground);
+  --input-bg-color: var(--surface-elevated);
+  --input-hover-bg-color: var(--surface);
+  --input-border-color: var(--control-border);
+  --input-label-color: var(--foreground-muted);
+  --sidebar-bg-color: var(--surface-elevated);
+  --sidebar-border-color: var(--border);
+  --dialog-border-color: var(--border);
+  --default-border-color: var(--border);
+  --button-gray-1: var(--surface-subtle);
+  --button-gray-2: var(--border);
+  --button-gray-3: var(--control-border);
+  --button-hover-bg: var(--surface-subtle);
+  --button-active-bg: var(--primary-subtle);
+  --button-active-border: var(--primary);
+  --mobile-action-button-bg: color-mix(in srgb, var(--surface-elevated) 88%, transparent);
+  --mobile-color-border: var(--border);
+  --overlay-bg-color: color-mix(in srgb, var(--foreground) 12%, transparent);
+
+  --text-primary-color: var(--foreground);
+  --color-on-surface: var(--foreground);
+  --icon-fill-color: var(--foreground);
+  --keybinding-color: var(--foreground-muted);
+  --color-disabled: var(--foreground-muted);
+
+  --color-surface-lowest: var(--surface-elevated);
+  --color-surface-low: var(--surface);
+  --color-surface-mid: var(--surface);
+  --color-surface-high: var(--surface-subtle);
+
+  --color-primary: var(--primary);
+  --color-primary-darker: var(--primary-hover);
+  --color-primary-darkest: var(--primary-hover);
+  --color-primary-light: var(--primary-subtle);
+  --color-primary-light-darker: var(--primary-subtle);
+  --color-primary-hover: var(--primary-hover);
+  --color-brand-hover: var(--primary-hover);
+  --color-brand-active: var(--primary);
+  --color-selection: var(--primary);
+  --color-on-primary-container: var(--primary-subtle-foreground);
+  --color-surface-primary-container: var(--primary-subtle);
+  --color-promo: var(--primary);
+  --color-logo-icon: var(--accent);
+  --color-logo-text: var(--foreground);
+
+  --color-border-outline: var(--control-border);
+  --color-border-outline-variant: var(--border);
+  --focus-highlight-color: var(--ring);
+  --select-highlight-color: var(--ring);
+  --link-color: var(--primary);
+  --link-color-hover: var(--primary-hover);
+  --link-color-active: var(--primary);
+
+  --color-danger: var(--danger);
+  --color-danger-dark: var(--danger);
+  --color-danger-darker: var(--danger);
+  --color-danger-darkest: var(--danger);
+  --color-danger-text: var(--danger);
+  --color-danger-background: var(--danger-subtle);
+  --color-danger-icon-background: var(--danger-subtle);
+  --color-danger-color: var(--danger);
+  --color-danger-icon-color: var(--danger);
+  --button-destructive-bg-color: var(--danger-subtle);
+  --button-destructive-color: var(--danger);
+
+  --color-warning: var(--warning-subtle);
+  --color-warning-dark: var(--warning);
+  --color-warning-darker: var(--warning);
+  --color-warning-darkest: var(--warning);
+  --color-text-warning: var(--foreground);
+  --color-warning-background: var(--warning-subtle);
+  --color-warning-icon-background: var(--warning-subtle);
+  --color-warning-color: var(--warning);
+  --color-warning-icon-color: var(--warning);
+
+  --color-success: var(--success-subtle);
+  --color-success-darker: var(--success-subtle);
+  --color-success-darkest: var(--success-subtle);
+  --color-success-text: var(--success);
+  --color-success-contrast: var(--success);
+  --color-success-contrast-hover: var(--success);
+  --color-success-contrast-active: var(--success);
+  --icon-green-fill-color: var(--success);
+  --button-special-active-bg-color: var(--success-subtle);
+  --color-badge: var(--success);
+  --background-color-badge: var(--success-subtle);
+
+  --color-slider-track: var(--primary-subtle);
+  --color-slider-thumb: var(--primary);
+  --scrollbar-thumb: var(--border);
+  --scrollbar-thumb-hover: var(--control-border);
+
+  --border-radius-md: calc(var(--radius) * 0.8);
+  --border-radius-lg: var(--radius);
+
+  --shadow-island:
+    0 1px 2px color-mix(in srgb, var(--foreground) 6%, transparent),
+    0 8px 20px color-mix(in srgb, var(--foreground) 6%, transparent);
+  --shadow-island-stronger:
+    0 1px 2px color-mix(in srgb, var(--foreground) 8%, transparent),
+    0 12px 24px color-mix(in srgb, var(--foreground) 10%, transparent);
+  --modal-shadow: var(--shadow-island-stronger);
+  --sidebar-shadow: var(--shadow-island-stronger);
+}
+
+.jayrr-excalidraw .excalidraw.theme--dark {
+  --default-bg-color: var(--background);
+  --island-bg-color: var(--surface-elevated);
+  --color-on-surface: var(--foreground);
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-surface-primary-container: var(--primary-subtle);
+  --color-on-primary-container: var(--primary-subtle-foreground);
+}
+
+.jayrr-excalidraw .excalidraw h1,
+.jayrr-excalidraw .excalidraw h2,
+.jayrr-excalidraw .excalidraw h3,
+.jayrr-excalidraw .excalidraw h4 {
+  font-family:
+    var(--font-outfit), var(--font-sans-body), ui-sans-serif, sans-serif;
+}
+
+.jayrr-excalidraw .excalidraw .Island {
+  border: 1px solid var(--border);
+}
+
+.jayrr-excalidraw .excalidraw .Modal__content {
+  border-radius: var(--radius-xl);
+  border-color: var(--border);
+  background: var(--surface-elevated);
+}
+
+.jayrr-excalidraw .excalidraw .dropdown-menu,
+.jayrr-excalidraw .excalidraw .context-menu {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-elevated);
+  box-shadow: var(--shadow-island);
+}
+
+.jayrr-excalidraw .excalidraw .divider {
+  background-color: var(--border);
+}
+
+.excalidraw-tooltip {
+  --ui-font:
+    var(--font-sans-body), ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--ui-font);
+  background: var(--foreground);
+  color: var(--surface-elevated);
+  border-radius: var(--radius-sm);
+}

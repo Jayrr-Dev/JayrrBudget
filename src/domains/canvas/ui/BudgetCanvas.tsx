@@ -5,6 +5,7 @@ import { CanvasApiContext } from "@/domains/canvas/ui/canvasApiContext";
 import { api } from "@convex/_generated/api";
 import { Excalidraw, serializeAsJSON } from "@excalidraw/excalidraw";
 import "@excalidraw/excalidraw/index.css";
+import "@/domains/canvas/ui/excalidrawTheme.css";
 import type {
   ExcalidrawImperativeAPI,
   ExcalidrawInitialDataState,
@@ -148,7 +149,7 @@ export function BudgetCanvas() {
 
   return (
     <CanvasApiContext.Provider value={apiRef}>
-      <div className="h-full min-h-0 w-full flex-1 overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)]">
+      <div className="jayrr-excalidraw h-full min-h-0 w-full flex-1 overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)]">
         <Excalidraw
           excalidrawAPI={setApi}
           initialData={initialData ?? undefined}
