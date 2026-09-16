@@ -14,6 +14,7 @@ import {
   CircleAlert,
   Eraser,
   LayoutTemplate,
+  MessageCircle,
   Move,
   PencilLine,
   Trash2,
@@ -96,6 +97,12 @@ const TOOL_META: Record<string, ToolMeta> = {
     preparing: "Getting the eraser…",
     running: "Wiping the board…",
     done: "Board cleared",
+  },
+  say_bubble: {
+    icon: MessageCircle,
+    preparing: "Clearing throat…",
+    running: "Speaking up…",
+    done: "Said it out loud",
   },
   remember_about_user: {
     icon: Brain,
