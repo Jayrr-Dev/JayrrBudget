@@ -14,10 +14,9 @@ export function runWithOpenRouterKey<T>(apiKey: string, fn: () => T): T {
 }
 
 const DEFAULT_MODELS = [
-  "google/gemini-3.8-flash",
-  "google/gemini-3.7-flash",
-  "google/gemini-3.5-flash-lite",
-  "google/gemini-2.5-flash",
+  "deepseek/deepseek-v4-flash",
+  "z-ai/glm-5.3-flash",
+  "openai/gpt-oss-120b",
 ] as const;
 
 export function isOpenRouterConfigured() {
@@ -36,7 +35,7 @@ export function getOpenRouter() {
   });
 }
 
-/** Ordered model chain: env list first, then built-in Gemini flash fallbacks. */
+/** Ordered model chain: env list first, then built-in cheap flash fallbacks. */
 export function getModelChain() {
   const fromList = process.env.OPENROUTER_MODELS?.split(",")
     .map((value) => value.trim())
@@ -102,9 +101,12 @@ export function chatModel(
     reasoning?: { effort: NonNullable<ChatModelOptions["reasoningEffort"]> };
     parallelToolCalls?: boolean;
   } = {
+    // false: cheap multi-provider models often omit params like
+    // parallel_tool_calls from their endpoint lists; require_parameters
+    // true then returns "No endpoints found".
     provider: {
       allow_fallbacks: true,
-      require_parameters: true,
+      require_parameters: false,
     },
   };
   if (fallbacks.length > 0) {

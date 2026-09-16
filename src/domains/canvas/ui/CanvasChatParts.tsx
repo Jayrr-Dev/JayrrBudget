@@ -22,7 +22,7 @@ import {
   Trash2,
   type LucideIcon,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
@@ -171,12 +171,47 @@ export function ToolActivity({
 /* Reasoning                                                           */
 /* ------------------------------------------------------------------ */
 
-/** Collapsible "Piggy's thoughts" block. Open while streaming, folds when done. */
+const PREVIEW_CHARS = 110;
+
+/** One short line for the collapsed peek (latest thought while streaming). */
+function thoughtPreview(text: string, preferLatest: boolean) {
+  const cleaned = text.replace(/\s+/g, " ").trim();
+  if (!cleaned) return "";
+  if (!preferLatest) {
+    if (cleaned.length <= PREVIEW_CHARS) return cleaned;
+    return `${cleaned.slice(0, PREVIEW_CHARS).trimEnd()}…`;
+  }
+  const lines = text
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const latest = lines.at(-1) ?? cleaned;
+  if (latest.length <= PREVIEW_CHARS) return latest;
+  return `…${latest.slice(-(PREVIEW_CHARS - 1)).trimStart()}`;
+}
+
+/** Cursor/OpenAI-style: peek only, full text tucked behind expand. */
 export function ReasoningBlock({ part }: { part: ReasoningUIPart }) {
-  const [userOpen, setUserOpen] = useState<boolean | null>(null);
+  const [userOpen, setUserOpen] = useState(false);
+  const [startedAt] = useState(() => Date.now());
+  const [elapsedSec, setElapsedSec] = useState<number | null>(null);
   const streaming = part.state === "streaming";
-  const open = userOpen ?? streaming;
-  if (!part.text.trim() && !streaming) return null;
+  const open = userOpen;
+  const text = part.text.trim();
+
+  useEffect(() => {
+    if (streaming || elapsedSec != null || !text) return;
+    setElapsedSec(Math.max(1, Math.round((Date.now() - startedAt) / 1000)));
+  }, [streaming, elapsedSec, text, startedAt]);
+
+  if (!text && !streaming) return null;
+
+  const preview = thoughtPreview(text, streaming);
+  const header = streaming
+    ? "Piggy is thinking…"
+    : elapsedSec != null
+      ? `Thought for ${elapsedSec}s`
+      : "Piggy's thoughts";
 
   return (
     <Collapsible
@@ -184,15 +219,24 @@ export function ReasoningBlock({ part }: { part: ReasoningUIPart }) {
       onOpenChange={setUserOpen}
       className="w-full max-w-[85%] rounded-lg border border-accent/15 bg-accent-subtle/30 text-xs"
     >
-      <CollapsibleTrigger className="group/reason flex w-full items-center gap-1.5 px-2 py-1.5 text-left text-accent">
-        <Brain className="size-3 shrink-0" />
-        <span className={cn("flex-1 font-medium", streaming && "shimmer")}>
-          {streaming ? "Piggy is thinking…" : "Piggy's thoughts"}
+      <CollapsibleTrigger className="group/reason flex w-full items-start gap-1.5 px-2 py-1.5 text-left text-accent">
+        <Brain className="mt-0.5 size-3 shrink-0" />
+        <span className="min-w-0 flex-1">
+          <span className={cn("block font-medium", streaming && "shimmer")}>
+            {header}
+          </span>
+          {!open && preview ? (
+            <span className="mt-0.5 block truncate font-normal text-muted-foreground">
+              {preview}
+            </span>
+          ) : null}
         </span>
-        <ChevronDown className="size-3 shrink-0 transition-transform group-data-[state=open]/reason:rotate-180" />
+        <ChevronDown className="mt-0.5 size-3 shrink-0 transition-transform group-data-[state=open]/reason:rotate-180" />
       </CollapsibleTrigger>
       <CollapsibleContent className="px-2 pb-2 text-muted-foreground data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:animate-in data-[state=open]:fade-in-0">
-        <p className="whitespace-pre-wrap leading-relaxed">{part.text}</p>
+        <div className="max-h-28 overflow-y-auto whitespace-pre-wrap leading-relaxed">
+          {text || (streaming ? "…" : null)}
+        </div>
       </CollapsibleContent>
     </Collapsible>
   );

@@ -156,11 +156,11 @@ export async function POST(request: Request) {
     ].join("\n");
 
     const result = streamText({
-      // Reasoning streams back as "Piggy's thoughts"; one tool call per step so
-      // pieces land on the board one at a time with an explanation between them.
+      // Reasoning streams back as "Piggy's thoughts". Do not set
+      // parallelToolCalls: false — OpenRouter cheap providers omit that
+      // param and return "No endpoints found" when it is required.
       model: chatModel(modelId, fallbacks, {
         reasoningEffort: "low",
-        parallelToolCalls: false,
       }),
       system,
       messages: modelMessages,
