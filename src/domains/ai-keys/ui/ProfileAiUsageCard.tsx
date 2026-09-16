@@ -25,6 +25,10 @@ export function ProfileAiUsageCard() {
     api.aiUsage.myMonth,
     isAuthenticated ? { monthKey } : "skip",
   );
+  const quota = useQuery(
+    api.service.myQuota,
+    isAuthenticated ? { monthKey } : "skip",
+  );
   const recent = useQuery(
     api.aiUsage.myRecent,
     isAuthenticated ? {} : "skip",
@@ -59,8 +63,8 @@ export function ProfileAiUsageCard() {
                 Tokens, OCR pages, and estimated USD for this UTC month.
               </PopoverDescription>
               <ul className="mt-1.5 list-disc space-y-1 pl-4 text-muted-foreground">
-                <li>App key usage is what premium limits will meter later</li>
-                <li>Your own OpenRouter key is tracked separately as BYOK</li>
+                <li>App key usage counts toward your monthly included cap</li>
+                <li>Your own OpenRouter key is tracked separately and not capped</li>
                 <li>Estimates use our published rates, not the provider invoice</li>
               </ul>
             </PopoverHeader>
@@ -96,7 +100,15 @@ export function ProfileAiUsageCard() {
         </div>
       )}
 
-      <p className="text-xs text-[var(--muted-foreground)]">Month {monthKey} UTC</p>
+      <p className="text-xs text-[var(--muted-foreground)]">
+        {quota
+          ? `${quota.name} · remaining ${
+              quota.remainingUsd == null ? "unlimited" : formatUsd(quota.remainingUsd)
+            } of ${
+              quota.monthlyCapUsd == null ? "no cap" : formatUsd(quota.monthlyCapUsd)
+            } · ${monthKey} UTC`
+          : `Month ${monthKey} UTC`}
+      </p>
 
       {recent && recent.length > 0 ? (
         <ul className="max-h-48 overflow-y-auto font-mono text-[11px]">

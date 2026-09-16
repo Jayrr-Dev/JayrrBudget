@@ -1,5 +1,6 @@
 import { recategorizeTransaction } from "@/domains/transactions/application/recategorizeTransaction";
 import { runMeteredOpenRouter } from "@/shared/ai/aiMeter.server";
+import { aiCallDeniedResponse, checkAiCall } from "@/shared/ai/enforceAiCall.server";
 import { loadOpenRouterKeyOr503 } from "@/shared/ai/resolveOpenRouter.server";
 import {
   AuthRequiredError,
@@ -14,6 +15,8 @@ export async function POST(request: Request) {
     const client = await getAuthenticatedConvexClient();
     const loaded = await loadOpenRouterKeyOr503(client);
     if (!loaded.ok) return loaded.response;
+    const gate = await checkAiCall(client, { billedTo: loaded.billedTo });
+    if (!gate.ok) return aiCallDeniedResponse(gate);
     const body = (await request.json()) as {
       transactionId?: string;
       description?: string;

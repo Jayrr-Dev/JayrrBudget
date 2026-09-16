@@ -38,11 +38,13 @@ export function TrackingUsageHeartbeat() {
     };
 
     lastAt.current = Date.now();
+    const kick = window.setTimeout(flush, 5_000);
     const timer = window.setInterval(() => {
       if (document.visibilityState === "visible") flush();
     }, INTERVAL_MS);
     document.addEventListener("visibilitychange", flush);
     return () => {
+      window.clearTimeout(kick);
       window.clearInterval(timer);
       document.removeEventListener("visibilitychange", flush);
       flush();

@@ -1,28 +1,22 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 16 16">
-  <g fill="none">
-    <path fill="url(#jb-icon-a)" d="M15 8.268c0 1.552-.548 2.64-1.11 3.34a4.6 4.6 0 0 1-.89.85V13.5a1.5 1.5 0 0 1-1.5 1.5H11a1 1 0 0 1-1-1H8a1 1 0 0 1-1 1h-.5A1.5 1.5 0 0 1 5 13.5v-.214c-1.363-.433-2.312-1.534-2.78-2.858a.43.43 0 0 0-.269-.281A1.31 1.31 0 0 1 1 8.89v-.794c0-.576.382-1.082.935-1.24c.104-.03.216-.13.271-.297c.346-1.046 1.069-1.81 2-2.37q.145-.088.26-.15V2.163a.76.76 0 0 1 .481-.704a.77.77 0 0 1 .826.15c.253.24.585.525.94.758c.365.238.707.39.986.418h.005C11.077 2.784 15 4.471 15 8.268"/>
-    <path fill="url(#jb-icon-b)" d="M5.5 6.75a.75.75 0 1 1-1.5 0a.75.75 0 0 1 1.5 0"/>
-    <path fill="#9f1459" d="M6.942 4.727a.835.835 0 0 1 1.09-.453l5.56 2.295a.835.835 0 0 1-.637 1.544l-5.56-2.296a.835.835 0 0 1-.453-1.09"/>
-    <path fill="url(#jb-icon-c)" d="M12.14 7.776a3 3 0 1 0-3.906-1.613z"/>
-    <path fill="url(#jb-icon-d)" fill-opacity=".8" d="M12.14 7.776a3 3 0 1 0-3.906-1.613z"/>
-    <defs>
-      <radialGradient id="jb-icon-a" cx="0" cy="0" r="1" gradientTransform="rotate(74.152 .833 4.867)scale(13.2972 13.6974)" gradientUnits="userSpaceOnUse">
-        <stop stop-color="#f08af4"/>
-        <stop offset=".581" stop-color="#e869ce"/>
-        <stop offset="1" stop-color="#d7257d"/>
-      </radialGradient>
-      <radialGradient id="jb-icon-b" cx="0" cy="0" r="1" gradientTransform="rotate(59.532 -3.375 7.091)scale(1.27093)" gradientUnits="userSpaceOnUse">
-        <stop stop-color="#b91d6b"/>
-        <stop offset="1" stop-color="#670938"/>
-      </radialGradient>
-      <linearGradient id="jb-icon-c" x1="12.968" x2="8.03" y1="7.63" y2="3.794" gradientUnits="userSpaceOnUse">
-        <stop stop-color="#ff8a69"/>
-        <stop offset="1" stop-color="#ffcd0f"/>
-      </linearGradient>
-      <linearGradient id="jb-icon-d" x1="11.795" x2="9.488" y1="2.361" y2="7.421" gradientUnits="userSpaceOnUse">
-        <stop offset=".67" stop-color="#fb5937" stop-opacity="0"/>
-        <stop offset="1" stop-color="#cd3e1d"/>
-      </linearGradient>
-    </defs>
-  </g>
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" fill="none" role="img" aria-labelledby="title desc">
+  <title id="title">JayrrBudget</title>
+  <desc id="desc">A bright pink piggy bank with tiny feet and a golden coin tucked into its back.</desc>
+  <defs>
+    <linearGradient id="body" x1="40" y1="41" x2="89" y2="107" gradientUnits="userSpaceOnUse"><stop stop-color="#F778D4"/><stop offset=".55" stop-color="#EE54BE"/><stop offset="1" stop-color="#D62C94"/></linearGradient>
+    <linearGradient id="ear" x1="38" y1="24" x2="50" y2="49" gradientUnits="userSpaceOnUse"><stop stop-color="#F486DF"/><stop offset="1" stop-color="#EC59C7"/></linearGradient>
+    <linearGradient id="gold" x1="80" y1="26" x2="104" y2="64" gradientUnits="userSpaceOnUse"><stop stop-color="#FFE581"/><stop offset=".5" stop-color="#FFC550"/><stop offset="1" stop-color="#FF9C35"/></linearGradient>
+    <linearGradient id="snout" x1="20" y1="57" x2="32" y2="80" gradientUnits="userSpaceOnUse"><stop stop-color="#F983DD"/><stop offset="1" stop-color="#EF63C7"/></linearGradient>
+  </defs>
+  <!-- Compact side silhouette, with no heavy outline. -->
+  <path d="M39 48L39 28Q39 23 44 26L58 41Z" fill="url(#ear)"/>
+  <path d="M99 62Q112 55 111 66Q111 73 104 72" stroke="#D72E98" stroke-width="5" stroke-linecap="round"/>
+  <path d="M40 89L40 107Q40 111 45 111H50Q54 111 55 106L58 96Z" fill="#D72C95"/>
+  <path d="M84 91L86 107Q86 111 90 111H95Q99 111 99 106L101 88Z" fill="#CB278D"/>
+  <path d="M24 60Q29 43 49 39Q68 34 87 44Q105 51 108 69Q112 88 99 98Q84 109 62 104Q39 101 29 84L22 79Z" fill="url(#body)"/>
+  <path d="M30 55Q24 58 19 63Q15 67 19 73L27 81Q31 84 35 79L38 66Z" fill="url(#snout)"/>
+  <ellipse cx="41" cy="58" rx="4.1" ry="4.6" fill="#743567"/>
+  <path d="M70 47L99 59" stroke="#AC237C" stroke-width="7" stroke-linecap="round"/>
+  <!-- Plain golden coin, partly inserted rather than floating above the bank. -->
+  <path d="M75 47C70 36 76 26 87 26C99 26 106 37 105 49L103 57Q88 55 75 47Z" fill="#F59A30"/>
+  <path d="M73 46C69 37 75 26 85 25C97 24 104 36 102 49L100 55Q86 53 73 46Z" fill="url(#gold)"/>
 </svg>

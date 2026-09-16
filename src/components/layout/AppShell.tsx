@@ -33,7 +33,7 @@ import { cn } from "@/lib/utils";
 import { budgetBrandLabel } from "@/shared/lib/budget-brand";
 import { useAuthActions } from "@convex-dev/auth/react";
 import { api } from "@convex/_generated/api";
-import { IconLogout, IconUser } from "@tabler/icons-react";
+import { PiggyIcon } from "@/components/ui/piggy-icon";
 import { useQueryClient } from "@tanstack/react-query";
 import { useConvexAuth, useQuery } from "convex/react";
 import { motion } from "motion/react";
@@ -161,7 +161,7 @@ function SidebarFooterLink() {
         link={{
           label: "Profile",
           href: "/profile",
-          icon: <IconUser className="size-5 shrink-0 opacity-90" />,
+          icon: <PiggyIcon name="profile" />,
         }}
       />
       <SignOutButton />
@@ -193,7 +193,7 @@ function SignOutButton() {
           )}
         >
           <span className="flex size-5 shrink-0 items-center justify-center [&_svg]:size-5">
-            <IconLogout className="size-5 shrink-0 opacity-90" />
+            <PiggyIcon name="logout" />
           </span>
           {showLabel ? (
             <motion.span

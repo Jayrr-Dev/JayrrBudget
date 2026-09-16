@@ -3,6 +3,7 @@ import {
   planSimilarMerchantMerges,
 } from "@/domains/merchants/application/cleanSimilarMerchants";
 import { runMeteredOpenRouter } from "@/shared/ai/aiMeter.server";
+import { aiCallDeniedResponse, checkAiCall } from "@/shared/ai/enforceAiCall.server";
 import { loadOpenRouterKeyOr503 } from "@/shared/ai/resolveOpenRouter.server";
 import {
   AuthRequiredError,
@@ -29,6 +30,8 @@ export async function POST(request: Request) {
     const client = await getAuthenticatedConvexClient();
     const loaded = await loadOpenRouterKeyOr503(client);
     if (!loaded.ok) return loaded.response;
+    const gate = await checkAiCall(client, { billedTo: loaded.billedTo });
+    if (!gate.ok) return aiCallDeniedResponse(gate);
     return runMeteredOpenRouter(client, loaded, async () => {
       const body = (await request.json().catch(() => ({}))) as ProbeBody;
       const probes = (body.merchants ?? [])

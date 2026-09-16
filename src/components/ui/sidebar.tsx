@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 import Link from "next/link";
 import React, { useEffect, useRef, useState, createContext, useContext } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { IconMenu2, IconX } from "@tabler/icons-react";
+import { PiggyIcon } from "@/components/ui/piggy-icon";
 
 export interface SidebarLinkItem {
   label: string;
@@ -202,7 +202,7 @@ export const MobileSidebar = ({
           className="rounded-lg p-1.5 text-[var(--sidebar-foreground)] hover:bg-[var(--sidebar-accent)]"
           onClick={() => setOpen(!open)}
         >
-          <IconMenu2 className="size-5" />
+          <PiggyIcon name="menu" />
         </button>
       </div>
       <AnimatePresence>
@@ -230,7 +230,7 @@ export const MobileSidebar = ({
               className="absolute top-4 right-4 rounded-lg p-1.5 text-[var(--foreground)] hover:bg-[var(--sidebar-accent)]"
               onClick={() => setOpen(false)}
             >
-              <IconX className="size-5" />
+              <PiggyIcon name="close" />
             </button>
             {children}
           </motion.div>

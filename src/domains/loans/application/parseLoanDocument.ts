@@ -12,6 +12,7 @@ import {
 } from "@/domains/statements/infrastructure/mistralOcr";
 import { OPENROUTER_NOT_CONFIGURED } from "@/shared/ai/openRouter";
 import { runMeteredOpenRouter } from "@/shared/ai/aiMeter.server";
+import { checkAiCall } from "@/shared/ai/enforceAiCall.server";
 import { resolveOpenRouterApiKey } from "@/shared/ai/resolveOpenRouter.server";
 import { api } from "@/shared/convex/httpClient";
 import { errorMessage } from "@/shared/lib/error-message";
@@ -57,6 +58,19 @@ export async function parseLoanDocument(params: {
       status: 503,
       code: "OPENROUTER_NOT_CONFIGURED",
       error: OPENROUTER_NOT_CONFIGURED,
+    };
+  }
+
+  const gate = await checkAiCall(params.client, {
+    billedTo: loaded.billedTo,
+    usesPlatformOcr: !params.clientOcr,
+  });
+  if (!gate.ok) {
+    return {
+      ok: false,
+      status: gate.status,
+      code: gate.code,
+      error: gate.error,
     };
   }
 

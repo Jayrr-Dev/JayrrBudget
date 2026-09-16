@@ -7,9 +7,9 @@ import {
   getModelChain,
 } from "@/shared/ai/openRouter";
 import { persistAiUsage, runMeteredOpenRouter } from "@/shared/ai/aiMeter.server";
+import { aiCallDeniedResponse, checkAiCall } from "@/shared/ai/enforceAiCall.server";
 import { aiUsageMessageMetadata } from "@/shared/ai/aiUsageMetadata";
 import { loadOpenRouterKeyOr503 } from "@/shared/ai/resolveOpenRouter.server";
-import { cachedConvexRead } from "@/shared/convex/cachedRead";
 import {
   AuthRequiredError,
   getAuthenticatedConvexClient,
@@ -30,42 +30,10 @@ export const maxDuration = 300;
 /** Pieces per request: title + ~20 pieces + arrows + frame + wrap-up. */
 const MAX_STEPS = 30;
 
-const RATE_WINDOW_MS = 60_000;
-const RATE_MAX = 20;
-const rateBuckets = new Map<string, { count: number; resetAt: number }>();
-
-function allowRate(userId: string) {
-  const now = Date.now();
-  const bucket = rateBuckets.get(userId);
-  if (!bucket || now >= bucket.resetAt) {
-    rateBuckets.set(userId, { count: 1, resetAt: now + RATE_WINDOW_MS });
-    return true;
-  }
-  if (bucket.count >= RATE_MAX) return false;
-  bucket.count += 1;
-  return true;
-}
-
 export async function POST(request: Request) {
-  let userKey: string;
-  let role: string | undefined;
+  let convex;
   try {
-    const me = await cachedConvexRead({
-      name: "users.me",
-      ttlMs: 60_000,
-      load: async () => {
-        const client = await getAuthenticatedConvexClient();
-        return client.query(api.users.me, {});
-      },
-    });
-    if (!me) {
-      return Response.json(
-        { error: "Authentication required" },
-        { status: 401 },
-      );
-    }
-    userKey = me.userId;
-    role = me.role;
+    convex = await getAuthenticatedConvexClient();
   } catch (error) {
     if (error instanceof AuthRequiredError) {
       return Response.json(
@@ -76,23 +44,24 @@ export async function POST(request: Request) {
     throw error;
   }
 
-  if (role !== "admin" && role !== "premium") {
+  const me = await convex.query(api.users.me, {});
+  if (!me) {
+    return Response.json(
+      { error: "Authentication required" },
+      { status: 401 },
+    );
+  }
+  if (me.role !== "admin" && me.role !== "premium") {
     return Response.json(
       { error: "Premium access required for canvas AI." },
       { status: 403 },
     );
   }
 
-  if (!allowRate(userKey)) {
-    return Response.json(
-      { error: "Too many AI requests. Try again in a minute." },
-      { status: 429 },
-    );
-  }
-
-  const convex = await getAuthenticatedConvexClient();
   const loaded = await loadOpenRouterKeyOr503(convex);
   if (!loaded.ok) return loaded.response;
+  const gate = await checkAiCall(convex, { billedTo: loaded.billedTo });
+  if (!gate.ok) return aiCallDeniedResponse(gate);
 
   return runMeteredOpenRouter(convex, loaded, async () => {
     let body: {

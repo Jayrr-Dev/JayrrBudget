@@ -41,13 +41,11 @@ import {
 import { cn } from "@/lib/utils";
 import { downloadCsv, toCsv } from "@/shared/lib/csv";
 import {
-  Bug,
   ChevronLeft,
-  FileSpreadsheet,
   PlusIcon,
-  StickyNote,
   XIcon,
 } from "lucide-react";
+import { PiggyIcon } from "@/components/ui/piggy-icon";
 import { useEffect, useMemo, useRef, useState, type ReactElement } from "react";
 
 function storeSheetCsvFilename(tabName: string) {
@@ -623,11 +621,7 @@ export function PersistentNoteFab({
             }
             className={segmentBtn(sheetOpen)}
           >
-            <FileSpreadsheet
-              className="size-5 shrink-0"
-              strokeWidth={2}
-              aria-hidden
-            />
+            <PiggyIcon name="sheet" className="size-6" />
             {sheetOpen && !isNavbar ? (
               <span className="flex min-w-0 select-none items-center gap-1 pr-0.5 text-[11px] font-medium tracking-tight whitespace-nowrap">
                 <span>Sheet</span>
@@ -668,11 +662,7 @@ export function PersistentNoteFab({
             aria-label={noteCount > 0 ? `Notes, ${noteCount} tabs` : "Notes"}
             className={segmentBtn(notesOpen)}
           >
-            <StickyNote
-              className="size-5 shrink-0"
-              strokeWidth={2}
-              aria-hidden
-            />
+            <PiggyIcon name="notes" className="size-6" />
             {notesOpen && !isNavbar ? (
               <span className="flex min-w-0 select-none items-center gap-1 pr-0.5 text-[11px] font-medium tracking-tight whitespace-nowrap">
                 <span>Note</span>
@@ -724,14 +714,7 @@ export function PersistentNoteFab({
             onClick={() => handleDebugOpenChange(!debugOpen)}
             className={segmentBtn(debugOpen)}
           >
-            <Bug
-              className={cn(
-                "size-5 shrink-0",
-                debugOpen && "text-[var(--accent)]",
-              )}
-              strokeWidth={2}
-              aria-hidden
-            />
+            <PiggyIcon name="issues" className="size-6" />
             {debugOpen && !isNavbar ? (
               <span className="flex min-w-0 select-none items-center pr-0.5 text-[11px] font-medium tracking-tight whitespace-nowrap">
                 Debug

@@ -53,5 +53,10 @@ export const DEFAULT_SERVICE_PLANS: readonly ServicePlanSeed[] = [
 
 export function defaultPlanForRole(role: UserRole): ServicePlanSeed {
   const found = DEFAULT_SERVICE_PLANS.find((plan) => plan.role === role);
-  return found ?? DEFAULT_SERVICE_PLANS[0];
+  if (found) return found;
+  const fallback = DEFAULT_SERVICE_PLANS[0];
+  if (!fallback) {
+    throw new Error("DEFAULT_SERVICE_PLANS is empty");
+  }
+  return fallback;
 }
