@@ -7,25 +7,20 @@ import { cn } from "@/lib/utils";
 function MoneyGrid({
   parts,
   className,
-  align = "right",
 }: {
   parts: MoneyParts;
   className?: string;
-  align?: "left" | "right";
 }) {
   return (
     <span
       className={cn(
-        "inline-grid items-baseline gap-x-1 font-mono tabular-nums",
-        align === "left"
-          ? "w-max grid-cols-[3.5ch_1ch_auto]"
-          : "w-full grid-cols-[3.5ch_1ch_minmax(0,1fr)]",
+        "inline-grid w-max grid-cols-[3.5ch_1ch_10ch] items-baseline font-mono tabular-nums",
         className,
       )}
     >
-      <span className="text-right">{parts.symbol}</span>
+      <span className="text-left">{parts.symbol}</span>
       <span className="text-center">{parts.negative ? "−" : ""}</span>
-      <span className="min-w-0 text-right">{parts.number}</span>
+      <span className="text-right">{parts.number}</span>
     </span>
   );
 }
@@ -55,5 +50,10 @@ export function MoneyText({
       </span>
     );
   }
-  return <MoneyGrid parts={parts} className={className} align={align} />;
+  return (
+    <MoneyGrid
+      parts={parts}
+      className={cn(align === "right" ? "ml-auto" : null, className)}
+    />
+  );
 }

@@ -129,6 +129,9 @@ export function TransactionRowActions({
         open={editOpen}
         onOpenChange={setEditOpen}
         currentDescription={transaction.name}
+        currentSection={transaction.sectionName}
+        currentCategory={transaction.categoryName}
+        currentSubcategory={transaction.subcategoryName}
       />
     </>
   );

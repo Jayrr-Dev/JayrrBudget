@@ -36,7 +36,8 @@ function MerchantsTitleInfo() {
           </PopoverDescription>
           <ul className="mt-1.5 list-disc space-y-1 pl-4 text-muted-foreground">
             <li>One row per payee after a statement labels it</li>
-            <li>Fix a name once; it updates on matching ledger rows</li>
+            <li>Edit from the actions menu; linked ledger rows follow</li>
+            <li>Rename to an existing merchant to merge them</li>
             <li>Slug, company, and brand live under Columns</li>
           </ul>
         </PopoverHeader>
@@ -54,8 +55,8 @@ export default function MerchantsPage() {
           <MerchantsTitleInfo />
         </h1>
         <p className="sr-only">
-          Stores and payees you spend with. Fix a name once; it updates
-          everywhere.
+          Stores and payees you spend with. Edit from the actions menu. Rename
+          to an existing merchant to merge them.
         </p>
       </header>
       <MerchantsPanel />

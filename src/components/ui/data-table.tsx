@@ -474,7 +474,7 @@ export function DataTable<TData extends RowData>({
       });
     }
 
-    const preferredOrder = ["class", "main"];
+    const preferredOrder = ["main", "class"];
     for (const id of [...preferredOrder].reverse()) {
       const index = sections.findIndex((section) => section.id === id);
       if (index > 0) {

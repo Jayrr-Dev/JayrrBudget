@@ -136,7 +136,7 @@ function ComboboxContent({
         align={align}
         alignOffset={alignOffset}
         anchor={anchor}
-        className="isolate z-50"
+        className="isolate z-100"
       >
         <ComboboxLayoutContext.Provider
           value={{ layout: table ? "table" : "list", columns: tableColumns }}

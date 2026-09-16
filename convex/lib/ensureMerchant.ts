@@ -130,3 +130,119 @@ export async function linkTxnsToMerchant(
   }
   return linked;
 }
+
+async function transactionsForMerchant(
+  ctx: MutationCtx,
+  userId: Id<"users">,
+  merchantId: Id<"merchants">,
+) {
+  return await ctx.db
+    .query("transactions")
+    .withIndex("by_userId_merchantId", (q) =>
+      q.eq("userId", userId).eq("merchantId", merchantId),
+    )
+    .collect();
+}
+
+async function applyMerchantToTxn(
+  ctx: MutationCtx,
+  txn: Doc<"transactions">,
+  merchant: Doc<"merchants">,
+) {
+  await ctx.db.patch(txn._id, {
+    merchantId: merchant._id,
+    merchantClean: merchant.name,
+    company: merchant.company,
+    brand: merchant.brand,
+    website: merchant.website,
+    logoUrl: merchant.logoUrl,
+    updatedAt: Date.now(),
+  });
+  const updated = await ctx.db.get(txn._id);
+  if (updated) await rememberCategorization(ctx, updated);
+}
+
+export type MerchantEditFields = {
+  name: string;
+  company: string | null;
+  brand: string | null;
+  website: string | null;
+  logoUrl: string | null;
+};
+
+/** Patch a merchant. Same slug as another payee merges into that row and relinks ledger lines. */
+export async function updateMerchantOrMerge(
+  ctx: MutationCtx,
+  userId: Id<"users">,
+  merchantId: Id<"merchants">,
+  fields: MerchantEditFields,
+): Promise<{
+  merchant: Doc<"merchants">;
+  merged: boolean;
+  mergedFromName: string | null;
+  transactionsUpdated: number;
+}> {
+  const source = await ctx.db.get(merchantId);
+  if (!source || source.userId !== userId) {
+    throw new Error("Merchant not found");
+  }
+
+  const name = fields.name.trim();
+  if (!name) {
+    throw new Error("Merchant name is required");
+  }
+  const slug = merchantSlug(name);
+  if (!slug) {
+    throw new Error("Merchant name produced an empty slug");
+  }
+
+  const now = Date.now();
+  const patch = {
+    name,
+    slug,
+    company: trimOrNull(fields.company),
+    brand: trimOrNull(fields.brand),
+    website: trimOrNull(fields.website),
+    logoUrl: trimOrNull(fields.logoUrl),
+    updatedAt: now,
+  };
+
+  const clash = await ctx.db
+    .query("merchants")
+    .withIndex("by_userId_slug", (q) =>
+      q.eq("userId", userId).eq("slug", slug),
+    )
+    .unique();
+
+  const merge = Boolean(clash && clash._id !== source._id);
+  const keeperId = clash && clash._id !== source._id ? clash._id : source._id;
+  await ctx.db.patch(keeperId, patch);
+  const keeper = await ctx.db.get(keeperId);
+  if (!keeper) {
+    throw new Error("Merchant update failed");
+  }
+
+  const sourceTxns = await transactionsForMerchant(ctx, userId, source._id);
+  const keeperTxns = merge
+    ? await transactionsForMerchant(ctx, userId, keeper._id)
+    : [];
+  const seen = new Set<string>();
+  let transactionsUpdated = 0;
+  for (const txn of [...sourceTxns, ...keeperTxns]) {
+    if (seen.has(txn._id)) continue;
+    seen.add(txn._id);
+    await applyMerchantToTxn(ctx, txn, keeper);
+    transactionsUpdated += 1;
+  }
+
+  if (merge) {
+    await ctx.db.delete(source._id);
+  }
+
+  return {
+    merchant: keeper,
+    merged: merge,
+    mergedFromName: merge ? source.name : null,
+    transactionsUpdated,
+  };
+}

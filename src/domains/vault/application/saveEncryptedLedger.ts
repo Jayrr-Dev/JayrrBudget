@@ -84,21 +84,39 @@ export async function patchEncryptedTransaction(
 
 const RENAME_CHUNK = 40;
 
+export type EncryptedDescriptionTaxonomy = {
+  sectionName: string | null;
+  categoryName: string | null;
+  subcategoryName: string | null;
+};
+
 /** Rewrite every encrypted tx whose description matches `from`. */
 export async function renameEncryptedDescriptions(
   ctx: VaultWriteContext,
   txs: PrivateTransaction[],
   from: string,
   to: string,
+  taxonomy?: EncryptedDescriptionTaxonomy,
 ) {
   const matches = txs.filter((tx) => tx.description === from);
   if (matches.length === 0) throw new Error("No matching transactions.");
+  const description = to.trim();
   for (let i = 0; i < matches.length; i += RENAME_CHUNK) {
     const chunk = matches.slice(i, i + RENAME_CHUNK);
     await saveEncryptedRecords(
       ctx,
       chunk.map((tx) => {
-        const next = { ...tx, description: to };
+        const next = {
+          ...tx,
+          description,
+          ...(taxonomy
+            ? {
+                sectionName: taxonomy.sectionName,
+                categoryName: taxonomy.categoryName,
+                subcategoryName: taxonomy.subcategoryName,
+              }
+            : {}),
+        };
         const { recordId, revision, ...value } = next;
         return {
           recordId,

@@ -115,61 +115,6 @@ function buildColumns(
       meta: { label: "Actions", width: "2rem" },
     }),
     columnHelper.group({
-      id: "class",
-      header: "Class",
-      columns: columnHelper.columns([
-        columnHelper.accessor("sectionName", {
-          header: "Section",
-          meta: bandMeta(
-            "14rem",
-            "invent",
-            "Top spend bucket (Lifestyle, Transport).",
-          ),
-          cell: ({ row, getValue }) => (
-            <TaxonomyCell
-              transactionId={row.original.transactionId}
-              field="section"
-              value={getValue()}
-            />
-          ),
-          filterFn: "equalsString",
-          sortFn: "text",
-        }),
-        columnHelper.accessor("categoryName", {
-          header: "Category",
-          meta: bandMeta("20rem", "invent", "Mid spend bucket under Section."),
-          cell: ({ row, getValue }) => (
-            <TaxonomyCell
-              transactionId={row.original.transactionId}
-              field="category"
-              value={getValue()}
-              sectionName={row.original.sectionName}
-            />
-          ),
-          filterFn: "equalsString",
-          sortFn: "text",
-        }),
-        columnHelper.accessor("subcategoryName", {
-          header: "Subcategories",
-          meta: bandMeta(
-            "20rem",
-            "invent",
-            "Fine spend label (leaf category).",
-          ),
-          cell: ({ row, getValue }) => (
-            <TaxonomyCell
-              transactionId={row.original.transactionId}
-              field="subcategory"
-              value={getValue()}
-              categoryName={row.original.categoryName}
-            />
-          ),
-          filterFn: "equalsString",
-          sortFn: "text",
-        }),
-      ]),
-    }),
-    columnHelper.group({
       id: "main",
       header: "Main",
       columns: columnHelper.columns([
@@ -248,6 +193,61 @@ function buildColumns(
             );
           },
           sortFn: "basic",
+        }),
+      ]),
+    }),
+    columnHelper.group({
+      id: "class",
+      header: "Class",
+      columns: columnHelper.columns([
+        columnHelper.accessor("sectionName", {
+          header: "Section",
+          meta: bandMeta(
+            "14rem",
+            "invent",
+            "Top spend bucket (Lifestyle, Transport).",
+          ),
+          cell: ({ row, getValue }) => (
+            <TaxonomyCell
+              transactionId={row.original.transactionId}
+              field="section"
+              value={getValue()}
+            />
+          ),
+          filterFn: "equalsString",
+          sortFn: "text",
+        }),
+        columnHelper.accessor("categoryName", {
+          header: "Category",
+          meta: bandMeta("20rem", "invent", "Mid spend bucket under Section."),
+          cell: ({ row, getValue }) => (
+            <TaxonomyCell
+              transactionId={row.original.transactionId}
+              field="category"
+              value={getValue()}
+              sectionName={row.original.sectionName}
+            />
+          ),
+          filterFn: "equalsString",
+          sortFn: "text",
+        }),
+        columnHelper.accessor("subcategoryName", {
+          header: "Subcategories",
+          meta: bandMeta(
+            "20rem",
+            "invent",
+            "Fine spend label (leaf category).",
+          ),
+          cell: ({ row, getValue }) => (
+            <TaxonomyCell
+              transactionId={row.original.transactionId}
+              field="subcategory"
+              value={getValue()}
+              categoryName={row.original.categoryName}
+            />
+          ),
+          filterFn: "equalsString",
+          sortFn: "text",
         }),
       ]),
     }),
@@ -658,6 +658,7 @@ export function TransactionsDataTable({
       columns={columns}
       data={transactions}
       initialColumnVisibility={{
+        account: false,
         accountId: false,
         authorizedDate: false,
         originalDescription: false,
@@ -666,8 +667,17 @@ export function TransactionsDataTable({
         locationRegion: false,
         locationCountry: false,
         isoCurrencyCode: false,
+        amount: false,
         source: false,
         transactionId: false,
+        merchant: false,
+        spreadName: false,
+        tags: false,
+        transactionTypeName: false,
+        transactionCode: false,
+        paymentChannel: false,
+        historyMatch: false,
+        enrichmentStatus: false,
       }}
       initialSorting={[{ id: "date", desc: true }]}
       enableGlobalFilter

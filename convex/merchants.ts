@@ -5,6 +5,7 @@ import {
   ensureMerchant,
   linkTxnsToMerchant,
   merchantLabelFromTxn,
+  updateMerchantOrMerge,
 } from "./lib/ensureMerchant";
 import type { Id } from "./_generated/dataModel";
 
@@ -183,6 +184,40 @@ export const upsert = mutation({
       logoUrl: args.logoUrl,
     });
     return toMerchantDoc(row);
+  },
+});
+
+/** Edit merchant fields. Matching name/slug merges into the other payee and relinks rows. */
+export const update = mutation({
+  args: {
+    merchantId: v.id("merchants"),
+    name: v.string(),
+    company: v.optional(v.union(v.string(), v.null())),
+    brand: v.optional(v.union(v.string(), v.null())),
+    website: v.optional(v.union(v.string(), v.null())),
+    logoUrl: v.optional(v.union(v.string(), v.null())),
+  },
+  returns: v.object({
+    merchant: merchantDoc,
+    merged: v.boolean(),
+    mergedFromName: v.union(v.string(), v.null()),
+    transactionsUpdated: v.number(),
+  }),
+  handler: async (ctx, args) => {
+    const user = await requireUser(ctx);
+    const result = await updateMerchantOrMerge(ctx, user._id, args.merchantId, {
+      name: args.name,
+      company: args.company ?? null,
+      brand: args.brand ?? null,
+      website: args.website ?? null,
+      logoUrl: args.logoUrl ?? null,
+    });
+    return {
+      merchant: toMerchantDoc(result.merchant),
+      merged: result.merged,
+      mergedFromName: result.mergedFromName,
+      transactionsUpdated: result.transactionsUpdated,
+    };
   },
 });
 
