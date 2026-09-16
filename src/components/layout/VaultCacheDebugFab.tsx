@@ -9,6 +9,12 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { DockPanelResizeGrip } from "@/components/layout/DockPanelResizeGrip";
+import {
+  DOCK_PANEL_DEFAULT_WIDTH,
+  useDockPanelSize,
+  type DockPanelAnchor,
+} from "@/components/layout/useDockPanelSize";
 import { cn } from "@/lib/utils";
 import {
   AI_COST_TABLE,
@@ -29,6 +35,9 @@ import { api } from "@convex/_generated/api";
 import { useConvexAuth, useQuery } from "convex/react";
 import { Info, XIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+
+/** Default height of each scrolling list; the user drags the corner to change it. */
+const DEBUG_BODY_DEFAULT_PX = 288;
 
 const KIND_LABEL: Record<VaultCacheDebugKind, string> = {
   "cache-hit": "HIT",
@@ -318,11 +327,18 @@ export function useVaultCacheDebugAdmin() {
 /** Floating debug panel. Toggle lives in the shared FAB pill. */
 export function VaultCacheDebugPanel({
   open,
+  anchor = "bottom-right",
   onOpenChange,
 }: {
   open: boolean;
+  anchor?: DockPanelAnchor;
   onOpenChange: (open: boolean) => void;
 }) {
+  const resize = useDockPanelSize({
+    storageKey: "debugger-panel-size",
+    defaultSize: { width: DOCK_PANEL_DEFAULT_WIDTH, bodyHeight: DEBUG_BODY_DEFAULT_PX },
+    anchor,
+  });
   const [tab, setTab] = useState("cache");
   const [aiSubTab, setAiSubTab] = useState<
     "usage" | "cost" | "team" | "memory"
@@ -390,10 +406,16 @@ export function VaultCacheDebugPanel({
   return (
     <div
       className={cn(
-        "pointer-events-auto flex w-[min(100vw-1.5rem,24rem)] flex-col overflow-hidden rounded-xl border border-[var(--border)]",
+        "pointer-events-auto relative flex max-w-[calc(100vw-1.5rem)] flex-col overflow-hidden rounded-xl border border-[var(--border)]",
         "bg-[var(--background)] text-[var(--foreground)] shadow-lg ring-1 ring-[var(--border)]/40",
+        resize.resizing && "select-none",
       )}
+      style={{
+        width: resize.size.width,
+        ["--dock-body-h" as string]: `${resize.size.bodyHeight}px`,
+      }}
     >
+      <DockPanelResizeGrip label="debugger" resize={resize} />
       <div className="flex items-center gap-1.5 border-b border-[var(--border)]/80 px-3 py-2">
         <h2 className="text-sm font-semibold tracking-tight">Debugger</h2>
         <DebuggerAboutInfo />
@@ -443,7 +465,7 @@ export function VaultCacheDebugPanel({
               Clear
             </button>
           </div>
-          <ul className="max-h-64 overflow-y-auto px-3 py-1">
+          <ul className="max-h-(--dock-body-h) overflow-y-auto px-3 py-1">
             {cacheEvents.length === 0 ? (
               <li className="py-6 text-center text-xs text-[var(--muted-foreground)]">
                 {capturing
@@ -515,15 +537,15 @@ export function VaultCacheDebugPanel({
           </div>
 
           {aiSubTab === "cost" ? (
-            <div className="max-h-72 overflow-y-auto">
+            <div className="max-h-(--dock-body-h) overflow-y-auto">
               <AiCostRatesTable />
             </div>
           ) : aiSubTab === "memory" ? (
-            <div className="max-h-72 overflow-y-auto">
+            <div className="max-h-(--dock-body-h) overflow-y-auto">
               <PiggyMemoryView memory={piggyMemory} />
             </div>
           ) : aiSubTab === "team" ? (
-            <ul className="max-h-72 overflow-y-auto px-3 py-1">
+            <ul className="max-h-(--dock-body-h) overflow-y-auto px-3 py-1">
               {teamMonth === undefined ? (
                 <li className="py-6 text-center text-xs text-[var(--muted-foreground)]">
                   Loading team month…
@@ -567,7 +589,7 @@ export function VaultCacheDebugPanel({
                   {formatUsd(aiTotals.estimatedUsd)}
                 </span>
               </div>
-              <ul className="max-h-56 overflow-y-auto px-3 py-1">
+              <ul className="max-h-(--dock-body-h) overflow-y-auto px-3 py-1">
                 {aiEvents === undefined ? (
                   <li className="py-6 text-center text-xs text-[var(--muted-foreground)]">
                     Loading usage…

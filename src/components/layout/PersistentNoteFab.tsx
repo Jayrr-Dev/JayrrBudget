@@ -1,6 +1,12 @@
 "use client";
 
 import { ChromeTab, ChromeTabStrip } from "@/components/layout/ChromeTab";
+import { DockPanelResizeGrip } from "@/components/layout/DockPanelResizeGrip";
+import {
+  DOCK_PANEL_DEFAULT_WIDTH,
+  useDockPanelSize,
+  type DockPanelAnchor,
+} from "@/components/layout/useDockPanelSize";
 import {
   useVaultCacheDebugAdmin,
   VaultCacheDebugPanel,
@@ -55,7 +61,8 @@ function storeSheetCsvFilename(tabName: string) {
 const FAB_COLLAPSED_PX = 44;
 /** Panels stack in the same fixed column as the pill, so they hug the right edge like the debug panel. */
 const FAB_DOCK_PANEL =
-  "pointer-events-auto w-[min(24rem,calc(100vw-1.5rem))] overflow-hidden rounded-xl border border-border bg-background text-foreground shadow-lg ring-1 ring-border/40";
+  "pointer-events-auto relative max-w-[calc(100vw-1.5rem)] overflow-hidden rounded-xl border border-border bg-background text-foreground shadow-lg ring-1 ring-border/40";
+const FAB_DOCK_BODY_DEFAULT_PX = 320;
 const FAB_EXPANDED_ICON_ONLY_SEGMENT_PX = 36;
 const FAB_EXPANDED_PILL_INNER_PADDING_PX = 8;
 const FAB_EXPANDED_DUAL_SEGMENT_GAP_PX = 2;
@@ -189,9 +196,14 @@ function StoreSheetTab({
   );
 }
 
-function StoreSheetPanel({ open }: { open: boolean }) {
+function StoreSheetPanel({ open, anchor }: { open: boolean; anchor: DockPanelAnchor }) {
   const { tabs, activeId, receiveId } = useScratchNote();
   const actions = useScratchNoteActions();
+  const resize = useDockPanelSize({
+    storageKey: "store-sheet-panel-size",
+    defaultSize: { width: DOCK_PANEL_DEFAULT_WIDTH, bodyHeight: FAB_DOCK_BODY_DEFAULT_PX },
+    anchor,
+  });
   const activeTab = tabs.find((tab) => tab.id === activeId) ?? tabs[0];
   const rows = activeTab?.rows ?? [];
   const currency = rows[0]?.currency ?? "CAD";
@@ -207,7 +219,11 @@ function StoreSheetPanel({ open }: { open: boolean }) {
   if (!open) return null;
 
   return (
-    <div className={FAB_DOCK_PANEL}>
+    <div
+      className={cn(FAB_DOCK_PANEL, resize.resizing && "select-none")}
+      style={{ width: resize.size.width }}
+    >
+        <DockPanelResizeGrip label="store sheet" resize={resize} />
         <div className="relative border-b border-[var(--border)] bg-[var(--muted)]/25">
           <ChromeTabStrip
             ariaLabel="Store sheet tabs"
@@ -244,7 +260,7 @@ function StoreSheetPanel({ open }: { open: boolean }) {
             Check a tab, then use + on a vendor line in Analysis.
           </p>
         ) : (
-          <div className="max-h-[min(320px,50vh)] overflow-auto">
+          <div className="overflow-auto" style={{ maxHeight: resize.size.bodyHeight }}>
             <table className="w-full border-collapse text-sm">
               <thead className="sticky top-0 bg-[var(--background)]">
                 <tr className="border-b border-[var(--border)] text-xs text-[var(--muted-foreground)]">
@@ -347,9 +363,14 @@ function StoreSheetPanel({ open }: { open: boolean }) {
   );
 }
 
-function NotesPanel({ open }: { open: boolean }) {
+function NotesPanel({ open, anchor }: { open: boolean; anchor: DockPanelAnchor }) {
   const notes = useUserNotes();
   const actions = useUserNotesActions();
+  const resize = useDockPanelSize({
+    storageKey: "notes-panel-size",
+    defaultSize: { width: DOCK_PANEL_DEFAULT_WIDTH, bodyHeight: FAB_DOCK_BODY_DEFAULT_PX },
+    anchor,
+  });
   useEnsureDefaultUserNote(open, notes);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
@@ -394,7 +415,11 @@ function NotesPanel({ open }: { open: boolean }) {
   if (!open) return null;
 
   return (
-    <div className={FAB_DOCK_PANEL}>
+    <div
+      className={cn(FAB_DOCK_PANEL, resize.resizing && "select-none")}
+      style={{ width: resize.size.width }}
+    >
+        <DockPanelResizeGrip label="notes" resize={resize} />
         <div className="relative border-b border-[var(--border)] bg-[var(--muted)]/25">
           <ChromeTabStrip
             ariaLabel="Note tabs"
@@ -429,7 +454,7 @@ function NotesPanel({ open }: { open: boolean }) {
           </ChromeTabStrip>
         </div>
 
-        <div className="h-[min(320px,50vh)] w-full bg-[var(--background)]">
+        <div className="w-full bg-[var(--background)]" style={{ height: resize.size.bodyHeight }}>
           {active ? (
             <Textarea
               value={draft}
@@ -446,7 +471,7 @@ function NotesPanel({ open }: { open: boolean }) {
               }}
               placeholder="Type or paste a note…"
               aria-label={`${active.tabName} note`}
-              className="h-full min-h-[min(300px,48vh)] w-full resize-none rounded-none border-0 bg-transparent px-2.5 py-2 text-[11px] shadow-none focus-visible:ring-0"
+              className="h-full min-h-0 w-full resize-none rounded-none border-0 bg-transparent px-2.5 py-2 text-[11px] shadow-none focus-visible:ring-0"
             />
           ) : (
             <p className="px-2.5 py-3 text-[11px] text-[var(--muted-foreground)]">
@@ -674,9 +699,12 @@ export function PersistentNoteFab({
     </>
   );
 
+  const anchor: DockPanelAnchor = isNavbar ? "top-right" : "bottom-right";
+
   const debugPanel = showDebug ? (
     <VaultCacheDebugPanel
       open={debugOpen}
+      anchor={anchor}
       onOpenChange={handleDebugOpenChange}
     />
   ) : null;
@@ -684,11 +712,11 @@ export function PersistentNoteFab({
   const dockedPanels = (
     <>
       {debugPanel}
-      <StoreSheetPanel open={sheetOpen} />
-      <NotesPanel open={notesOpen} />
+      <StoreSheetPanel open={sheetOpen} anchor={anchor} />
+      <NotesPanel open={notesOpen} anchor={anchor} />
       <LedgerAiChat
         open={aiOpen}
-        anchor={isNavbar ? "top-right" : "bottom-right"}
+        anchor={anchor}
         onOpenChange={handleAiOpenChange}
         onMoodChange={setPiggyMood}
       />

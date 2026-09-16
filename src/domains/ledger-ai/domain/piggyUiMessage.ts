@@ -1,4 +1,8 @@
 import type { UIMessage } from "ai";
+import {
+  APPLY_BUDGET_EDIT_TOOL_NAME,
+  type ApplyBudgetEditUITool,
+} from "./applyBudgetEditTool";
 import { ASK_USER_TOOL_NAME, type AskUserUITool } from "./askUserTool";
 import {
   EXPORT_FILE_TOOL_NAME,
@@ -17,6 +21,7 @@ export type PiggyUIMessage = UIMessage<
     [ASK_USER_TOOL_NAME]: AskUserUITool;
     [EXPORT_FILE_TOOL_NAME]: ExportFileUITool;
     [SHOW_SKETCH_TOOL_NAME]: ShowSketchUITool;
+    [APPLY_BUDGET_EDIT_TOOL_NAME]: ApplyBudgetEditUITool;
   }
 >;
 
@@ -49,9 +54,25 @@ export function isShowSketchPart(part: PiggyUIPart): part is ShowSketchPart {
   return part.type === `tool-${SHOW_SKETCH_TOOL_NAME}`;
 }
 
+export type ApplyBudgetEditPart = Extract<
+  PiggyUIPart,
+  { type: `tool-${typeof APPLY_BUDGET_EDIT_TOOL_NAME}` }
+>;
+
+export function isApplyBudgetEditPart(
+  part: PiggyUIPart,
+): part is ApplyBudgetEditPart {
+  return part.type === `tool-${APPLY_BUDGET_EDIT_TOOL_NAME}`;
+}
+
 /** Parts the transcript renders as cards (question, file, or sketch). */
 export function isPiggyCardPart(
   part: PiggyUIPart,
-): part is AskUserPart | ExportFilePart | ShowSketchPart {
-  return isAskUserPart(part) || isExportFilePart(part) || isShowSketchPart(part);
+): part is AskUserPart | ExportFilePart | ShowSketchPart | ApplyBudgetEditPart {
+  return (
+    isAskUserPart(part) ||
+    isExportFilePart(part) ||
+    isShowSketchPart(part) ||
+    isApplyBudgetEditPart(part)
+  );
 }

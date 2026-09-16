@@ -3,50 +3,45 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 
-const STORAGE_KEY = "piggy-chat-panel-size";
 const REM = 16;
 const MIN_WIDTH = 20 * REM;
 const MAX_WIDTH = 56 * REM;
-const MIN_TRANSCRIPT = 12 * REM;
-/** Room for the tab strip, composer, fab pill, and screen margins. */
+const MIN_BODY = 8 * REM;
+/** Room for headers, footers, the fab pill, and screen margins. */
 const CHROME_HEIGHT = 12 * REM;
 
-export const DEFAULT_PIGGY_PANEL_SIZE: PiggyPanelSize = {
-  width: 24 * REM,
-  transcriptHeight: 21.3 * REM,
-};
+export const DOCK_PANEL_DEFAULT_WIDTH = 24 * REM;
 
-export type PiggyPanelSize = {
+export type DockPanelSize = {
   width: number;
-  transcriptHeight: number;
+  /** Pixel height of the panel's scrolling body (not the whole panel). */
+  bodyHeight: number;
 };
 
 /** Which screen corner the panel hugs; the grip sits on the opposite corner. */
-export type PiggyPanelAnchor = "bottom-right" | "top-right";
+export type DockPanelAnchor = "bottom-right" | "top-right";
 
-function clampSize(size: PiggyPanelSize): PiggyPanelSize {
+function clampSize(size: DockPanelSize): DockPanelSize {
   const maxWidth = Math.min(MAX_WIDTH, window.innerWidth - 1.5 * REM);
-  const maxTranscript = Math.max(MIN_TRANSCRIPT, window.innerHeight - CHROME_HEIGHT);
+  const maxBody = Math.max(MIN_BODY, window.innerHeight - CHROME_HEIGHT);
   return {
     width: Math.round(Math.min(maxWidth, Math.max(MIN_WIDTH, size.width))),
-    transcriptHeight: Math.round(
-      Math.min(maxTranscript, Math.max(MIN_TRANSCRIPT, size.transcriptHeight)),
-    ),
+    bodyHeight: Math.round(Math.min(maxBody, Math.max(MIN_BODY, size.bodyHeight))),
   };
 }
 
-function readStoredSize(): PiggyPanelSize | undefined {
+function readStoredSize(storageKey: string): DockPanelSize | undefined {
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
+    const raw = window.localStorage.getItem(storageKey);
     if (!raw) return undefined;
     const parsed: unknown = JSON.parse(raw);
     if (
       typeof parsed === "object" &&
       parsed !== null &&
-      typeof (parsed as PiggyPanelSize).width === "number" &&
-      typeof (parsed as PiggyPanelSize).transcriptHeight === "number"
+      typeof (parsed as DockPanelSize).width === "number" &&
+      typeof (parsed as DockPanelSize).bodyHeight === "number"
     ) {
-      return clampSize(parsed as PiggyPanelSize);
+      return clampSize(parsed as DockPanelSize);
     }
   } catch {
     // Ignore unreadable storage; fall back to the default size.
@@ -54,30 +49,38 @@ function readStoredSize(): PiggyPanelSize | undefined {
   return undefined;
 }
 
-function writeStoredSize(size: PiggyPanelSize | undefined) {
+function writeStoredSize(storageKey: string, size: DockPanelSize | undefined) {
   try {
-    if (size) window.localStorage.setItem(STORAGE_KEY, JSON.stringify(size));
-    else window.localStorage.removeItem(STORAGE_KEY);
+    if (size) window.localStorage.setItem(storageKey, JSON.stringify(size));
+    else window.localStorage.removeItem(storageKey);
   } catch {
     // Storage full or blocked; the size still applies for this session.
   }
 }
 
 /**
- * Drag-to-resize state for the docked Piggy panel, remembered per browser.
+ * Drag-to-resize state for a fab-docked panel, remembered per browser.
  * Width grows as the grip moves left; height grows away from the anchored edge.
  */
-export function usePiggyPanelSize(anchor: PiggyPanelAnchor) {
-  const [size, setSize] = useState<PiggyPanelSize>(DEFAULT_PIGGY_PANEL_SIZE);
+export function useDockPanelSize({
+  storageKey,
+  defaultSize,
+  anchor,
+}: {
+  storageKey: string;
+  defaultSize: DockPanelSize;
+  anchor: DockPanelAnchor;
+}) {
+  const [size, setSize] = useState<DockPanelSize>(defaultSize);
   const [resizing, setResizing] = useState(false);
-  const drag = useRef<{ startX: number; startY: number; origin: PiggyPanelSize } | null>(null);
+  const drag = useRef<{ startX: number; startY: number; origin: DockPanelSize } | null>(null);
 
   useEffect(() => {
-    const stored = readStoredSize();
+    const stored = readStoredSize(storageKey);
     if (stored) setSize(stored);
-  }, []);
+  }, [storageKey]);
 
-  const onGripPointerDown = useCallback(
+  const onPointerDown = useCallback(
     (event: ReactPointerEvent<HTMLElement>) => {
       if (event.button !== 0) return;
       event.preventDefault();
@@ -88,7 +91,7 @@ export function usePiggyPanelSize(anchor: PiggyPanelAnchor) {
     [size],
   );
 
-  const onGripPointerMove = useCallback(
+  const onPointerMove = useCallback(
     (event: ReactPointerEvent<HTMLElement>) => {
       const current = drag.current;
       if (!current) return;
@@ -98,41 +101,42 @@ export function usePiggyPanelSize(anchor: PiggyPanelAnchor) {
       setSize(
         clampSize({
           width: current.origin.width - dx,
-          transcriptHeight: current.origin.transcriptHeight + heightDelta,
+          bodyHeight: current.origin.bodyHeight + heightDelta,
         }),
       );
     },
     [anchor],
   );
 
-  const onGripPointerUp = useCallback(
+  const onPointerUp = useCallback(
     (event: ReactPointerEvent<HTMLElement>) => {
       if (!drag.current) return;
       drag.current = null;
       event.currentTarget.releasePointerCapture(event.pointerId);
       setResizing(false);
       setSize((current) => {
-        writeStoredSize(current);
+        writeStoredSize(storageKey, current);
         return current;
       });
     },
-    [],
+    [storageKey],
   );
 
   const reset = useCallback(() => {
-    setSize(DEFAULT_PIGGY_PANEL_SIZE);
-    writeStoredSize(undefined);
-  }, []);
+    setSize(defaultSize);
+    writeStoredSize(storageKey, undefined);
+  }, [defaultSize, storageKey]);
 
   return {
     size,
     resizing,
-    reset,
+    anchor,
     gripProps: {
-      onPointerDown: onGripPointerDown,
-      onPointerMove: onGripPointerMove,
-      onPointerUp: onGripPointerUp,
-      onPointerCancel: onGripPointerUp,
+      onPointerDown,
+      onPointerMove,
+      onPointerUp,
+      onPointerCancel: onPointerUp,
+      onDoubleClick: reset,
     },
   };
 }

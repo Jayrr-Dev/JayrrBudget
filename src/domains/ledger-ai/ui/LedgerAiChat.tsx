@@ -38,6 +38,10 @@ import { cn } from "@/lib/utils";
 import { errorMessage } from "@/shared/lib/error-message";
 import { logAiUsageFromMessageMetadata } from "@/shared/debug/aiUsageDebug";
 import {
+  APPLY_BUDGET_EDIT_TOOL_NAME,
+  type ApplyBudgetEditOutput,
+} from "@/domains/ledger-ai/domain/applyBudgetEditTool";
+import {
   ASK_USER_TOOL_NAME,
   type AskUserOutput,
 } from "@/domains/ledger-ai/domain/askUserTool";
@@ -46,6 +50,7 @@ import {
   type ExportFileOutput,
 } from "@/domains/ledger-ai/domain/exportFileTool";
 import {
+  isApplyBudgetEditPart,
   isAskUserPart,
   isExportFilePart,
   isPiggyCardPart,
@@ -60,6 +65,7 @@ import {
 } from "@/domains/ledger-ai/application/attachDocuments";
 import { earlierDocumentNote } from "@/domains/ledger-ai/domain/piggyDocuments";
 import { OCR_DOCUMENT_ACCEPT } from "@/domains/statements/domain/ocrDocumentTypes";
+import { PiggyApplyBudgetEdit } from "@/domains/ledger-ai/ui/PiggyApplyBudgetEdit";
 import { PiggyAttachment } from "@/domains/ledger-ai/ui/PiggyAttachment";
 import {
   PiggyPendingDocuments,
@@ -90,13 +96,19 @@ import { toast } from "sonner";
 import type { ComponentProps } from "react";
 import { emptyPiggyHistory, restorePiggyHistory, restorePiggyChatIndex, type PiggyChatIndex, type PiggyHistory } from "../domain/piggyHistory";
 import { usePiggyHistory } from "./usePiggyHistory";
+import { DockPanelResizeGrip } from "@/components/layout/DockPanelResizeGrip";
 import {
-  DEFAULT_PIGGY_PANEL_SIZE,
-  usePiggyPanelSize,
-  type PiggyPanelAnchor,
-} from "./usePiggyPanelSize";
+  DOCK_PANEL_DEFAULT_WIDTH,
+  useDockPanelSize,
+  type DockPanelAnchor,
+  type DockPanelSize,
+} from "@/components/layout/useDockPanelSize";
 
 const MAX_PIGGY_TABS = 8;
+const PIGGY_PANEL_DEFAULT_SIZE: DockPanelSize = {
+  width: DOCK_PANEL_DEFAULT_WIDTH,
+  bodyHeight: 21.3 * 16,
+};
 /** Same shell as the fab's docked panels, so the chat hugs the right edge under the pill. */
 const LEDGER_AI_DOCK_PANEL =
   "pointer-events-auto max-w-[calc(100vw-1.5rem)] overflow-hidden rounded-xl border border-border bg-background shadow-lg ring-1 ring-border/40";
@@ -274,6 +286,12 @@ function PiggyChatPaneSession({
     void addToolResult({ tool: ASK_USER_TOOL_NAME, toolCallId, output });
   const reportExport = (toolCallId: string, output: ExportFileOutput) =>
     void addToolResult({ tool: EXPORT_FILE_TOOL_NAME, toolCallId, output });
+  const reportBudgetEdit = (toolCallId: string, output: ApplyBudgetEditOutput) =>
+    void addToolResult({
+      tool: APPLY_BUDGET_EDIT_TOOL_NAME,
+      toolCallId,
+      output,
+    });
   const bornMessageIds = useRef(new Set(messages.map((message) => message.id)));
   const mood = piggyMoodFromChat({
     status,
@@ -393,6 +411,24 @@ function PiggyChatPaneSession({
                           <PiggyInlineSketch
                             key={part.toolCallId}
                             input={part.input}
+                          />
+                        );
+                      }
+                      if (isApplyBudgetEditPart(part)) {
+                        if (
+                          part.state !== "input-available" &&
+                          part.state !== "output-available"
+                        ) {
+                          return null;
+                        }
+                        return (
+                          <PiggyApplyBudgetEdit
+                            key={part.toolCallId}
+                            input={part.input}
+                            pending={part.state === "input-available"}
+                            onDone={(output) =>
+                              reportBudgetEdit(part.toolCallId, output)
+                            }
                           />
                         );
                       }
@@ -547,7 +583,7 @@ export function LedgerAiChat(props: Omit<ComponentProps<typeof LedgerAiChatSessi
   const history = usePiggyHistory("ledger-index", restorePiggyChatIndex);
   if (!props.open) return null;
   if (!history.ready) return (
-    <div className={`${LEDGER_AI_DOCK_PANEL} p-3`} style={{ width: DEFAULT_PIGGY_PANEL_SIZE.width }}>
+    <div className={`${LEDGER_AI_DOCK_PANEL} p-3`} style={{ width: PIGGY_PANEL_DEFAULT_SIZE.width }}>
       <p className="text-xs text-muted-foreground">Loading saved Piggy chats…</p>
     </div>
   );
@@ -568,12 +604,16 @@ function LedgerAiChatSession({
   open: boolean;
   onOpenChange: (open: boolean) => void;
   /** Screen corner the panel is docked to; the resize grip sits on the opposite corner. */
-  anchor?: PiggyPanelAnchor;
+  anchor?: DockPanelAnchor;
   onMoodChange?: (mood: PiggyMood) => void;
 }) {
   const [tabs, setTabs] = useState<PiggyTab[]>(initialIndex.tabs);
   const [activeId, setActiveId] = useState(initialIndex.activeId);
-  const panelSize = usePiggyPanelSize(anchor);
+  const panelSize = useDockPanelSize({
+    storageKey: "piggy-chat-panel-size",
+    defaultSize: PIGGY_PANEL_DEFAULT_SIZE,
+    anchor,
+  });
   useEffect(() => { saveIndex({ tabs, activeId }); }, [tabs, activeId, saveIndex]);
   const encryptedLedger = useFeatureFlag("encryptedLedger");
   const cloudProcessing = useFeatureFlag("cloudProcessing");
@@ -657,19 +697,7 @@ function LedgerAiChatSession({
       className={cn(LEDGER_AI_DOCK_PANEL, "relative", panelSize.resizing && "select-none")}
       style={{ width: panelSize.size.width }}
     >
-        <div
-          role="separator"
-          aria-label="Resize Piggy panel. Drag to resize, double-click to reset."
-          title="Drag to resize · double-click to reset"
-          className={cn(
-            "absolute left-0 z-30 size-5 touch-none",
-            anchor === "bottom-right"
-              ? "top-0 cursor-nwse-resize"
-              : "bottom-0 cursor-nesw-resize",
-          )}
-          onDoubleClick={panelSize.reset}
-          {...panelSize.gripProps}
-        />
+        <DockPanelResizeGrip label="Piggy panel" resize={panelSize} />
         <div className="relative border-b border-border bg-muted/25">
           <ChromeTabStrip ariaLabel="Piggy chats">
             {tabs.map((tab) => (
@@ -718,7 +746,7 @@ function LedgerAiChatSession({
             open={open}
             blocked={blocked}
             transport={transport}
-            transcriptHeight={panelSize.size.transcriptHeight}
+            transcriptHeight={panelSize.size.bodyHeight}
             onMoodChange={onMoodChange}
           />
         ))}

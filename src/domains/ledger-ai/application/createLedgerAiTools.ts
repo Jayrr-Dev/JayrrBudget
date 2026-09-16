@@ -1,4 +1,8 @@
 import {
+  APPLY_BUDGET_EDIT_TOOL_NAME,
+  applyBudgetEditTool,
+} from "@/domains/ledger-ai/domain/applyBudgetEditTool";
+import {
   ASK_USER_TOOL_NAME,
   askUserTool,
 } from "@/domains/ledger-ai/domain/askUserTool";
@@ -61,6 +65,96 @@ function sameName(a: string | null | undefined, b: string) {
   return (a ?? "").trim().toLowerCase() === b.trim().toLowerCase();
 }
 
+const accountArg = z
+  .string()
+  .optional()
+  .describe("Account id, name, or last-4 digits. Narrows to one account (card, chequing, loan).");
+
+/** Users paste rows, not ids: find one transaction from date, amount, and text. */
+const transactionMatchSchema = z.object({
+  date: z.string().optional().describe("YYYY-MM-DD as shown on the row"),
+  amount: z.number().optional().describe("Row amount; sign is ignored"),
+  query: z
+    .string()
+    .optional()
+    .describe("Description or merchant text from the row (a distinctive fragment is enough)"),
+  account: accountArg,
+});
+
+type TransactionMatch = z.infer<typeof transactionMatchSchema>;
+type AiTxnRow = (typeof api.transactions.searchForAi._returnType)["matches"][number];
+
+const AMOUNT_TOLERANCE = 0.005;
+/** Statement dates drift a day or two from what the user pasted. */
+const DATE_WINDOW_DAYS = 3;
+
+function shiftDate(date: string, days: number) {
+  const value = new Date(`${date}T00:00:00Z`);
+  value.setUTCDate(value.getUTCDate() + days);
+  return value.toISOString().slice(0, 10);
+}
+
+function sameAmount(a: number, b: number) {
+  return Math.abs(Math.abs(a) - Math.abs(b)) < AMOUNT_TOLERANCE;
+}
+
+type ResolvedTransaction =
+  | { transaction: AiTxnRow }
+  | { error: string; candidates?: AiTxnRow[] };
+
+/**
+ * Narrow to one owned transaction. Tries the exact date and text first, then
+ * loosens (date window, drop text) so a slightly-off paste still lands.
+ */
+async function resolveTransaction(
+  client: ConvexHttpClient,
+  match: TransactionMatch,
+): Promise<ResolvedTransaction> {
+  const date = match.date?.trim();
+  const query = match.query?.trim() || undefined;
+  if (!date && match.amount === undefined && !query) {
+    return { error: "Pass transactionId, or match with date, amount, and/or query." };
+  }
+  const attempts: Array<{ startDate?: string; endDate?: string; query?: string }> = [];
+  if (date) {
+    attempts.push({ startDate: date, endDate: date, query });
+    const wide = { startDate: shiftDate(date, -DATE_WINDOW_DAYS), endDate: shiftDate(date, DATE_WINDOW_DAYS) };
+    attempts.push({ ...wide, query });
+    if (query) attempts.push(wide);
+  } else {
+    attempts.push({ query });
+  }
+
+  let candidates: AiTxnRow[] = [];
+  for (const attempt of attempts) {
+    const found = await client.query(api.transactions.searchForAi, {
+      ...attempt,
+      account: match.account,
+      limit: MAX_BULK_IDS,
+    });
+    if (found.accountNotFound) {
+      return { error: `Account not found: ${match.account}. Call list_accounts.` };
+    }
+    candidates =
+      match.amount === undefined
+        ? found.matches
+        : found.matches.filter((row) => sameAmount(row.amount, match.amount!));
+    if (candidates.length > 0) break;
+  }
+
+  if (candidates.length === 1) return { transaction: candidates[0]! };
+  if (candidates.length === 0) {
+    return {
+      error:
+        "No transaction matched. Try search_transactions with fewer filters, or ask the user which account it is on.",
+    };
+  }
+  return {
+    error: `${candidates.length} transactions matched. Use ask_user to let the user pick one (show date, description, amount), then call again with its transactionId.`,
+    candidates: candidates.slice(0, 10),
+  };
+}
+
 async function afterWrite<T>(value: T): Promise<T> {
   await invalidateConvexUserCache();
   return value;
@@ -106,6 +200,7 @@ function createWorkspaceTools(
     [ASK_USER_TOOL_NAME]: askUserTool,
     [EXPORT_FILE_TOOL_NAME]: exportFileTool,
     [SHOW_SKETCH_TOOL_NAME]: showSketchTool,
+    [APPLY_BUDGET_EDIT_TOOL_NAME]: applyBudgetEditTool,
 
     list_store_sheet: tool({
       description:
@@ -319,11 +414,6 @@ async function createNoteTab(client: ConvexHttpClient, tabName: string) {
   });
 }
 
-const accountArg = z
-  .string()
-  .optional()
-  .describe("Account id, name, or last-4 digits. Narrows to one account (card, chequing, loan).");
-
 /** Read-only ledger tools: search, summaries, accounts, statements, taxonomy. */
 export function createLedgerReadTools(client: ConvexHttpClient) {
   return {
@@ -425,15 +515,24 @@ export function createLedgerAiTools(
 
     update_transaction: tool({
       description:
-        "Edit one of the signed-in user's transactions in one call: description, date, amount, section/category/subcategory/spread, tags, merchant. Omit fields to leave them alone; pass null to clear. Look up transactionId with search_transactions first.",
+        "Edit one of the signed-in user's transactions in one call: description, date, amount, section/category/subcategory/spread, tags, merchant. Omit fields to leave them alone; pass null to clear. Identify the row with transactionId, or with `match` (date, amount, description text the user pasted). Never ask the user for an id.",
       inputSchema: z.object({
-        transactionId: z.string(),
+        transactionId: z.string().optional(),
+        match: transactionMatchSchema
+          .optional()
+          .describe("Find the row from what the user pasted when you have no transactionId"),
         ...transactionPatchSchema,
       }),
-      execute: async ({ transactionId, ...patch }) => {
+      execute: async ({ transactionId, match, ...patch }) => {
+        let id = transactionId?.trim();
+        if (!id) {
+          const resolved = await resolveTransaction(client, match ?? {});
+          if ("error" in resolved) return resolved;
+          id = resolved.transaction.transactionId;
+        }
         return afterWrite(
           await client.mutation(api.transactions.updateForAi, {
-            transactionId,
+            transactionId: id,
             patch: toConvexPatch(patch),
           }),
         );

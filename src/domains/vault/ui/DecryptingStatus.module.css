@@ -6,8 +6,11 @@
 }
 
 .art {
+  box-sizing: content-box;
   width: 3.5rem;
   height: 3.5rem;
+  overflow: visible;
+  padding: 0.75rem;
 }
 
 .coin {
