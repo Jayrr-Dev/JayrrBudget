@@ -27,6 +27,7 @@ import {
   useVaultPageLocked,
   VaultLockedGate,
 } from "@/domains/vault/ui/VaultLockedGate";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
 import { budgetBrandLabel } from "@/shared/lib/budget-brand";
 import { useAuthActions } from "@convex-dev/auth/react";
@@ -275,6 +276,10 @@ export function AppShell({
   const modules = modulesQuery.data?.modules ?? [];
   const navModules = modules;
   const vaultLocked = useVaultPageLocked();
+  const isMobile = useIsMobile();
+  const workspaceTools = vaultLocked ? null : (
+    <PersistentNoteFab placement={isMobile ? "navbar" : "floating"} />
+  );
   const fullBleedDatabase =
     !vaultLocked &&
     (pathname === "/database" || pathname.startsWith("/database/"));
@@ -292,6 +297,7 @@ export function AppShell({
         <SidebarBody
           className="w-full justify-between gap-8"
           title={brandLabel}
+          headerActions={isMobile ? workspaceTools : undefined}
         >
           <div className="flex min-h-0 w-full flex-1 flex-col gap-4 overflow-hidden">
             <Brand label={brandLabel} />
@@ -317,7 +323,7 @@ export function AppShell({
           <VaultLockedGate>{children}</VaultLockedGate>
         </div>
       </main>
-      {vaultLocked ? null : <PersistentNoteFab />}
+      {isMobile ? null : workspaceTools}
     </div>
   );
 }

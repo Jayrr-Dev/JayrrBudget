@@ -1,5 +1,6 @@
 "use client";
 
+import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
 import React, { useEffect, useRef, useState, createContext, useContext } from "react";
@@ -175,11 +176,26 @@ export const MobileSidebar = ({
       )}
       {...props}
     >
-      <p className="min-w-0 truncate text-sm font-semibold text-[var(--foreground)]">
-        {title}
-      </p>
-      <div className="flex shrink-0 items-center gap-1.5">
+      <div className="flex min-w-0 items-center gap-2">
+        <img
+          src="/logo.svg"
+          alt=""
+          width={28}
+          height={28}
+          className="size-7 shrink-0"
+        />
+        <p className="min-w-0 truncate text-sm font-semibold text-[var(--foreground)]">
+          {title}
+        </p>
+      </div>
+      <div className="flex h-8 shrink-0 items-center">
         {headerActions}
+        {headerActions ? (
+          <Separator
+            orientation="vertical"
+            className="mx-1.5 h-5 self-center bg-[var(--sidebar-border)]"
+          />
+        ) : null}
         <button
           type="button"
           aria-label="Open menu"

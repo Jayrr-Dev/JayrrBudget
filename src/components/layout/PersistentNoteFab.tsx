@@ -6,7 +6,6 @@ import {
   VaultCacheDebugPanel,
 } from "@/components/layout/VaultCacheDebugFab";
 import { Button } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Popover,
@@ -759,13 +758,7 @@ export function PersistentNoteFab({
             {debugPanel}
           </div>
         ) : null}
-        <div className="flex items-center gap-0.5">
-          {actions}
-          <Separator
-            orientation="vertical"
-            className="mx-1 h-5 bg-[var(--sidebar-border)]"
-          />
-        </div>
+        <div className="flex h-8 items-center gap-0.5">{actions}</div>
       </TooltipProvider>
     );
   }

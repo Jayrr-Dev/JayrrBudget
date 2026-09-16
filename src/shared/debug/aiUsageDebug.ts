@@ -1,4 +1,6 @@
-/** In-memory ring log for AI token usage (admin debugger). */
+/** In-memory ring log for AI token / OCR usage (admin debugger). */
+
+import { estimateAiUsageUsd } from "@/shared/ai/aiCostTable";
 
 export type AiUsageDebugEvent = {
   id: number;
@@ -8,6 +10,8 @@ export type AiUsageDebugEvent = {
   inputTokens: number | null;
   outputTokens: number | null;
   totalTokens: number | null;
+  pages: number | null;
+  estimatedUsd: number | null;
   ms: number | null;
   detail?: string;
 };
@@ -23,13 +27,33 @@ function notify() {
 }
 
 export function logAiUsageDebug(
-  input: Omit<AiUsageDebugEvent, "id" | "at">,
+  input: Omit<AiUsageDebugEvent, "id" | "at" | "estimatedUsd" | "pages"> & {
+    pages?: number | null;
+    estimatedUsd?: number | null;
+  },
 ) {
+  const pages = input.pages ?? null;
+  const estimatedUsd =
+    input.estimatedUsd ??
+    estimateAiUsageUsd({
+      modelId: input.modelId,
+      inputTokens: input.inputTokens,
+      outputTokens: input.outputTokens,
+      pages,
+    });
   seq += 1;
   events.unshift({
     id: seq,
     at: Date.now(),
-    ...input,
+    source: input.source,
+    modelId: input.modelId,
+    inputTokens: input.inputTokens,
+    outputTokens: input.outputTokens,
+    totalTokens: input.totalTokens,
+    pages,
+    estimatedUsd,
+    ms: input.ms,
+    detail: input.detail,
   });
   if (events.length > MAX_EVENTS) events.length = MAX_EVENTS;
   notify();
@@ -90,5 +114,25 @@ export function logAiUsageFromMessageMetadata(
     outputTokens,
     totalTokens,
     ms: typeof row.ms === "number" ? row.ms : null,
+  });
+}
+
+/** Log Mistral OCR page bill (server OCR only — local Tesseract is free). */
+export function logMistralOcrUsage(input: {
+  source: string;
+  pages: number;
+  ms?: number | null;
+  detail?: string;
+}) {
+  if (input.pages <= 0) return;
+  logAiUsageDebug({
+    source: input.source,
+    modelId: "mistral-ocr-latest",
+    inputTokens: null,
+    outputTokens: null,
+    totalTokens: null,
+    pages: input.pages,
+    ms: input.ms ?? null,
+    detail: input.detail,
   });
 }

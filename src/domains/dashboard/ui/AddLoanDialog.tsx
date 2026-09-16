@@ -65,6 +65,7 @@ import {
   vaultWriteReady,
 } from "@/domains/vault/application/saveEncryptedLedger";
 import { usePrivateLedger } from "@/domains/vault/ui/usePrivateLedger";
+import { logMistralOcrUsage } from "@/shared/debug/aiUsageDebug";
 import { errorMessage } from "@/shared/lib/error-message";
 import { api } from "@convex/_generated/api";
 import { useConvex, useMutation } from "convex/react";
@@ -187,6 +188,14 @@ export function AddLoanDialog({ open, onOpenChange }: AddLoanDialogProps) {
           ledger,
         });
         privateLedger.reload();
+      }
+
+      if (ocrMode !== "local" && result.pageCount > 0) {
+        logMistralOcrUsage({
+          source: "loan-ocr",
+          pages: result.pageCount,
+          detail: result.filename ?? file.name,
+        });
       }
 
       const fill = loanFieldsToFormFill(result.fields);

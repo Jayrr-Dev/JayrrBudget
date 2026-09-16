@@ -11,6 +11,11 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import {
+  AI_COST_TABLE,
+  formatRatePerMillion,
+  formatUsd,
+} from "@/shared/ai/aiCostTable";
+import {
   clearAiUsageDebugEvents,
   getAiUsageDebugEvents,
   subscribeAiUsageDebug,
@@ -88,15 +93,17 @@ function CacheEventRow({ event }: { event: VaultCacheDebugEvent }) {
 }
 
 function AiUsageEventRow({ event }: { event: AiUsageDebugEvent }) {
-  const tokens =
-    event.totalTokens != null
-      ? `${event.totalTokens} tok`
-      : [
-          event.inputTokens != null ? `in ${event.inputTokens}` : null,
-          event.outputTokens != null ? `out ${event.outputTokens}` : null,
-        ]
-          .filter(Boolean)
-          .join(" · ") || "—";
+  const amount =
+    event.pages != null && event.pages > 0
+      ? `${event.pages} pg`
+      : event.totalTokens != null
+        ? `${event.totalTokens} tok`
+        : [
+            event.inputTokens != null ? `in ${event.inputTokens}` : null,
+            event.outputTokens != null ? `out ${event.outputTokens}` : null,
+          ]
+            .filter(Boolean)
+            .join(" · ") || "—";
   return (
     <li className="border-b border-[var(--border)]/60 py-1.5 last:border-0">
       <div className="flex items-baseline gap-2 font-mono text-[11px] leading-snug">
@@ -106,8 +113,11 @@ function AiUsageEventRow({ event }: { event: AiUsageDebugEvent }) {
         <span className="min-w-0 font-semibold text-[var(--foreground)]">
           {event.source}
         </span>
-        <span className="ml-auto shrink-0 tabular-nums text-[var(--accent)]">
-          {tokens}
+        <span className="ml-auto shrink-0 tabular-nums text-[var(--muted-foreground)]">
+          {amount}
+        </span>
+        <span className="w-14 shrink-0 text-right tabular-nums text-[var(--accent)]">
+          {formatUsd(event.estimatedUsd)}
         </span>
       </div>
       <p className="mt-0.5 font-mono text-[10px] text-[var(--muted-foreground)]">
@@ -115,6 +125,7 @@ function AiUsageEventRow({ event }: { event: AiUsageDebugEvent }) {
           event.modelId,
           event.inputTokens != null ? `in=${event.inputTokens}` : null,
           event.outputTokens != null ? `out=${event.outputTokens}` : null,
+          event.pages != null ? `pages=${event.pages}` : null,
           event.ms != null ? `${event.ms}ms` : null,
           event.detail,
         ]
@@ -122,6 +133,52 @@ function AiUsageEventRow({ event }: { event: AiUsageDebugEvent }) {
           .join(" · ")}
       </p>
     </li>
+  );
+}
+
+function AiCostRatesTable() {
+  return (
+    <div className="px-3 py-2">
+      <p className="mb-1.5 text-[10px] font-medium tracking-wide text-[var(--muted-foreground)] uppercase">
+        Rate card · est. only
+      </p>
+      <table className="w-full border-collapse font-mono text-[10px]">
+        <thead>
+          <tr className="text-left text-[var(--muted-foreground)]">
+            <th className="pb-1 font-medium">Model</th>
+            <th className="pb-1 text-right font-medium">In / Out</th>
+          </tr>
+        </thead>
+        <tbody>
+          {AI_COST_TABLE.map((row) => (
+            <tr key={row.id} className="align-top">
+              <td className="py-0.5 pr-2 text-[var(--foreground)]">
+                <div>{row.label}</div>
+                <div className="text-[var(--muted-foreground)]">{row.id}</div>
+              </td>
+              <td className="py-0.5 text-right tabular-nums whitespace-nowrap text-[var(--foreground)]">
+                {row.unit === "tokens" ? (
+                  <>
+                    {formatRatePerMillion(row.inputPerMillionUsd)} /{" "}
+                    {formatRatePerMillion(row.outputPerMillionUsd)}
+                    <div className="text-[var(--muted-foreground)]">/1M tok</div>
+                  </>
+                ) : (
+                  <>
+                    {formatUsd(row.perPageUsd)}
+                    <div className="text-[var(--muted-foreground)]">/page</div>
+                  </>
+                )}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <p className="mt-1.5 text-[10px] text-[var(--muted-foreground)]">
+        OpenRouter list + Mistral OCR $4/1k pages. As of{" "}
+        {AI_COST_TABLE[0]?.asOf ?? "—"}.
+      </p>
+    </div>
   );
 }
 
@@ -150,7 +207,8 @@ function DebuggerAboutInfo() {
           </PopoverDescription>
           <ul className="mt-1.5 list-disc space-y-1 pl-4 text-muted-foreground">
             <li>Cache logs IndexedDB hits and Convex ciphertext reads</li>
-            <li>AI Usage logs tokens from Piggy and canvas chat</li>
+            <li>AI Usage logs tokens from Piggy / canvas and Mistral OCR pages</li>
+            <li>Cost estimates use the rate card (OpenRouter + Mistral)</li>
             <li>Plaintext ledger never appears here</li>
           </ul>
         </PopoverHeader>
@@ -174,6 +232,7 @@ export function VaultCacheDebugPanel({
   onOpenChange: (open: boolean) => void;
 }) {
   const [tab, setTab] = useState("cache");
+  const [aiSubTab, setAiSubTab] = useState<"usage" | "cost">("usage");
   const [capturing, setCapturing] = useState(isVaultCacheDebugCapturing);
   const [cacheEvents, setCacheEvents] = useState(() => [
     ...getVaultCacheDebugEvents(),
@@ -203,13 +262,25 @@ export function VaultCacheDebugPanel({
     let input = 0;
     let output = 0;
     let total = 0;
+    let pages = 0;
+    let estimatedUsd = 0;
     for (const event of aiEvents) {
       input += event.inputTokens ?? 0;
       output += event.outputTokens ?? 0;
       total +=
-        event.totalTokens ?? (event.inputTokens ?? 0) + (event.outputTokens ?? 0);
+        event.totalTokens ??
+        (event.inputTokens ?? 0) + (event.outputTokens ?? 0);
+      pages += event.pages ?? 0;
+      estimatedUsd += event.estimatedUsd ?? 0;
     }
-    return { input, output, total, calls: aiEvents.length };
+    return {
+      input,
+      output,
+      total,
+      pages,
+      estimatedUsd,
+      calls: aiEvents.length,
+    };
   }, [aiEvents]);
 
   if (!open) return null;
@@ -287,29 +358,71 @@ export function VaultCacheDebugPanel({
 
         <TabsContent value="ai-usage" className="mt-0 gap-0">
           <div className="flex items-center gap-1 border-b border-[var(--border)]/60 px-3 py-1.5">
-            <span className="font-mono text-[10px] text-[var(--muted-foreground)]">
-              {aiTotals.calls} call{aiTotals.calls === 1 ? "" : "s"} · in{" "}
-              {aiTotals.input} · out {aiTotals.output} · Σ {aiTotals.total}
-            </span>
             <button
               type="button"
-              onClick={() => clearAiUsageDebugEvents()}
-              className="ml-auto rounded-md px-2 py-1 text-[11px] text-[var(--muted-foreground)] hover:bg-[var(--surface-2)] hover:text-[var(--foreground)]"
+              aria-pressed={aiSubTab === "usage"}
+              onClick={() => setAiSubTab("usage")}
+              className={cn(
+                "rounded-md px-2 py-1 text-[11px] font-medium",
+                aiSubTab === "usage"
+                  ? "bg-[var(--accent)]/15 text-[var(--accent)]"
+                  : "text-[var(--muted-foreground)] hover:bg-[var(--surface-2)]",
+              )}
             >
-              Clear
+              Usage
             </button>
+            <button
+              type="button"
+              aria-pressed={aiSubTab === "cost"}
+              onClick={() => setAiSubTab("cost")}
+              className={cn(
+                "rounded-md px-2 py-1 text-[11px] font-medium",
+                aiSubTab === "cost"
+                  ? "bg-[var(--accent)]/15 text-[var(--accent)]"
+                  : "text-[var(--muted-foreground)] hover:bg-[var(--surface-2)]",
+              )}
+            >
+              Cost
+            </button>
+            {aiSubTab === "usage" ? (
+              <button
+                type="button"
+                onClick={() => clearAiUsageDebugEvents()}
+                className="ml-auto rounded-md px-2 py-1 text-[11px] text-[var(--muted-foreground)] hover:bg-[var(--surface-2)] hover:text-[var(--foreground)]"
+              >
+                Clear
+              </button>
+            ) : null}
           </div>
-          <ul className="max-h-64 overflow-y-auto px-3 py-1">
-            {aiEvents.length === 0 ? (
-              <li className="py-6 text-center text-xs text-[var(--muted-foreground)]">
-                Send a Piggy or canvas chat to log tokens.
-              </li>
-            ) : (
-              aiEvents.map((event) => (
-                <AiUsageEventRow key={event.id} event={event} />
-              ))
-            )}
-          </ul>
+
+          {aiSubTab === "cost" ? (
+            <div className="max-h-72 overflow-y-auto">
+              <AiCostRatesTable />
+            </div>
+          ) : (
+            <>
+              <div className="border-b border-[var(--border)]/60 px-3 py-1.5 font-mono text-[10px] text-[var(--muted-foreground)]">
+                {aiTotals.calls} call{aiTotals.calls === 1 ? "" : "s"} · in{" "}
+                {aiTotals.input} · out {aiTotals.output}
+                {aiTotals.pages > 0 ? ` · ${aiTotals.pages} pg` : ""} · est{" "}
+                <span className="text-[var(--accent)]">
+                  {formatUsd(aiTotals.estimatedUsd)}
+                </span>
+              </div>
+              <ul className="max-h-56 overflow-y-auto px-3 py-1">
+                {aiEvents.length === 0 ? (
+                  <li className="py-6 text-center text-xs text-[var(--muted-foreground)]">
+                    Send a Piggy / canvas chat, or upload a statement with
+                    server OCR.
+                  </li>
+                ) : (
+                  aiEvents.map((event) => (
+                    <AiUsageEventRow key={event.id} event={event} />
+                  ))
+                )}
+              </ul>
+            </>
+          )}
         </TabsContent>
       </Tabs>
     </div>

@@ -72,6 +72,7 @@ import { ImportLedgerCsv } from "@/domains/vault/ui/ImportLedgerCsv";
 import { usePrivateLedger } from "@/domains/vault/ui/usePrivateLedger";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
+import { logMistralOcrUsage } from "@/shared/debug/aiUsageDebug";
 import { errorMessage } from "@/shared/lib/error-message";
 import { api } from "@convex/_generated/api";
 import { useConvex, useMutation, useQuery } from "convex/react";
@@ -503,6 +504,13 @@ export function StatementUpload({ onImported }: Props) {
         }
 
         const copy = describeImportResult(result);
+        if (ocrMode !== "local" && result.pageCount > 0) {
+          logMistralOcrUsage({
+            source: "statement-ocr",
+            pages: result.pageCount,
+            detail: result.filename ?? item.file.name,
+          });
+        }
         if (result.categorization?.ok === false) {
           toast.warning("Imported; categorization needs attention", {
             description: copy.description,
