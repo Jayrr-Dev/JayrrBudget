@@ -19,9 +19,8 @@ import {
   Trash2,
   type LucideIcon,
 } from "lucide-react";
+import { PiggyMarkdown } from "@/domains/ledger-ai/ui/PiggyMarkdown";
 import { useEffect, useState, type ReactNode } from "react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
 
 /** Collapse thoughts/stamps without yanking the bubble. Height + gap fold together. */
 export function ScratchFold({
@@ -292,15 +291,8 @@ export function ReasoningBlock({ part }: { part: ReasoningUIPart }) {
 /* Markdown                                                            */
 /* ------------------------------------------------------------------ */
 
-const MARKDOWN_CLASSES =
-  "space-y-2 [&_p]:leading-relaxed [&_strong]:font-semibold [&_em]:italic [&_ul]:list-disc [&_ul]:pl-4 [&_ol]:list-decimal [&_ol]:pl-4 [&_li]:my-0.5 [&_h1]:text-sm [&_h1]:font-semibold [&_h2]:text-sm [&_h2]:font-semibold [&_h3]:text-sm [&_h3]:font-semibold [&_code]:rounded [&_code]:bg-foreground/5 [&_code]:px-1 [&_code]:py-0.5 [&_code]:font-mono [&_code]:text-[0.8em] [&_a]:underline [&_a]:underline-offset-2 [&_table]:w-full [&_table]:text-xs [&_th]:text-left [&_th]:font-semibold [&_td]:py-0.5 [&_hr]:border-border";
-
 export function AssistantMarkdown({ text }: { text: string }) {
-  return (
-    <div className={MARKDOWN_CLASSES}>
-      <ReactMarkdown remarkPlugins={[remarkGfm]}>{text}</ReactMarkdown>
-    </div>
-  );
+  return <PiggyMarkdown text={text} />;
 }
 
 /* ------------------------------------------------------------------ */

@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import { mutation, query, type MutationCtx } from "./_generated/server";
 import { ensureUser, requireUser } from "./lib/auth";
+import { classifyCashFlow } from "./lib/cashFlow";
 import { rememberCategorization } from "./lib/categorizationMemory";
 import { ensureMerchant, linkTxnsToMerchant } from "./lib/ensureMerchant";
 import { bumpMerchantTxnCount } from "./lib/merchantTxnCount";
@@ -531,6 +532,8 @@ export const summarizeForAi = query({
     truncated: v.boolean(),
     spendTotal: v.number(),
     incomeTotal: v.number(),
+    /** Money moved between own accounts / card payoffs. Excluded from spend and income. */
+    transferTotal: v.number(),
     groups: v.array(
       v.object({
         name: v.string(),
@@ -544,6 +547,14 @@ export const summarizeForAi = query({
     const user = await requireUser(ctx);
     const startDate = args.startDate?.trim() || null;
     const endDate = args.endDate?.trim() || null;
+
+    const accounts = await ctx.db
+      .query("accounts")
+      .withIndex("by_userId", (q) => q.eq("userId", user._id))
+      .collect();
+    const accountTypeById = new Map(
+      accounts.map((account) => [account.accountId, account.type ?? null]),
+    );
 
     const rows = await ctx.db
       .query("transactions")
@@ -565,8 +576,25 @@ export const summarizeForAi = query({
     >();
     let spendTotal = 0;
     let incomeTotal = 0;
+    let transferTotal = 0;
 
     for (const row of rows) {
+      const kind = classifyCashFlow({
+        amountMinor: Math.round(row.amount * 100),
+        description: row.description,
+        accountType: accountTypeById.get(row.accountId) ?? null,
+        sectionName: row.section,
+        categoryName: row.category,
+        typeName: row.subcategory,
+        transactionCode: row.txnCode,
+      });
+      // Own-account moves (e.g. "Internet Transfer", card payoffs) are not spend.
+      if (kind === "transfer_out") {
+        transferTotal += row.amount;
+        continue;
+      }
+      if (kind === "transfer_in" || kind === "refund") continue;
+
       let name = "Unlabeled";
       if (args.groupBy === "merchant") {
         name = row.merchantClean || row.merchantName || "Unknown";
@@ -607,6 +635,7 @@ export const summarizeForAi = query({
       truncated: rows.length === 1500,
       spendTotal: Number(spendTotal.toFixed(2)),
       incomeTotal: Number(incomeTotal.toFixed(2)),
+      transferTotal: Number(transferTotal.toFixed(2)),
       groups,
     };
   },

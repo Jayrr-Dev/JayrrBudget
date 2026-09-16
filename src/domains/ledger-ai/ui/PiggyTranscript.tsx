@@ -19,6 +19,7 @@ import {
   type PiggyMood,
 } from "@/domains/ledger-ai/ui/PiggyMascot";
 import { UserMascot } from "@/domains/ledger-ai/ui/UserMascot";
+import { PiggyMarkdown } from "@/domains/ledger-ai/ui/PiggyMarkdown";
 import { cn } from "@/lib/utils";
 import type { ReactNode } from "react";
 import styles from "./PiggyTranscript.module.css";
@@ -77,7 +78,9 @@ export function PiggyUserMessage({ text }: { text: string }) {
       </MessageAvatar>
       <MessageContent>
         <Bubble align="end" variant="default" className={styles.userBubble}>
-          <BubbleContent className="whitespace-pre-wrap">{text}</BubbleContent>
+          <BubbleContent className="min-w-0">
+            <PiggyMarkdown text={text} />
+          </BubbleContent>
         </Bubble>
       </MessageContent>
     </Message>
@@ -115,7 +118,7 @@ export function PiggyTextBubble({
 }) {
   return (
     <Bubble align={align} variant="piggy">
-      <BubbleContent className="whitespace-pre-wrap">{children}</BubbleContent>
+      <BubbleContent className="min-w-0">{children}</BubbleContent>
     </Bubble>
   );
 }
@@ -128,5 +131,6 @@ export function PiggyCappedText({
   text: string;
   live?: boolean;
 }) {
-  return useCappedTextReveal(text, live);
+  const shown = useCappedTextReveal(text, live);
+  return <PiggyMarkdown text={shown} />;
 }

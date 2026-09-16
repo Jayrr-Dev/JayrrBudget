@@ -47,12 +47,12 @@ import {
   type PiggyUIMessage,
 } from "@/domains/ledger-ai/domain/piggyUiMessage";
 import { PiggyAttachment } from "@/domains/ledger-ai/ui/PiggyAttachment";
+import { PiggyFeatureCarousel } from "@/domains/ledger-ai/ui/PiggyFeatureCarousel";
+import { PiggyInlineSketch } from "@/domains/ledger-ai/ui/PiggyInlineSketch";
 import {
   PiggyQuestionnaire,
   PiggyQuestionnaireAnswers,
 } from "@/domains/ledger-ai/ui/PiggyQuestionnaire";
-import { PiggySketchChip } from "@/domains/ledger-ai/ui/PiggySketchChip";
-import { showPiggySketch } from "@/domains/ledger-ai/ui/piggySketchStore";
 import { useChat } from "@ai-sdk/react";
 import {
   DefaultChatTransport,
@@ -66,7 +66,6 @@ import { emptyPiggyHistory, restorePiggyHistory, restorePiggyChatIndex, type Pig
 import { usePiggyHistory } from "./usePiggyHistory";
 
 const MAX_PIGGY_TABS = 8;
-
 type PiggyTab = {
   id: string;
   name: string;
@@ -107,28 +106,15 @@ function PiggyAboutInfo() {
         align="start"
         side="bottom"
         sideOffset={8}
-        className="w-72 gap-0 p-3.5"
+        className="w-[min(20rem,calc(100vw-2rem))] gap-0 p-3.5"
       >
-        <PopoverHeader className="gap-1.5">
+        <PopoverHeader className="gap-1">
           <PopoverTitle>Piggy</PopoverTitle>
           <PopoverDescription>
-            A financial advisor mascot who uses your budget numbers, then can
-            tidy transactions, the store sheet, and notes.
+            A financial advisor mascot who works from your budget numbers.
           </PopoverDescription>
-          <ul className="mt-1.5 list-disc space-y-1 pl-4 text-muted-foreground">
-            <li>Advice from your spend, income, bills, and savings</li>
-            <li>Can hire up to two helper piggies; they talk through your private crew mail</li>
-            <li>Recategorize your transactions</li>
-            <li>Edit sections, categories, and subcategories</li>
-            <li>Read and update your store sheet and notes</li>
-            <li>Asks you a quick multiple-choice question when unsure</li>
-            <li>Builds CSV or PDF files you can download</li>
-            <li>Can open a sketch dialog to picture a split or flow</li>
-            <li>Summarize spend by merchant or category</li>
-            <li>Open extra tabs for separate chats</li>
-            <li>Chats and drafts are saved on this browser for your account</li>
-          </ul>
         </PopoverHeader>
+        <PiggyFeatureCarousel className="mt-3" />
       </PopoverContent>
     </Popover>
   );
@@ -203,7 +189,6 @@ function PiggyChatPaneSession({
   const reportExport = (toolCallId: string, output: ExportFileOutput) =>
     void addToolResult({ tool: EXPORT_FILE_TOOL_NAME, toolCallId, output });
   const bornMessageIds = useRef(new Set(messages.map((message) => message.id)));
-  const openedSketchIds = useRef(new Set<string>());
   const mood = piggyMoodFromChat({
     status,
     listening: inputFocused || input.trim().length > 0,
@@ -217,22 +202,6 @@ function PiggyChatPaneSession({
     onMoodChange?.(open ? mood : "still");
   }, [active, mood, onMoodChange, open]);
 
-  useEffect(() => {
-    for (const message of messages) {
-      if (bornMessageIds.current.has(message.id)) continue;
-      for (const part of message.parts) {
-        if (!isShowSketchPart(part)) continue;
-        if (part.state !== "input-available" && part.state !== "output-available") {
-          continue;
-        }
-        if (openedSketchIds.current.has(part.toolCallId)) continue;
-        if (!part.input) continue;
-        openedSketchIds.current.add(part.toolCallId);
-        showPiggySketch(part.input);
-      }
-    }
-  }, [messages]);
-
   return (
     <div className="flex flex-col" hidden={!active}>
       {blocked ? (
@@ -244,7 +213,7 @@ function PiggyChatPaneSession({
 
       <PiggyTranscript
         ariaLabel={`${tabName} conversation`}
-        className="h-64"
+        className="h-[21.3rem]"
       >
         {messages.length === 0 ? (
           <PiggyTranscriptItem messageId="piggy-empty">
@@ -314,7 +283,7 @@ function PiggyChatPaneSession({
                           return null;
                         }
                         return (
-                          <PiggySketchChip
+                          <PiggyInlineSketch
                             key={part.toolCallId}
                             input={part.input}
                           />
@@ -404,9 +373,17 @@ function PiggyChatPaneSession({
 export function LedgerAiChat(props: Omit<ComponentProps<typeof LedgerAiChatSession>, "initialIndex" | "saveIndex" | "historyError">) {
   const history = usePiggyHistory("ledger-index", restorePiggyChatIndex);
   if (!history.ready) return (
-    <Popover open={props.open} onOpenChange={props.onOpenChange}>
+    <Popover modal={false} open={props.open} onOpenChange={props.onOpenChange}>
       <PopoverTrigger asChild>{props.trigger}</PopoverTrigger>
-      <PopoverContent side={props.contentSide ?? "top"} align="end">
+      <PopoverContent
+        side={props.contentSide ?? "top"}
+        align="end"
+        onOpenAutoFocus={(event) => event.preventDefault()}
+        onCloseAutoFocus={(event) => event.preventDefault()}
+        onInteractOutside={(event) => event.preventDefault()}
+        onFocusOutside={(event) => event.preventDefault()}
+        onPointerDownOutside={(event) => event.preventDefault()}
+      >
         <p className="text-xs text-muted-foreground">Loading saved Piggy chats…</p>
       </PopoverContent>
     </Popover>
@@ -499,7 +476,7 @@ function LedgerAiChatSession({
   };
 
   return (
-    <Popover open={open} onOpenChange={onOpenChange}>
+    <Popover modal={false} open={open} onOpenChange={onOpenChange}>
       <PopoverTrigger asChild>{trigger}</PopoverTrigger>
       <PopoverContent
         align="end"
@@ -507,6 +484,10 @@ function LedgerAiChatSession({
         sideOffset={8}
         className="pointer-events-auto w-[min(24rem,calc(100vw-1rem))] gap-0 overflow-hidden border border-[var(--border)] bg-[var(--background)] p-0 shadow-lg"
         onOpenAutoFocus={(event) => event.preventDefault()}
+        onCloseAutoFocus={(event) => event.preventDefault()}
+        onInteractOutside={(event) => event.preventDefault()}
+        onFocusOutside={(event) => event.preventDefault()}
+        onPointerDownOutside={(event) => event.preventDefault()}
       >
         <div className="relative border-b border-[var(--border)] bg-[var(--muted)]/25">
           <ChromeTabStrip

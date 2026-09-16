@@ -29,6 +29,7 @@ import {
   ScratchFold,
   ToolActivity,
 } from "@/domains/canvas/ui/CanvasChatParts";
+import { PiggyGreeting } from "@/domains/canvas/ui/PiggyGreeting";
 import { useCanvasApi } from "@/domains/canvas/ui/canvasApiContext";
 import { useFeatureFlag } from "@/domains/feature-flags/ui/useFeatureFlag";
 import {
@@ -271,7 +272,19 @@ function AssistantTurn({
 
 export function CanvasAiChat() {
   const history = usePiggyHistory("canvas", restorePiggyHistory);
-  if (!history.ready) return <Button variant="ghost" size="icon-lg" disabled aria-label="Loading saved Canvas Piggy chat"><PiggyMascot mood="thinking" /></Button>;
+  if (!history.ready) {
+    return (
+      <Button
+        variant="ghost"
+        disabled
+        aria-label="Loading saved Canvas Piggy chat"
+        className="h-9 min-w-0 shrink-0 justify-start gap-1.5 rounded-lg border border-border bg-surface-elevated px-2 pr-2 text-sm font-medium text-foreground shadow-md ring-1 ring-foreground/10 [&_svg]:size-5"
+      >
+        <PiggyMascot mood="thinking" iconClassName="size-8" />
+        <PiggyGreeting />
+      </Button>
+    );
+  }
   return <CanvasAiChatSession key={history.owner} initialHistory={history.initial!} saveHistory={history.save} historyError={history.error} />;
 }
 
@@ -411,20 +424,20 @@ function CanvasAiChatSession({ initialHistory, saveHistory, historyError }: {
   };
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover modal={false} open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button
           type="button"
           variant="ghost"
-          size="icon-lg"
           title="Canvas Piggy"
           aria-label="Canvas Piggy"
           className={cn(
-            "size-9 rounded-lg border border-border bg-surface-elevated text-accent shadow-md ring-1 ring-foreground/10 hover:bg-muted hover:text-accent [&_svg]:size-5",
+            "h-9 min-w-0 shrink-0 justify-start gap-1.5 rounded-lg border border-border bg-surface-elevated px-2 pr-2 text-sm font-medium text-foreground shadow-md ring-1 ring-foreground/10 hover:bg-muted hover:text-foreground [&_svg]:size-5",
             busy && !open && "ring-2 ring-accent/35",
           )}
         >
           <PiggyMascot mood={mood} iconClassName="size-8" />
+          <PiggyGreeting paused={open} />
         </Button>
       </PopoverTrigger>
       <PopoverContent
@@ -432,6 +445,10 @@ function CanvasAiChatSession({ initialHistory, saveHistory, historyError }: {
         side="bottom"
         sideOffset={8}
         onOpenAutoFocus={(event) => event.preventDefault()}
+        onCloseAutoFocus={(event) => event.preventDefault()}
+        onInteractOutside={(event) => event.preventDefault()}
+        onFocusOutside={(event) => event.preventDefault()}
+        onPointerDownOutside={(event) => event.preventDefault()}
         className="z-[2000] flex w-[min(24rem,calc(100vw-1rem))] flex-col gap-0 overflow-hidden border border-border p-0 shadow-lg ring-1 ring-foreground/10"
       >
         <PopoverHeader className="flex-row items-center gap-1.5 border-b border-accent/15 bg-linear-to-r from-accent-subtle/80 to-transparent px-3 py-2.5">

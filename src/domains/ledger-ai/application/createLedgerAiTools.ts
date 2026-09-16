@@ -277,7 +277,7 @@ export function createLedgerAiTools(
     }),
     summarize_spend: tool({
       description:
-        "Analyze the signed-in user's spend and income grouped by merchant, section, category, or subcategory. Optional YYYY-MM-DD range.",
+        "Analyze the signed-in user's spend and income grouped by merchant, section, category, or subcategory. Optional YYYY-MM-DD range. Own-account transfers and card payoffs are excluded and reported as transferTotal.",
       inputSchema: z.object({
         groupBy: z.enum(["merchant", "section", "category", "subcategory"]),
         startDate: z.string().optional(),

@@ -174,6 +174,105 @@ function AiCostRatesTable() {
   );
 }
 
+const MEMORY_LISTS: Array<{
+  key:
+    | "basicInfo"
+    | "goals"
+    | "painPoints"
+    | "preferences"
+    | "wins"
+    | "followUps";
+  label: string;
+}> = [
+  { key: "basicInfo", label: "Basic info" },
+  { key: "goals", label: "Goals" },
+  { key: "painPoints", label: "Pain points" },
+  { key: "preferences", label: "Preferences" },
+  { key: "wins", label: "Wins" },
+  { key: "followUps", label: "Follow-ups" },
+];
+
+function formatDateTime(at: number) {
+  return new Date(at).toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+}
+
+function PiggyMemoryView({
+  memory,
+}: {
+  memory: (typeof api.piggyMemory.get)["_returnType"] | undefined;
+}) {
+  if (memory === undefined) {
+    return (
+      <p className="py-6 text-center text-xs text-[var(--muted-foreground)]">
+        Loading memory…
+      </p>
+    );
+  }
+  const hasFacts =
+    memory.nickname != null ||
+    memory.lastSessionSummary != null ||
+    MEMORY_LISTS.some(({ key }) => memory[key].length > 0);
+  if (!hasFacts && memory.sessionCount === 0) {
+    return (
+      <p className="py-6 text-center text-xs text-[var(--muted-foreground)]">
+        Piggy has not saved anything yet. Chat with Piggy first.
+      </p>
+    );
+  }
+  return (
+    <div className="px-3 py-2 font-mono text-[11px]">
+      <p className="text-[10px] text-[var(--muted-foreground)]">
+        {memory.sessionCount} session{memory.sessionCount === 1 ? "" : "s"}
+        {memory.lastSessionAt != null
+          ? ` · last ${formatDateTime(memory.lastSessionAt)}${
+              memory.lastSessionScope ? ` (${memory.lastSessionScope})` : ""
+            }`
+          : ""}
+        {memory.updatedAt != null
+          ? ` · updated ${formatDateTime(memory.updatedAt)}`
+          : ""}
+      </p>
+      {memory.nickname ? (
+        <p className="mt-1.5">
+          <span className="text-[var(--muted-foreground)]">nickname </span>
+          <span className="text-[var(--foreground)]">{memory.nickname}</span>
+        </p>
+      ) : null}
+      {memory.lastSessionSummary ? (
+        <div className="mt-1.5">
+          <p className="font-semibold text-[var(--accent)]">Last session</p>
+          <p className="text-[var(--foreground)]">{memory.lastSessionSummary}</p>
+        </div>
+      ) : null}
+      {MEMORY_LISTS.map(({ key, label }) => {
+        const items = memory[key];
+        if (items.length === 0) return null;
+        return (
+          <div key={key} className="mt-1.5">
+            <p className="font-semibold text-[var(--accent)]">
+              {label}{" "}
+              <span className="font-normal text-[var(--muted-foreground)]">
+                ({items.length})
+              </span>
+            </p>
+            <ul className="list-disc space-y-0.5 pl-4 text-[var(--foreground)]">
+              {items.map((item) => (
+                <li key={item}>{item}</li>
+              ))}
+            </ul>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function DebuggerAboutInfo() {
   return (
     <Popover>
@@ -201,6 +300,7 @@ function DebuggerAboutInfo() {
             <li>Cache logs IndexedDB hits and Convex ciphertext reads</li>
             <li>AI Usage logs tokens from Piggy / canvas and Mistral OCR pages</li>
             <li>Cost estimates use the rate card (OpenRouter + Mistral)</li>
+            <li>Memory shows what Piggy has saved about you</li>
             <li>Plaintext ledger never appears here</li>
           </ul>
         </PopoverHeader>
@@ -224,7 +324,9 @@ export function VaultCacheDebugPanel({
   onOpenChange: (open: boolean) => void;
 }) {
   const [tab, setTab] = useState("cache");
-  const [aiSubTab, setAiSubTab] = useState<"usage" | "cost" | "team">("usage");
+  const [aiSubTab, setAiSubTab] = useState<
+    "usage" | "cost" | "team" | "memory"
+  >("usage");
   const [capturing, setCapturing] = useState(isVaultCacheDebugCapturing);
   const [cacheEvents, setCacheEvents] = useState(() => [
     ...getVaultCacheDebugEvents(),
@@ -238,6 +340,10 @@ export function VaultCacheDebugPanel({
   const teamMonth = useQuery(
     api.aiUsage.adminMonth,
     isAuthenticated && open && aiSubTab === "team" ? { monthKey } : "skip",
+  );
+  const piggyMemory = useQuery(
+    api.piggyMemory.get,
+    isAuthenticated && open && aiSubTab === "memory" ? {} : "skip",
   );
 
   useEffect(() => {
@@ -393,11 +499,28 @@ export function VaultCacheDebugPanel({
             >
               Cost
             </button>
+            <button
+              type="button"
+              aria-pressed={aiSubTab === "memory"}
+              onClick={() => setAiSubTab("memory")}
+              className={cn(
+                "rounded-md px-2 py-1 text-[11px] font-medium",
+                aiSubTab === "memory"
+                  ? "bg-[var(--accent)]/15 text-[var(--accent)]"
+                  : "text-[var(--muted-foreground)] hover:bg-[var(--surface-2)]",
+              )}
+            >
+              Memory
+            </button>
           </div>
 
           {aiSubTab === "cost" ? (
             <div className="max-h-72 overflow-y-auto">
               <AiCostRatesTable />
+            </div>
+          ) : aiSubTab === "memory" ? (
+            <div className="max-h-72 overflow-y-auto">
+              <PiggyMemoryView memory={piggyMemory} />
             </div>
           ) : aiSubTab === "team" ? (
             <ul className="max-h-72 overflow-y-auto px-3 py-1">

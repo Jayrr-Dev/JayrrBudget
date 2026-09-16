@@ -16,16 +16,33 @@ import {
   PopoverTitle,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { paintSketchCommands } from "@/domains/ledger-ai/ui/paintSketchCommands";
+import type { SketchCommand } from "@/domains/ledger-ai/domain/sketchBoard";
+import {
+  paintSketchCommands,
+  readSketchPaintTheme,
+} from "@/domains/ledger-ai/ui/paintSketchCommands";
 import {
   closePiggySketch,
   usePiggySketch,
 } from "@/domains/ledger-ai/ui/piggySketchStore";
 import { Info } from "lucide-react";
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 
 const CANVAS_WIDTH = 560;
 const CANVAS_HEIGHT = 320;
+
+function paintCanvas(
+  canvas: HTMLCanvasElement,
+  commands: readonly SketchCommand[],
+) {
+  const ctx = canvas.getContext("2d", { alpha: true });
+  if (!ctx) return;
+  const ratio = window.devicePixelRatio || 1;
+  canvas.width = CANVAS_WIDTH * ratio;
+  canvas.height = CANVAS_HEIGHT * ratio;
+  ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+  paintSketchCommands(ctx, CANVAS_WIDTH, CANVAS_HEIGHT, commands, readSketchPaintTheme());
+}
 
 function SketchAboutInfo() {
   return (
@@ -58,18 +75,25 @@ function SketchAboutInfo() {
 
 export function PiggySketchDialog() {
   const sketch = usePiggySketch();
-  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  const attachCanvas = useCallback(
+    (canvas: HTMLCanvasElement | null) => {
+      canvasRef.current = canvas;
+      if (canvas && sketch.open) {
+        paintCanvas(canvas, sketch.commands);
+      }
+    },
+    [sketch.open, sketch.commands],
+  );
 
   useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas || !sketch.open) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-    const ratio = window.devicePixelRatio || 1;
-    canvas.width = CANVAS_WIDTH * ratio;
-    canvas.height = CANVAS_HEIGHT * ratio;
-    ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
-    paintSketchCommands(ctx, CANVAS_WIDTH, CANVAS_HEIGHT, sketch.commands);
+    if (!sketch.open) return;
+    const id = requestAnimationFrame(() => {
+      const canvas = canvasRef.current;
+      if (canvas) paintCanvas(canvas, sketch.commands);
+    });
+    return () => cancelAnimationFrame(id);
   }, [sketch.open, sketch.commands]);
 
   return (
@@ -93,12 +117,17 @@ export function PiggySketchDialog() {
           </p>
         </DialogHeader>
         <canvas
-          ref={canvasRef}
-          className="w-full rounded-lg border border-border bg-surface"
+          ref={attachCanvas}
+          className="block w-full bg-transparent"
           style={{ aspectRatio: `${CANVAS_WIDTH} / ${CANVAS_HEIGHT}` }}
           width={CANVAS_WIDTH}
           height={CANVAS_HEIGHT}
         />
+        {sketch.commands.length === 0 ? (
+          <p className="text-xs text-muted-foreground">
+            Piggy sent a caption but no shapes. Ask it to sketch bars or boxes.
+          </p>
+        ) : null}
         {sketch.caption ? (
           <DialogDescription>{sketch.caption}</DialogDescription>
         ) : null}

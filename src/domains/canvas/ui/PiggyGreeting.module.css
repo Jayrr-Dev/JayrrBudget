@@ -1,0 +1,105 @@
+.slot {
+  display: block;
+  flex: none;
+  box-sizing: border-box;
+  min-width: 0;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.line {
+  display: block;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.bang,
+.ask,
+.dots,
+.caret {
+  display: inline-block;
+  transform-origin: 50% 80%;
+}
+
+.bang {
+  animation: greet-bang 1.5s ease-in-out infinite;
+}
+
+.ask {
+  animation: greet-ask 1.8s ease-in-out infinite;
+}
+
+.dots {
+  animation: greet-dots 2.6s ease-in-out infinite;
+}
+
+.caret {
+  width: 0.08em;
+  height: 0.95em;
+  margin-left: 0.08em;
+  vertical-align: -0.08em;
+  background: currentColor;
+  animation: greet-caret 1s steps(1) infinite;
+}
+
+@keyframes greet-bang {
+  0%,
+  100% {
+    transform: translateY(0) rotate(0deg) scale(1);
+  }
+  35% {
+    transform: translateY(-3px) rotate(-14deg) scale(1.18);
+  }
+  55% {
+    transform: translateY(0) rotate(8deg) scale(1.05);
+  }
+}
+
+@keyframes greet-ask {
+  0%,
+  100% {
+    transform: rotate(0deg) translateY(0);
+  }
+  40% {
+    transform: rotate(16deg) translateY(-1px);
+  }
+  70% {
+    transform: rotate(-10deg) translateY(0);
+  }
+}
+
+@keyframes greet-dots {
+  0%,
+  100% {
+    opacity: 0.35;
+    letter-spacing: 0;
+  }
+  50% {
+    opacity: 1;
+    letter-spacing: 0.08em;
+  }
+}
+
+@keyframes greet-caret {
+  0%,
+  49% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bang,
+  .ask,
+  .dots,
+  .caret {
+    animation: none;
+  }
+
+  .caret {
+    opacity: 0;
+  }
+}

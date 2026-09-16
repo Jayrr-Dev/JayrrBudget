@@ -250,6 +250,9 @@ const updateElementSchema = z.object({
   opacity: styleFields.opacity,
 });
 
+/** Speech-bubble cap: the header slot fits one short line. */
+export const PIGGY_BUBBLE_MAX_CHARS = 16;
+
 function withWarnings<T extends object>(result: T, warnings: string[]) {
   return warnings.length > 0 ? { ...result, warnings } : result;
 }
@@ -409,6 +412,18 @@ export function createCanvasTools(knownIds: Iterable<string> = []) {
         known.clear();
         return { ok: true as const };
       },
+    }),
+    say_bubble: tool({
+      description: `Show a tiny line in Piggy's speech bubble next to the Piggy button on the canvas header. At most ${PIGGY_BUBBLE_MAX_CHARS} characters. Use it once, after the board is drawn, for a short remark like "Done!", "Ta-da!", "Rent is big", "Look right ->". Not a replacement for your chat reply.`,
+      inputSchema: z.object({
+        text: z
+          .string()
+          .trim()
+          .min(1)
+          .max(PIGGY_BUBBLE_MAX_CHARS)
+          .describe(`Bubble text, ${PIGGY_BUBBLE_MAX_CHARS} chars max.`),
+      }),
+      execute: async ({ text }) => ({ ok: true as const, text }),
     }),
   };
 }

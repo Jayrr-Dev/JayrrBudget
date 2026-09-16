@@ -1,7 +1,10 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
-import type { ShowSketchInput } from "@/domains/ledger-ai/domain/sketchBoard";
+import {
+  normalizeSketchInput,
+  type ShowSketchInput,
+} from "@/domains/ledger-ai/domain/sketchBoard";
 
 export type PiggySketchState = {
   open: boolean;
@@ -23,12 +26,14 @@ function notify() {
   for (const listener of listeners) listener();
 }
 
-export function showPiggySketch(input: ShowSketchInput) {
+export function showPiggySketch(input: unknown) {
+  const next = normalizeSketchInput(input);
+  if (!next) return;
   snapshot = {
     open: true,
-    title: input.title,
-    caption: input.caption,
-    commands: input.commands,
+    title: next.title,
+    caption: next.caption,
+    commands: next.commands,
   };
   notify();
 }

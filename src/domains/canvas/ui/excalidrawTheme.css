@@ -178,6 +178,10 @@
   box-shadow: none;
 }
 
+.jayrr-excalidraw .excalidraw .default-sidebar-trigger {
+  display: none;
+}
+
 .jayrr-excalidraw .excalidraw .help-icon,
 .jayrr-excalidraw .excalidraw .sidebar-trigger,
 .jayrr-excalidraw .excalidraw .dropdown-menu-button,

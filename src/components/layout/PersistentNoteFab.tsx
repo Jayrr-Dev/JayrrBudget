@@ -425,7 +425,7 @@ function NotesPanel({
   };
 
   return (
-    <Popover open={open} onOpenChange={onOpenChange}>
+    <Popover modal={false} open={open} onOpenChange={onOpenChange}>
       <FabTooltip label="Open notes" side={contentSide}>
         <PopoverTrigger asChild>{trigger}</PopoverTrigger>
       </FabTooltip>
@@ -435,6 +435,10 @@ function NotesPanel({
         sideOffset={8}
         className="pointer-events-auto w-[min(23rem,calc(100vw-1rem))] gap-0 overflow-hidden border border-[var(--border)] bg-[var(--background)] p-0 shadow-lg"
         onOpenAutoFocus={(event) => event.preventDefault()}
+        onCloseAutoFocus={(event) => event.preventDefault()}
+        onInteractOutside={(event) => event.preventDefault()}
+        onFocusOutside={(event) => event.preventDefault()}
+        onPointerDownOutside={(event) => event.preventDefault()}
       >
         <div className="relative border-b border-[var(--border)] bg-[var(--muted)]/25">
           <ChromeTabStrip

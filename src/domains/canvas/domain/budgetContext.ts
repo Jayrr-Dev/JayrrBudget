@@ -1,9 +1,32 @@
-import type { DashboardData } from "@/domains/dashboard/domain/types";
+import { classifyCashFlow, type CashFlowKind } from "@/domains/analysis/domain/cashFlow";
+import type { DashboardData, DashboardTransaction } from "@/domains/dashboard/domain/types";
+
+function cashFlowKind(txn: DashboardTransaction, accountType: string | null): CashFlowKind {
+  return classifyCashFlow({
+    amountMinor: Math.round(txn.amount * 100),
+    description: txn.name,
+    accountType,
+    sectionName: txn.sectionName,
+    categoryName: txn.categoryName,
+    typeName: txn.typeName,
+    transactionCode: txn.transactionCode,
+  });
+}
 
 /** Compact ledger snapshot for canvas AI. Same shape whether built server-side or from decrypted vault. */
 export function buildBudgetContextFromDashboard(data: DashboardData) {
-  const spend = data.transactions.filter((txn) => txn.amount > 0);
-  const income = data.transactions.filter((txn) => txn.amount < 0);
+  const accountTypeById = new Map(data.accounts.map((a) => [a.accountId, a.type]));
+  const classified = data.transactions.map((txn) => ({
+    txn,
+    kind: cashFlowKind(txn, accountTypeById.get(txn.accountId) ?? null),
+  }));
+
+  // Transfers between own accounts and card payoffs are not spend or income.
+  const spend = classified.filter((row) => row.kind === "spend").map((row) => row.txn);
+  const income = classified.filter((row) => row.kind === "income").map((row) => row.txn);
+  const transferTotal = classified
+    .filter((row) => row.kind === "transfer_out")
+    .reduce((sum, row) => sum + row.txn.amount, 0);
   const spendTotal = spend.reduce((sum, txn) => sum + txn.amount, 0);
   const incomeTotal = income.reduce((sum, txn) => sum + Math.abs(txn.amount), 0);
 
@@ -31,14 +54,17 @@ export function buildBudgetContextFromDashboard(data: DashboardData) {
       transactionCount: data.transactionCount,
       spendTotal: Number(spendTotal.toFixed(2)),
       incomeTotal: Number(incomeTotal.toFixed(2)),
+      /** Money moved between own accounts / card payoffs. Not spend. */
+      transferTotal: Number(transferTotal.toFixed(2)),
       earliestDate: data.earliestDate,
       latestDate: data.latestDate,
     },
     topMerchants,
-    recentTransactions: data.transactions.slice(0, 25).map((txn) => ({
+    recentTransactions: classified.slice(0, 25).map(({ txn, kind }) => ({
       date: txn.date,
       merchant: txn.merchantClean ?? txn.merchantName ?? txn.name,
       amount: txn.amount,
+      kind,
       category:
         txn.subcategoryName ||
         txn.typeName ||
