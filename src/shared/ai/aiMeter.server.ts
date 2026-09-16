@@ -2,7 +2,7 @@ import "server-only";
 
 import { api } from "@convex/_generated/api";
 import type { ConvexHttpClient } from "convex/browser";
-import { runWithOpenRouterKey } from "@/shared/ai/openRouter";
+import { runWithModelChain, runWithOpenRouterKey } from "@/shared/ai/openRouter";
 import {
   emitAiUsage,
   runWithAiUsageSink,
@@ -68,14 +68,18 @@ export async function persistAiUsage(
   }
 }
 
-export function runMeteredOpenRouter<T>(
+export async function runMeteredOpenRouter<T>(
   client: ConvexHttpClient,
   loaded: { apiKey: string; billedTo: AiBilledTo },
   fn: () => T,
-): T {
+): Promise<T> {
+  const models = await client.query(api.service.getAiModels, {});
   return runWithAiUsageSink(
     (event) => persistAiUsage(client, loaded.billedTo, event),
-    () => runWithOpenRouterKey(loaded.apiKey, fn),
+    () =>
+      runWithOpenRouterKey(loaded.apiKey, () =>
+        runWithModelChain(models.chain, fn),
+      ),
   );
 }
 

@@ -178,7 +178,7 @@ export const MobileSidebar = ({
     >
       <div className="flex min-w-0 items-center gap-2">
         <img
-          src="/icon.svg"
+          src="/icon.svg?v=public"
           alt=""
           width={28}
           height={28}

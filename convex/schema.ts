@@ -550,6 +550,17 @@ export default defineSchema({
     .index("by_userId_monthKey_billedTo", ["userId", "monthKey", "billedTo"])
     .index("by_monthKey", ["monthKey"]),
 
+  /**
+   * App-wide default OpenRouter model. One row, key "default".
+   * Catalog ids live in convex/lib/openRouterModels.ts.
+   */
+  serviceAiConfig: defineTable({
+    key: v.literal("default"),
+    primaryModelId: v.string(),
+    fallbackModelIds: v.array(v.string()),
+    updatedAt: v.number(),
+  }).index("by_key", ["key"]),
+
   /** Per-role AI plan: price, monthly platform cap, request rate. */
   servicePlans: defineTable({
     role: v.union(

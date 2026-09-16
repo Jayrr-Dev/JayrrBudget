@@ -18,6 +18,7 @@ import {
   PiggyMascot,
   type PiggyMood,
 } from "@/domains/ledger-ai/ui/PiggyMascot";
+import { UserMascot } from "@/domains/ledger-ai/ui/UserMascot";
 import { cn } from "@/lib/utils";
 import type { ReactNode } from "react";
 import styles from "./PiggyTranscript.module.css";
@@ -69,7 +70,10 @@ export function PiggyTranscriptItem({
 
 export function PiggyUserMessage({ text }: { text: string }) {
   return (
-    <Message align="end" className="motion-safe:animate-piggy-pop">
+    <Message align="end" className={cn("motion-safe:animate-piggy-pop", styles.user)}>
+      <MessageAvatar className="size-10 self-start overflow-visible rounded-none bg-transparent">
+        <UserMascot iconClassName="size-10" />
+      </MessageAvatar>
       <MessageContent>
         <Bubble align="end" variant="default" className={styles.userBubble}>
           <BubbleContent className="whitespace-pre-wrap">{text}</BubbleContent>

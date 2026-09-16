@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" fill="none" role="img" aria-labelledby="title desc">
+  <title id="title">Jay</title>
+  <desc id="desc">A round blue jay with a cocoa outline, cream cheek, and tiny crest.</desc>
+  <g stroke="#60353d" stroke-linecap="round" stroke-linejoin="round" stroke-width="4.5">
+    <path fill="#7eb8d4" d="M86 38c8-10 18-16 22-12 4 5-2 16-12 24"/>
+    <path fill="#f8c3cc" stroke="none" d="M92 42c5-7 12-11 15-9-1 6-8 13-15 18"/>
+    <path fill="#8ec5e0" d="M64 28c-24 1-42 18-42 40 0 24 18 40 42 40s42-15 42-38c0-22-18-43-42-42Z"/>
+    <path fill="#6fa8c9" stroke="none" d="M32 78c8 20 22 28 32 28s32-7 40-24c-8 18-22 28-40 28-16 0-26-10-32-32Z"/>
+    <path fill="#f4f4ee" d="M44 62c0-14 10-24 22-24 8 0 14 4 18 10 2 14-4 28-18 32-14 3-22-6-22-18Z"/>
+    <path stroke="#fff6ea" stroke-width="5" d="M48 52q10-8 20-6"/>
+    <ellipse cx="52" cy="68" fill="#ef94af" stroke="none" opacity=".7" rx="7" ry="5"/>
+    <ellipse cx="58" cy="58" fill="#60353d" stroke="none" rx="4" ry="5"/>
+    <circle cx="59" cy="56" r="1.2" fill="#fff5f3" stroke="none"/>
+    <path fill="#f0b070" d="M28 62c-8 4-10 12-4 16 8 5 18 2 22-4-8-2-14-6-18-12Z"/>
+    <path fill="#e89a4a" stroke="none" d="M28 68c-4 3-5 8-1 11 5 3 12 2 16-1-6-1-11-4-15-10Z"/>
+    <path stroke-width="3.2" d="M62 74q6 6 12 1"/>
+  </g>
+</svg>

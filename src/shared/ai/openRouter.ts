@@ -1,17 +1,24 @@
 import { errorMessage, isRetryableAiError } from "@/shared/ai/errors";
 import { emitAiUsage } from "@/shared/ai/aiUsageSink";
+import { resolveOpenRouterModel } from "@convex/lib/openRouterModels";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { generateObject } from "ai";
 import { AsyncLocalStorage } from "node:async_hooks";
 import type { z } from "zod";
 
 const requestApiKey = new AsyncLocalStorage<string>();
+const requestModelChain = new AsyncLocalStorage<string[]>();
 
 export const OPENROUTER_NOT_CONFIGURED =
   "No OpenRouter key. Add yours on Profile, or set OPENROUTER_API_KEY on the server.";
 
 export function runWithOpenRouterKey<T>(apiKey: string, fn: () => T): T {
   return requestApiKey.run(apiKey, fn);
+}
+
+export function runWithModelChain<T>(chain: string[], fn: () => T): T {
+  if (chain.length === 0) return fn();
+  return requestModelChain.run(chain, fn);
 }
 
 const DEFAULT_MODELS = [
@@ -36,8 +43,13 @@ export function getOpenRouter() {
   });
 }
 
-/** Ordered model chain: env list first, then built-in cheap flash fallbacks. */
+/** Ordered model chain: saved Service pick, then env, then built-in flash models. */
 export function getModelChain() {
+  const stored = requestModelChain.getStore();
+  if (stored && stored.length > 0) {
+    return [...new Set(stored)];
+  }
+
   const fromList = process.env.OPENROUTER_MODELS?.split(",")
     .map((value) => value.trim())
     .filter(Boolean);
@@ -66,11 +78,24 @@ type OpenRouterObjectSettings = {
   provider: {
     allow_fallbacks: boolean;
     require_parameters: boolean;
+    only?: string[];
   };
   models?: string[];
 };
 
+function openRouterFallbacks(modelId: string, fallbacks: string[]) {
+  const primary = resolveOpenRouterModel(modelId).openRouterId;
+  return [
+    ...new Set(
+      fallbacks
+        .map((id) => resolveOpenRouterModel(id).openRouterId)
+        .filter((id) => id !== primary),
+    ),
+  ];
+}
+
 function objectModel(modelId: string, fallbacks: string[]) {
+  const choice = resolveOpenRouterModel(modelId);
   const settings: OpenRouterObjectSettings = {
     plugins: [{ id: "response-healing" }],
     provider: {
@@ -78,10 +103,14 @@ function objectModel(modelId: string, fallbacks: string[]) {
       require_parameters: true,
     },
   };
-  if (fallbacks.length > 0) {
-    settings.models = fallbacks;
+  if (choice.providerOnly) {
+    settings.provider.only = [choice.providerOnly];
   }
-  return getOpenRouter()(modelId, settings);
+  const next = openRouterFallbacks(modelId, fallbacks);
+  if (next.length > 0) {
+    settings.models = next;
+  }
+  return getOpenRouter()(choice.openRouterId, settings);
 }
 
 type ChatModelOptions = {
@@ -96,8 +125,13 @@ export function chatModel(
   fallbacks: string[],
   options: ChatModelOptions = {},
 ) {
+  const choice = resolveOpenRouterModel(modelId);
   const settings: {
-    provider: { allow_fallbacks: boolean; require_parameters: boolean };
+    provider: {
+      allow_fallbacks: boolean;
+      require_parameters: boolean;
+      only?: string[];
+    };
     models?: string[];
     reasoning?: { effort: NonNullable<ChatModelOptions["reasoningEffort"]> };
     parallelToolCalls?: boolean;
@@ -110,8 +144,12 @@ export function chatModel(
       require_parameters: false,
     },
   };
-  if (fallbacks.length > 0) {
-    settings.models = fallbacks;
+  if (choice.providerOnly) {
+    settings.provider.only = [choice.providerOnly];
+  }
+  const next = openRouterFallbacks(modelId, fallbacks);
+  if (next.length > 0) {
+    settings.models = next;
   }
   if (options.reasoningEffort) {
     settings.reasoning = { effort: options.reasoningEffort };
@@ -119,7 +157,7 @@ export function chatModel(
   if (options.parallelToolCalls !== undefined) {
     settings.parallelToolCalls = options.parallelToolCalls;
   }
-  return getOpenRouter()(modelId, settings);
+  return getOpenRouter()(choice.openRouterId, settings);
 }
 
 const GENERATE_TIMEOUT_MS = 120_000;

@@ -9,6 +9,11 @@ import {
   defaultPlanForRole,
   type ServicePlanSeed,
 } from "./lib/servicePlans";
+import {
+  chainFromPrimary,
+  isCatalogModelId,
+  OPENROUTER_MODEL_CATALOG,
+} from "./lib/openRouterModels";
 import { isUserRole, type UserRole } from "./lib/roles";
 
 type DbCtx = Pick<QueryCtx, "db"> | Pick<MutationCtx, "db">;
@@ -18,6 +23,13 @@ const roleValidator = v.union(
   v.literal("normal"),
   v.literal("premium"),
 );
+
+const catalogRowValidator = v.object({
+  id: v.string(),
+  openRouterId: v.string(),
+  label: v.string(),
+  providerOnly: v.union(v.string(), v.null()),
+});
 
 const planValidator = v.object({
   role: roleValidator,
@@ -94,6 +106,89 @@ async function platformSpendUsd(
     .unique();
   return row?.estimatedUsd ?? 0;
 }
+
+const SERVICE_AI_KEY = "default" as const;
+
+async function readAiConfig(ctx: DbCtx) {
+  return await ctx.db
+    .query("serviceAiConfig")
+    .withIndex("by_key", (q) => q.eq("key", SERVICE_AI_KEY))
+    .unique();
+}
+
+export const getAiModels = query({
+  args: {},
+  returns: v.object({
+    primaryModelId: v.union(v.string(), v.null()),
+    fallbackModelIds: v.array(v.string()),
+    chain: v.array(v.string()),
+    catalog: v.array(catalogRowValidator),
+  }),
+  handler: async (ctx) => {
+    await requireUser(ctx);
+    const row = await readAiConfig(ctx);
+    const catalog = OPENROUTER_MODEL_CATALOG.map((item) => ({
+      id: item.id,
+      openRouterId: item.openRouterId,
+      label: item.label,
+      providerOnly: item.providerOnly,
+    }));
+    if (!row) {
+      return {
+        primaryModelId: null,
+        fallbackModelIds: [],
+        chain: [],
+        catalog,
+      };
+    }
+    return {
+      primaryModelId: row.primaryModelId,
+      fallbackModelIds: row.fallbackModelIds,
+      chain:
+        row.fallbackModelIds.length > 0
+          ? [row.primaryModelId, ...row.fallbackModelIds]
+          : chainFromPrimary(row.primaryModelId),
+      catalog,
+    };
+  },
+});
+
+export const saveAiModels = mutation({
+  args: {
+    primaryModelId: v.string(),
+  },
+  returns: v.object({
+    primaryModelId: v.string(),
+    fallbackModelIds: v.array(v.string()),
+  }),
+  handler: async (ctx, args) => {
+    await requireRole(ctx, "admin");
+    if (!isCatalogModelId(args.primaryModelId)) {
+      throw new Error("Unknown model");
+    }
+    const fallbackModelIds = chainFromPrimary(args.primaryModelId).slice(1);
+    const now = Date.now();
+    const existing = await readAiConfig(ctx);
+    if (existing) {
+      await ctx.db.patch(existing._id, {
+        primaryModelId: args.primaryModelId,
+        fallbackModelIds,
+        updatedAt: now,
+      });
+    } else {
+      await ctx.db.insert("serviceAiConfig", {
+        key: SERVICE_AI_KEY,
+        primaryModelId: args.primaryModelId,
+        fallbackModelIds,
+        updatedAt: now,
+      });
+    }
+    return {
+      primaryModelId: args.primaryModelId,
+      fallbackModelIds,
+    };
+  },
+});
 
 export const listPlans = query({
   args: {},

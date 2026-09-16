@@ -1,3 +1,7 @@
+import {
+  buildCanvasSkeleton,
+  CANVAS_SKELETON_KINDS,
+} from "@/domains/canvas/domain/canvasSkeletons";
 import { tool } from "ai";
 import { z } from "zod";
 
@@ -220,9 +224,22 @@ const updateElementSchema = z.object({
     .describe("Element id from the canvas snapshot, or the ref you drew it with."),
   x: z.number().optional(),
   y: z.number().optional(),
-  w: z.number().optional(),
-  h: z.number().optional(),
-  text: z.string().optional().describe("New label / text."),
+  w: z
+    .number()
+    .optional()
+    .describe(
+      "New width. Required when the new text is longer than the placeholder. Category labels at least 280. Labeled boxes at least 280.",
+    ),
+  h: z
+    .number()
+    .optional()
+    .describe("New height. Grow with the text. Labeled boxes at least 80."),
+  text: z
+    .string()
+    .optional()
+    .describe(
+      "New label. Keep it short enough to fit: under 22 characters per line. Abbreviate rather than clip.",
+    ),
   fontSize: z.number().optional(),
   stroke: styleFields.stroke,
   fill: styleFields.fill,
@@ -250,6 +267,63 @@ export function createCanvasTools(knownIds: Iterable<string> = []) {
   const known = new Set(knownIds);
 
   return {
+    use_skeleton: tool({
+      description:
+        "Stamp a ready-made layout skeleton in one call: bar_chart, cash_flow, steps, comparison, timeline, progress, flowchart, decision, or loop. Place it in empty space (originX/originY). Then fill labels and values with update_shapes using the returned refs. Do not redraw the same layout with create_shapes after stamping.",
+      inputSchema: z.object({
+        kind: z
+          .enum(CANVAS_SKELETON_KINDS)
+          .describe(
+            "bar_chart = ranked spend bars; cash_flow = income to buckets to total; steps = ordered plan; comparison = two columns; timeline = dates on a line; progress = goal track; flowchart = start to steps to done; decision = yes/no branch; loop = payday cycle.",
+          ),
+        originX: z
+          .number()
+          .optional()
+          .describe("Left of the stamp. Default 80. Use empty space from the snapshot."),
+        originY: z
+          .number()
+          .optional()
+          .describe("Top of the stamp. Default 80."),
+        slots: z
+          .number()
+          .min(3)
+          .max(8)
+          .optional()
+          .describe("How many bars, buckets, steps, rows, or dates. Default 5. Ignored for progress."),
+        title: z.string().optional().describe("Board title. Placeholder if omitted."),
+        prefix: z
+          .string()
+          .optional()
+          .describe(
+            'Prepended to every ref (e.g. "sep" → sep_title, sep_bar_1). Use when the board already has a skeleton of this kind.',
+          ),
+      }),
+      execute: async (args) => {
+        const built = buildCanvasSkeleton(args);
+        const warnings: string[] = [];
+        const refs: string[] = [];
+        for (const ref of built.refs) {
+          if (known.has(ref) || refs.includes(ref)) {
+            warnings.push(
+              `Ref "${ref}" is already taken; the board gave this element a random id. Pass a fresh prefix next time.`,
+            );
+            continue;
+          }
+          refs.push(ref);
+          known.add(ref);
+        }
+        return withWarnings(
+          {
+            ok: true as const,
+            kind: built.kind,
+            count: built.elements.length,
+            slots: built.slots,
+            refs,
+          },
+          warnings,
+        );
+      },
+    }),
     create_shapes: tool({
       description:
         "Draw ONE idea on the Excalidraw board: a title, one labeled box, one bar with its value, one arrow, one frame. Elements: rectangle/ellipse/diamond containers with labels, standalone text, sticky notes, arrows bound to shapes (from/to), lines (axes, dividers, timelines), frames that group children under a title. Refs become element ids and stay valid in later calls. Put shapes BEFORE the arrows and frames that reference them.",
@@ -298,7 +372,7 @@ export function createCanvasTools(knownIds: Iterable<string> = []) {
     }),
     update_shapes: tool({
       description:
-        "Move, resize, restyle, or relabel existing elements by id or ref. Bound arrows follow moved shapes.",
+        "Move, resize, restyle, or relabel existing elements by id or ref. Bound arrows follow moved shapes. When you change text, also set w and h so the new letters fit; clipped labels are wrong.",
       inputSchema: z.object({
         elements: z.array(updateElementSchema).min(1).max(80),
       }),

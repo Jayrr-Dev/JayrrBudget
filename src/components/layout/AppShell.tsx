@@ -62,7 +62,7 @@ function Brand({ label }: { label: string }) {
       )}
     >
       <img
-        src="/icon.svg"
+        src="/icon.svg?v=public"
         alt=""
         width={28}
         height={28}

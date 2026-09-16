@@ -1,4 +1,8 @@
 import { resolveCanvasColor } from "@/domains/canvas/domain/canvasColors";
+import {
+  buildCanvasSkeleton,
+  type CanvasSkeletonArgs,
+} from "@/domains/canvas/domain/canvasSkeletons";
 import type {
   CanvasArrowInput,
   CanvasContainerInput,
@@ -28,7 +32,8 @@ const DEFAULT_FONT_SIZE = 20;
 const DEFAULT_FRAME_PADDING = 24;
 const ARROW_GAP = 4;
 const LINE_HEIGHT = 1.25;
-const CHAR_WIDTH_RATIO = 0.6;
+const CHAR_WIDTH_RATIO = 1.2;
+const LABEL_PAD = 28;
 
 const FONT_FAMILY: Record<CanvasFontName, FontFamilyValues> = {
   hand: 5, // Excalifont
@@ -721,17 +726,41 @@ export function applyUpdateShapes(
     };
 
     if (existing.type === "text") {
+      const nextText = input.text ?? (existing.originalText || existing.text);
+      const fontSize = input.fontSize ?? existing.fontSize;
+      const measured = estimateTextBox({
+        type: "text",
+        x: patch.x ?? existing.x,
+        y: patch.y ?? existing.y,
+        text: nextText,
+        fontSize,
+      });
       nextById.set(
         input.id,
         newElementWith(existing, {
           ...patch,
-          ...(input.text != null
-            ? { text: input.text, originalText: input.text }
-            : {}),
-          ...(input.fontSize != null ? { fontSize: input.fontSize } : {}),
+          width: input.w ?? measured.w,
+          height: input.h ?? measured.h,
+          text: nextText,
+          originalText: nextText,
+          fontSize,
         }),
       );
     } else {
+      if (input.text != null && input.w == null) {
+        const fontSize = input.fontSize ?? DEFAULT_FONT_SIZE;
+        const measured = estimateTextBox({
+          type: "text",
+          x: existing.x,
+          y: existing.y,
+          text: input.text,
+          fontSize,
+        });
+        patch.width = Math.max(existing.width, measured.w + LABEL_PAD);
+        if (input.h == null) {
+          patch.height = Math.max(existing.height, measured.h + LABEL_PAD);
+        }
+      }
       nextById.set(input.id, newElementWith(existing, patch));
       if (input.text != null || input.fontSize != null) {
         const bound = [...nextById.values()].find(
@@ -741,13 +770,14 @@ export function applyUpdateShapes(
             !element.isDeleted,
         );
         if (bound?.type === "text") {
+          const nextText = input.text ?? (bound.originalText || bound.text);
+          const fontSize = input.fontSize ?? bound.fontSize;
           nextById.set(
             bound.id,
             newElementWith(bound, {
-              ...(input.text != null
-                ? { text: input.text, originalText: input.text }
-                : {}),
-              ...(input.fontSize != null ? { fontSize: input.fontSize } : {}),
+              text: nextText,
+              originalText: nextText,
+              fontSize,
             }),
           );
         }
@@ -815,6 +845,10 @@ type ToolHandler = (
 ) => unknown;
 
 const canvasToolHandlers = {
+  use_skeleton: (api, input, aliases) => {
+    const built = buildCanvasSkeleton(input as CanvasSkeletonArgs);
+    return applyCreateShapes(api, built.elements, aliases);
+  },
   create_shapes: (api, input, aliases) => {
     const { elements } = input as { elements: CreateElementInput[] };
     return applyCreateShapes(api, elements, aliases);

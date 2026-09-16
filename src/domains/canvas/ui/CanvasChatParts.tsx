@@ -13,14 +13,45 @@ import {
   ChevronDown,
   CircleAlert,
   Eraser,
+  LayoutTemplate,
   Move,
   PencilLine,
   Trash2,
   type LucideIcon,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+
+/** Collapse thoughts/stamps without yanking the bubble. Height + gap fold together. */
+export function ScratchFold({
+  hidden,
+  children,
+}: {
+  hidden: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <div
+      aria-hidden={hidden}
+      className={cn(
+        "grid transition-[grid-template-rows,opacity] duration-300 ease-out motion-reduce:duration-0",
+        hidden ? "grid-rows-[0fr] opacity-0" : "grid-rows-[1fr] opacity-100",
+      )}
+    >
+      <div className="min-h-0 overflow-hidden">
+        <div
+          className={cn(
+            "mb-1.5 flex flex-col gap-1.5",
+            hidden && "pointer-events-none",
+          )}
+        >
+          {children}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 /* ------------------------------------------------------------------ */
 /* Tool activity                                                       */
@@ -37,6 +68,12 @@ type ToolMeta = {
 };
 
 const TOOL_META: Record<string, ToolMeta> = {
+  use_skeleton: {
+    icon: LayoutTemplate,
+    preparing: "Laying out the board…",
+    running: "Stamping {n} shape(s)…",
+    done: "Stamped {n} shape(s)",
+  },
   create_shapes: {
     icon: PencilLine,
     preparing: "Sketching the next piece…",

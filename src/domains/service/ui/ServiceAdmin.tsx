@@ -2,7 +2,12 @@
 
 import { Button } from "@/components/ui/button";
 import { TitleInfo } from "@/domains/ops/ui/TitleInfo";
-import { formatUsd, utcMonthKey } from "@/shared/ai/aiCostTable";
+import {
+  findAiPriceRow,
+  formatRatePerMillion,
+  formatUsd,
+  utcMonthKey,
+} from "@/shared/ai/aiCostTable";
 import { api } from "@convex/_generated/api";
 import { useMutation, useQuery } from "convex/react";
 import { useEffect, useMemo, useState } from "react";
@@ -15,6 +20,12 @@ type PlanDraft = {
   rateMax: string;
   includedCanvas: boolean;
 };
+
+function modelCostLabel(modelId: string) {
+  const row = findAiPriceRow(modelId);
+  if (!row || row.unit !== "tokens") return null;
+  return `${formatRatePerMillion(row.inputPerMillionUsd)} in / ${formatRatePerMillion(row.outputPerMillionUsd)} out per 1M`;
+}
 
 function pctUsed(spent: number, cap: number | null) {
   if (cap == null || cap <= 0) return "—";
@@ -108,14 +119,25 @@ export function ServiceAdmin() {
   const monthKey = useMemo(() => utcMonthKey(Date.now()), []);
   const ensurePlans = useMutation(api.service.ensurePlans);
   const savePlan = useMutation(api.service.savePlan);
+  const saveAiModels = useMutation(api.service.saveAiModels);
   const team = useQuery(api.service.teamMonth, { monthKey });
+  const aiModels = useQuery(api.service.getAiModels);
   const [drafts, setDrafts] = useState<PlanDraft[]>([]);
   const [savingRole, setSavingRole] = useState<string | null>(null);
+  const [savingModel, setSavingModel] = useState(false);
+  const [modelDraft, setModelDraft] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     void ensurePlans({});
   }, [ensurePlans]);
+
+  useEffect(() => {
+    if (!aiModels) return;
+    setModelDraft(
+      aiModels.primaryModelId ?? aiModels.catalog[0]?.id ?? "",
+    );
+  }, [aiModels]);
 
   useEffect(() => {
     if (!team) return;
@@ -132,11 +154,13 @@ export function ServiceAdmin() {
     );
   }, [team]);
 
-  if (team === undefined) {
+  if (team === undefined || aiModels === undefined) {
     return (
       <p className="text-sm text-[var(--muted-foreground)]">Loading service…</p>
     );
   }
+
+  const selectedCost = modelCostLabel(modelDraft);
 
   return (
     <div className="space-y-8">
@@ -201,6 +225,71 @@ export function ServiceAdmin() {
           Caps are estimated USD from our rate table, not the provider invoice.
           Stripe checkout comes later.
         </p>
+      </section>
+
+      <section className="space-y-3">
+        <TitleInfo
+          heading="h2"
+          title="Default model"
+          lead="Chat, canvas, and statement parse use this first, then the rest of the list."
+          bullets={[
+            "Saved in Convex, not .env",
+            "Rates are OpenRouter USD per 1M tokens (input / output)",
+            "Cerebras rows pin routing to Cerebras only",
+            "Until you save, the server still uses OPENROUTER_MODEL",
+          ]}
+        />
+        <div className="flex flex-wrap items-end gap-3">
+          <label className="block min-w-[16rem] flex-1 space-y-1 text-sm">
+            <span className="text-[var(--muted-foreground)]">Primary</span>
+            <select
+              value={modelDraft}
+              onChange={(event) => setModelDraft(event.target.value)}
+              disabled={!aiModels}
+              className="w-full rounded-md border border-control-border bg-surface-elevated px-3 py-2 outline-none focus:border-primary"
+            >
+              {(aiModels?.catalog ?? []).map((row) => {
+                const cost = modelCostLabel(row.id);
+                return (
+                  <option key={row.id} value={row.id}>
+                    {row.label}
+                    {cost ? ` — ${cost}` : ""}
+                  </option>
+                );
+              })}
+            </select>
+          </label>
+          <Button
+            type="button"
+            size="sm"
+            disabled={savingModel || !modelDraft}
+            onClick={() => {
+              setError(null);
+              setSavingModel(true);
+              void saveAiModels({ primaryModelId: modelDraft })
+                .catch((err: unknown) => {
+                  setError(
+                    err instanceof Error
+                      ? err.message
+                      : "Could not save model.",
+                  );
+                })
+                .finally(() => setSavingModel(false));
+            }}
+          >
+            {savingModel ? "Saving…" : "Save model"}
+          </Button>
+        </div>
+        {selectedCost ? (
+          <p className="text-xs text-[var(--muted-foreground)]">
+            {selectedCost}
+          </p>
+        ) : null}
+        {aiModels?.primaryModelId == null ? (
+          <p className="text-xs text-[var(--muted-foreground)]">
+            No saved pick yet. Env still wins until you save.
+          </p>
+        ) : null}
       </section>
 
       <section className="space-y-3">
