@@ -5,7 +5,10 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { PiggyMascot, type PiggyMood } from "@/domains/ledger-ai/ui/PiggyMascot";
+import {
+  PiggyMascot,
+  type PiggyMood,
+} from "@/domains/ledger-ai/ui/PiggyMascot";
 import { cn } from "@/lib/utils";
 import type { DynamicToolUIPart, ReasoningUIPart, ToolUIPart } from "ai";
 import {
@@ -135,10 +138,8 @@ export function ToolActivity({
       className={cn(
         "inline-flex w-fit max-w-full items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs motion-safe:animate-piggy-pop",
         tone === "busy" && "border-accent/20 bg-accent-subtle/50 text-accent",
-        tone === "done" &&
-          "border-success/20 bg-success-subtle text-success",
-        tone === "error" &&
-          "border-danger/20 bg-danger-subtle text-danger",
+        tone === "done" && "border-success/20 bg-success-subtle text-success",
+        tone === "error" && "border-danger/20 bg-danger-subtle text-danger",
       )}
     >
       {tone === "done" ? (
@@ -148,12 +149,7 @@ export function ToolActivity({
       ) : (
         <Icon className="size-3 shrink-0 motion-safe:animate-piggy-idle" />
       )}
-      <span
-        className={cn(
-          "truncate",
-          tone === "busy" && "shimmer",
-        )}
-      >
+      <span className={cn("truncate", tone === "busy" && "shimmer")}>
         {label}
       </span>
     </div>
@@ -179,12 +175,7 @@ export function ReasoningBlock({ part }: { part: ReasoningUIPart }) {
     >
       <CollapsibleTrigger className="group/reason flex w-full items-center gap-1.5 px-2 py-1.5 text-left text-accent">
         <Brain className="size-3 shrink-0" />
-        <span
-          className={cn(
-            "flex-1 font-medium",
-            streaming && "shimmer",
-          )}
-        >
+        <span className={cn("flex-1 font-medium", streaming && "shimmer")}>
           {streaming ? "Piggy is thinking…" : "Piggy's thoughts"}
         </span>
         <ChevronDown className="size-3 shrink-0 transition-transform group-data-[state=open]/reason:rotate-180" />
@@ -235,9 +226,7 @@ export function PiggyThinking({
         <PiggyMascot mood={mood} iconClassName="size-3.5" />
       </span>
       <div className="flex items-center gap-2 rounded-xl border border-accent/15 bg-accent-subtle/70 px-3 py-2">
-        <span className="text-xs text-accent shimmer">
-          {label}
-        </span>
+        <span className="text-xs text-accent shimmer">{label}</span>
         <span className="flex items-end gap-0.5" aria-hidden>
           {COIN_DELAYS.map((delay) => (
             <span

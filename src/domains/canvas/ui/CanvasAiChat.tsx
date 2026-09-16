@@ -1,17 +1,5 @@
 "use client";
 
-import { useChat } from "@ai-sdk/react";
-import {
-  DefaultChatTransport,
-  isReasoningUIPart,
-  isTextUIPart,
-  isToolUIPart,
-  lastAssistantMessageIsCompleteWithToolCalls,
-  type UIMessage,
-} from "ai";
-import { ArrowUp, Info, Square } from "lucide-react";
-import { useMemo, useState, type KeyboardEvent } from "react";
-import { toast } from "sonner";
 import { Bubble, BubbleContent } from "@/components/ui/bubble";
 import { Button } from "@/components/ui/button";
 import {
@@ -61,6 +49,18 @@ import { dashboardFromPrivateLedger } from "@/domains/vault/application/dashboar
 import { usePrivateLedger } from "@/domains/vault/ui/usePrivateLedger";
 import { cn } from "@/lib/utils";
 import { errorMessage } from "@/shared/lib/error-message";
+import { useChat } from "@ai-sdk/react";
+import {
+  DefaultChatTransport,
+  isReasoningUIPart,
+  isTextUIPart,
+  isToolUIPart,
+  lastAssistantMessageIsCompleteWithToolCalls,
+  type UIMessage,
+} from "ai";
+import { ArrowUp, Info, Square } from "lucide-react";
+import { useMemo, useState, type KeyboardEvent } from "react";
+import { toast } from "sonner";
 
 const SUGGESTIONS = [
   "Sketch where my money goes",
@@ -164,7 +164,10 @@ function AssistantTurn({
   return (
     <Message align="start" className="motion-safe:animate-piggy-pop">
       <MessageAvatar className="size-7 self-start bg-accent-subtle">
-        <PiggyMascot mood={talking ? "talk" : "still"} iconClassName="size-3.5" />
+        <PiggyMascot
+          mood={talking ? "talk" : "still"}
+          iconClassName="size-3.5"
+        />
       </MessageAvatar>
       <MessageContent className="gap-1.5">
         {visible.map((block) => {
@@ -227,8 +230,8 @@ export function CanvasAiChat() {
     [api, encryptedLedger, privateLedger.ledger, privateLedger.unlocked],
   );
 
-  const { messages, sendMessage, addToolOutput, status, error, stop } =
-    useChat({
+  const { messages, sendMessage, addToolOutput, status, error, stop } = useChat(
+    {
       transport,
       sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
       onError: (err) => {
@@ -271,7 +274,8 @@ export function CanvasAiChat() {
           });
         }
       },
-    });
+    },
+  );
 
   const busy = status === "submitted" || status === "streaming";
   const blocked = encryptedLedger && !cloudProcessing;
@@ -294,7 +298,11 @@ export function CanvasAiChat() {
   };
 
   const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
+    if (
+      event.key === "Enter" &&
+      !event.shiftKey &&
+      !event.nativeEvent.isComposing
+    ) {
       event.preventDefault();
       submit(input);
     }
