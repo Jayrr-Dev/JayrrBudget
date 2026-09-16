@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" fill="none" role="img" aria-labelledby="title desc">
+  <title id="title">Bull</title>
+  <desc id="desc">Animated cream bulldog with a heavy brow, big nose, frown, and tank top.</desc>
+  <style>
+    .dog{transform-origin:64px 128px;animation:huff 3s ease-in-out infinite}
+    .brow{transform-origin:64px 54px;animation:scowl 4.8s ease-in-out infinite}
+    .eyes{transform-origin:64px 62px;animation:blink 5.6s infinite}
+    .ear-l{transform-origin:28px 44px;animation:ear 3s ease-in-out infinite}
+    .ear-r{transform-origin:100px 44px;animation:ear 3s ease-in-out infinite reverse}
+    @keyframes huff{0%,100%{transform:translateY(0)}50%{transform:translateY(-1.5px)}}
+    @keyframes scowl{0%,100%{transform:translateY(0)}50%{transform:translateY(1.5px)}}
+    @keyframes blink{0%,44%,48%,100%{transform:scaleY(1)}46%{transform:scaleY(.08)}}
+    @keyframes ear{0%,100%{transform:rotate(0)}50%{transform:rotate(-4deg)}}
+    @media(prefers-reduced-motion:reduce){.dog,.brow,.eyes,.ear-l,.ear-r{animation:none}}
+  </style>
+  <g class="dog" stroke="#60353d" stroke-linecap="round" stroke-linejoin="round" stroke-width="4.5">
+    <!-- Tank top. -->
+    <path fill="#cfd6df" d="M22 130c4-16 18-26 42-26s38 10 42 26Z"/>
+    <path fill="#b8c2ce" stroke="none" d="M40 130c4-10 12-16 24-16s20 6 24 16Z"/>
+    <!-- Folded ears. -->
+    <g class="ear-l">
+      <path fill="#e4ddd2" d="M36 40c-10-8-22-6-24 6-1 8 4 14 12 16Z"/>
+    </g>
+    <g class="ear-r">
+      <path fill="#e4ddd2" d="M92 40c10-8 22-6 24 6 1 8-4 14-12 16Z"/>
+    </g>
+    <!-- Head. -->
+    <path fill="#f4f1ea" d="M64 20C32 20 14 44 14 72c0 26 22 40 50 40s50-14 50-40C114 44 96 20 64 20Z"/>
+    <path fill="#e4ddd2" stroke="none" d="M22 84c8 18 22 26 42 26s34-8 42-26c-6 18-22 28-42 28-20 0-36-10-42-28Z"/>
+    <!-- Eyes, then a heavy brow that covers their tops. -->
+    <g class="eyes" fill="#3a2a30" stroke="none">
+      <ellipse cx="44" cy="66" rx="6.5" ry="7"/>
+      <ellipse cx="84" cy="66" rx="6.5" ry="7"/>
+      <circle cx="46" cy="64" r="1.8" fill="#fff5f3"/>
+      <circle cx="86" cy="64" r="1.8" fill="#fff5f3"/>
+    </g>
+    <g class="brow">
+      <path fill="#e4ddd2" d="M28 58c10-8 24-8 36-2 12-6 26-6 36 2-6 5-14 6-22 4-6-2-10-3-14-3s-8 1-14 3c-8 2-16 1-22-4Z"/>
+    </g>
+    <!-- Muzzle, nose, frown, fangs. -->
+    <path fill="#faf8f3" d="M40 82c0-6 10-10 24-10s24 4 24 10c0 12-10 22-24 22S40 94 40 82Z"/>
+    <path fill="#3a2a30" d="M56 80c0-4 3-6 8-6s8 2 8 6-3 6-8 6-8-2-8-6Z"/>
+    <path stroke-width="3.5" d="M64 86v5M54 98c5-5 15-5 20 0"/>
+    <path stroke-width="3" d="M34 86c2 6 4 10 8 14M94 86c-2 6-4 10-8 14"/>
+  </g>
+</svg>

@@ -20,6 +20,7 @@ import {
 } from "@/domains/ledger-ai/ui/PiggyMascot";
 import {
   PiggyAssistantMessage,
+  PiggyCappedText,
   PiggyTextBubble,
   PiggyTranscript,
   PiggyTranscriptItem,
@@ -33,7 +34,7 @@ import { logAiUsageFromMessageMetadata } from "@/shared/debug/aiUsageDebug";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
 import { Info, PlusIcon, SendHorizonal } from "lucide-react";
-import { useEffect, useMemo, useState, type ReactElement } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactElement } from "react";
 import { toast } from "sonner";
 import type { ComponentProps } from "react";
 import { emptyPiggyHistory, restorePiggyHistory, restorePiggyChatIndex, type PiggyChatIndex, type PiggyHistory } from "../domain/piggyHistory";
@@ -155,6 +156,7 @@ function PiggyChatPaneSession({
   }, [input, messages, saveHistory]);
 
   const busy = status === "submitted" || status === "streaming";
+  const bornMessageIds = useRef(new Set(messages.map((message) => message.id)));
   const mood = piggyMoodFromChat({
     status,
     listening: inputFocused || input.trim().length > 0,
@@ -213,7 +215,12 @@ function PiggyChatPaneSession({
                   <PiggyAssistantMessage
                     mood={assistantTalking ? mood : piggyMoodFromMessage(message)}
                   >
-                    <PiggyTextBubble>{text}</PiggyTextBubble>
+                    <PiggyTextBubble>
+                      <PiggyCappedText
+                        text={text}
+                        live={!bornMessageIds.current.has(message.id)}
+                      />
+                    </PiggyTextBubble>
                   </PiggyAssistantMessage>
                 )}
               </PiggyTranscriptItem>

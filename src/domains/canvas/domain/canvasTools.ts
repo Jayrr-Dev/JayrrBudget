@@ -269,12 +269,12 @@ export function createCanvasTools(knownIds: Iterable<string> = []) {
   return {
     use_skeleton: tool({
       description:
-        "Stamp a ready-made layout skeleton in one call: bar_chart, cash_flow, steps, comparison, timeline, progress, flowchart, decision, or loop. Place it in empty space (originX/originY). Then fill labels and values with update_shapes using the returned refs. Do not redraw the same layout with create_shapes after stamping.",
+        "Stamp a ready-made layout skeleton in one call. Then fill labels with update_shapes. Do not redraw the same layout with create_shapes after stamping.",
       inputSchema: z.object({
         kind: z
           .enum(CANVAS_SKELETON_KINDS)
           .describe(
-            "bar_chart = ranked spend bars; cash_flow = income to buckets to total; steps = ordered plan; comparison = two columns; timeline = dates on a line; progress = goal track; flowchart = start to steps to done; decision = yes/no branch; loop = payday cycle.",
+            "bar_chart, cash_flow, steps, comparison, timeline, progress, flowchart, decision, loop, line_chart (trend), waterfall (start / in / out / end), split (needs-wants-save), accounts (cards), table (budget vs actual rows).",
           ),
         originX: z
           .number()

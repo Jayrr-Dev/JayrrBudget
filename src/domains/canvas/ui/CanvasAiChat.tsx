@@ -42,6 +42,7 @@ import {
   PiggyTranscriptItem,
   PiggyUserMessage,
 } from "@/domains/ledger-ai/ui/PiggyTranscript";
+import { useCappedTextReveal } from "@/domains/ledger-ai/ui/useCappedTextReveal";
 import { dashboardFromPrivateLedger } from "@/domains/vault/application/dashboardFromPrivateLedger";
 import { usePrivateLedger } from "@/domains/vault/ui/usePrivateLedger";
 import { cn } from "@/lib/utils";
@@ -132,16 +133,36 @@ function CanvasPiggyInfo() {
   );
 }
 
+function CanvasCappedMarkdown({
+  text,
+  live,
+}: {
+  text: string;
+  live?: boolean;
+}) {
+  const shown = useCappedTextReveal(text, live === true);
+  return (
+    <Bubble align="start" variant="piggy">
+      <BubbleContent>
+        <AssistantMarkdown text={shown} />
+      </BubbleContent>
+    </Bubble>
+  );
+}
+
 function AssistantTurn({
   message,
   boardErrors,
   mood,
   live,
+  pace,
 }: {
   message: UIMessage;
   mood?: PiggyMood;
   /** True while this turn is still streaming. */
   live?: boolean;
+  /** Type out text even after the model has already finished. */
+  pace?: boolean;
   /** toolCallId -> why the piece did not land on the board. */
   boardErrors: ReadonlyMap<string, string>;
 }) {
@@ -210,11 +231,11 @@ function AssistantTurn({
         {rows.map((row) => {
           if (row.kind === "text") {
             return (
-              <Bubble key={row.key} align="start" variant="piggy">
-                <BubbleContent>
-                  <AssistantMarkdown text={row.text} />
-                </BubbleContent>
-              </Bubble>
+              <CanvasCappedMarkdown
+                key={row.key}
+                text={row.text}
+                live={pace}
+              />
             );
           }
           if (row.kind === "error" && isToolUIPart(row.part)) {
@@ -344,6 +365,7 @@ function CanvasAiChatSession({ initialHistory, saveHistory, historyError }: {
     },
   });
 
+  const bornMessageIds = useRef(new Set(messages.map((message) => message.id)));
   const busy = status === "submitted" || status === "streaming";
   const blocked = encryptedLedger && !cloudProcessing;
   const last = messages.at(-1);
@@ -410,7 +432,7 @@ function CanvasAiChatSession({ initialHistory, saveHistory, historyError }: {
       >
         <PopoverHeader className="flex-row items-center gap-1.5 border-b border-accent/15 bg-linear-to-r from-accent-subtle/80 to-transparent px-3 py-2.5">
           <PopoverTitle className="flex min-w-0 flex-1 items-center gap-1.5">
-            <PiggyMascot mood={mood} iconClassName="size-10" />
+            <PiggyMascot mood={mood} iconClassName="size-14" />
             Canvas Piggy
             <CanvasPiggyInfo />
           </PopoverTitle>
@@ -497,6 +519,7 @@ function CanvasAiChatSession({ initialHistory, saveHistory, historyError }: {
                     message={message}
                     boardErrors={boardErrors}
                     live={busy && message.id === last?.id}
+                    pace={!bornMessageIds.current.has(message.id)}
                     mood={busy && message.id === last?.id ? mood : undefined}
                   />
                 </PiggyTranscriptItem>

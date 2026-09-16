@@ -22,6 +22,7 @@ import { UserMascot } from "@/domains/ledger-ai/ui/UserMascot";
 import { cn } from "@/lib/utils";
 import type { ReactNode } from "react";
 import styles from "./PiggyTranscript.module.css";
+import { useCappedTextReveal } from "./useCappedTextReveal";
 
 /** Shared scroll shell for bottom Piggy and Canvas Piggy. */
 export function PiggyTranscript({
@@ -71,8 +72,8 @@ export function PiggyTranscriptItem({
 export function PiggyUserMessage({ text }: { text: string }) {
   return (
     <Message align="end" className={cn("motion-safe:animate-piggy-pop", styles.user)}>
-      <MessageAvatar className="size-10 self-start overflow-visible rounded-none bg-transparent">
-        <UserMascot iconClassName="size-10" />
+      <MessageAvatar className="size-14 self-start overflow-visible rounded-none bg-transparent">
+        <UserMascot iconClassName="size-14" />
       </MessageAvatar>
       <MessageContent>
         <Bubble align="end" variant="default" className={styles.userBubble}>
@@ -97,8 +98,8 @@ export function PiggyAssistantMessage({
       align="start"
       className={cn("motion-safe:animate-piggy-pop", styles.assistant, className)}
     >
-      <MessageAvatar className="size-10 self-start overflow-visible rounded-none bg-transparent">
-        <PiggyMascot mood={mood} iconClassName="size-10" />
+      <MessageAvatar className="size-14 self-start overflow-visible rounded-none bg-transparent">
+        <PiggyMascot mood={mood} iconClassName="size-14" />
       </MessageAvatar>
       <MessageContent className="gap-1.5">{children}</MessageContent>
     </Message>
@@ -117,4 +118,15 @@ export function PiggyTextBubble({
       <BubbleContent className="whitespace-pre-wrap">{children}</BubbleContent>
     </Bubble>
   );
+}
+
+/** Assistant reply text that types at a max speed even after the stream ends. */
+export function PiggyCappedText({
+  text,
+  live = false,
+}: {
+  text: string;
+  live?: boolean;
+}) {
+  return useCappedTextReveal(text, live);
 }

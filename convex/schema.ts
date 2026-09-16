@@ -2,6 +2,7 @@ import { authTables } from "@convex-dev/auth/server";
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 import { profileValidator } from "./lib/categorization";
+import { userIconValidator } from "./lib/userIcons";
 
 /**
  * Personal ledgers: every private row is scoped by `userId`.
@@ -123,6 +124,8 @@ export default defineSchema({
     ),
     /** Document OCR: local (device) or server. Defaults to server when missing. */
     ocrMode: v.optional(v.union(v.literal("local"), v.literal("server"))),
+    /** Chat avatar under public/user/. Defaults to jay when missing. */
+    avatarIcon: v.optional(userIconValidator),
     // Legacy Clerk / bootstrap fields (remove after cutover clear)
     tokenIdentifier: v.optional(v.string()),
     clerkUserId: v.optional(v.string()),

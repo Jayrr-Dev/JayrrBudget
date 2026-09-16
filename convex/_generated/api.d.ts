@@ -55,6 +55,7 @@ import type * as lib_spreads from "../lib/spreads.js";
 import type * as lib_tags from "../lib/tags.js";
 import type * as lib_taxonomyDescriptions from "../lib/taxonomyDescriptions.js";
 import type * as lib_txnCodes from "../lib/txnCodes.js";
+import type * as lib_userIcons from "../lib/userIcons.js";
 import type * as lib_utcKeys from "../lib/utcKeys.js";
 import type * as loanDocuments from "../loanDocuments.js";
 import type * as merchants from "../merchants.js";
@@ -124,6 +125,7 @@ declare const fullApi: ApiFromModules<{
   "lib/tags": typeof lib_tags;
   "lib/taxonomyDescriptions": typeof lib_taxonomyDescriptions;
   "lib/txnCodes": typeof lib_txnCodes;
+  "lib/userIcons": typeof lib_userIcons;
   "lib/utcKeys": typeof lib_utcKeys;
   loanDocuments: typeof loanDocuments;
   merchants: typeof merchants;

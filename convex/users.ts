@@ -4,6 +4,7 @@ import { mutation, query } from "./_generated/server";
 import { requireRole, requireUser, userRole } from "./lib/auth";
 import { ensureModulesForUser } from "./lib/ensureModules";
 import { isUserRole, USER_ROLES } from "./lib/roles";
+import { resolveUserIcon, userIconValidator } from "./lib/userIcons";
 
 /** Current signed-in Convex Auth user profile. Null when signed out / auth still hydrating. */
 export const me = query({
@@ -23,7 +24,19 @@ export const me = query({
       name: user.name ?? null,
       role: userRole(user),
       ocrMode: user.ocrMode === "local" ? "local" : "server",
+      avatarIcon: resolveUserIcon(user.avatarIcon),
     };
+  },
+});
+
+/** Chat avatar for the signed-in user. */
+export const updateAvatarIcon = mutation({
+  args: { avatarIcon: userIconValidator },
+  returns: v.object({ avatarIcon: userIconValidator }),
+  handler: async (ctx, args) => {
+    const user = await requireUser(ctx);
+    await ctx.db.patch(user._id, { avatarIcon: args.avatarIcon });
+    return { avatarIcon: args.avatarIcon };
   },
 });
 

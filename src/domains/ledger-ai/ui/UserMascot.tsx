@@ -1,15 +1,16 @@
 "use client";
 
 import { cn } from "@/lib/utils";
+import { api } from "@convex/_generated/api";
+import { DEFAULT_USER_ICON, type UserIconId } from "@convex/lib/userIcons";
+import { useConvexAuth, useQuery } from "convex/react";
 import Image from "next/image";
 
-export const USER_ICON_IDS = ["jay", "otter"] as const;
-export type UserIconId = (typeof USER_ICON_IDS)[number];
+export type { UserIconId } from "@convex/lib/userIcons";
 
-const DEFAULT_USER_ICON: UserIconId = "jay";
-
+/** User avatar. Falls back to the signed-in user's saved icon when `icon` is omitted. */
 export function UserMascot({
-  icon = DEFAULT_USER_ICON,
+  icon,
   className,
   iconClassName,
 }: {
@@ -17,23 +18,30 @@ export function UserMascot({
   className?: string;
   iconClassName?: string;
 }) {
+  const { isAuthenticated } = useConvexAuth();
+  const me = useQuery(
+    api.users.me,
+    icon === undefined && isAuthenticated ? {} : "skip",
+  );
+  const resolved = icon ?? me?.avatarIcon ?? DEFAULT_USER_ICON;
+
   return (
     <span
       className={cn(
-        "inline-flex shrink-0 items-center justify-center",
+        "inline-flex shrink-0 items-center justify-center overflow-visible",
         className,
       )}
       aria-hidden
     >
       <Image
-        src={`/user/${icon}.svg`}
+        src={`/user/${resolved}.svg`}
         alt=""
         width={128}
         height={128}
         unoptimized
         loading="eager"
         draggable={false}
-        className={cn("size-8 object-contain", iconClassName)}
+        className={cn("size-8 overflow-visible object-contain", iconClassName)}
       />
     </span>
   );

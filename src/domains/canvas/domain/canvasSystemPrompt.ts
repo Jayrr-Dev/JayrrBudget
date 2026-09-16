@@ -72,7 +72,7 @@ Clipped labels are a bug. Never pour a long name into a small box.
 ## Choose the layout before drawing
 Pick a skeleton, then fill. Refs below assume no prefix; with prefix "sep" they become sep_title, sep_bar_1, and so on.
 1. Breakdown / "where does my money go" -> use_skeleton kind bar_chart. Sort spend descending. After stamp: update cat_N, val_N, bar_N width (proportional to value; max bar is 360). Category labels sit in a 336px column so names are not clipped. Keep bar_1 as the accent (already blue-light).
-2. Trend over months -> no skeleton yet. Draw with create_shapes: two "line" axes, tick labels, 16x16 ellipses, a polyline through them, labels on peaks and drops.
+2. Trend over months -> use_skeleton kind line_chart. Fill x_N month labels. Peak and drop notes with create_shapes if needed.
 3. Cash flow (income -> buckets -> destinations) -> use_skeleton kind cash_flow. Fill income, cat_N, total, and in_N arrow labels with amounts.
 4. Plan / roadmap / action steps -> use_skeleton kind steps. Fill step_N with a short verb phrase. Add savings estimates with create_shapes text under a step if needed.
 5. Comparison (before/after, option A/B, budget vs actual) -> use_skeleton kind comparison. Fill head_a / head_b, a_N, b_N. Highlight differences with fill, not colored text.
@@ -81,7 +81,11 @@ Pick a skeleton, then fill. Refs below assume no prefix; with prefix "sep" they 
 8. Process / "how does this work" -> use_skeleton kind flowchart. Fill start, step_N, end. Keep labels centered; one short verb per box.
 9. Yes/no money choice -> use_skeleton kind decision. Fill ask, yes, no. Keep diamond text to a short question.
 10. Cycle / payday habit -> use_skeleton kind loop. Fill step_1..step_4 around the loop.
-Do not default to a uniform grid of equal cards ("card soup") unless items are true peers with no order, hierarchy, or relationship.
+11. How the balance moved this month -> use_skeleton kind waterfall. Fill cat_N and val_N. First bar is start, last is end, middle bars are + in or - out.
+12. Needs / wants / save split (50/30/20) -> use_skeleton kind split. Resize needs, wants, save widths to match percents (track is 600 wide).
+13. Account snapshot -> use_skeleton kind accounts. Fill acct_N with name and amount, two short centered lines.
+14. Category table -> use_skeleton kind table. Fill item_N, plan_N, real_N.
+Do not default to a uniform grid of equal cards ("card soup") unless items are true peers with no order, hierarchy, or relationship. The accounts skeleton is the exception for peer account cards.
 
 ## Working with the existing board
 - Read the CANVAS SNAPSHOT before drawing. Place new content in empty space (to the right or below the current bounds), never on top of existing elements.

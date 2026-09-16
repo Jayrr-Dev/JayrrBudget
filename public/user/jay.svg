@@ -1,18 +1,58 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" fill="none" role="img" aria-labelledby="title desc">
   <title id="title">Jay</title>
-  <desc id="desc">A round blue jay with a cocoa outline, cream cheek, and tiny crest.</desc>
-  <g stroke="#60353d" stroke-linecap="round" stroke-linejoin="round" stroke-width="4.5">
-    <path fill="#7eb8d4" d="M86 38c8-10 18-16 22-12 4 5-2 16-12 24"/>
-    <path fill="#f8c3cc" stroke="none" d="M92 42c5-7 12-11 15-9-1 6-8 13-15 18"/>
-    <path fill="#8ec5e0" d="M64 28c-24 1-42 18-42 40 0 24 18 40 42 40s42-15 42-38c0-22-18-43-42-42Z"/>
-    <path fill="#6fa8c9" stroke="none" d="M32 78c8 20 22 28 32 28s32-7 40-24c-8 18-22 28-40 28-16 0-26-10-32-32Z"/>
-    <path fill="#f4f4ee" d="M44 62c0-14 10-24 22-24 8 0 14 4 18 10 2 14-4 28-18 32-14 3-22-6-22-18Z"/>
-    <path stroke="#fff6ea" stroke-width="5" d="M48 52q10-8 20-6"/>
-    <ellipse cx="52" cy="68" fill="#ef94af" stroke="none" opacity=".7" rx="7" ry="5"/>
-    <ellipse cx="58" cy="58" fill="#60353d" stroke="none" rx="4" ry="5"/>
-    <circle cx="59" cy="56" r="1.2" fill="#fff5f3" stroke="none"/>
-    <path fill="#f0b070" d="M28 62c-8 4-10 12-4 16 8 5 18 2 22-4-8-2-14-6-18-12Z"/>
-    <path fill="#e89a4a" stroke="none" d="M28 68c-4 3-5 8-1 11 5 3 12 2 16-1-6-1-11-4-15-10Z"/>
-    <path stroke-width="3.2" d="M62 74q6 6 12 1"/>
+  <desc id="desc">Animated front-facing blue jay with big round eyes, an orange beak, a small crest, and two wings.</desc>
+  <style>
+    .jay{transform-origin:64px 110px;animation:bob 3.2s ease-in-out infinite}
+    .crest{transform-origin:66px 28px;animation:crest 3.2s ease-in-out infinite}
+    .eyes{transform-origin:64px 62px;animation:blink 5.2s infinite}
+    .lower{transform-origin:64px 90px;animation:chirp 6.4s ease-in-out infinite}
+    .wing-r{transform-origin:100px 80px;animation:wave 6.4s ease-in-out infinite}
+    .wing-l{transform-origin:28px 80px;animation:wave 6.4s ease-in-out infinite reverse}
+    @keyframes bob{0%,100%{transform:translateY(0) rotate(0)}50%{transform:translateY(-2.5px) rotate(1.5deg)}}
+    @keyframes crest{0%,100%{transform:rotate(0)}50%{transform:rotate(-7deg)}}
+    @keyframes blink{0%,44%,48%,100%{transform:scaleY(1)}46%{transform:scaleY(.08)}}
+    @keyframes chirp{0%,80%,100%{transform:translateY(0)}86%{transform:translateY(2.5px)}}
+    @keyframes wave{0%,78%,100%{transform:rotate(0)}82%{transform:rotate(-16deg)}86%{transform:rotate(6deg)}90%{transform:rotate(-14deg)}94%{transform:rotate(4deg)}}
+    @media(prefers-reduced-motion:reduce){.jay,.crest,.eyes,.lower,.wing-l,.wing-r{animation:none}}
+  </style>
+  <g class="jay" stroke="#60353d" stroke-linecap="round" stroke-linejoin="round" stroke-width="4.5">
+    <!-- Crest, drawn first so its base hides under the head. -->
+    <g class="crest">
+      <path fill="#2f93cc" d="M56 30c-2-12 4-21 12-26-1 9 2 16 7 24Z"/>
+      <path fill="#4fb3e8" d="M68 26c4-9 11-14 18-14-5 6-5 12-2 17Z"/>
+    </g>
+    <!-- Head and body. -->
+    <path fill="#4fb3e8" d="M64 22C36 22 20 44 20 72c0 26 18 42 44 42s44-16 44-42C108 44 92 22 64 22Z"/>
+    <path fill="#2f93cc" stroke="none" d="M26 84c8 20 20 28 38 28s30-8 38-26c-6 18-20 28-38 28-16 0-30-10-38-30Z"/>
+    <path fill="#8ddaf8" stroke="none" d="M64 42C46 42 34 55 34 72c0 12 10 22 30 22s30-10 30-22C94 55 82 42 64 42Z"/>
+    <path stroke="#bfeaff" stroke-width="5" d="M40 40q10-10 22-10"/>
+    <!-- White belly. -->
+    <path fill="#f6f2e6" d="M64 90c-14 0-24 8-26 18 6 4 15 6 26 6s20-2 26-6c-2-10-12-18-26-18Z"/>
+    <!-- Blush. -->
+    <ellipse cx="34" cy="78" fill="#ef94af" stroke="none" opacity=".85" rx="8" ry="5.5"/>
+    <ellipse cx="94" cy="78" fill="#ef94af" stroke="none" opacity=".85" rx="8" ry="5.5"/>
+    <!-- Eyes. -->
+    <g class="eyes">
+      <circle cx="46" cy="60" r="14" fill="#fffdf8"/>
+      <circle cx="82" cy="60" r="14" fill="#fffdf8"/>
+      <g fill="#60353d" stroke="none">
+        <circle cx="48" cy="64" r="8.5"/>
+        <circle cx="80" cy="64" r="8.5"/>
+        <circle cx="51" cy="61" r="2.4" fill="#fff5f3"/>
+        <circle cx="83" cy="61" r="2.4" fill="#fff5f3"/>
+      </g>
+    </g>
+    <!-- Beak: small diamond, lower mandible opens with a tiny drop. -->
+    <path fill="#f5a03a" d="M64 76 78 86 64 90 50 86Z"/>
+    <path class="lower" fill="#d9731f" d="M54 90 64 98 74 90Z"/>
+    <!-- Wings. -->
+    <g class="wing-l">
+      <path fill="#4fb3e8" d="M32 76c-6-12-16-20-24-18 4 12 10 22 20 28 4-3 6-6 4-10Z"/>
+      <path stroke="#2f93cc" stroke-width="3" d="M22 80c-5-3-9-7-12-12M26 76c-3-3-7-5-10-6"/>
+    </g>
+    <g class="wing-r">
+      <path fill="#4fb3e8" d="M96 76c6-12 16-20 24-18-4 12-10 22-20 28-4-3-6-6-4-10Z"/>
+      <path stroke="#2f93cc" stroke-width="3" d="M106 80c5-3 9-7 12-12M102 76c3-3 7-5 10-6"/>
+    </g>
   </g>
 </svg>

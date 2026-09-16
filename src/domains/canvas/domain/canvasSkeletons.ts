@@ -85,6 +85,11 @@ export function buildCanvasSkeleton(args: CanvasSkeletonArgs): {
     flowchart: () => flowchart(originX, originY, slots, title, r),
     decision: () => decision(originX, originY, title, r),
     loop: () => loop(originX, originY, title, r),
+    line_chart: () => lineChart(originX, originY, slots, title, r),
+    waterfall: () => waterfall(originX, originY, slots, title, r),
+    split: () => split(originX, originY, title, r),
+    accounts: () => accounts(originX, originY, slots, title, r),
+    table: () => table(originX, originY, slots, title, r),
   };
 
   const elements = builders[args.kind]();
@@ -888,5 +893,306 @@ function loop(
     });
   }
 
+  return elements;
+}
+
+function lineChart(
+  originX: number,
+  originY: number,
+  slots: number,
+  title: string,
+  r: (name: string) => string,
+): CreateElementInput[] {
+  const plotX = originX + 72;
+  const plotY = originY + 72;
+  const plotW = 560;
+  const plotH = 280;
+  const axisY = plotY + plotH;
+  const step = slots === 1 ? 0 : plotW / (slots - 1);
+  const heights = [0.42, 0.55, 0.48, 0.7, 0.62, 0.78, 0.66, 0.84];
+  const firstShare = heights[0] ?? 0.42;
+  const firstY = axisY - plotH * firstShare;
+  const elements: CreateElementInput[] = [
+    titleText(originX, originY, title, r("title")),
+    {
+      type: "line",
+      ref: r("axis_y"),
+      x: plotX,
+      y: plotY,
+      points: [
+        [0, 0],
+        [0, plotH],
+      ],
+    },
+    {
+      type: "line",
+      ref: r("axis_x"),
+      x: plotX,
+      y: axisY,
+      points: [
+        [0, 0],
+        [plotW, 0],
+      ],
+    },
+  ];
+
+  const linePoints: [number, number][] = [[0, 0]];
+  for (let i = 0; i < slots; i += 1) {
+    const n = i + 1;
+    const t = heights[i] ?? 0.5;
+    const cx = plotX + i * step;
+    const cy = axisY - plotH * t;
+    if (i > 0) linePoints.push([i * step, cy - firstY]);
+    const group = r(`pt_${n}`);
+    elements.push(
+      {
+        type: "ellipse",
+        ref: r(`dot_${n}`),
+        x: cx - 9,
+        y: cy - 9,
+        w: 18,
+        h: 18,
+        fill: i === slots - 1 ? "blue-light" : "grey-light",
+        group,
+      },
+      {
+        type: "text",
+        ref: r(`x_${n}`),
+        x: cx - 28,
+        y: axisY + 12,
+        text: `M${n}`,
+        fontSize: 16,
+        font: "code",
+        textAlign: "center",
+        group,
+      },
+    );
+  }
+
+  elements.push({
+    type: "line",
+    ref: r("series"),
+    x: plotX,
+    y: firstY,
+    points: linePoints,
+    strokeWidth: 2,
+  });
+
+  return elements;
+}
+
+function waterfall(
+  originX: number,
+  originY: number,
+  slots: number,
+  title: string,
+  r: (name: string) => string,
+): CreateElementInput[] {
+  const barW = 88;
+  const gap = 32;
+  const baseY = originY + 360;
+  const startH = 200;
+  const changeH = 140;
+  const elements: CreateElementInput[] = [
+    titleText(originX, originY, title, r("title")),
+    {
+      type: "line",
+      ref: r("axis"),
+      x: originX,
+      y: baseY,
+      points: [
+        [0, 0],
+        [slots * (barW + gap) + 40, 0],
+      ],
+    },
+  ];
+
+  for (let i = 0; i < slots; i += 1) {
+    const n = i + 1;
+    const x = originX + i * (barW + gap);
+    const isEnd = i === 0 || i === slots - 1;
+    const h = isEnd ? startH : changeH;
+    const y = baseY - h;
+    const fill =
+      i === 0
+        ? "grey-light"
+        : i === slots - 1
+          ? "blue-light"
+          : i % 2 === 1
+            ? "green-light"
+            : "red-light";
+    const label =
+      i === 0 ? "Start" : i === slots - 1 ? "End" : i % 2 === 1 ? "+ In" : "- Out";
+    const group = r(`col_${n}`);
+    elements.push(
+      {
+        type: "rectangle",
+        ref: r(`bar_${n}`),
+        x,
+        y,
+        w: barW,
+        h,
+        rounded: true,
+        fill,
+        group,
+      },
+      {
+        type: "text",
+        ref: r(`val_${n}`),
+        x: x + 8,
+        y: y - 32,
+        text: "—",
+        fontSize: 18,
+        font: "code",
+        textAlign: "center",
+        group,
+      },
+      {
+        type: "text",
+        ref: r(`cat_${n}`),
+        x,
+        y: baseY + 12,
+        text: label,
+        fontSize: 16,
+        font: "hand",
+        textAlign: "center",
+        group,
+      },
+    );
+  }
+
+  return elements;
+}
+
+function split(
+  originX: number,
+  originY: number,
+  title: string,
+  r: (name: string) => string,
+): CreateElementInput[] {
+  const trackY = originY + 80;
+  const trackH = 88;
+  const segs = [
+    { ref: "needs", w: 300, text: "Needs 50%", fill: "violet-light" },
+    { ref: "wants", w: 180, text: "Wants 30%", fill: "yellow-light" },
+    { ref: "save", w: 120, text: "Save 20%", fill: "green-light" },
+  ] as const;
+  const elements: CreateElementInput[] = [
+    titleText(originX, originY, title, r("title")),
+  ];
+  let x = originX;
+  for (const seg of segs) {
+    elements.push(
+      centeredNode({
+        type: "rectangle",
+        ref: r(seg.ref),
+        x,
+        y: trackY,
+        w: seg.w,
+        h: trackH,
+        text: seg.text,
+        fill: seg.fill,
+      }),
+    );
+    x += seg.w;
+  }
+  return elements;
+}
+
+function accounts(
+  originX: number,
+  originY: number,
+  slots: number,
+  title: string,
+  r: (name: string) => string,
+): CreateElementInput[] {
+  const cardW = 220;
+  const cardH = 140;
+  const gap = 28;
+  const fills = ["blue-light", "green-light", "violet-light", "orange-light"] as const;
+  const names = ["Checking", "Savings", "Credit", "Loan", "Cash", "Other"];
+  const elements: CreateElementInput[] = [
+    titleText(originX, originY, title, r("title")),
+  ];
+  for (let i = 0; i < slots; i += 1) {
+    const n = i + 1;
+    const x = originX + i * (cardW + gap);
+    const name = names[i] ?? `Acct ${n}`;
+    elements.push(
+      centeredNode({
+        type: "rectangle",
+        ref: r(`acct_${n}`),
+        x,
+        y: originY + 72,
+        w: cardW,
+        h: cardH,
+        text: `${name}\n$0`,
+        fill: fills[i % fills.length] ?? "grey-light",
+      }),
+    );
+  }
+  return elements;
+}
+
+function table(
+  originX: number,
+  originY: number,
+  slots: number,
+  title: string,
+  r: (name: string) => string,
+): CreateElementInput[] {
+  const cols = [
+    { key: "item", w: 240, head: "Item" },
+    { key: "plan", w: 160, head: "Budget" },
+    { key: "real", w: 160, head: "Actual" },
+  ] as const;
+  const rowH = 64;
+  const headerH = 56;
+  const gap = 8;
+  const headerY = originY + 64;
+  const elements: CreateElementInput[] = [
+    titleText(originX, originY, title, r("title")),
+  ];
+  let x = originX;
+  for (const col of cols) {
+    elements.push(
+      centeredNode({
+        type: "rectangle",
+        ref: r(`head_${col.key}`),
+        x,
+        y: headerY,
+        w: col.w,
+        h: headerH,
+        text: col.head,
+        fill: "blue-tint",
+        fontSize: 18,
+      }),
+    );
+    x += col.w + gap;
+  }
+  for (let i = 0; i < slots; i += 1) {
+    const n = i + 1;
+    const y = headerY + headerH + gap + i * (rowH + gap);
+    x = originX;
+    for (const col of cols) {
+      const body = col.key === "item" ? `Item ${n}` : "—";
+      elements.push({
+        type: "rectangle",
+        ref: r(`${col.key}_${n}`),
+        x,
+        y,
+        w: col.w,
+        h: rowH,
+        rounded: true,
+        text: body,
+        fontSize: col.key === "item" ? 18 : 20,
+        font: col.key === "item" ? "hand" : "code",
+        textAlign: col.key === "item" ? "left" : "center",
+        verticalAlign: "middle",
+        fill: "grey-light",
+      });
+      x += col.w + gap;
+    }
+  }
   return elements;
 }
