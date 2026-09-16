@@ -12,11 +12,13 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { RowActionsMenu } from "@/components/ui/row-actions-menu";
 import { MoneyText } from "@/domains/dashboard/ui/MoneyText";
+import { MoveMerchantDialog } from "@/domains/merchants/ui/MoveMerchantDialog";
 import {
-  MerchantMoveActionRow,
-  MoveMerchantDialog,
-} from "@/domains/merchants/ui/MoveMerchantDialog";
+  DescriptionActionsButton,
+  EditDescriptionDialog,
+} from "@/domains/transactions/ui/EditDescriptionDialog";
 import { formatShortDisplayDate } from "@/shared/lib/format-date";
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
@@ -44,6 +46,7 @@ export function MerchantTxnsPopover({
 }) {
   const [open, setOpen] = useState(false);
   const [moveOpen, setMoveOpen] = useState(false);
+  const [editDescription, setEditDescription] = useState<string | null>(null);
   const useVault = vaultPeeks !== undefined;
   const remote = useQuery(
     api.merchants.listTransactionPeeks,
@@ -72,7 +75,9 @@ export function MerchantTxnsPopover({
             const target = event.target;
             if (!(target instanceof Element)) return;
             if (
+              target.closest("[data-slot=dropdown-menu-content]") ||
               target.closest("[data-slot=dialog-content]") ||
+              target.closest("[data-slot=dropdown-menu]") ||
               target.closest("[data-slot=combobox-content]")
             ) {
               event.preventDefault();
@@ -82,6 +87,7 @@ export function MerchantTxnsPopover({
             const target = event.target;
             if (!(target instanceof Element)) return;
             if (
+              target.closest("[data-slot=dropdown-menu-content]") ||
               target.closest("[data-slot=dialog-content]") ||
               target.closest("[data-slot=combobox-content]")
             ) {
@@ -89,22 +95,31 @@ export function MerchantTxnsPopover({
             }
           }}
         >
-          <div className="border-b border-[var(--border)] px-3 py-2 text-sm font-medium">
-            {merchantName}
-            {peeks ? (
-              <span className="ml-2 font-normal text-[var(--muted-foreground)]">
-                {peeks.length}
-                {peeks.length >= MERCHANT_TXN_PEEK_LIMIT ? "+" : ""} txn
-                {peeks.length === 1 ? "" : "s"}
-              </span>
-            ) : null}
+          <div className="flex items-center justify-between gap-2 border-b border-[var(--border)] px-3 py-2">
+            <div className="min-w-0 text-sm font-medium">
+              {merchantName}
+              {peeks ? (
+                <span className="ml-2 font-normal text-[var(--muted-foreground)]">
+                  {peeks.length}
+                  {peeks.length >= MERCHANT_TXN_PEEK_LIMIT ? "+" : ""} txn
+                  {peeks.length === 1 ? "" : "s"}
+                </span>
+              ) : null}
+            </div>
+            <RowActionsMenu
+              label={merchantName}
+              size="sm"
+              actions={[
+                {
+                  label: "Move",
+                  onSelect: () => {
+                    setOpen(false);
+                    setMoveOpen(true);
+                  },
+                },
+              ]}
+            />
           </div>
-          <MerchantMoveActionRow
-            onMove={() => {
-              setOpen(false);
-              window.setTimeout(() => setMoveOpen(true), 0);
-            }}
-          />
           <TooltipProvider>
             <div className="max-h-72 overflow-auto">
               {peeks === undefined ? (
@@ -125,6 +140,12 @@ export function MerchantTxnsPopover({
                           key={`${txn.date}-${txn.description}-${index}`}
                           className="border-b border-[var(--border)] last:border-b-0"
                         >
+                          <td className="w-8 px-1 py-1 align-top">
+                            <DescriptionActionsButton
+                              description={txn.description}
+                              onEdit={setEditDescription}
+                            />
+                          </td>
                           <td className="whitespace-nowrap px-3 py-1.5 align-top tabular-nums text-[var(--muted-foreground)]">
                             {formatShortDisplayDate(txn.date)}
                           </td>
@@ -172,6 +193,13 @@ export function MerchantTxnsPopover({
           </TooltipProvider>
         </PopoverContent>
       </Popover>
+      <EditDescriptionDialog
+        open={editDescription != null}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen) setEditDescription(null);
+        }}
+        currentDescription={editDescription ?? ""}
+      />
       <MoveMerchantDialog
         open={moveOpen}
         onOpenChange={setMoveOpen}

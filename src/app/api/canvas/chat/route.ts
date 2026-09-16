@@ -7,6 +7,7 @@ import {
   getModelChain,
   runWithOpenRouterKey,
 } from "@/shared/ai/openRouter";
+import { aiUsageMessageMetadata } from "@/shared/ai/aiUsageMetadata";
 import { loadOpenRouterKeyOr503 } from "@/shared/ai/resolveOpenRouter.server";
 import { cachedConvexRead } from "@/shared/convex/cachedRead";
 import {
@@ -132,6 +133,7 @@ export async function POST(request: Request) {
 
     const [primary, ...fallbacks] = getModelChain();
     const modelId = primary ?? "google/gemini-3.8-flash";
+    const startedAt = Date.now();
 
     let modelMessages;
     try {
@@ -173,6 +175,14 @@ export async function POST(request: Request) {
     });
 
     return result.toUIMessageStreamResponse({
+      messageMetadata: ({ part }) => {
+        if (part.type !== "finish") return undefined;
+        return aiUsageMessageMetadata({
+          modelId,
+          usage: part.totalUsage,
+          startedAt,
+        });
+      },
       onError: (error) => errorMessage(error, "Canvas AI failed"),
     });
   });

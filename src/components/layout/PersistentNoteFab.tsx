@@ -1,7 +1,12 @@
 "use client";
 
 import { ChromeTab } from "@/components/layout/ChromeTab";
+import {
+  useVaultCacheDebugAdmin,
+  VaultCacheDebugPanel,
+} from "@/components/layout/VaultCacheDebugFab";
 import { Button } from "@/components/ui/button";
+import { Separator } from "@/components/ui/separator";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Popover,
@@ -37,6 +42,7 @@ import {
 import { cn } from "@/lib/utils";
 import { downloadCsv, toCsv } from "@/shared/lib/csv";
 import {
+  Bug,
   ChevronLeft,
   FileSpreadsheet,
   PlusIcon,
@@ -86,6 +92,8 @@ function expandedPillWidthPx(
   sheetOpen: boolean,
   notesOpen: boolean,
   aiOpen: boolean,
+  debugOpen: boolean,
+  showDebug: boolean,
 ): number {
   const sheetPx = sheetOpen
     ? expandedSegmentWidthPx(sheetCount)
@@ -96,28 +104,36 @@ function expandedPillWidthPx(
   const aiPx = aiOpen
     ? FAB_EXPANDED_PIGGY_PX
     : FAB_EXPANDED_ICON_ONLY_SEGMENT_PX;
+  const debugPx = showDebug
+    ? debugOpen
+      ? FAB_EXPANDED_BASE_PX
+      : FAB_EXPANDED_ICON_ONLY_SEGMENT_PX
+    : 0;
   return (
     FAB_EXPANDED_PILL_INNER_PADDING_PX +
     sheetPx +
     FAB_EXPANDED_DUAL_SEGMENT_GAP_PX +
     notePx +
     FAB_EXPANDED_DUAL_SEGMENT_GAP_PX +
-    aiPx
+    aiPx +
+    (showDebug ? FAB_EXPANDED_DUAL_SEGMENT_GAP_PX + debugPx : 0)
   );
 }
 
 function FabTooltip({
   label,
   children,
+  side = "top",
 }: {
   label: string;
   children: ReactElement;
+  side?: "top" | "bottom";
 }) {
   return (
     <Tooltip>
       <TooltipTrigger asChild>{children}</TooltipTrigger>
       <TooltipContent
-        side="top"
+        side={side}
         sideOffset={4}
         className="px-2 py-1.5 text-[11px] leading-tight"
       >
@@ -179,10 +195,12 @@ function StoreSheetPanel({
   open,
   onOpenChange,
   trigger,
+  contentSide = "top",
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   trigger: ReactElement;
+  contentSide?: "top" | "bottom";
 }) {
   const { tabs, activeId, receiveId } = useScratchNote();
   const actions = useScratchNoteActions();
@@ -200,12 +218,12 @@ function StoreSheetPanel({
 
   return (
     <Popover modal={false} open={open} onOpenChange={onOpenChange}>
-      <FabTooltip label="Open store sheet">
+      <FabTooltip label="Open store sheet" side={contentSide}>
         <PopoverTrigger asChild>{trigger}</PopoverTrigger>
       </FabTooltip>
       <PopoverContent
         align="end"
-        side="top"
+        side={contentSide}
         sideOffset={8}
         className="pointer-events-auto w-[min(24rem,calc(100vw-1rem))] gap-0 overflow-hidden border border-[var(--border)] bg-[var(--background)] p-0 shadow-lg duration-0 data-closed:animate-none data-open:animate-none"
         onOpenAutoFocus={(event) => event.preventDefault()}
@@ -358,10 +376,12 @@ function NotesPanel({
   open,
   onOpenChange,
   trigger,
+  contentSide = "top",
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   trigger: ReactElement;
+  contentSide?: "top" | "bottom";
 }) {
   const notes = useUserNotes();
   const actions = useUserNotesActions();
@@ -408,12 +428,12 @@ function NotesPanel({
 
   return (
     <Popover open={open} onOpenChange={onOpenChange}>
-      <FabTooltip label="Open notes">
+      <FabTooltip label="Open notes" side={contentSide}>
         <PopoverTrigger asChild>{trigger}</PopoverTrigger>
       </FabTooltip>
       <PopoverContent
         align="end"
-        side="top"
+        side={contentSide}
         sideOffset={8}
         className="pointer-events-auto w-[min(23rem,calc(100vw-1rem))] gap-0 overflow-hidden border border-[var(--border)] bg-[var(--background)] p-0 shadow-lg"
         onOpenAutoFocus={(event) => event.preventDefault()}
@@ -482,13 +502,19 @@ function NotesPanel({
   );
 }
 
-/** Bottom-right utilitek-style dual FAB: Store sheet + Notes. */
-export function PersistentNoteFab() {
+/** Store sheet, notes, Piggy, and optional debug. Floating pill on desktop; header icons on mobile. */
+export function PersistentNoteFab({
+  placement = "floating",
+}: {
+  placement?: "floating" | "navbar";
+}) {
   const [hovered, setHovered] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [notesOpen, setNotesOpen] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
+  const [debugOpen, setDebugOpen] = useState(false);
   const [piggyMood, setPiggyMood] = useState<PiggyMood>("still");
+  const showDebug = useVaultCacheDebugAdmin();
   const { tabs, activeId } = useScratchNote();
   const notes = useUserNotes();
   useScratchNoteLocalMigration();
@@ -500,7 +526,8 @@ export function PersistentNoteFab() {
     [tabs],
   );
   const noteCount = notes.length;
-  const isExpanded = hovered || sheetOpen || notesOpen || aiOpen;
+  const isExpanded =
+    hovered || sheetOpen || notesOpen || aiOpen || debugOpen;
   const badgeLabel = formatBadge(totalSheetRows);
   const showBadge = totalSheetRows > 0;
 
@@ -511,6 +538,8 @@ export function PersistentNoteFab() {
         sheetOpen,
         notesOpen,
         aiOpen,
+        debugOpen,
+        showDebug,
       )
     : FAB_COLLAPSED_PX;
 
@@ -519,6 +548,7 @@ export function PersistentNoteFab() {
       subscribeScratchNoteOpen(() => {
         setNotesOpen(false);
         setAiOpen(false);
+        setDebugOpen(false);
         setSheetOpen(true);
       }),
     [],
@@ -529,6 +559,7 @@ export function PersistentNoteFab() {
     if (next) {
       setNotesOpen(false);
       setAiOpen(false);
+      setDebugOpen(false);
     }
   };
 
@@ -537,6 +568,7 @@ export function PersistentNoteFab() {
     if (next) {
       setSheetOpen(false);
       setAiOpen(false);
+      setDebugOpen(false);
     }
   };
 
@@ -545,18 +577,202 @@ export function PersistentNoteFab() {
     if (next) {
       setSheetOpen(false);
       setNotesOpen(false);
+      setDebugOpen(false);
     }
   };
 
+  const handleDebugOpenChange = (next: boolean) => {
+    setDebugOpen(next);
+    if (next) {
+      setSheetOpen(false);
+      setNotesOpen(false);
+      setAiOpen(false);
+    }
+  };
+
+  const isNavbar = placement === "navbar";
+  const contentSide = isNavbar ? "bottom" : "top";
   const segmentBtn = (active: boolean) =>
-    cn(
-      "relative flex shrink-0 cursor-pointer items-center rounded-full outline-none",
-      active ? "flex-row gap-0.5" : "size-9 justify-center",
-      "focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-1",
+    isNavbar
+      ? cn(
+          "relative flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-lg outline-none",
+          "text-[var(--sidebar-foreground)] hover:bg-[var(--sidebar-accent)]",
+          active && "bg-[var(--sidebar-accent)]",
+          "focus-visible:ring-2 focus-visible:ring-[var(--ring)]",
+        )
+      : cn(
+          "relative flex shrink-0 cursor-pointer items-center rounded-full outline-none",
+          active ? "flex-row gap-0.5" : "size-9 justify-center",
+          "focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-1",
+        );
+
+  const actions = (
+    <>
+      <StoreSheetPanel
+        open={sheetOpen}
+        onOpenChange={handleSheetOpenChange}
+        contentSide={contentSide}
+        trigger={
+          <button
+            type="button"
+            aria-expanded={sheetOpen}
+            aria-haspopup="dialog"
+            aria-label={
+              sheetRowCount > 0
+                ? `Store sheet, ${sheetRowCount} lines`
+                : "Store sheet"
+            }
+            className={segmentBtn(sheetOpen)}
+          >
+            <FileSpreadsheet
+              className="size-5 shrink-0"
+              strokeWidth={2}
+              aria-hidden
+            />
+            {sheetOpen && !isNavbar ? (
+              <span className="flex min-w-0 select-none items-center gap-1 pr-0.5 text-[11px] font-medium tracking-tight whitespace-nowrap">
+                <span>Sheet</span>
+                <span
+                  className="tabular-nums text-[var(--muted-foreground)]"
+                  aria-hidden
+                >
+                  {sheetRowCount}
+                </span>
+              </span>
+            ) : null}
+            {showBadge && !sheetOpen ? (
+              <span
+                className={cn(
+                  isNavbar
+                    ? cn(CORNER_BADGE_CLASS, "-top-0.5 -right-0.5")
+                    : FAB_SEGMENT_BADGE_CLASS,
+                  badgeLabel.length > 1 ? "min-w-6 px-1" : "aspect-square px-0",
+                )}
+                aria-hidden
+              >
+                {badgeLabel}
+              </span>
+            ) : null}
+          </button>
+        }
+      />
+
+      <NotesPanel
+        open={notesOpen}
+        onOpenChange={handleNotesOpenChange}
+        contentSide={contentSide}
+        trigger={
+          <button
+            type="button"
+            aria-expanded={notesOpen}
+            aria-haspopup="dialog"
+            aria-label={noteCount > 0 ? `Notes, ${noteCount} tabs` : "Notes"}
+            className={segmentBtn(notesOpen)}
+          >
+            <StickyNote
+              className="size-5 shrink-0"
+              strokeWidth={2}
+              aria-hidden
+            />
+            {notesOpen && !isNavbar ? (
+              <span className="flex min-w-0 select-none items-center gap-1 pr-0.5 text-[11px] font-medium tracking-tight whitespace-nowrap">
+                <span>Note</span>
+                <span
+                  className="tabular-nums text-[var(--muted-foreground)]"
+                  aria-hidden
+                >
+                  {noteCount}
+                </span>
+              </span>
+            ) : null}
+          </button>
+        }
+      />
+
+      <LedgerAiChat
+        open={aiOpen}
+        onOpenChange={handleAiOpenChange}
+        onMoodChange={setPiggyMood}
+        contentSide={contentSide}
+        trigger={
+          <button
+            type="button"
+            aria-expanded={aiOpen}
+            aria-haspopup="dialog"
+            aria-label="Piggy"
+            className={segmentBtn(aiOpen)}
+          >
+            <PiggyMascot
+              mood={aiOpen ? piggyMood : "still"}
+              iconClassName="size-5 shrink-0"
+            />
+            {aiOpen && !isNavbar ? (
+              <span className="flex min-w-0 select-none items-center pr-0.5 text-[11px] font-medium tracking-tight whitespace-nowrap">
+                Piggy
+              </span>
+            ) : null}
+          </button>
+        }
+      />
+
+      {showDebug ? (
+        <FabTooltip label="Vault cache debug" side={contentSide}>
+          <button
+            type="button"
+            aria-expanded={debugOpen}
+            aria-pressed={debugOpen}
+            aria-label="Vault cache debug"
+            onClick={() => handleDebugOpenChange(!debugOpen)}
+            className={segmentBtn(debugOpen)}
+          >
+            <Bug
+              className={cn(
+                "size-5 shrink-0",
+                debugOpen && "text-[var(--accent)]",
+              )}
+              strokeWidth={2}
+              aria-hidden
+            />
+            {debugOpen && !isNavbar ? (
+              <span className="flex min-w-0 select-none items-center pr-0.5 text-[11px] font-medium tracking-tight whitespace-nowrap">
+                Debug
+              </span>
+            ) : null}
+          </button>
+        </FabTooltip>
+      ) : null}
+    </>
+  );
+
+  const debugPanel = showDebug ? (
+    <VaultCacheDebugPanel
+      open={debugOpen}
+      onOpenChange={handleDebugOpenChange}
+    />
+  ) : null;
+
+  if (isNavbar) {
+    return (
+      <TooltipProvider>
+        {debugPanel ? (
+          <div className="pointer-events-auto fixed top-16 right-3 z-40">
+            {debugPanel}
+          </div>
+        ) : null}
+        <div className="flex items-center gap-0.5">
+          {actions}
+          <Separator
+            orientation="vertical"
+            className="mx-1 h-5 bg-[var(--sidebar-border)]"
+          />
+        </div>
+      </TooltipProvider>
     );
+  }
 
   return (
-    <div className="pointer-events-none fixed right-3 bottom-3 z-40 flex flex-col items-end">
+    <div className="pointer-events-none fixed right-3 bottom-3 z-40 hidden flex-col items-end gap-2 md:flex">
+      {debugPanel}
       <TooltipProvider>
         <div
           className="relative transition-[width] duration-300 ease-out"
@@ -572,8 +788,16 @@ export function PersistentNoteFab() {
               isExpanded ? "justify-start gap-0 px-1" : "justify-center px-0",
             )}
           >
-            {!isExpanded ? (
-              <FabTooltip label="Open store sheet, notes, and AI">
+            {isExpanded ? (
+              actions
+            ) : (
+              <FabTooltip
+                label={
+                  showDebug
+                    ? "Open workspace · Alt-click for cache debug"
+                    : "Open store sheet, notes, and AI"
+                }
+              >
                 <button
                   type="button"
                   aria-label={
@@ -581,9 +805,14 @@ export function PersistentNoteFab() {
                       ? `Workspace, ${totalSheetRows} store sheet lines`
                       : "Open store sheet, notes, and AI"
                   }
-                  onClick={() => {
+                  onClick={(event) => {
+                    if (showDebug && event.altKey) {
+                      handleDebugOpenChange(!debugOpen);
+                      return;
+                    }
                     setNotesOpen(false);
                     setAiOpen(false);
+                    setDebugOpen(false);
                     setSheetOpen(true);
                   }}
                   className="relative flex h-full w-full cursor-pointer items-center justify-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-1"
@@ -595,114 +824,6 @@ export function PersistentNoteFab() {
                   />
                 </button>
               </FabTooltip>
-            ) : (
-              <>
-                <StoreSheetPanel
-                  open={sheetOpen}
-                  onOpenChange={handleSheetOpenChange}
-                  trigger={
-                    <button
-                      type="button"
-                      aria-expanded={sheetOpen}
-                      aria-haspopup="dialog"
-                      aria-label={
-                        sheetRowCount > 0
-                          ? `Store sheet, ${sheetRowCount} lines`
-                          : "Store sheet"
-                      }
-                      className={segmentBtn(sheetOpen)}
-                    >
-                      <FileSpreadsheet
-                        className="size-5 shrink-0"
-                        strokeWidth={2}
-                        aria-hidden
-                      />
-                      {sheetOpen ? (
-                        <span className="flex min-w-0 select-none items-center gap-1 pr-0.5 text-[11px] font-medium tracking-tight whitespace-nowrap">
-                          <span>Sheet</span>
-                          <span
-                            className="tabular-nums text-[var(--muted-foreground)]"
-                            aria-hidden
-                          >
-                            {sheetRowCount}
-                          </span>
-                        </span>
-                      ) : null}
-                      {showBadge && !sheetOpen ? (
-                        <span
-                          className={cn(
-                            FAB_SEGMENT_BADGE_CLASS,
-                            badgeLabel.length > 1
-                              ? "min-w-6 px-1"
-                              : "aspect-square px-0",
-                          )}
-                          aria-hidden
-                        >
-                          {badgeLabel}
-                        </span>
-                      ) : null}
-                    </button>
-                  }
-                />
-
-                <NotesPanel
-                  open={notesOpen}
-                  onOpenChange={handleNotesOpenChange}
-                  trigger={
-                    <button
-                      type="button"
-                      aria-expanded={notesOpen}
-                      aria-haspopup="dialog"
-                      aria-label={
-                        noteCount > 0 ? `Notes, ${noteCount} tabs` : "Notes"
-                      }
-                      className={segmentBtn(notesOpen)}
-                    >
-                      <StickyNote
-                        className="size-5 shrink-0"
-                        strokeWidth={2}
-                        aria-hidden
-                      />
-                      {notesOpen ? (
-                        <span className="flex min-w-0 select-none items-center gap-1 pr-0.5 text-[11px] font-medium tracking-tight whitespace-nowrap">
-                          <span>Note</span>
-                          <span
-                            className="tabular-nums text-[var(--muted-foreground)]"
-                            aria-hidden
-                          >
-                            {noteCount}
-                          </span>
-                        </span>
-                      ) : null}
-                    </button>
-                  }
-                />
-
-                <LedgerAiChat
-                  open={aiOpen}
-                  onOpenChange={handleAiOpenChange}
-                  onMoodChange={setPiggyMood}
-                  trigger={
-                    <button
-                      type="button"
-                      aria-expanded={aiOpen}
-                      aria-haspopup="dialog"
-                      aria-label="Piggy"
-                      className={segmentBtn(aiOpen)}
-                    >
-                      <PiggyMascot
-                        mood={aiOpen ? piggyMood : "still"}
-                        iconClassName="size-5 shrink-0"
-                      />
-                      {aiOpen ? (
-                        <span className="flex min-w-0 select-none items-center pr-0.5 text-[11px] font-medium tracking-tight whitespace-nowrap">
-                          Piggy
-                        </span>
-                      ) : null}
-                    </button>
-                  }
-                />
-              </>
             )}
           </div>
           {!isExpanded && showBadge ? (

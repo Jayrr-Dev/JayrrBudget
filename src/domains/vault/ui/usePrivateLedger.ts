@@ -127,6 +127,7 @@ export function usePrivateLedger() {
           {
             userId: String(me.userId),
             vaultId,
+            vaultUpdatedAt,
           },
         );
         if (!cancelled) {

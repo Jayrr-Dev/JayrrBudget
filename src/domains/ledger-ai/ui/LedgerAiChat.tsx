@@ -28,6 +28,7 @@ import { useScratchNote } from "@/domains/scratch-note/scratchNoteStore";
 import { dashboardFromPrivateLedger } from "@/domains/vault/application/dashboardFromPrivateLedger";
 import { usePrivateLedger } from "@/domains/vault/ui/usePrivateLedger";
 import { errorMessage } from "@/shared/lib/error-message";
+import { logAiUsageFromMessageMetadata } from "@/shared/debug/aiUsageDebug";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
 import { Info, PlusIcon, SendHorizonal } from "lucide-react";
@@ -124,6 +125,9 @@ function PiggyChatPane({
       toast.error("Piggy stumbled", {
         description: errorMessage(err, "Chat request failed"),
       });
+    },
+    onFinish: ({ message }) => {
+      logAiUsageFromMessageMetadata("ledger-chat", message.metadata);
     },
   });
 
@@ -232,11 +236,13 @@ export function LedgerAiChat({
   onOpenChange,
   onMoodChange,
   trigger,
+  contentSide = "top",
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onMoodChange?: (mood: PiggyMood) => void;
   trigger: ReactElement;
+  contentSide?: "top" | "bottom";
 }) {
   const [tabs, setTabs] = useState<PiggyTab[]>(() => [createPiggyTab("Piggy")]);
   const [activeId, setActiveId] = useState(() => tabs[0]!.id);
@@ -307,7 +313,7 @@ export function LedgerAiChat({
       <PopoverTrigger asChild>{trigger}</PopoverTrigger>
       <PopoverContent
         align="end"
-        side="top"
+        side={contentSide}
         sideOffset={8}
         className="pointer-events-auto w-[min(24rem,calc(100vw-1rem))] gap-0 overflow-hidden border border-[var(--border)] bg-[var(--background)] p-0 shadow-lg"
         onOpenAutoFocus={(event) => event.preventDefault()}

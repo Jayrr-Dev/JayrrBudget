@@ -739,7 +739,7 @@ export function DataTable<TData extends RowData>({
                         data-icon="inline-start"
                         className="opacity-70"
                       />
-                      <span className="max-w-36 truncate sm:max-w-none">
+                      <span className="max-w-36 overflow-hidden text-ellipsis whitespace-nowrap sm:max-w-none sm:overflow-visible">
                         {formatRangeLabel(dateWindow.from, dateWindow.to)}
                       </span>
                     </Button>

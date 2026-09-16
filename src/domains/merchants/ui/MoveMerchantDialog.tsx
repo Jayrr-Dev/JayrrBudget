@@ -159,24 +159,6 @@ function TaxonomyPicker({
   );
 }
 
-export function MerchantMoveActionRow({ onMove }: { onMove: () => void }) {
-  return (
-    <div className="flex items-center gap-2 border-b border-border px-3 py-1.5">
-      <Button
-        type="button"
-        size="sm"
-        variant="outline"
-        onClick={(event) => {
-          event.stopPropagation();
-          onMove();
-        }}
-      >
-        Move
-      </Button>
-    </div>
-  );
-}
-
 export function MoveMerchantDialog({
   open,
   onOpenChange,

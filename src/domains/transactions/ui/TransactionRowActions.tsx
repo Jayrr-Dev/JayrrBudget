@@ -1,11 +1,6 @@
 "use client";
 
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { RowActionsMenu } from "@/components/ui/row-actions-menu";
 import { getVaultMasterKey } from "@/crypto/session";
 import type { MutationClient } from "@/crypto/vaultRecords";
 import { analysisQueryKeys } from "@/domains/analysis/queries/query-keys";
@@ -15,7 +10,6 @@ import { dbExplorerQueryKeys } from "@/domains/db-explorer/queries/query-keys";
 import { EditDescriptionDialog } from "@/domains/transactions/ui/EditDescriptionDialog";
 import { applyVaultCategorization } from "@/domains/vault/application/applyVaultCategorization";
 import { usePrivateLedger } from "@/domains/vault/ui/usePrivateLedger";
-import { Icon } from "@iconify/react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useConvex } from "convex/react";
 import { useState } from "react";
@@ -101,30 +95,21 @@ export function TransactionRowActions({
 
   return (
     <>
-      <DropdownMenu>
-        <DropdownMenuTrigger
-          className="inline-flex size-6 cursor-pointer items-center justify-center rounded-[min(var(--radius-md),12px)] text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]"
-          aria-label={`Actions for ${transaction.name}`}
-        >
-          <Icon icon="basil:menu-outline" className="size-4" />
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="start" className="w-auto min-w-36">
-          <DropdownMenuItem
-            disabled={rerun.isPending}
-            onClick={() => rerun.mutate()}
-          >
-            {rerun.isPending ? "Re-running..." : "Re-run"}
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            className="cursor-pointer"
-            onClick={() => {
-              window.setTimeout(() => setEditOpen(true), 0);
-            }}
-          >
-            Edit
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+      <RowActionsMenu
+        label={transaction.name}
+        size="sm"
+        actions={[
+          {
+            label: rerun.isPending ? "Re-running..." : "Re-run",
+            onSelect: () => rerun.mutate(),
+            disabled: rerun.isPending,
+          },
+          {
+            label: "Edit",
+            onSelect: () => setEditOpen(true),
+          },
+        ]}
+      />
       <EditDescriptionDialog
         open={editOpen}
         onOpenChange={setEditOpen}

@@ -73,13 +73,18 @@ export const Sidebar = ({
 
 export const SidebarBody = ({
   title,
+  headerActions,
   ...props
-}: React.ComponentProps<typeof motion.div> & { title?: string }) => {
+}: React.ComponentProps<typeof motion.div> & {
+  title?: string;
+  headerActions?: React.ReactNode;
+}) => {
   return (
     <>
       <DesktopSidebar {...props} />
       <MobileSidebar
         title={title}
+        headerActions={headerActions}
         {...(props as React.ComponentProps<"div">)}
       />
     </>
@@ -156,8 +161,12 @@ export const MobileSidebar = ({
   className,
   children,
   title = "Jayrr's Budget",
+  headerActions,
   ...props
-}: React.ComponentProps<"div"> & { title?: string }) => {
+}: React.ComponentProps<"div"> & {
+  title?: string;
+  headerActions?: React.ReactNode;
+}) => {
   const { open, setOpen } = useSidebar();
   return (
     <div
@@ -166,15 +175,20 @@ export const MobileSidebar = ({
       )}
       {...props}
     >
-      <p className="text-sm font-semibold text-[var(--foreground)]">{title}</p>
-      <button
-        type="button"
-        aria-label="Open menu"
-        className="rounded-lg p-1.5 text-[var(--sidebar-foreground)] hover:bg-[var(--sidebar-accent)]"
-        onClick={() => setOpen(!open)}
-      >
-        <IconMenu2 className="size-5" />
-      </button>
+      <p className="min-w-0 truncate text-sm font-semibold text-[var(--foreground)]">
+        {title}
+      </p>
+      <div className="flex shrink-0 items-center gap-1.5">
+        {headerActions}
+        <button
+          type="button"
+          aria-label="Open menu"
+          className="rounded-lg p-1.5 text-[var(--sidebar-foreground)] hover:bg-[var(--sidebar-accent)]"
+          onClick={() => setOpen(!open)}
+        >
+          <IconMenu2 className="size-5" />
+        </button>
+      </div>
       <AnimatePresence>
         {open ? (
           <motion.div

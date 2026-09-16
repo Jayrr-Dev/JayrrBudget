@@ -17,13 +17,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
+import { RowActionsMenu } from "@/components/ui/row-actions-menu";
 import { Label } from "@/components/ui/label";
 import {
   Popover,
@@ -43,7 +38,6 @@ import {
   vaultWriteReady,
 } from "@/domains/vault/application/saveEncryptedLedger";
 import { usePrivateLedger } from "@/domains/vault/ui/usePrivateLedger";
-import { Icon } from "@iconify/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useConvex } from "convex/react";
 import { Info } from "lucide-react";
@@ -520,25 +514,14 @@ export function DescriptionActionsButton({
   onEdit: (description: string) => void;
 }) {
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger
-        className="inline-flex size-7 cursor-pointer items-center justify-center rounded-[min(var(--radius-md),12px)] text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]"
-        aria-label={`Actions for ${description}`}
-        onClick={(event) => event.stopPropagation()}
-        onPointerDown={(event) => event.stopPropagation()}
-      >
-        <Icon icon="basil:menu-outline" className="size-4" />
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="w-auto min-w-36">
-        <DropdownMenuItem
-          className="cursor-pointer"
-          onClick={() => {
-            window.setTimeout(() => onEdit(description), 0);
-          }}
-        >
-          Edit
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
+    <RowActionsMenu
+      label={description}
+      actions={[
+        {
+          label: "Edit",
+          onSelect: () => onEdit(description),
+        },
+      ]}
+    />
   );
 }

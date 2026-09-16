@@ -40,6 +40,7 @@ import {
 import { dashboardFromPrivateLedger } from "@/domains/vault/application/dashboardFromPrivateLedger";
 import { usePrivateLedger } from "@/domains/vault/ui/usePrivateLedger";
 import { cn } from "@/lib/utils";
+import { logAiUsageFromMessageMetadata } from "@/shared/debug/aiUsageDebug";
 import { errorMessage } from "@/shared/lib/error-message";
 import { useChat } from "@ai-sdk/react";
 import {
@@ -237,6 +238,9 @@ export function CanvasAiChat() {
       toast.error("Piggy stumbled", {
         description: errorMessage(err, "Chat request failed"),
       });
+    },
+    onFinish: ({ message }) => {
+      logAiUsageFromMessageMetadata("canvas-chat", message.metadata);
     },
     // Fires as soon as a tool call's input is complete, before the server ack
     // arrives, so each piece lands on the board while Piggy keeps talking.

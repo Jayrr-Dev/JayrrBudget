@@ -1,3 +1,9 @@
+import {
+  readVaultCiphertextCache,
+  toCachedCiphertextRecord,
+  writeVaultCiphertextCache,
+  type CachedCiphertextRecord,
+} from "@/crypto/ciphertextCache";
 import { decryptJson } from "@/crypto/envelope";
 import { getVaultMasterKey } from "@/crypto/session";
 import type { EncryptedEnvelopeV1, EnvelopeKind } from "@/crypto/types";
@@ -12,6 +18,7 @@ import type {
   PrivateStatementLog,
   PrivateTransaction,
 } from "@/domains/vault/domain/privateLedger";
+import { logVaultCacheDebug } from "@/shared/debug/vaultCacheDebug";
 import { api } from "@convex/_generated/api";
 
 export type VaultListClient = {
@@ -316,14 +323,43 @@ function asLoan(
   };
 }
 
-/** Loads ciphertext pages and decrypts into an in-memory ledger. Returns empty when locked. */
-export async function loadPrivateLedger(
+async function fetchCiphertextRecords(
   client: VaultListClient,
-  input: { userId: string; vaultId: string },
-): Promise<PrivateLedger> {
-  const masterKey = getVaultMasterKey();
-  if (!masterKey) return EMPTY;
+  vaultId: string,
+): Promise<CachedCiphertextRecord[]> {
+  const started = Date.now();
+  const records: CachedCiphertextRecord[] = [];
+  let cursor: string | null = null;
+  let pages = 0;
+  for (let pageIndex = 0; pageIndex < 40; pageIndex += 1) {
+    const page = await client.query(api.vaults.listRecords, {
+      vaultId,
+      paginationOpts: { numItems: 100, cursor },
+    });
+    pages += 1;
+    for (const row of page.page) {
+      const cached = toCachedCiphertextRecord(row);
+      if (cached) records.push(cached);
+    }
+    if (page.isDone) break;
+    cursor = page.continueCursor;
+    if (!cursor) break;
+  }
+  logVaultCacheDebug("network-read", "Fetched ciphertext from Convex", {
+    vaultId,
+    pages,
+    records: records.length,
+    ms: Date.now() - started,
+  });
+  return records;
+}
 
+async function decryptLedgerFromRecords(
+  records: CachedCiphertextRecord[],
+  userId: string,
+  masterKey: CryptoKey,
+): Promise<PrivateLedger> {
+  const started = Date.now();
   const ledger: PrivateLedger = {
     transactions: [],
     accounts: [],
@@ -337,80 +373,79 @@ export async function loadPrivateLedger(
   const ocrDocs: Array<NonNullable<ReturnType<typeof asOcrDoc>>> = [];
   const loanOcrDocs: Array<NonNullable<ReturnType<typeof asLoanOcrDoc>>> = [];
 
-  let cursor: string | null = null;
-  for (let pageIndex = 0; pageIndex < 40; pageIndex += 1) {
-    const page = await client.query(api.vaults.listRecords, {
-      vaultId: input.vaultId,
-      paginationOpts: { numItems: 100, cursor },
-    });
-    for (const row of page.page) {
-      if (row.deleted) continue;
-      const kind = String(row.kind ?? "") as EnvelopeKind;
-      const recordId = String(row.recordId ?? "");
-      const revision = Number(row.revision ?? 0);
-      const envelope = row as unknown as EncryptedEnvelopeV1;
-      try {
-        const value = await decryptJson<unknown>(
-          envelope,
-          {
-            userId: input.userId,
-            recordId,
-            kind,
-            keyId: String(row.keyId ?? ""),
-          },
-          masterKey,
-        );
-        if (kind === "tx" || kind === "tx_batch") {
-          const tx = asTx(value, recordId, revision);
-          if (tx) ledger.transactions.push(tx);
-        } else if (kind === "account_meta") {
-          const account = asAccount(value, recordId, revision);
-          if (account) ledger.accounts.push(account);
-        } else if (kind === "category") {
-          // reserved for taxonomy prefs
-        } else if (kind === "note") {
-          if (recordId.startsWith("scratch-")) {
-            const pad = asScratch(value, recordId, revision);
-            if (pad) ledger.scratchPads.push(pad);
-          } else if (recordId.startsWith("loan-")) {
-            const loan = asLoan(value, recordId, revision);
-            if (loan) ledger.loans.push(loan);
-          } else if (recordId.startsWith("merchant-")) {
-            const merchant = asMerchant(value, recordId, revision, {
-              createdAt: Number(row.createdAt ?? 0) || undefined,
-              updatedAt: Number(row.updatedAt ?? 0) || undefined,
-            });
-            if (merchant) ledger.merchants.push(merchant);
+  for (const row of records) {
+    if (row.deleted) continue;
+    const kind = row.kind as EnvelopeKind;
+    const recordId = row.recordId;
+    const revision = row.revision;
+    const envelope: EncryptedEnvelopeV1 = {
+      v: 1,
+      alg: "AES-256-GCM",
+      keyId: row.keyId,
+      kind,
+      recordId,
+      iv: row.iv,
+      wrappedDek: row.wrappedDek,
+      ciphertext: row.ciphertext,
+    };
+    try {
+      const value = await decryptJson<unknown>(
+        envelope,
+        {
+          userId,
+          recordId,
+          kind,
+          keyId: row.keyId,
+        },
+        masterKey,
+      );
+      if (kind === "tx" || kind === "tx_batch") {
+        const tx = asTx(value, recordId, revision);
+        if (tx) ledger.transactions.push(tx);
+      } else if (kind === "account_meta") {
+        const account = asAccount(value, recordId, revision);
+        if (account) ledger.accounts.push(account);
+      } else if (kind === "category") {
+        // reserved for taxonomy prefs
+      } else if (kind === "note") {
+        if (recordId.startsWith("scratch-")) {
+          const pad = asScratch(value, recordId, revision);
+          if (pad) ledger.scratchPads.push(pad);
+        } else if (recordId.startsWith("loan-")) {
+          const loan = asLoan(value, recordId, revision);
+          if (loan) ledger.loans.push(loan);
+        } else if (recordId.startsWith("merchant-")) {
+          const merchant = asMerchant(value, recordId, revision, {
+            createdAt: row.createdAt || undefined,
+            updatedAt: row.updatedAt || undefined,
+          });
+          if (merchant) ledger.merchants.push(merchant);
+        } else {
+          const note = asNote(value, recordId, revision);
+          if (note) ledger.notes.push(note);
+        }
+      } else if (kind === "document") {
+        const ocr = asOcrDoc(value, recordId, revision);
+        if (ocr) {
+          ocrDocs.push(ocr);
+        } else {
+          const loanOcr = asLoanOcrDoc(value, recordId, revision);
+          if (loanOcr) {
+            loanOcrDocs.push(loanOcr);
           } else {
-            const note = asNote(value, recordId, revision);
-            if (note) ledger.notes.push(note);
-          }
-        } else if (kind === "document") {
-          const ocr = asOcrDoc(value, recordId, revision);
-          if (ocr) {
-            ocrDocs.push(ocr);
-          } else {
-            const loanOcr = asLoanOcrDoc(value, recordId, revision);
-            if (loanOcr) {
-              loanOcrDocs.push(loanOcr);
+            const loanDoc = asLoanDocument(value, recordId, revision);
+            if (loanDoc) {
+              ledger.loanDocuments.push(loanDoc);
             } else {
-              const loanDoc = asLoanDocument(value, recordId, revision);
-              if (loanDoc) {
-                ledger.loanDocuments.push(loanDoc);
-              } else {
-                const log = asStatementLog(value, recordId, revision);
-                if (log) ledger.statementLogs.push(log);
-              }
+              const log = asStatementLog(value, recordId, revision);
+              if (log) ledger.statementLogs.push(log);
             }
           }
         }
-      } catch {
-        // Stale key or corrupt row must not break the whole ledger.
       }
+    } catch {
+      // Stale key or corrupt row must not break the whole ledger.
     }
-    if (page.isDone) break;
-    cursor = page.continueCursor;
-    if (!cursor) break;
   }
 
   for (const ocr of ocrDocs) {
@@ -473,5 +508,68 @@ export async function loadPrivateLedger(
       transactionIds: ledger.transactions.map((tx) => tx.recordId),
     });
   }
+  logVaultCacheDebug("decrypt", "Decrypted ledger in memory", {
+    records: records.length,
+    transactions: ledger.transactions.length,
+    ms: Date.now() - started,
+  });
   return ledger;
+}
+
+/** Loads ciphertext (cache or network), then decrypts. Empty when locked. */
+export async function loadPrivateLedger(
+  client: VaultListClient,
+  input: { userId: string; vaultId: string; vaultUpdatedAt?: number },
+): Promise<PrivateLedger> {
+  const masterKey = getVaultMasterKey();
+  if (!masterKey) return EMPTY;
+
+  const vaultUpdatedAt = input.vaultUpdatedAt ?? 0;
+  let records: CachedCiphertextRecord[] | null = null;
+  if (vaultUpdatedAt > 0) {
+    const cached = await readVaultCiphertextCache(input.vaultId);
+    if (
+      cached &&
+      cached.userId === input.userId &&
+      cached.updatedAt === vaultUpdatedAt
+    ) {
+      records = cached.records;
+      logVaultCacheDebug("cache-hit", "IndexedDB ciphertext matched stamp", {
+        vaultId: input.vaultId,
+        updatedAt: vaultUpdatedAt,
+        records: records.length,
+      });
+    } else {
+      logVaultCacheDebug("cache-miss", "IndexedDB miss or stale stamp", {
+        vaultId: input.vaultId,
+        updatedAt: vaultUpdatedAt,
+        cachedUpdatedAt: cached?.updatedAt ?? null,
+        cachedUserMatch: cached ? cached.userId === input.userId : null,
+      });
+    }
+  } else {
+    logVaultCacheDebug("cache-miss", "No vault stamp; skip cache read", {
+      vaultId: input.vaultId,
+    });
+  }
+
+  if (!records) {
+    records = await fetchCiphertextRecords(client, input.vaultId);
+    if (vaultUpdatedAt > 0) {
+      await writeVaultCiphertextCache({
+        v: 1,
+        vaultId: input.vaultId,
+        userId: input.userId,
+        updatedAt: vaultUpdatedAt,
+        records,
+      });
+      logVaultCacheDebug("cache-write", "Wrote ciphertext snapshot to IndexedDB", {
+        vaultId: input.vaultId,
+        updatedAt: vaultUpdatedAt,
+        records: records.length,
+      });
+    }
+  }
+
+  return decryptLedgerFromRecords(records, input.userId, masterKey);
 }

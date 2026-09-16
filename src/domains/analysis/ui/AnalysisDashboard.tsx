@@ -18,6 +18,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { RowActionsMenu } from "@/components/ui/row-actions-menu";
 import { PageSpinner } from "@/components/ui/spinner";
 import {
   ScrollTopX,
@@ -69,10 +70,7 @@ import {
 } from "@/domains/dashboard/domain/money";
 import { MoneyText } from "@/domains/dashboard/ui/MoneyText";
 import { MerchantLabel } from "@/domains/merchants/ui/MerchantLabel";
-import {
-  MerchantMoveActionRow,
-  MoveMerchantDialog,
-} from "@/domains/merchants/ui/MoveMerchantDialog";
+import { MoveMerchantDialog } from "@/domains/merchants/ui/MoveMerchantDialog";
 import { useScratchNoteActions } from "@/domains/scratch-note/scratchNoteStore";
 import {
   DescriptionActionsButton,
@@ -3027,21 +3025,28 @@ function RowTxnsPopover({
             }
           }}
         >
-          <div className="border-b border-[var(--border)] px-3 py-2 text-sm font-medium">
-            {label}
-            <span className="ml-2 font-normal text-[var(--muted-foreground)]">
-              {transactions.length}
-              {transactions.length >= 48 ? "+" : ""} txn
-              {transactions.length === 1 ? "" : "s"}
-            </span>
+          <div className="flex items-center justify-between gap-2 border-b border-[var(--border)] px-3 py-2">
+            <div className="min-w-0 text-sm font-medium">
+              {label}
+              <span className="ml-2 font-normal text-[var(--muted-foreground)]">
+                {transactions.length}
+                {transactions.length >= 48 ? "+" : ""} txn
+                {transactions.length === 1 ? "" : "s"}
+              </span>
+            </div>
+            {canMoveMerchant ? (
+              <RowActionsMenu
+                label={label}
+                size="sm"
+                actions={[
+                  {
+                    label: "Move",
+                    onSelect: () => setMoveOpen(true),
+                  },
+                ]}
+              />
+            ) : null}
           </div>
-          {canMoveMerchant ? (
-            <MerchantMoveActionRow
-              onMove={() => {
-                window.setTimeout(() => setMoveOpen(true), 0);
-              }}
-            />
-          ) : null}
           <div className="max-h-72 overflow-auto">
             {transactions.length === 0 ? (
               <p className="px-3 py-4 text-sm text-[var(--muted-foreground)]">

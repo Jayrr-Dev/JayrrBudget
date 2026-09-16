@@ -13,13 +13,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { EmptyPrompt } from "@/components/ui/empty-prompt";
+import { RowActionsMenu } from "@/components/ui/row-actions-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -1569,40 +1564,14 @@ function RowActions({
   onPromote?: () => void;
   onUnshare?: () => void;
 }) {
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger
-        className="inline-flex size-6 cursor-pointer items-center justify-center rounded-[min(var(--radius-md),12px)] text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]"
-        aria-label={`Actions for ${name}`}
-      >
-        <Icon icon="basil:menu-outline" className="size-4" />
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="w-auto min-w-36">
-        {onEdit ? (
-          <DropdownMenuItem className="cursor-pointer" onClick={onEdit}>
-            Edit
-          </DropdownMenuItem>
-        ) : null}
-        {onPromote ? (
-          <DropdownMenuItem className="cursor-pointer" onClick={onPromote}>
-            Add to shared
-          </DropdownMenuItem>
-        ) : null}
-        {onUnshare ? (
-          <DropdownMenuItem className="cursor-pointer" onClick={onUnshare}>
-            Remove from shared
-          </DropdownMenuItem>
-        ) : null}
-        {onDelete ? (
-          <DropdownMenuItem
-            variant="destructive"
-            className="cursor-pointer"
-            onClick={onDelete}
-          >
-            Delete
-          </DropdownMenuItem>
-        ) : null}
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
+  const actions = [
+    onEdit ? { label: "Edit", onSelect: onEdit } : null,
+    onPromote ? { label: "Add to shared", onSelect: onPromote } : null,
+    onUnshare ? { label: "Remove from shared", onSelect: onUnshare } : null,
+    onDelete
+      ? { label: "Delete", onSelect: onDelete, variant: "destructive" as const }
+      : null,
+  ].filter((action) => action !== null);
+
+  return <RowActionsMenu label={name} size="sm" actions={actions} />;
 }
