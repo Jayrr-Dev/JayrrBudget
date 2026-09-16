@@ -96,7 +96,7 @@ export async function encryptStatementImportToVault(input: {
           currency: payload.currency,
           accountId: payload.accountId,
           statementRecordId,
-          tagNames: existing?.tagNames ?? [],
+          tagNames: txn.tagNames ?? existing?.tagNames ?? [],
         }),
         expectedRevision: existing?.revision ?? null,
       };

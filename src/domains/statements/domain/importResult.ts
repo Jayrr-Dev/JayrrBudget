@@ -75,6 +75,7 @@ export type ImportBankStatementSuccess = {
       transactionTypeName?: string | null;
       txnCode?: string | null;
       channel?: string | null;
+      tagNames?: string[];
     }>;
   };
 };

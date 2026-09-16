@@ -51,6 +51,9 @@ function norm(value: string | null | undefined) {
 
 const NEED_SUBCATEGORIES = new Set([
   "supermarkets",
+  "supermarket",
+  "produce",
+  "meal kits",
   "fuel",
   "parking",
   "maintenance",
@@ -82,6 +85,7 @@ const NEED_CATEGORIES = new Set([
   "transit",
   "dealership",
   "mobile & wireless",
+  "groceries",
 ]);
 
 const SAVINGS_SUBCATEGORIES = new Set(["brokerage & crypto"]);
@@ -137,11 +141,16 @@ const WANT_CATEGORIES = new Set([
   "lodging",
   "recreational",
   "attractions & tours",
-  "delivery services",
+  "delivery",
+  "restaurants",
+  "takeout",
+  "specialty food",
+  "drink",
+  "alcohol",
   "rideshare",
   "flights",
   "vehicle",
-  "software & subscriptions",
+  "software",
   "ai services",
   "cloud & hosting",
   "personal care",

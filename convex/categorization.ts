@@ -6,6 +6,8 @@ import { requireUser } from "./lib/auth";
 import { descriptionKey, isCategorized, normalizedLabel, profileValidator, taxonomyKey } from "./lib/categorization";
 import { ensureMerchant } from "./lib/ensureMerchant";
 import { SEED_CATEGORY_PATHS } from "./lib/seedCategoryPaths";
+import { ensureSeedSharedTags, sortSharedTagNames } from "./lib/seedSharedTags";
+import { joinTags, splitTags } from "./lib/tags";
 import { TXN_CODES } from "./lib/txnCodes";
 import { SPREAD_NAMES } from "./lib/spreads";
 
@@ -37,6 +39,7 @@ export const publishOwnVocabulary = mutation({
   returns: v.null(),
   handler: async ctx => {
     const user = await requireUser(ctx);
+    await ensureSeedSharedTags(ctx);
     for (const path of SEED_CATEGORY_PATHS) {
       await publishPath(ctx, path.section, path.category, path.subcategory);
     }
@@ -66,16 +69,30 @@ export const vocabulary = query({
     })),
     types: v.array(v.string()),
     spreads: v.array(v.string()),
+    tags: v.array(v.string()),
   }),
   handler: async ctx => {
     const user = await requireUser(ctx);
     const types = await ctx.db.query("transactionTypes").withIndex("by_userId", q => q.eq("userId", user._id)).collect();
     const spreads = await ctx.db.query("transactionSpreads").withIndex("by_userId", q => q.eq("userId", user._id)).collect();
     const paths = await ctx.db.query("sharedCategoryPaths").collect();
+    const [sharedTags, userTags] = await Promise.all([
+      ctx.db.query("sharedTags").collect(),
+      ctx.db.query("transactionTags").withIndex("by_userId", q => q.eq("userId", user._id)).collect(),
+    ]);
+    const tagNames: string[] = [];
+    const seen = new Set<string>();
+    for (const row of [...sharedTags, ...userTags]) {
+      const key = normalizedLabel(row.name);
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      tagNames.push(row.name);
+    }
     return {
       paths: paths.map(({ key, section, category, subcategory }) => ({ key, section, category, subcategory })),
       types: [...new Set(types.length ? types.map(t => t.name) : ["Expense", "Income", "Transfer"])],
       spreads: [...new Set([...SPREAD_NAMES, ...spreads.map(s => s.name)])],
+      tags: tagNames.sort(sortSharedTagNames),
     };
   },
 });
@@ -143,6 +160,57 @@ export const lookup = query({
   },
 });
 
+function resolveProfileTags(incoming: string[] | undefined, catalog: string[]) {
+  if (!incoming) return null;
+  const byKey = new Map(catalog.map((name) => [normalizedLabel(name), name]));
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const raw of incoming) {
+    const trimmed = raw.trim();
+    if (!trimmed || trimmed.length > 40) continue;
+    const key = normalizedLabel(trimmed);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    out.push(byKey.get(key) ?? trimmed);
+    if (out.length >= 4) break;
+  }
+  return out;
+}
+
+async function rememberUserTags(
+  ctx: MutationCtx,
+  userId: Id<"users">,
+  names: string[],
+) {
+  if (names.length === 0) return;
+  const existing = await ctx.db
+    .query("transactionTags")
+    .withIndex("by_userId", (q) => q.eq("userId", userId))
+    .collect();
+  const have = new Set(existing.map((row) => normalizedLabel(row.name)));
+  for (const name of names) {
+    const key = normalizedLabel(name);
+    if (!key || have.has(key)) continue;
+    have.add(key);
+    await ctx.db.insert("transactionTags", {
+      userId,
+      name,
+      description: `Tag: ${name}.`,
+    });
+  }
+}
+
+async function loadTagCatalog(ctx: MutationCtx, userId: Id<"users">) {
+  const [sharedTags, userTags] = await Promise.all([
+    ctx.db.query("sharedTags").collect(),
+    ctx.db
+      .query("transactionTags")
+      .withIndex("by_userId", (q) => q.eq("userId", userId))
+      .collect(),
+  ]);
+  return [...sharedTags, ...userTags].map((row) => row.name);
+}
+
 async function moduleWriter(ctx: MutationCtx, userId: Id<"users">) {
   const sections = await ctx.db.query("transactionSections").withIndex("by_userId", q => q.eq("userId", userId)).collect();
   const categories = await ctx.db.query("transactionCategories").withIndex("by_userId", q => q.eq("userId", userId)).collect();
@@ -196,6 +264,7 @@ export const apply = mutation({
     const user = await requireUser(ctx);
     if (args.groups.length > 40 || args.groups.reduce((n, g) => n + g.rows.length, 0) > 200) throw new Error("Batch too large");
     const modules = await moduleWriter(ctx, user._id);
+    const tagCatalog = await loadTagCatalog(ctx, user._id);
     let applied = 0;
     for (const group of args.groups) {
       const p = group.profile;
@@ -205,6 +274,8 @@ export const apply = mutation({
       let groupApplied = 0;
       const ids = await modules(path, p.spread, p.transactionType);
       const merchant = await ensureMerchant(ctx, user._id, { name: p.merchant });
+      const resolvedTags = resolveProfileTags(p.tags, tagCatalog);
+      if (resolvedTags) await rememberUserTags(ctx, user._id, resolvedTags);
       for (const input of group.rows) {
         const row = await ctx.db.query("transactions").withIndex("by_userId_transactionId", q => q.eq("userId", user._id).eq("transactionId", input.transactionId)).unique();
         if (!row || row.updatedAt !== input.updatedAt) continue;
@@ -212,13 +283,18 @@ export const apply = mutation({
         if (descriptionKey(row.description, row.amount) !== group.key) throw new Error("Description changed");
         await ctx.db.patch(row._id, { ...ids, merchantId: merchant._id, merchantClean: merchant.name,
           section: path.section, category: path.category, subcategory: path.subcategory,
-          spread: p.spread, transactionType: p.transactionType, txnCode: p.txnCode, channel: p.channel, updatedAt: Date.now() });
+          spread: p.spread, transactionType: p.transactionType, txnCode: p.txnCode, channel: p.channel,
+          ...(resolvedTags
+            ? { tags: joinTags([...splitTags(row.tags), ...resolvedTags]) }
+            : {}),
+          updatedAt: Date.now() });
         groupApplied++; applied++;
       }
       if (groupApplied) {
+        const stored = resolvedTags ? { ...p, tags: resolvedTags } : p;
         const rule = await ctx.db.query("categorizationRules").withIndex("by_userId_key", q => q.eq("userId", user._id).eq("key", group.key)).unique();
-        if (rule) await ctx.db.patch(rule._id, { profile: p, updatedAt: Date.now() });
-        else await ctx.db.insert("categorizationRules", { userId: user._id, key: group.key, profile: p, updatedAt: Date.now() });
+        if (rule) await ctx.db.patch(rule._id, { profile: stored, updatedAt: Date.now() });
+        else await ctx.db.insert("categorizationRules", { userId: user._id, key: group.key, profile: stored, updatedAt: Date.now() });
       }
     }
     return { applied };
@@ -259,6 +335,11 @@ export const recategorize = mutation({
     const ids = await modules(path, p.spread, p.transactionType);
     const merchant = await ensureMerchant(ctx, user._id, { name: p.merchant });
     const key = descriptionKey(row.description, row.amount);
+    const resolvedTags = resolveProfileTags(
+      p.tags,
+      await loadTagCatalog(ctx, user._id),
+    );
+    if (resolvedTags) await rememberUserTags(ctx, user._id, resolvedTags);
     await ctx.db.patch(row._id, {
       ...ids,
       merchantId: merchant._id,
@@ -270,14 +351,18 @@ export const recategorize = mutation({
       transactionType: p.transactionType,
       txnCode: p.txnCode,
       channel: p.channel,
+      ...(resolvedTags
+        ? { tags: joinTags([...splitTags(row.tags), ...resolvedTags]) }
+        : {}),
       updatedAt: Date.now(),
     });
+    const stored = resolvedTags ? { ...p, tags: resolvedTags } : p;
     const rule = await ctx.db
       .query("categorizationRules")
       .withIndex("by_userId_key", (q) => q.eq("userId", user._id).eq("key", key))
       .unique();
-    if (rule) await ctx.db.patch(rule._id, { profile: p, updatedAt: Date.now() });
-    else await ctx.db.insert("categorizationRules", { userId: user._id, key, profile: p, updatedAt: Date.now() });
+    if (rule) await ctx.db.patch(rule._id, { profile: stored, updatedAt: Date.now() });
+    else await ctx.db.insert("categorizationRules", { userId: user._id, key, profile: stored, updatedAt: Date.now() });
     return { applied: 1 };
   },
 });

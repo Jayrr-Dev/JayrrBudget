@@ -23,6 +23,18 @@ export default defineSchema({
     key: v.string(), section: v.string(), category: v.string(),
     subcategory: v.union(v.string(), v.null()),
   }).index("by_key", ["key"]),
+  sharedTags: defineTable({
+    key: v.string(),
+    name: v.string(),
+    description: v.string(),
+  }).index("by_key", ["key"]),
+  transactionTags: defineTable({
+    userId,
+    name: v.string(),
+    description: v.string(),
+  })
+    .index("by_userId", ["userId"])
+    .index("by_userId_name", ["userId", "name"]),
   categorizationRules: defineTable({
     userId: v.id("users"), key: v.string(), profile: profileValidator,
     updatedAt: v.number(),

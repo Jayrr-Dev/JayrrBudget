@@ -50,7 +50,7 @@ function buildPrompt(txns: EnrichmentTxnInput[], catalog: EnrichmentCatalog) {
     "- Amount convention: positive = money out (purchase/fee).",
     "- Software subscriptions are SaaS under Software, never Online Retail / Shopping.",
     canonicalCategoryAiRules(),
-    "- Reuse EXISTING taxonomy names/slugs for near-duplicates: Gas→Gas Stations, Restaurant→Restaurants, Convenience Store↔Convenience Stores.",
+    "- Reuse EXISTING taxonomy names/slugs for near-duplicates: Gas→Gas Stations, Restaurant→Restaurants, corner store food→Convenience Store under Groceries.",
     "- Dimension tags: attach AI for model/LLM tools and AI-primary products (CapCut, Canva Magic, SparkReceipt), Dev Tools for hosting/domains/CI/IDEs/git, Subscription when recurring.",
     "- Do not create a new type/category that is only a plural, typo, or paraphrase of an existing one.",
     "",

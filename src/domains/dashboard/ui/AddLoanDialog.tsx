@@ -1,11 +1,47 @@
 "use client";
 
-import { api } from "@convex/_generated/api";
-import { useConvex, useMutation } from "convex/react";
-import { Info, UploadIcon } from "lucide-react";
+import { Spinner } from "@/components/ui/spinner";
+import {
+  encryptLoanDocumentToVault,
+  linkEncryptedLoanDocument,
+} from "@/domains/loans/application/encryptLoanDocument";
+import { loanFieldsToFormFill } from "@/domains/loans/domain/loanDocumentFields";
+import { formatLoanDocumentProgress } from "@/domains/loans/domain/loanDocumentProgress";
+import {
+  isLoanUploadAbortError,
+  uploadLoanDocument,
+} from "@/domains/loans/queries/uploadLoanDocument";
+import {
+  LOAN_TYPES,
+  RATE_TYPES,
+  loanTypeMeta,
+  type LoanType,
+  type RateType,
+} from "@/domains/loans/domain/loanTypes";
+import {
+  PAYMENT_FREQUENCIES,
+  type PaymentFrequency,
+} from "@/domains/loans/domain/paymentFrequency";
+import {
+  isOcrDocumentFile,
+} from "@/domains/statements/domain/ocrDocumentTypes";
+import { OcrDocumentPickerButton } from "@/domains/statements/ui/OcrDocumentPickerButton";
+import { useFeatureFlags } from "@/domains/feature-flags/ui/useFeatureFlag";
+import { hydrateVaultSession, type VaultClient } from "@/domains/vault/application/ensureVaultFromPasscode";
+import { loadPrivateLedger, type VaultListClient } from "@/domains/vault/application/loadPrivateLedger";
+import {
+  saveEncryptedLoan,
+  saveEncryptedRecords,
+  vaultWriteReady,
+} from "@/domains/vault/application/saveEncryptedLedger";
+import { usePrivateLedger } from "@/domains/vault/ui/usePrivateLedger";
+import { errorMessage } from "@/shared/lib/error-message";
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
+import { Info, UploadIcon } from "lucide-react";
+import { api } from "@convex/_generated/api";
+import { useConvex, useMutation } from "convex/react";
 import type { MutationClient } from "@/crypto/vaultRecords";
 import { getVaultMasterKey } from "@/crypto/session";
 import { Button } from "@/components/ui/button";
@@ -31,42 +67,6 @@ import {
   PopoverTitle,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { Spinner } from "@/components/ui/spinner";
-import {
-  encryptLoanDocumentToVault,
-  linkEncryptedLoanDocument,
-} from "@/domains/loans/application/encryptLoanDocument";
-import { loanFieldsToFormFill } from "@/domains/loans/domain/loanDocumentFields";
-import { formatLoanDocumentProgress } from "@/domains/loans/domain/loanDocumentProgress";
-import {
-  isLoanUploadAbortError,
-  uploadLoanDocument,
-} from "@/domains/loans/queries/uploadLoanDocument";
-import {
-  LOAN_TYPES,
-  RATE_TYPES,
-  loanTypeMeta,
-  type LoanType,
-  type RateType,
-} from "@/domains/loans/domain/loanTypes";
-import {
-  PAYMENT_FREQUENCIES,
-  type PaymentFrequency,
-} from "@/domains/loans/domain/paymentFrequency";
-import {
-  OCR_DOCUMENT_ACCEPT,
-  isOcrDocumentFile,
-} from "@/domains/statements/domain/ocrDocumentTypes";
-import { useFeatureFlags } from "@/domains/feature-flags/ui/useFeatureFlag";
-import { hydrateVaultSession, type VaultClient } from "@/domains/vault/application/ensureVaultFromPasscode";
-import { loadPrivateLedger, type VaultListClient } from "@/domains/vault/application/loadPrivateLedger";
-import {
-  saveEncryptedLoan,
-  saveEncryptedRecords,
-  vaultWriteReady,
-} from "@/domains/vault/application/saveEncryptedLedger";
-import { usePrivateLedger } from "@/domains/vault/ui/usePrivateLedger";
-import { errorMessage } from "@/shared/lib/error-message";
 
 type AddLoanDialogProps = {
   open: boolean;
@@ -96,7 +96,6 @@ export function AddLoanDialog({ open, onOpenChange }: AddLoanDialogProps) {
   const flags = useFeatureFlags();
   const createCustomLoan = useMutation(api.dashboard.createCustomLoan);
   const linkLoanDocument = useMutation(api.loanDocuments.linkToAccount);
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -147,7 +146,7 @@ export function AddLoanDialog({ open, onOpenChange }: AddLoanDialogProps) {
 
       if (vaultPersist) {
         if (!flags.cloudProcessing) {
-            throw new Error(
+          throw new Error(
             "Turn on Cloud Processing in Modules before uploading a document.",
           );
         }
@@ -205,8 +204,12 @@ export function AddLoanDialog({ open, onOpenChange }: AddLoanDialogProps) {
       }
     } finally {
       setUploading(false);
-      if (fileInputRef.current) fileInputRef.current.value = "";
     }
+  }
+
+  function onPickerFiles(files: FileList | File[]) {
+    const file = Array.from(files)[0];
+    if (file) void onUploadDocument(file);
   }
 
   async function onSubmit(event: React.FormEvent) {
@@ -366,7 +369,7 @@ export function AddLoanDialog({ open, onOpenChange }: AddLoanDialogProps) {
                     </PopoverDescription>
                     <ul className="mt-1.5 list-disc space-y-1 pl-4 text-muted-foreground">
                       <li>Mortgage, auto, student, personal, HELOC, or other</li>
-                      <li>Upload a PDF or photo to fill the form from a scan</li>
+                      <li>Upload a PDF or photo (or take one) to fill the form</li>
                       <li>OCR stays encrypted for later viewing</li>
                     </ul>
                   </PopoverHeader>
@@ -388,12 +391,9 @@ export function AddLoanDialog({ open, onOpenChange }: AddLoanDialogProps) {
                 body: "Sets the account subtype and the optional collateral field (vehicle, property, school, etc.).",
               }}
               action={
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
+                <OcrDocumentPickerButton
                   disabled={busy}
-                  onClick={() => fileInputRef.current?.click()}
+                  onFiles={onPickerFiles}
                 >
                   {uploading ? (
                     <>
@@ -406,7 +406,7 @@ export function AddLoanDialog({ open, onOpenChange }: AddLoanDialogProps) {
                       Upload Document
                     </>
                   )}
-                </Button>
+                </OcrDocumentPickerButton>
               }
             >
               <NativeSelect
@@ -599,17 +599,6 @@ export function AddLoanDialog({ open, onOpenChange }: AddLoanDialogProps) {
               />
             </Field>
           </div>
-
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept={OCR_DOCUMENT_ACCEPT}
-            className="hidden"
-            onChange={(event) => {
-              const file = event.target.files?.[0];
-              if (file) void onUploadDocument(file);
-            }}
-          />
 
           <DialogFooter>
             <Button

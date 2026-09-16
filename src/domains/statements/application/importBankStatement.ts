@@ -226,6 +226,7 @@ export async function importBankStatement(params: {
             transactionTypeName: hit.profile.transactionType,
             txnCode: hit.profile.txnCode,
             channel: hit.profile.channel,
+            tagNames: hit.profile.tags ?? [],
           };
         });
       } catch (error) {

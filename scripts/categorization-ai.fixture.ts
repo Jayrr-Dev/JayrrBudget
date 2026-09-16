@@ -7,5 +7,5 @@ export async function generateObjectWithFallback({ prompt }: { prompt: string })
   aiState.inputs += inputs.length;
   return { object: { results: inputs.map(({ id }) => ({ id: aiState.invalid ? 99 : id,
     merchant: "Acme", path: 0, spread: "Wants", transactionType: "Expense", txnCode: "purchase",
-    channel: "other", confident: aiState.confident })) } };
+    channel: "other", tags: [], confident: aiState.confident })) } };
 }

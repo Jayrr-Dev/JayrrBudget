@@ -2,6 +2,10 @@
 
 import { PersistentNoteFab } from "@/components/layout/PersistentNoteFab";
 import {
+  useVaultPageLocked,
+  VaultLockedGate,
+} from "@/domains/vault/ui/VaultLockedGate";
+import {
   Sidebar,
   SidebarBody,
   SidebarLink,
@@ -261,8 +265,10 @@ export function AppShell({
   };
   const modules = modulesQuery.data?.modules ?? [];
   const navModules = modules;
+  const vaultLocked = useVaultPageLocked();
   const fullBleedDatabase =
-    pathname === "/database" || pathname.startsWith("/database/");
+    !vaultLocked &&
+    (pathname === "/database" || pathname.startsWith("/database/"));
 
   return (
     <div
@@ -294,13 +300,14 @@ export function AppShell({
             "mx-auto w-full max-w-[90rem] min-h-0 flex-1 overflow-y-auto px-4 py-6 sm:px-8 sm:py-8",
             fullBleedDatabase &&
               "flex h-full max-h-full max-w-none flex-col overflow-hidden p-2 sm:p-3",
+            vaultLocked && "flex flex-col",
             contentClassName,
           )}
         >
-          {children}
+          <VaultLockedGate>{children}</VaultLockedGate>
         </div>
       </main>
-      <PersistentNoteFab />
+      {vaultLocked ? null : <PersistentNoteFab />}
     </div>
   );
 }

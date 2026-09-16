@@ -72,7 +72,7 @@ const CATEGORY_FIXES: CategoryFix[] = [
   {
     test: (text) => /wealthsimple\s*tax/i.test(text),
     section: "Technology",
-    category: "Software & Subscriptions",
+    category: "Software",
     subcategory: "Productivity & Creative",
   },
   {
@@ -118,9 +118,25 @@ const CATEGORY_FIXES: CategoryFix[] = [
   },
   {
     test: (text) => /uber\s*eats|ubereats/i.test(text),
-    section: "Lifestyle",
-    category: "Delivery Services",
+    section: "Food",
+    category: "Delivery",
     subcategory: "Food Delivery",
+  },
+  {
+    test: (text) =>
+      /air\s*canada|westjet|porter\s*air|trip\.com|cheap\s*tickets|airline|airfare/i.test(
+        text,
+      ),
+    section: "Travel",
+    category: "Flights",
+    subcategory: "Airline Tickets",
+  },
+  {
+    test: (text) =>
+      /airbnb|booking\.com|marriott|hilton|holiday\s*inn|hotel/i.test(text),
+    section: "Travel",
+    category: "Lodging",
+    subcategory: "Hotels",
   },
 ];
 

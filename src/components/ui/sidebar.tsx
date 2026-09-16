@@ -2,7 +2,7 @@
 
 import { cn } from "@/lib/utils";
 import Link from "next/link";
-import React, { useState, createContext, useContext } from "react";
+import React, { useEffect, useRef, useState, createContext, useContext } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { IconMenu2, IconX } from "@tabler/icons-react";
 
@@ -86,14 +86,50 @@ export const SidebarBody = ({
   );
 };
 
+function pointerStillInSidebar(
+  root: HTMLElement | null,
+  target: EventTarget | null,
+) {
+  if (!root) return false;
+  if (target instanceof Node && root.contains(target)) return true;
+  if (target instanceof Element) {
+    if (target.closest("[data-radix-popper-content-wrapper]")) return true;
+    if (target.closest("[data-slot='popover-content']")) return true;
+  }
+  return root.matches(":hover");
+}
+
 export const DesktopSidebar = ({
   className,
   children,
   ...props
 }: React.ComponentProps<typeof motion.div>) => {
   const { open, setOpen, animate } = useSidebar();
+  const rootRef = useRef<HTMLElement | null>(null);
+  const closeTimer = useRef<number>(0);
+
+  useEffect(() => {
+    return () => window.clearTimeout(closeTimer.current);
+  }, []);
+
+  const keepOpen = () => {
+    window.clearTimeout(closeTimer.current);
+    if (animate) setOpen(true);
+  };
+
+  const scheduleClose = (target: EventTarget | null) => {
+    if (!animate) return;
+    if (pointerStillInSidebar(rootRef.current, target)) return;
+    window.clearTimeout(closeTimer.current);
+    closeTimer.current = window.setTimeout(() => {
+      if (pointerStillInSidebar(rootRef.current, null)) return;
+      setOpen(false);
+    }, 220);
+  };
+
   return (
     <motion.aside
+      ref={rootRef}
       className={cn(
         "sticky top-0 z-30 hidden h-screen shrink-0 overflow-hidden border-r border-[var(--sidebar-border)] bg-[var(--surface)] py-5 md:flex md:flex-col",
         open || !animate ? "px-3" : "items-center px-0",
@@ -107,13 +143,9 @@ export const DesktopSidebar = ({
         duration: open ? 0.25 : 0.45,
         ease: open ? "easeOut" : [0.32, 0.72, 0, 1],
       }}
-      onMouseEnter={() => {
-        if (animate) setOpen(true);
-      }}
-      onMouseLeave={() => {
-        if (animate) setOpen(false);
-      }}
       {...props}
+      onPointerEnter={keepOpen}
+      onPointerLeave={(event) => scheduleClose(event.relatedTarget)}
     >
       {children}
     </motion.aside>

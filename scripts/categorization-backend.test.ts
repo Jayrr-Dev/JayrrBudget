@@ -62,6 +62,17 @@ test("batch apply memorizes all fields, links owner modules, and reruns do no wo
   assert.deepEqual(await call(apply, ctx, args), { applied: 0 });
 });
 
+test("apply writes AI tags onto the transaction and remembers new names", async () => {
+  const { db, ctx, tables } = database();
+  await db.insert("sharedCategoryPaths", { key: pathKey, section: "Food", category: "Dining", subcategory: "Cafes" });
+  await db.insert("transactions", txn);
+  const tagged = { ...profile, tags: ["Subscription", "Online"] };
+  await call(apply, ctx, { groups: [{ key, profile: tagged, rows: [{ transactionId: "t1", updatedAt: 1 }] }] });
+  assert.equal(tables.transactions[0].tags, "Subscription, Online");
+  assert.equal(tables.transactionTags.length, 2);
+  assert.deepEqual(tables.categorizationRules[0].profile.tags, ["Subscription", "Online"]);
+});
+
 test("concurrent manual edits and foreign rows are not overwritten", async () => {
   const { db, ctx, tables } = database();
   await db.insert("sharedCategoryPaths", { key: pathKey, section: "Food", category: "Dining", subcategory: "Cafes" });

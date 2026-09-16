@@ -27,7 +27,12 @@ function labeledTxValue(tx: PrivateTransaction, label: LabeledTransaction) {
     channel: label.profile.channel,
     statementRecordId: tx.statementRecordId ?? null,
     source: tx.source ?? "statement",
-    tagNames: tx.tagNames ?? [],
+    tagNames: [
+      ...new Set([
+        ...(tx.tagNames ?? []),
+        ...(label.profile.tags ?? []),
+      ]),
+    ],
   };
 }
 

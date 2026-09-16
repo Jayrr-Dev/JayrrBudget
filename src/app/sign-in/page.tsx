@@ -1,10 +1,20 @@
 "use client";
 
 import { useAuthActions } from "@convex-dev/auth/react";
+import { Info } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { clearPendingPasscode, setPendingPasscode } from "@/crypto/pendingPasscode";
 import { MIN_PASSCODE_LENGTH } from "@/domains/vault/application/ensureVaultFromPasscode";
+import { ProductShowcaseCard } from "@/components/marketing/ProductShowcaseCard";
+import {
+  Popover,
+  PopoverContent,
+  PopoverDescription,
+  PopoverHeader,
+  PopoverTitle,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { authErrorMessage } from "@/shared/lib/auth-error-message";
 
 type AuthFlow = "signIn" | "signUp" | "reset" | "resetVerification";
@@ -12,7 +22,7 @@ type AuthFlow = "signIn" | "signUp" | "reset" | "resetVerification";
 export default function SignInPage() {
   const { signIn } = useAuthActions();
   const router = useRouter();
-  const [flow, setFlow] = useState<AuthFlow>("signIn");
+  const [flow, setFlow] = useState<AuthFlow>("signUp");
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   // Defer password autofill attrs until focus so iCloud / managers
@@ -20,8 +30,12 @@ export default function SignInPage() {
   const [passwordAutofillReady, setPasswordAutofillReady] = useState(false);
 
   return (
-    <main className="flex min-h-full flex-1 items-center justify-center bg-[var(--background)] px-4">
-      <div className="w-full max-w-sm space-y-6">
+    <main className="flex min-h-full flex-1 items-start justify-center bg-[var(--background)] px-4 py-6 sm:items-center sm:py-10">
+      <div className="grid w-full max-w-6xl items-start gap-8 lg:grid-cols-[minmax(0,2fr)_minmax(16rem,1fr)] lg:items-center lg:gap-12">
+      <div className="order-2 w-full min-w-0 lg:order-1">
+        <ProductShowcaseCard />
+      </div>
+      <div className="order-1 w-full max-w-sm justify-self-center space-y-6 lg:order-2 lg:max-w-none lg:justify-self-stretch">
         <div className="flex flex-col items-center space-y-3 text-center">
           <img
             src="/logo.svg"
@@ -45,6 +59,47 @@ export default function SignInPage() {
             </p>
           </div>
         </div>
+
+        {flow === "signIn" || flow === "signUp" ? (
+          <div
+            className="grid grid-cols-2 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-1"
+            role="tablist"
+            aria-label="Account"
+          >
+            <button
+              type="button"
+              role="tab"
+              aria-selected={flow === "signUp"}
+              className={
+                flow === "signUp"
+                  ? "rounded-md bg-[var(--accent)] px-3 py-2 text-sm font-medium text-[var(--accent-foreground)]"
+                  : "rounded-md px-3 py-2 text-sm font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+              }
+              onClick={() => {
+                setError(null);
+                setFlow("signUp");
+              }}
+            >
+              Sign up
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={flow === "signIn"}
+              className={
+                flow === "signIn"
+                  ? "rounded-md bg-[var(--accent)] px-3 py-2 text-sm font-medium text-[var(--accent-foreground)]"
+                  : "rounded-md px-3 py-2 text-sm font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+              }
+              onClick={() => {
+                setError(null);
+                setFlow("signIn");
+              }}
+            >
+              Sign in
+            </button>
+          </div>
+        ) : null}
 
         <form
           className="space-y-3 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-5"
@@ -158,8 +213,34 @@ export default function SignInPage() {
             </label>
           ) : null}
           {flow !== "reset" ? <label className="relative z-10 block space-y-1 text-sm">
-            <span className="text-[var(--muted-foreground)]">
+            <span className="inline-flex items-center gap-1 text-[var(--muted-foreground)]">
               {flow === "resetVerification" ? "New password" : "Password"}
+              {flow === "signUp" ? (
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <button
+                      type="button"
+                      aria-label="How this password encrypts your ledger"
+                      className="inline-flex size-5 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
+                    >
+                      <Info className="size-3.5" />
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent
+                    align="start"
+                    side="bottom"
+                    sideOffset={8}
+                    className="w-[min(20rem,calc(100vw-2rem))]"
+                  >
+                    <PopoverHeader className="gap-1.5">
+                      <PopoverTitle>Your password is the lock</PopoverTitle>
+                      <PopoverDescription className="leading-relaxed">
+                        This password also encrypts your ledger. Only you can read it.
+                      </PopoverDescription>
+                    </PopoverHeader>
+                  </PopoverContent>
+                </Popover>
+              ) : null}
             </span>
             <input
               name={flow === "resetVerification" ? "newPassword" : "password"}
@@ -200,11 +281,6 @@ export default function SignInPage() {
                 className="w-full rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-[var(--foreground)] outline-none focus:border-[var(--accent)]"
               />
             </label>
-          ) : null}
-          {flow === "signUp" ? (
-            <p className="text-xs text-[var(--muted-foreground)]">
-              This password also encrypts your ledger. Only you can read it.
-            </p>
           ) : null}
           {flow === "reset" ? (
             <p className="text-xs text-[var(--muted-foreground)]">
@@ -254,34 +330,24 @@ export default function SignInPage() {
             >
               Forgot password?
             </button>
-            <span className="mx-2">·</span>
-            Need an account?{" "}
+          </p>
+        ) : null}
+        {flow === "reset" || flow === "resetVerification" ? (
+          <p className="text-center text-sm text-[var(--muted-foreground)]">
+            Remember your password?{" "}
             <button
               type="button"
               className="text-[var(--accent)] underline-offset-2 hover:underline"
               onClick={() => {
                 setError(null);
-                setFlow("signUp");
+                setFlow("signIn");
               }}
             >
-              Sign up
+              Sign in
             </button>
           </p>
-        ) : (
-        <p className="text-center text-sm text-[var(--muted-foreground)]">
-          {flow === "signUp" ? "Already have an account?" : "Remember your password?"}{" "}
-          <button
-            type="button"
-            className="text-[var(--accent)] underline-offset-2 hover:underline"
-            onClick={() => {
-              setError(null);
-              setFlow(flow === "signUp" ? "signIn" : "signIn");
-            }}
-          >
-            {flow === "signUp" ? "Sign in" : "Sign in"}
-          </button>
-        </p>
-        )}
+        ) : null}
+      </div>
       </div>
     </main>
   );

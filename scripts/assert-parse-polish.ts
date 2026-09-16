@@ -18,7 +18,7 @@ const vocab: CategoryVocabulary = {
     "Account Transfers",
     "Personal Care",
     "AI Services",
-    "Software & Subscriptions",
+    "Software",
   ],
   subcategories: [
     "Credit Card Payoffs",

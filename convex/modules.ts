@@ -6,14 +6,6 @@ import { ensureModulesForUser } from "./lib/ensureModules";
 import { MODULE_CATALOG } from "./lib/moduleCatalog";
 import { roleAllowsModule } from "./lib/roles";
 
-const catalogSortOrder = new Map(
-  MODULE_CATALOG.map((entry) => [entry.slug, entry.sortOrder]),
-);
-
-function sortOrderForSlug(slug: string, fallback: number) {
-  return catalogSortOrder.get(slug) ?? fallback;
-}
-
 export const list = query({
   args: {
     enabledOnly: v.optional(v.boolean()),
@@ -36,28 +28,27 @@ export const list = query({
       .query("appModules")
       .withIndex("by_userId", (q) => q.eq("userId", user._id))
       .collect();
-    return rows
-      .filter((row) =>
-        args.enabledOnly ? roleAllowsModule(role, row.slug) : true,
-      )
+    const bySlug = new Map(rows.map((row) => [row.slug, row]));
+    const merged = MODULE_CATALOG.filter((seed) =>
+      args.enabledOnly ? roleAllowsModule(role, seed.slug) : true,
+    ).map((seed) => {
+      const row = bySlug.get(seed.slug);
+      return {
+        id: row?.legacyId ?? seed.sortOrder,
+        slug: seed.slug,
+        name: seed.name,
+        description: seed.description,
+        href: seed.href,
+        icon: seed.icon,
+        category: seed.category,
+        enabled: row ? Boolean(row.enabled) : true,
+        sortOrder: seed.sortOrder,
+        isCore: seed.isCore,
+      };
+    });
+    return merged
       .filter((row) => (args.enabledOnly ? row.enabled : true))
-      .sort(
-        (a, b) =>
-          sortOrderForSlug(a.slug, a.sortOrder) -
-          sortOrderForSlug(b.slug, b.sortOrder),
-      )
-      .map((row) => ({
-        id: row.legacyId,
-        slug: row.slug,
-        name: row.name,
-        description: row.description,
-        href: row.href,
-        icon: row.icon,
-        category: row.category,
-        enabled: Boolean(row.enabled),
-        sortOrder: sortOrderForSlug(row.slug, row.sortOrder),
-        isCore: Boolean(row.isCore),
-      }));
+      .sort((a, b) => a.sortOrder - b.sortOrder);
   },
 });
 
@@ -78,12 +69,41 @@ export const setEnabled = mutation({
   },
   handler: async (ctx, args) => {
     const user = await requireRole(ctx, "admin");
-    const row = await ctx.db
+    const seed = MODULE_CATALOG.find((entry) => entry.slug === args.slug);
+    if (!seed) {
+      return { ok: false as const, error: "Module not found", status: 404 };
+    }
+    let row = await ctx.db
       .query("appModules")
       .withIndex("by_userId_slug", (q) =>
         q.eq("userId", user._id).eq("slug", args.slug),
       )
       .unique();
+    if (!row) {
+      const existing = await ctx.db
+        .query("appModules")
+        .withIndex("by_userId", (q) => q.eq("userId", user._id))
+        .collect();
+      const now = Date.now();
+      const legacyId =
+        existing.reduce((max, item) => Math.max(max, item.legacyId), 0) + 1;
+      const id = await ctx.db.insert("appModules", {
+        userId: user._id,
+        legacyId,
+        slug: seed.slug,
+        name: seed.name,
+        description: seed.description,
+        href: seed.href,
+        icon: seed.icon,
+        category: seed.category,
+        enabled: args.enabled,
+        sortOrder: seed.sortOrder,
+        isCore: seed.isCore,
+        createdAt: now,
+        updatedAt: now,
+      });
+      row = await ctx.db.get(id);
+    }
     if (!row) {
       return { ok: false as const, error: "Module not found", status: 404 };
     }

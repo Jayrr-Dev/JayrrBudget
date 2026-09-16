@@ -7,6 +7,7 @@ export const profileValidator = v.object({
   transactionType: v.string(),
   txnCode: v.string(),
   channel: v.string(),
+  tags: v.optional(v.array(v.string())),
 });
 
 export type CategoryProfile = {
@@ -16,6 +17,7 @@ export type CategoryProfile = {
   transactionType: string;
   txnCode: string;
   channel: string;
+  tags?: string[];
 };
 
 export function normalizedLabel(value: string) {

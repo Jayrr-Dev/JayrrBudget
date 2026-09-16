@@ -2,9 +2,11 @@
 
 import { useMutation, useQuery } from "convex/react";
 import {
+  CameraIcon,
   CheckIcon,
   CopyCheckIcon,
   FileTextIcon,
+  FileUpIcon,
   FileWarningIcon,
   Info,
   ListChecks,
@@ -46,10 +48,7 @@ import {
   normalizeStatementFilename,
   sha256FileHex,
 } from "@/domains/statements/domain/fileFingerprint";
-import {
-  OCR_DOCUMENT_ACCEPT,
-  isOcrDocumentFile,
-} from "@/domains/statements/domain/ocrDocumentTypes";
+import { isOcrDocumentFile } from "@/domains/statements/domain/ocrDocumentTypes";
 import { describeImportResult } from "@/domains/statements/domain/importCopy";
 import {
   formatImportProgress,
@@ -58,6 +57,17 @@ import {
 } from "@/domains/statements/domain/importProgress";
 import { uploadBankStatement, isUploadAbortError } from "@/domains/statements/queries/uploadBankStatement";
 import { StatementAiRulesDialog } from "@/domains/statements/ui/StatementAiRulesDialog";
+import {
+  OCR_UPLOAD_HINT_POINTER,
+  OCR_UPLOAD_HINT_TOUCH,
+  useOcrDocumentInputs,
+} from "@/domains/statements/ui/OcrDocumentPickerButton";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { getVaultMasterKey } from "@/crypto/session";
 import { hydrateVaultSession, type VaultClient } from "@/domains/vault/application/ensureVaultFromPasscode";
 import { useFeatureFlags } from "@/domains/feature-flags/ui/useFeatureFlag";
@@ -161,7 +171,6 @@ function classifyAgainstKnown(
 }
 
 export function StatementUpload({ onImported }: Props) {
-  const inputRef = useRef<HTMLInputElement>(null);
   const busyRef = useRef(false);
   const abortRef = useRef<AbortController | null>(null);
   const itemsRef = useRef<QueueItem[]>([]);
@@ -179,6 +188,12 @@ export function StatementUpload({ onImported }: Props) {
 
   busyRef.current = busy;
   itemsRef.current = items;
+
+  const ocrPicker = useOcrDocumentInputs({
+    multiple: true,
+    disabled: busy,
+    onFiles: (files) => addFiles(files),
+  });
 
   const fingerprints = useQuery(
     api.statements.listCompletedFingerprints,
@@ -358,7 +373,7 @@ export function StatementUpload({ onImported }: Props) {
 
   function clearQueue() {
     setItems([]);
-    if (inputRef.current) inputRef.current.value = "";
+    hashingIdsRef.current.clear();
   }
 
   function cancelUpload() {
@@ -630,7 +645,28 @@ export function StatementUpload({ onImported }: Props) {
           setDialogOpen(true);
         }}
       >
-        <DialogContent className="sm:max-w-md" showCloseButton>
+        <DialogContent
+          className="sm:max-w-md"
+          showCloseButton
+          onPointerDownOutside={(event) => {
+            const target = event.target;
+            if (
+              target instanceof Element &&
+              target.closest('[data-slot="dropdown-menu-content"]')
+            ) {
+              event.preventDefault();
+            }
+          }}
+          onInteractOutside={(event) => {
+            const target = event.target;
+            if (
+              target instanceof Element &&
+              target.closest('[data-slot="dropdown-menu-content"]')
+            ) {
+              event.preventDefault();
+            }
+          }}
+        >
           <DialogHeader className="gap-0 pr-8">
             <DialogTitle className="flex items-center gap-2">
               Upload statements
@@ -660,7 +696,7 @@ export function StatementUpload({ onImported }: Props) {
                         : ""}
                     </PopoverDescription>
                     <ul className="mt-1 list-disc space-y-1 pl-4 text-sm leading-relaxed text-muted-foreground">
-                      <li>Drag PDFs or photos here or choose files.</li>
+                      <li>On your phone, tap to take a photo or pick a file</li>
                       <li>Up to {MAX_FILES} · 20MB each.</li>
                       <li>Already-imported files are marked before scan.</li>
                       {vaultPersist ? (
@@ -682,72 +718,134 @@ export function StatementUpload({ onImported }: Props) {
             </DialogDescription>
           </DialogHeader>
 
-          <input
-            ref={inputRef}
-            type="file"
-            accept={OCR_DOCUMENT_ACCEPT}
-            multiple
-            className="hidden"
-            disabled={busy}
-            onChange={(event) => {
-              addFiles(event.target.files);
-              event.target.value = "";
-            }}
-          />
+          {ocrPicker.inputs}
 
           <div className="space-y-3">
-            <div
-              role="button"
-              tabIndex={busy ? -1 : 0}
-              aria-disabled={busy}
-              aria-label="Choose statement files"
-              onClick={() => {
-                if (!busy) inputRef.current?.click();
-              }}
-              onKeyDown={(event) => {
-                if (busy) return;
-                if (event.key === "Enter" || event.key === " ") {
+            {ocrPicker.showCameraMenu ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild disabled={busy}>
+                  <div
+                    role="button"
+                    tabIndex={busy ? -1 : 0}
+                    aria-disabled={busy}
+                    aria-label="Upload statement files or take a photo"
+                    onDragEnter={(event) => {
+                      event.preventDefault();
+                      if (!busy) setDragOver(true);
+                    }}
+                    onDragOver={(event) => {
+                      event.preventDefault();
+                      if (!busy) setDragOver(true);
+                    }}
+                    onDragLeave={(event) => {
+                      event.preventDefault();
+                      setDragOver(false);
+                    }}
+                    onDrop={(event) => {
+                      event.preventDefault();
+                      setDragOver(false);
+                      if (busy) return;
+                      addFiles(event.dataTransfer.files);
+                    }}
+                    className={cn(
+                      "flex w-full flex-col items-center justify-center gap-2 rounded-xl border border-dashed px-4 py-8 text-center transition-colors outline-none",
+                      "focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50",
+                      busy ? "pointer-events-none opacity-60" : "cursor-pointer",
+                      dragOver
+                        ? "border-foreground/40 bg-muted/60"
+                        : "border-border bg-muted/20 hover:bg-muted/40",
+                    )}
+                  >
+                    <span className="flex size-9 items-center justify-center rounded-lg bg-background text-foreground ring-1 ring-border">
+                      <UploadIcon className="size-4" />
+                    </span>
+                    <span className="text-sm font-medium">
+                      {OCR_UPLOAD_HINT_POINTER}
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      PDF or photo · take photo or choose file · up to {MAX_FILES}{" "}
+                      · 20MB each
+                    </span>
+                  </div>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent
+                  align="center"
+                  side="top"
+                  sideOffset={8}
+                  className="w-auto min-w-44"
+                >
+                  <DropdownMenuItem
+                    className="cursor-pointer"
+                    onClick={() => ocrPicker.openCamera()}
+                  >
+                    <CameraIcon className="size-4" />
+                    Take photo
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    className="cursor-pointer"
+                    onClick={() => ocrPicker.openFilePicker()}
+                  >
+                    <FileUpIcon className="size-4" />
+                    Choose file
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : (
+              <div
+                role="button"
+                tabIndex={busy ? -1 : 0}
+                aria-disabled={busy}
+                aria-label="Choose statement files"
+                onClick={() => {
+                  if (!busy) ocrPicker.openFilePicker();
+                }}
+                onKeyDown={(event) => {
+                  if (busy) return;
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    ocrPicker.openFilePicker();
+                  }
+                }}
+                onDragEnter={(event) => {
                   event.preventDefault();
-                  inputRef.current?.click();
-                }
-              }}
-              onDragEnter={(event) => {
-                event.preventDefault();
-                if (!busy) setDragOver(true);
-              }}
-              onDragOver={(event) => {
-                event.preventDefault();
-                if (!busy) setDragOver(true);
-              }}
-              onDragLeave={(event) => {
-                event.preventDefault();
-                setDragOver(false);
-              }}
-              onDrop={(event) => {
-                event.preventDefault();
-                setDragOver(false);
-                if (busy) return;
-                addFiles(event.dataTransfer.files);
-              }}
-              className={cn(
-                "flex w-full flex-col items-center justify-center gap-2 rounded-xl border border-dashed px-4 py-8 text-center transition-colors outline-none",
-                "focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50",
-                busy ? "pointer-events-none opacity-60" : "cursor-pointer",
-                dragOver
-                  ? "border-foreground/40 bg-muted/60"
-                  : "border-border bg-muted/20 hover:bg-muted/40",
-              )}
-            >
-              <span className="flex size-9 items-center justify-center rounded-lg bg-background text-foreground ring-1 ring-border">
-                <UploadIcon className="size-4" />
-              </span>
-              <span className="text-sm font-medium">
-                Drag & Drop or Choose file to upload
-              </span>
-              <span className="text-xs text-muted-foreground">
-                PDF or photo · up to {MAX_FILES} · 20MB each
-              </span>
-            </div>
+                  if (!busy) setDragOver(true);
+                }}
+                onDragOver={(event) => {
+                  event.preventDefault();
+                  if (!busy) setDragOver(true);
+                }}
+                onDragLeave={(event) => {
+                  event.preventDefault();
+                  setDragOver(false);
+                }}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  setDragOver(false);
+                  if (busy) return;
+                  addFiles(event.dataTransfer.files);
+                }}
+                className={cn(
+                  "flex w-full flex-col items-center justify-center gap-2 rounded-xl border border-dashed px-4 py-8 text-center transition-colors outline-none",
+                  "focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50",
+                  busy ? "pointer-events-none opacity-60" : "cursor-pointer",
+                  dragOver
+                    ? "border-foreground/40 bg-muted/60"
+                    : "border-border bg-muted/20 hover:bg-muted/40",
+                )}
+              >
+                <span className="flex size-9 items-center justify-center rounded-lg bg-background text-foreground ring-1 ring-border">
+                  <UploadIcon className="size-4" />
+                </span>
+                <span className="text-sm font-medium">
+                  {ocrPicker.isMobile
+                    ? OCR_UPLOAD_HINT_TOUCH
+                    : "Drag & drop or choose file to upload"}
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  PDF or photo · up to {MAX_FILES} · 20MB each
+                </span>
+              </div>
+            )}
 
             {items.length > 0 ? (
               <ul className="max-h-56 space-y-2 overflow-y-auto">

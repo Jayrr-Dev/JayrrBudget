@@ -23,6 +23,7 @@ export function EnsureUserBootstrap({ children }: { children: ReactNode }) {
   const convex = useConvex();
   const claimUnowned = useMutation(api.migrations.claimUnownedData);
   const ensureModules = useMutation(api.modules.ensure);
+  const ensureStarterTaxonomy = useMutation(api.classifications.ensureStarter);
   const backfillMerchants = useMutation(api.merchants.backfillFromTransactions);
   const ranForSession = useRef(false);
   const vaultSyncForSession = useRef(false);
@@ -31,17 +32,20 @@ export function EnsureUserBootstrap({ children }: { children: ReactNode }) {
   useEffect(() => subscribePendingPasscode(() => setHasPasscode(Boolean(peekPendingPasscode()))), []);
 
   useEffect(() => {
+    if (isLoading || !isAuthenticated) return;
+    void ensureModules({}).catch((error) => {
+      console.warn("[auth] ensure modules failed", error);
+    });
+    void ensureStarterTaxonomy({}).catch((error) => {
+      console.warn("[auth] ensure starter taxonomy failed", error);
+    });
+  }, [ensureModules, ensureStarterTaxonomy, isAuthenticated, isLoading]);
+
+  useEffect(() => {
     if (isLoading || !isAuthenticated || ranForSession.current) return;
     ranForSession.current = true;
 
     void (async () => {
-      try {
-        await ensureModules({});
-      } catch (error) {
-        console.warn("[auth] ensure modules failed", error);
-        ranForSession.current = false;
-        return;
-      }
 
       let alreadyClaimed = false;
       try {
@@ -98,7 +102,6 @@ export function EnsureUserBootstrap({ children }: { children: ReactNode }) {
     isAuthenticated,
     isLoading,
     claimUnowned,
-    ensureModules,
     backfillMerchants,
   ]);
 

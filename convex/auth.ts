@@ -4,6 +4,7 @@ import { convexAuth } from "@convex-dev/auth/server";
 import { ConvexError } from "convex/values";
 import { internal } from "./_generated/api";
 import { ensureModulesForUser } from "./lib/ensureModules";
+import { seedStarterTaxonomyForUser } from "./lib/seedStarterTaxonomy";
 import { DEFAULT_USER_ROLE, isUserRole } from "./lib/roles";
 
 const passwordResetEmail = Email({
@@ -65,6 +66,7 @@ export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
           const user = await ctx.db.get(args.existingUserId);
           if (user) {
             await ensureModulesForUser(ctx, user);
+            await seedStarterTaxonomyForUser(ctx, user);
           }
           return args.existingUserId;
         }
@@ -78,6 +80,7 @@ export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
       const user = await ctx.db.get(userId);
       if (user) {
         await ensureModulesForUser(ctx, user);
+        await seedStarterTaxonomyForUser(ctx, user);
       }
       return userId;
     },

@@ -1,8 +1,8 @@
 "use client";
 
 import { createColumnHelper } from "@tanstack/react-table";
-import { useMutation } from "convex/react";
-import { useQuery } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
+import { useEffect } from "react";
 import { api } from "@convex/_generated/api";
 import { Badge } from "@/components/ui/badge";
 import { DataTable } from "@/components/ui/data-table";
@@ -69,7 +69,12 @@ const columns = columnHelper.columns([
 ]);
 
 export function ModuleManager() {
+  const ensure = useMutation(api.modules.ensure);
   const modules = useQuery(api.modules.list, {});
+
+  useEffect(() => {
+    void ensure({});
+  }, [ensure]);
 
   if (modules === undefined) {
     return (

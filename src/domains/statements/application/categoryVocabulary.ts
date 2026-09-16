@@ -122,7 +122,7 @@ export function formatCategoryVocabularyForPrompt(
     "section (top bucket):",
     sections.length
       ? sections.map((label) => `- ${label}`).join("\n")
-      : "- Lifestyle, Transport, Technology, Transfers, Income, Finance, Health, Home",
+      : "- Lifestyle, Transport, Technology, Transfers, Income, Finance, Health, Home, Travel, Family, Food, Development",
     "",
     "category (mid node under section):",
     categories.length

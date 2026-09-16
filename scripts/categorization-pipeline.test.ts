@@ -10,14 +10,15 @@ function client(count: number, repeated = true, cached = false) {
   const rows = Array.from({ length: count }, (_, i) => ({ transactionId: `t${i}`, description: repeated ? "ACME" : `ACME ${i}`,
     amount: 10, key: descriptionKey(repeated ? "ACME" : `ACME ${i}`, 10), updatedAt: 1 }));
   const saved = new Set<string>();
-  const profile = { merchant: "Acme", pathKey: "food", spread: "Wants", transactionType: "Expense", txnCode: "purchase", channel: "other" };
+  const profile = { merchant: "Acme", pathKey: "food", spread: "Wants", transactionType: "Expense", txnCode: "purchase", channel: "other", tags: [] };
   const rules = new Map(cached ? rows.map(r => [r.key, profile]) : []);
   return { saved, client: {
     query: async (fn: any, args: any) => {
       const name = getFunctionName(fn);
       if (name.endsWith(":pendingPage")) return { page: rows.filter(r => !saved.has(r.transactionId)), isDone: true, continueCursor: "" };
       if (name.endsWith(":lookup")) return args.keys.map((key: string) => ({ key, profile: rules.get(key) ?? null }));
-      if (name.endsWith(":vocabulary")) return { paths: [{ key: "food", section: "Food", category: "Dining", subcategory: "Cafes" }], spreads: ["Wants"], types: ["Expense"] };
+      if (name.endsWith(":vocabulary")) return { paths: [{ key: "food", section: "Food", category: "Dining", subcategory: "Cafes" }], spreads: ["Wants"], types: ["Expense"], tags: [] };
+      if (name.endsWith("aiRules:get") || name.endsWith(":get")) return { rules: [] };
       throw new Error(name);
     },
     mutation: async (fn: any, args: any) => {

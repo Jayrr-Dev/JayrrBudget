@@ -28,16 +28,20 @@ export const SEED_TAXONOMY: SeedTaxonomyNode[] = [
   { facet: "section", name: "Health" },
   { facet: "section", name: "Income" },
   { facet: "section", name: "Transfers" },
+  { facet: "section", name: "Travel" },
+  { facet: "section", name: "Family" },
+  { facet: "section", name: "Technology" },
+  { facet: "section", name: "Food" },
 
   {
     facet: "category",
-    name: "Food",
-    parentSlug: "lifestyle",
+    name: "Groceries",
+    parentSlug: "food",
   },
   {
     facet: "category",
     name: "Drink",
-    parentSlug: "lifestyle",
+    parentSlug: "food",
   },
   {
     facet: "category",
@@ -63,6 +67,36 @@ export const SEED_TAXONOMY: SeedTaxonomyNode[] = [
     facet: "category",
     name: "Personal Care",
     parentSlug: "lifestyle",
+  },
+  {
+    facet: "category",
+    name: "Attractions & Tours",
+    parentSlug: "travel",
+  },
+  {
+    facet: "category",
+    name: "Lodging",
+    parentSlug: "travel",
+  },
+  {
+    facet: "category",
+    name: "Flights",
+    parentSlug: "travel",
+  },
+  {
+    facet: "category",
+    name: "Childcare",
+    parentSlug: "family",
+  },
+  {
+    facet: "category",
+    name: "Kids",
+    parentSlug: "family",
+  },
+  {
+    facet: "category",
+    name: "Elder Support",
+    parentSlug: "family",
   },
   {
     facet: "category",
@@ -121,12 +155,17 @@ export const SEED_TAXONOMY: SeedTaxonomyNode[] = [
   },
   {
     facet: "category",
-    name: "Travel",
+    name: "Auto",
     parentSlug: "transport",
   },
   {
     facet: "category",
-    name: "Auto",
+    name: "Rentals",
+    parentSlug: "transport",
+  },
+  {
+    facet: "category",
+    name: "Vehicle",
     parentSlug: "transport",
   },
   {
@@ -297,7 +336,7 @@ export const SEED_TAXONOMY: SeedTaxonomyNode[] = [
   },
   {
     facet: "subcategory",
-    name: "Tax Credits",
+    name: "Unemployment",
     parentSlug: "government-benefits",
   },
   {
@@ -334,6 +373,46 @@ export const SEED_TAXONOMY: SeedTaxonomyNode[] = [
     facet: "subcategory",
     name: "Car Wash",
     parentSlug: "auto",
+  },
+  {
+    facet: "subcategory",
+    name: "Monthly Fees",
+    parentSlug: "bank-fees",
+  },
+  {
+    facet: "subcategory",
+    name: "Mortgage",
+    parentSlug: "housing",
+  },
+  {
+    facet: "subcategory",
+    name: "Rent Payment",
+    parentSlug: "rent",
+  },
+  {
+    facet: "subcategory",
+    name: "Electricity",
+    parentSlug: "utilities",
+  },
+  {
+    facet: "subcategory",
+    name: "Tickets",
+    parentSlug: "attractions-and-tours",
+  },
+  {
+    facet: "subcategory",
+    name: "Hotels",
+    parentSlug: "lodging",
+  },
+  {
+    facet: "subcategory",
+    name: "Equipment Rental",
+    parentSlug: "rentals",
+  },
+  {
+    facet: "subcategory",
+    name: "Car Rental",
+    parentSlug: "vehicle",
   },
 
   { facet: "transaction_type", name: "income" },

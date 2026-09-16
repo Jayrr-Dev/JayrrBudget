@@ -191,7 +191,7 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
     tags: ["AI", "Subscription", "Online"],
     tree: {
       section: "Technology",
-      category: "Software & Subscriptions",
+      category: "Software",
       type: "Productivity & Creative",
     },
     patterns: [
@@ -202,12 +202,12 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
     ],
   },
 
-  // --- Software & Subscriptions (non-AI) ---
+  // --- Software (non-AI) ---
   {
     tags: ["Subscription", "Online"],
     tree: {
       section: "Technology",
-      category: "Software & Subscriptions",
+      category: "Software",
       type: "Productivity & Creative",
     },
     patterns: [
@@ -222,7 +222,7 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
     tags: ["Subscription", "Online"],
     tree: {
       section: "Technology",
-      category: "Software & Subscriptions",
+      category: "Software",
       type: "Communication & Social",
     },
     patterns: [
@@ -237,7 +237,7 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
     tags: ["Subscription", "Online"],
     tree: {
       section: "Technology",
-      category: "Software & Subscriptions",
+      category: "Software",
       type: "Security & Utilities",
     },
     patterns: [/nord/i, /start\.me/i, /google\s*one/i],
@@ -263,8 +263,8 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
   {
     tags: ["Online"],
     tree: {
-      section: "Lifestyle",
-      category: "Delivery Services",
+      section: "Food",
+      category: "Delivery",
       type: "Food Delivery",
     },
     patterns: [
@@ -279,7 +279,7 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
     tags: ["In Store"],
     tree: {
       section: "Lifestyle",
-      category: "Restaurants & Cafes",
+      category: "Recreational",
       type: "Board Game Cafes",
     },
     patterns: [/hexagon\s*board\s*game/i],
@@ -287,8 +287,8 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
   {
     tags: ["In Store"],
     tree: {
-      section: "Lifestyle",
-      category: "Restaurants & Cafes",
+      section: "Food",
+      category: "Restaurants",
       type: "Fast Food",
     },
     patterns: [
@@ -305,9 +305,9 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
   {
     tags: ["In Store"],
     tree: {
-      section: "Lifestyle",
-      category: "Food",
-      type: "Supermarkets",
+      section: "Food",
+      category: "Groceries",
+      type: "Supermarket",
     },
     patterns: [
       /real\s*cdn\s*superstore/i,
@@ -504,16 +504,16 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
   },
   {
     tree: {
-      section: "Lifestyle",
-      category: "Personal Care",
+      section: "Family",
+      category: "Pets",
       type: "Veterinary",
     },
     patterns: [/animal\s*hospital/i, /veterinar/i],
   },
   {
     tree: {
-      section: "Lifestyle",
-      category: "Shopping",
+      section: "Family",
+      category: "Pets",
       type: "Pet Supplies",
     },
     patterns: [/petsmart/i, /pet\s*smart/i],
@@ -522,9 +522,9 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
   // --- Entertainment & shopping ---
   {
     tree: {
-      section: "Lifestyle",
-      category: "Entertainment",
-      type: "Education & Training",
+      section: "Development",
+      category: "Education",
+      type: "Courses & Training",
     },
     patterns: [/\bnait\b/i],
   },
