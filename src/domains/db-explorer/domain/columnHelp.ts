@@ -1,10 +1,8 @@
 /** One-line "what you use this for" notes. Not type docs. */
 
 export const TABLE_HELP: Record<string, string> = {
-  institutions:
-    "A bank or card issuer. Statement accounts hang off this.",
-  accounts:
-    "A real account at that bank. Checking, credit card, etc.",
+  institutions: "A bank or card issuer. Statement accounts hang off this.",
+  accounts: "A real account at that bank. Checking, credit card, etc.",
   statement_uploads:
     "One PDF statement you uploaded. Totals live here, not on each line.",
   transactions:
@@ -15,30 +13,21 @@ export const TABLE_HELP: Record<string, string> = {
     "Filter lookup for 50/30/20 Spread (Needs / Wants / Savings).",
   transaction_categories:
     "Filter lookup for Category (Fuel, Flights, Shopping, …).",
-  transaction_subcategories:
-    "Filter lookup for Subcategory.",
+  transaction_subcategories: "Filter lookup for Subcategory.",
   transaction_types:
     "Filter lookup for cash-flow Transaction type (income / transfers / expenses).",
   transaction_kinds:
     "Retired lookup for Type chips. Folded into txn_code (fee / subscription / …).",
-  app_modules:
-    "Which app pages show in the sidebar.",
-  scratch_notes:
-    "Scratch pads on Analysis (tabs + vendor rows).",
-  users:
-    "Signed-in people. Role controls which modules they get.",
-  auth_sessions:
-    "Active login sessions for a user.",
-  auth_accounts:
-    "Password / OAuth provider link for a user.",
-  auth_refresh_tokens:
-    "Tokens used to renew a session.",
+  app_modules: "Which app pages show in the sidebar.",
+  scratch_notes: "Scratch pads on Analysis (tabs + vendor rows).",
+  users: "Signed-in people. Role controls which modules they get.",
+  auth_sessions: "Active login sessions for a user.",
+  auth_accounts: "Password / OAuth provider link for a user.",
+  auth_refresh_tokens: "Tokens used to renew a session.",
   auth_verification_codes:
     "One-time codes for email verify / magic link / OTP.",
-  auth_verifiers:
-    "PKCE verifiers for OAuth handshakes.",
-  auth_rate_limits:
-    "Sign-in attempt counters (stops brute force).",
+  auth_verifiers: "PKCE verifiers for OAuth handshakes.",
+  auth_rate_limits: "Sign-in attempt counters (stops brute force).",
 };
 
 export const COLUMN_HELP: Record<string, Record<string, string>> = {
@@ -87,7 +76,8 @@ export const COLUMN_HELP: Record<string, Record<string, string>> = {
     transaction_sum: "All line amounts added up.",
     computed_closing: "Opening plus lines. Should match closing.",
     balance_delta: "Gap between computed close and printed close. Want ~0.",
-    balance_ok: "1 = PDF math checks out. 0 = mismatch. Empty = we could not tell.",
+    balance_ok:
+      "1 = PDF math checks out. 0 = mismatch. Empty = we could not tell.",
     ocr_markdown: "Raw text we pulled off the PDF. Debug parse errors here.",
     error: "Why import failed, if it did.",
     created_at: "When you uploaded the PDF.",
@@ -102,6 +92,10 @@ export const COLUMN_HELP: Record<string, Record<string, string>> = {
     source: "Where the row came from, usually statement.",
     statement_upload_id: "Which PDF created or updated this row.",
     updated_at: "When we last changed this ledger row.",
+    currency: "Ledger currency for the posted amount (usually CAD).",
+    foreign_currency: "Original purchase currency when the line is FX.",
+    foreign_amount: "Original foreign charge size printed on the statement.",
+    exchange_rate: "FX rate printed on the line when present.",
     spread: "50/30/20 bucket name: Needs, Wants, or Savings.",
     spread_id: "FK to transaction_spreads for type-safe Spread filters.",
   },
@@ -109,7 +103,8 @@ export const COLUMN_HELP: Record<string, Record<string, string>> = {
     transaction_id: "Which ledger row this money belongs to.",
     amount_minor: "Amount in cents. Positive = money out. Negative = money in.",
     currency_code: "Currency for this amount (CAD, USD).",
-    running_balance_minor: "Account balance after this line in cents, if known.",
+    running_balance_minor:
+      "Account balance after this line in cents, if known.",
   },
   transaction_dates: {
     transaction_id: "Which ledger row these dates belong to.",
@@ -133,7 +128,8 @@ export const COLUMN_HELP: Record<string, Record<string, string>> = {
     foreign_currency: "Foreign currency code, if present.",
   },
   transaction_bank_categories: {
-    transaction_id: "Which ledger row these bank labels belong to (retired table).",
+    transaction_id:
+      "Which ledger row these bank labels belong to (retired table).",
   },
   entities: {
     id: "This merchant node's number.",
@@ -156,7 +152,8 @@ export const COLUMN_HELP: Record<string, Record<string, string>> = {
   },
   taxonomy_nodes: {
     id: "This category node's number.",
-    facet: "Which list: section, category, subcategory, type, transaction_type, tag, store_type, food_type.",
+    facet:
+      "Which list: section, category, subcategory, type, transaction_type, tag, store_type, food_type.",
     slug: "Stable key (food).",
     name: "Label you read (Food, Drink).",
     parent_id: "Parent in the spend tree. Empty on top sections.",

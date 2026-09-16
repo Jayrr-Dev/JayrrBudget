@@ -330,9 +330,91 @@ function buildColumns(accountNameById: Map<string, string>) {
       columns: columnHelper.columns([
         columnHelper.accessor("isoCurrencyCode", {
           header: "CCY",
-          meta: bandMeta("4rem", "read", "Currency code (usually CAD)."),
+          meta: bandMeta(
+            "4rem",
+            "read",
+            "Ledger currency for the posted amount (usually CAD).",
+          ),
           cell: ({ getValue }) => textOrDash(getValue()),
+          filterFn: "equalsString",
           sortFn: "text",
+        }),
+        columnHelper.accessor("foreignCurrency", {
+          header: "Foreign",
+          meta: bandMeta(
+            "5rem",
+            "read",
+            "Original purchase currency when the line is FX (PHP, USD).",
+          ),
+          cell: ({ getValue }) => textOrDash(getValue()),
+          filterFn: "equalsString",
+          sortFn: "text",
+        }),
+        columnHelper.accessor("foreignAmount", {
+          header: "FX amt",
+          meta: {
+            ...bandMeta(
+              undefined,
+              "read",
+              "Original foreign charge size printed on the statement.",
+            ),
+            autoWidth: (_value: unknown, row: unknown) => {
+              const txn = row as DashboardTransaction;
+              if (txn.foreignAmount == null) return "-";
+              return formatMoney(
+                Number(txn.foreignAmount),
+                txn.foreignCurrency ?? "CAD",
+              );
+            },
+            autoWidthPadCh: 2,
+            autoWidthMinCh: 10,
+          },
+          cell: ({ row, getValue }) => {
+            const amount = getValue();
+            if (amount == null) {
+              return (
+                <span className="text-sm text-[var(--muted-foreground)]">
+                  -
+                </span>
+              );
+            }
+            return (
+              <MoneyText
+                amount={Number(amount)}
+                currency={row.original.foreignCurrency ?? "CAD"}
+                className="leading-snug"
+              />
+            );
+          },
+          filterFn: "amountLogRange",
+          sortFn: "basic",
+        }),
+        columnHelper.accessor("exchangeRate", {
+          header: "Rate",
+          meta: bandMeta(
+            "6rem",
+            "read",
+            "FX rate printed on the line (e.g. 0.024).",
+          ),
+          cell: ({ getValue }) => {
+            const rate = getValue();
+            if (rate == null) {
+              return (
+                <span className="text-sm text-[var(--muted-foreground)]">
+                  -
+                </span>
+              );
+            }
+            return (
+              <span
+                className="font-mono text-xs tabular-nums"
+                title={String(rate)}
+              >
+                {Number(rate)}
+              </span>
+            );
+          },
+          sortFn: "basic",
         }),
       ]),
     }),

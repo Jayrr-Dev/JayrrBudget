@@ -1,3 +1,4 @@
+import { COLUMN_HELP } from "@/domains/db-explorer/domain/columnHelp";
 import type {
   DbColumnInfo,
   DbForeignKey,
@@ -5,12 +6,11 @@ import type {
   DbTableBrowseResult,
   DbTableInfo,
 } from "@/domains/db-explorer/domain/types";
-import { COLUMN_HELP } from "@/domains/db-explorer/domain/columnHelp";
-import { api } from "@/shared/convex/httpClient";
 import {
   cachedConvexRead,
   SHORT_READ_TTL_MS,
 } from "@/shared/convex/cachedRead";
+import { api } from "@/shared/convex/httpClient";
 import { getAuthenticatedConvexClient } from "@/shared/convex/httpClient.server";
 
 const CONVEX_TO_UI: Record<string, string> = {
@@ -28,6 +28,7 @@ const CONVEX_TO_UI: Record<string, string> = {
   transactionKinds: "transaction_kinds",
   appModules: "app_modules",
   scratchNotes: "scratch_notes",
+  canvasScenes: "canvas_scenes",
   users: "users",
   authSessions: "auth_sessions",
   authAccounts: "auth_accounts",
@@ -193,13 +194,7 @@ const FALLBACK_COLUMNS: Record<string, string[]> = {
     "transactionId",
     "userId",
   ],
-  statement_uploads: [
-    "uploadId",
-    "filename",
-    "status",
-    "accountId",
-    "userId",
-  ],
+  statement_uploads: ["uploadId", "filename", "status", "accountId", "userId"],
   transactions: [
     "transactionId",
     "posted",
@@ -288,15 +283,17 @@ export async function getSchemaGraph(): Promise<DbSchemaGraph> {
       return client.query(api.dbExplorer.schemaOverview, {});
     },
   });
-  const tables: DbTableInfo[] = overview.tables.map((table: (typeof overview.tables)[number]) => {
-    const uiName = table.uiName ?? CONVEX_TO_UI[table.name] ?? table.name;
-    return {
-      name: uiName,
-      rowCount: table.approxCount,
-      columns: buildColumns(uiName, table.sampleKeys),
-      scope: table.scope === "auth" ? "auth" : "ledger",
-    };
-  });
+  const tables: DbTableInfo[] = overview.tables.map(
+    (table: (typeof overview.tables)[number]) => {
+      const uiName = table.uiName ?? CONVEX_TO_UI[table.name] ?? table.name;
+      return {
+        name: uiName,
+        rowCount: table.approxCount,
+        columns: buildColumns(uiName, table.sampleKeys),
+        scope: table.scope === "auth" ? "auth" : "ledger",
+      };
+    },
+  );
 
   const present = new Set(tables.map((table) => table.name));
   const foreignKeys = LEDGER_FOREIGN_KEYS.filter(

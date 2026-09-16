@@ -1,7 +1,7 @@
 import { v } from "convex/values";
+import type { Id } from "./_generated/dataModel";
 import { query } from "./_generated/server";
 import { requireRole } from "./lib/auth";
-import type { Id } from "./_generated/dataModel";
 
 /**
  * UI snake_case → Convex table.
@@ -28,6 +28,7 @@ const TABLE_META = {
   transactions: { convex: "transactions", scope: "ledger" },
   app_modules: { convex: "appModules", scope: "ledger" },
   scratch_notes: { convex: "scratchNotes", scope: "ledger" },
+  canvas_scenes: { convex: "canvasScenes", scope: "ledger" },
   // Auth / users (global admin view)
   users: { convex: "users", scope: "auth" },
   auth_sessions: { convex: "authSessions", scope: "auth" },
@@ -56,7 +57,10 @@ function serializeRow(
 ): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(row)) {
-    if (redactSecrets && (key === "secret" || key === "code" || key === "verifier")) {
+    if (
+      redactSecrets &&
+      (key === "secret" || key === "code" || key === "verifier")
+    ) {
       out[key] = value ? "[redacted]" : null;
       continue;
     }

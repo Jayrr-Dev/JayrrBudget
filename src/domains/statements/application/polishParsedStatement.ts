@@ -1,12 +1,10 @@
-import { cleanMerchantDescriptor } from "@convex/lib/cleanMerchantDescriptor";
 import { normalizeStatementAccountType } from "@/domains/dashboard/domain/accountCategory";
 import { resolveAccountMask } from "@/domains/statements/application/accountMask";
-import {
-  normalizeParsedCategories,
-} from "@/domains/statements/application/normalizeParsedCategories";
 import type { CategoryVocabulary } from "@/domains/statements/application/categoryVocabulary";
+import { normalizeParsedCategories } from "@/domains/statements/application/normalizeParsedCategories";
 import { fillFxGapsFromDescription } from "@/domains/statements/domain/extractFxFromDescription";
 import type { ParsedStatement } from "@/domains/statements/domain/parsedStatement";
+import { cleanMerchantDescriptor } from "@convex/lib/cleanMerchantDescriptor";
 
 type ParsedTxn = ParsedStatement["transactions"][number];
 
@@ -142,7 +140,9 @@ const CATEGORY_FIXES: CategoryFix[] = [
   },
 ];
 
-export function applyParseCategoryFixes(parsed: ParsedStatement): ParsedStatement {
+export function applyParseCategoryFixes(
+  parsed: ParsedStatement,
+): ParsedStatement {
   return {
     ...parsed,
     transactions: parsed.transactions.map((txn) => {
@@ -197,7 +197,9 @@ function flipAmounts(parsed: ParsedStatement): ParsedStatement {
  * CIBC chequing prints withdrawals as negative cash. Ledger wants positive = out.
  * If opening+sum=closing on a deposit account, flip every amount.
  */
-export function alignParsedAmountSigns(parsed: ParsedStatement): ParsedStatement {
+export function alignParsedAmountSigns(
+  parsed: ParsedStatement,
+): ParsedStatement {
   const opening = parsed.openingBalance;
   const closing = parsed.closingBalance;
   if (opening == null || closing == null || parsed.transactions.length === 0) {
@@ -225,8 +227,8 @@ function cleanTransactionText(parsed: ParsedStatement): ParsedStatement {
       ...txn,
       description: cleanStatementLine(txn.description),
       merchantName: txn.merchantName
-        ? cleanMerchantDescriptor(cleanStatementLine(txn.merchantName)) ??
-          cleanStatementLine(txn.merchantName)
+        ? (cleanMerchantDescriptor(cleanStatementLine(txn.merchantName)) ??
+          cleanStatementLine(txn.merchantName))
         : txn.merchantName,
     })),
   };
@@ -258,7 +260,11 @@ export function polishParsedStatement(
     normalizeParsedCategories(withMask, options.vocabulary),
   );
   const deduped = options.dedupe(categorized);
-  return alignParsedAmountSigns(deduped);
+  const withFx = {
+    ...deduped,
+    transactions: deduped.transactions.map(fillFxGapsFromDescription),
+  };
+  return alignParsedAmountSigns(withFx);
 }
 
 export type PolishPaperFactsOptions = {

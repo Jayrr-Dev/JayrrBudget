@@ -1,4 +1,3 @@
-import { api } from "@convex/_generated/api";
 import { decryptJson } from "@/crypto/envelope";
 import { getVaultMasterKey } from "@/crypto/session";
 import type { EncryptedEnvelopeV1, EnvelopeKind } from "@/crypto/types";
@@ -13,9 +12,13 @@ import type {
   PrivateStatementLog,
   PrivateTransaction,
 } from "@/domains/vault/domain/privateLedger";
+import { api } from "@convex/_generated/api";
 
 export type VaultListClient = {
-  query: (reference: unknown, args: unknown) => Promise<{
+  query: (
+    reference: unknown,
+    args: unknown,
+  ) => Promise<{
     page: Array<Record<string, unknown>>;
     isDone: boolean;
     continueCursor: string | null;
@@ -33,7 +36,11 @@ const EMPTY: PrivateLedger = {
   loanDocuments: [],
 };
 
-function asTx(value: unknown, recordId: string, revision: number): PrivateTransaction | null {
+function asTx(
+  value: unknown,
+  recordId: string,
+  revision: number,
+): PrivateTransaction | null {
   if (!value || typeof value !== "object") return null;
   const row = value as Record<string, unknown>;
   const date = String(row.date ?? "");
@@ -47,28 +54,46 @@ function asTx(value: unknown, recordId: string, revision: number): PrivateTransa
     description,
     amount,
     currency: String(row.currency ?? row.isoCurrencyCode ?? "CAD"),
+    foreignAmount:
+      row.foreignAmount == null || !Number.isFinite(Number(row.foreignAmount))
+        ? null
+        : Number(row.foreignAmount),
+    foreignCurrency:
+      row.foreignCurrency == null ? null : String(row.foreignCurrency),
+    exchangeRate:
+      row.exchangeRate == null || !Number.isFinite(Number(row.exchangeRate))
+        ? null
+        : Number(row.exchangeRate),
     accountId: row.accountId == null ? null : String(row.accountId),
     merchantName: row.merchantName == null ? null : String(row.merchantName),
     merchantClean: row.merchantClean == null ? null : String(row.merchantClean),
     sectionName: row.sectionName == null ? null : String(row.sectionName),
     categoryName: row.categoryName == null ? null : String(row.categoryName),
-    subcategoryName: row.subcategoryName == null ? null : String(row.subcategoryName),
+    subcategoryName:
+      row.subcategoryName == null ? null : String(row.subcategoryName),
     spreadName: row.spreadName == null ? null : String(row.spreadName),
     tagNames: Array.isArray(row.tagNames) ? row.tagNames.map(String) : [],
     pending: Boolean(row.pending),
-    authorizedDate: row.authorizedDate == null ? null : String(row.authorizedDate),
+    authorizedDate:
+      row.authorizedDate == null ? null : String(row.authorizedDate),
     city: row.city == null ? null : String(row.city),
     region: row.region == null ? null : String(row.region),
     country: row.country == null ? null : String(row.country),
-    transactionTypeName: row.transactionTypeName == null ? null : String(row.transactionTypeName),
+    transactionTypeName:
+      row.transactionTypeName == null ? null : String(row.transactionTypeName),
     txnCode: row.txnCode == null ? null : String(row.txnCode),
     channel: row.channel == null ? null : String(row.channel),
-    statementRecordId: row.statementRecordId == null ? null : String(row.statementRecordId),
+    statementRecordId:
+      row.statementRecordId == null ? null : String(row.statementRecordId),
     source: row.source == null ? null : String(row.source),
   };
 }
 
-function asAccount(value: unknown, recordId: string, revision: number): PrivateAccount | null {
+function asAccount(
+  value: unknown,
+  recordId: string,
+  revision: number,
+): PrivateAccount | null {
   if (!value || typeof value !== "object") return null;
   const row = value as Record<string, unknown>;
   const accountId = String(row.accountId ?? recordId);
@@ -83,9 +108,12 @@ function asAccount(value: unknown, recordId: string, revision: number): PrivateA
     mask: row.mask == null ? null : String(row.mask),
     type: row.type == null ? null : String(row.type),
     subtype: row.subtype == null ? null : String(row.subtype),
-    currentBalance: row.currentBalance == null ? null : Number(row.currentBalance),
-    availableBalance: row.availableBalance == null ? null : Number(row.availableBalance),
-    isoCurrencyCode: row.isoCurrencyCode == null ? null : String(row.isoCurrencyCode),
+    currentBalance:
+      row.currentBalance == null ? null : Number(row.currentBalance),
+    availableBalance:
+      row.availableBalance == null ? null : Number(row.availableBalance),
+    isoCurrencyCode:
+      row.isoCurrencyCode == null ? null : String(row.isoCurrencyCode),
   };
 }
 
@@ -114,7 +142,11 @@ function asMerchant(
   };
 }
 
-function asNote(value: unknown, recordId: string, revision: number): PrivateNote | null {
+function asNote(
+  value: unknown,
+  recordId: string,
+  revision: number,
+): PrivateNote | null {
   if (!value || typeof value !== "object") return null;
   const row = value as Record<string, unknown>;
   return {
@@ -126,7 +158,11 @@ function asNote(value: unknown, recordId: string, revision: number): PrivateNote
   };
 }
 
-function asScratch(value: unknown, recordId: string, revision: number): PrivateScratchPad | null {
+function asScratch(
+  value: unknown,
+  recordId: string,
+  revision: number,
+): PrivateScratchPad | null {
   if (!value || typeof value !== "object") return null;
   const row = value as Record<string, unknown>;
   if (!Array.isArray(row.tabs)) return null;
@@ -145,7 +181,11 @@ function asNumber(value: unknown): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-function asStatementLog(value: unknown, recordId: string, revision: number): PrivateStatementLog | null {
+function asStatementLog(
+  value: unknown,
+  recordId: string,
+  revision: number,
+): PrivateStatementLog | null {
   if (!value || typeof value !== "object") return null;
   const row = value as Record<string, unknown>;
   if (row.type != null && row.type !== "statement_import") return null;
@@ -157,7 +197,8 @@ function asStatementLog(value: unknown, recordId: string, revision: number): Pri
     filename,
     fileHash: String(row.fileHash ?? ""),
     status: String(row.status ?? "completed"),
-    institutionName: row.institutionName == null ? null : String(row.institutionName),
+    institutionName:
+      row.institutionName == null ? null : String(row.institutionName),
     accountName: row.accountName == null ? null : String(row.accountName),
     accountMask: row.accountMask == null ? null : String(row.accountMask),
     currency: row.currency == null ? null : String(row.currency),
@@ -166,8 +207,12 @@ function asStatementLog(value: unknown, recordId: string, revision: number): Pri
     insertedCount: asNumber(row.insertedCount),
     updatedCount: asNumber(row.updatedCount),
     skippedCount: asNumber(row.skippedCount),
-    statementPeriodStart: row.statementPeriodStart == null ? null : String(row.statementPeriodStart),
-    statementPeriodEnd: row.statementPeriodEnd == null ? null : String(row.statementPeriodEnd),
+    statementPeriodStart:
+      row.statementPeriodStart == null
+        ? null
+        : String(row.statementPeriodStart),
+    statementPeriodEnd:
+      row.statementPeriodEnd == null ? null : String(row.statementPeriodEnd),
     openingBalance: asNumber(row.openingBalance),
     closingBalance: asNumber(row.closingBalance),
     transactionSum: asNumber(row.transactionSum),
@@ -178,7 +223,9 @@ function asStatementLog(value: unknown, recordId: string, revision: number): Pri
     ocrMarkdown: row.ocrMarkdown == null ? null : String(row.ocrMarkdown),
     ocrRecordId: row.ocrRecordId == null ? null : String(row.ocrRecordId),
     ocrRevision: null,
-    transactionIds: Array.isArray(row.transactionIds) ? row.transactionIds.map(String) : [],
+    transactionIds: Array.isArray(row.transactionIds)
+      ? row.transactionIds.map(String)
+      : [],
   };
 }
 
@@ -235,7 +282,11 @@ function asLoanDocument(
   };
 }
 
-function asLoan(value: unknown, recordId: string, revision: number): PrivateLoanTerms | null {
+function asLoan(
+  value: unknown,
+  recordId: string,
+  revision: number,
+): PrivateLoanTerms | null {
   if (!value || typeof value !== "object") return null;
   const row = value as Record<string, unknown>;
   const accountId = String(row.accountId ?? "");
@@ -244,7 +295,12 @@ function asLoan(value: unknown, recordId: string, revision: number): PrivateLoan
   const paymentAmount = Number(row.paymentAmount);
   const paymentCount = Number(row.paymentCount);
   const firstPaymentDate = String(row.firstPaymentDate ?? "");
-  if (!accountId || !firstPaymentDate || ![principal, annualRate, paymentAmount, paymentCount].every(Number.isFinite)) return null;
+  if (
+    !accountId ||
+    !firstPaymentDate ||
+    ![principal, annualRate, paymentAmount, paymentCount].every(Number.isFinite)
+  )
+    return null;
   return {
     recordId,
     revision,
@@ -254,7 +310,8 @@ function asLoan(value: unknown, recordId: string, revision: number): PrivateLoan
     paymentAmount,
     firstPaymentDate,
     paymentCount,
-    matchMerchantClean: row.matchMerchantClean == null ? null : String(row.matchMerchantClean),
+    matchMerchantClean:
+      row.matchMerchantClean == null ? null : String(row.matchMerchantClean),
     matchAmount: row.matchAmount == null ? null : Number(row.matchAmount),
   };
 }
@@ -295,7 +352,12 @@ export async function loadPrivateLedger(
       try {
         const value = await decryptJson<unknown>(
           envelope,
-          { userId: input.userId, recordId, kind, keyId: String(row.keyId ?? "") },
+          {
+            userId: input.userId,
+            recordId,
+            kind,
+            keyId: String(row.keyId ?? ""),
+          },
           masterKey,
         );
         if (kind === "tx" || kind === "tx_batch") {
@@ -382,7 +444,9 @@ export async function loadPrivateLedger(
     ledger.statementLogs.push({
       recordId: "statement-inferred",
       revision: 0,
-      filename: account?.name ? `${account.name} statement` : "Encrypted statement",
+      filename: account?.name
+        ? `${account.name} statement`
+        : "Encrypted statement",
       fileHash: "",
       status: "completed",
       institutionName: account?.officialName ?? account?.name ?? null,

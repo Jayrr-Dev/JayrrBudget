@@ -12,6 +12,7 @@ import type * as aiByok from "../aiByok.js";
 import type * as aiRules from "../aiRules.js";
 import type * as analysis from "../analysis.js";
 import type * as auth from "../auth.js";
+import type * as canvasScenes from "../canvasScenes.js";
 import type * as categorization from "../categorization.js";
 import type * as classifications from "../classifications.js";
 import type * as dashboard from "../dashboard.js";
@@ -72,6 +73,7 @@ declare const fullApi: ApiFromModules<{
   aiRules: typeof aiRules;
   analysis: typeof analysis;
   auth: typeof auth;
+  canvasScenes: typeof canvasScenes;
   categorization: typeof categorization;
   classifications: typeof classifications;
   dashboard: typeof dashboard;

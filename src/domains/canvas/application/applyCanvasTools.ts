@@ -310,8 +310,8 @@ function buildContainer(
             text: input.text,
             fontSize: input.fontSize ?? DEFAULT_FONT_SIZE,
             fontFamily: fontFamily(input.font),
-            textAlign: input.textAlign ?? "center",
-            verticalAlign: input.verticalAlign ?? "middle",
+            textAlign: input.textAlign ?? "left",
+            verticalAlign: input.verticalAlign ?? "top",
             strokeColor: resolveCanvasColor(input.textColor, DEFAULT_TEXT),
           }
         : undefined,

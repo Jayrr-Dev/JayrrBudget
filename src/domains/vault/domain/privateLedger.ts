@@ -5,6 +5,12 @@ export type PrivateTransaction = {
   description: string;
   amount: number;
   currency: string;
+  /** Original purchase currency when the line is FX. */
+  foreignCurrency?: string | null;
+  /** Original amount in foreignCurrency when printed. */
+  foreignAmount?: number | null;
+  /** Statement FX rate when printed. */
+  exchangeRate?: number | null;
   accountId?: string | null;
   authorizedDate?: string | null;
   city?: string | null;
@@ -69,7 +75,14 @@ export type PrivateScratchPad = {
   tabs: Array<{
     id: string;
     name: string;
-    rows: Array<{ id: string; name: string; spend: number; count: number; currency: string; parent?: string }>;
+    rows: Array<{
+      id: string;
+      name: string;
+      spend: number;
+      count: number;
+      currency: string;
+      parent?: string;
+    }>;
   }>;
   activeId: string;
   receiveId: string;

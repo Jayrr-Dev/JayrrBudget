@@ -1,11 +1,13 @@
-import type { ImportBankStatementSuccess } from "@/domains/statements/domain/importResult";
 import type { MutationClient, PrivateRecordInput } from "@/crypto/vaultRecords";
 import { savePrivateRecords } from "@/crypto/vaultRecords";
 import { toSlug } from "@/domains/enrichment/domain/slug";
+import type { ImportBankStatementSuccess } from "@/domains/statements/domain/importResult";
 import type { PrivateLedger } from "@/domains/vault/domain/privateLedger";
 
 function txValue(
-  txn: NonNullable<ImportBankStatementSuccess["vaultPayload"]>["transactions"][number],
+  txn: NonNullable<
+    ImportBankStatementSuccess["vaultPayload"]
+  >["transactions"][number],
   input: {
     currency: string;
     accountId: string;
@@ -19,6 +21,9 @@ function txValue(
     description: txn.description,
     amount: txn.amount,
     currency: input.currency,
+    foreignAmount: txn.foreignAmount ?? null,
+    foreignCurrency: txn.foreignCurrency ?? null,
+    exchangeRate: txn.exchangeRate ?? null,
     accountId: input.accountId,
     pending: txn.pending,
     city: txn.city,
@@ -50,16 +55,21 @@ export async function encryptStatementImportToVault(input: {
   ledger?: PrivateLedger;
 }) {
   const payload = input.result.vaultPayload;
-  if (!payload) throw new Error("Statement parse did not return vault payload.");
+  if (!payload)
+    throw new Error("Statement parse did not return vault payload.");
 
   const accountRecordId = `account-${payload.accountId}`;
   const existingAccount = input.ledger?.accounts.find(
-    (account) => account.recordId === accountRecordId || account.accountId === payload.accountId,
+    (account) =>
+      account.recordId === accountRecordId ||
+      account.accountId === payload.accountId,
   );
   const fileHash = input.result.fileHash?.trim() || `import-${Date.now()}`;
   const statementRecordId = `statement-${fileHash}`;
   const ocrRecordId = `ocr-${fileHash}`;
-  const existingLog = input.ledger?.statementLogs.find((log) => log.fileHash && log.fileHash === fileHash);
+  const existingLog = input.ledger?.statementLogs.find(
+    (log) => log.fileHash && log.fileHash === fileHash,
+  );
   const now = new Date().toISOString();
   const transactionIds = payload.transactions.map((txn) => txn.transactionId);
 
@@ -88,7 +98,9 @@ export async function encryptStatementImportToVault(input: {
       expectedRevision: existingAccount?.revision ?? null,
     },
     ...payload.transactions.map((txn) => {
-      const existing = input.ledger?.transactions.find((row) => row.recordId === txn.transactionId);
+      const existing = input.ledger?.transactions.find(
+        (row) => row.recordId === txn.transactionId,
+      );
       return {
         recordId: txn.transactionId,
         kind: "tx" as const,
@@ -102,7 +114,9 @@ export async function encryptStatementImportToVault(input: {
       };
     }),
     ...[...merchants.entries()].map(([merchantId, name]) => {
-      const existing = input.ledger?.merchants.find((row) => row.merchantId === merchantId);
+      const existing = input.ledger?.merchants.find(
+        (row) => row.merchantId === merchantId,
+      );
       return {
         recordId: `merchant-${merchantId}`,
         kind: "note" as const,

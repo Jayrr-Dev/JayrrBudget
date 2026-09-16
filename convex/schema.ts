@@ -493,6 +493,13 @@ export default defineSchema({
     .index("by_userId", ["userId"])
     .index("by_userId_tabId", ["userId", "tabId"]),
 
+  /** Per-user Excalidraw scene (serializeAsJSON string). One doc per user. */
+  canvasScenes: defineTable({
+    userId: v.id("users"),
+    sceneJson: v.string(),
+    updatedAt: v.number(),
+  }).index("by_userId", ["userId"]),
+
   /** Per-user AI preferences for that owner's statement PDF imports only. */
   userAiRules: defineTable({
     userId,

@@ -223,6 +223,11 @@ async function importBankStatementWithKey(
         city: txn.locationCity,
         region: txn.locationRegion,
         country: txn.locationCountry,
+        foreignAmount: txn.foreignAmount,
+        foreignCurrency: txn.foreignCurrency
+          ? normalizeCurrencyCode(txn.foreignCurrency)
+          : null,
+        exchangeRate: txn.exchangeRate,
       };
     });
 

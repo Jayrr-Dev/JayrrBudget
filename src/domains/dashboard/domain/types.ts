@@ -65,6 +65,12 @@ export type DashboardTransaction = {
   enrichmentStatus: string | null;
   amount: number;
   isoCurrencyCode: string | null;
+  /** Original purchase currency when the line is FX. */
+  foreignCurrency: string | null;
+  /** Original amount in foreignCurrency when printed. */
+  foreignAmount: number | null;
+  /** Statement FX rate when printed. */
+  exchangeRate: number | null;
   date: string;
   authorizedDate: string | null;
   pending: boolean;

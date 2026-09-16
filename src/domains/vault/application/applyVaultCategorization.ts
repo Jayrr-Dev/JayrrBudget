@@ -1,8 +1,11 @@
-import { toSlug } from "@/domains/enrichment/domain/slug";
 import type { MutationClient } from "@/crypto/vaultRecords";
 import { savePrivateRecords } from "@/crypto/vaultRecords";
+import { toSlug } from "@/domains/enrichment/domain/slug";
 import type { LabeledTransaction } from "@/domains/statements/application/categorizeStatement";
-import type { PrivateLedger, PrivateTransaction } from "@/domains/vault/domain/privateLedger";
+import type {
+  PrivateLedger,
+  PrivateTransaction,
+} from "@/domains/vault/domain/privateLedger";
 
 function labeledTxValue(tx: PrivateTransaction, label: LabeledTransaction) {
   return {
@@ -11,6 +14,9 @@ function labeledTxValue(tx: PrivateTransaction, label: LabeledTransaction) {
     description: tx.description,
     amount: tx.amount,
     currency: tx.currency,
+    foreignAmount: tx.foreignAmount ?? null,
+    foreignCurrency: tx.foreignCurrency ?? null,
+    exchangeRate: tx.exchangeRate ?? null,
     accountId: tx.accountId ?? null,
     pending: Boolean(tx.pending),
     city: tx.city ?? null,
@@ -28,10 +34,7 @@ function labeledTxValue(tx: PrivateTransaction, label: LabeledTransaction) {
     statementRecordId: tx.statementRecordId ?? null,
     source: tx.source ?? "statement",
     tagNames: [
-      ...new Set([
-        ...(tx.tagNames ?? []),
-        ...(label.profile.tags ?? []),
-      ]),
+      ...new Set([...(tx.tagNames ?? []), ...(label.profile.tags ?? [])]),
     ],
   };
 }
@@ -48,7 +51,9 @@ export async function applyVaultCategorization(input: {
   const records = [];
   const merchants = new Map<string, string>();
   for (const label of input.labeled) {
-    const tx = input.ledger.transactions.find((row) => row.recordId === label.transactionId);
+    const tx = input.ledger.transactions.find(
+      (row) => row.recordId === label.transactionId,
+    );
     if (!tx) continue;
     records.push({
       recordId: tx.recordId,
@@ -60,7 +65,9 @@ export async function applyVaultCategorization(input: {
     if (name) merchants.set(toSlug(name) || name, name);
   }
   for (const [merchantId, name] of merchants) {
-    const existing = input.ledger.merchants.find((row) => row.merchantId === merchantId);
+    const existing = input.ledger.merchants.find(
+      (row) => row.merchantId === merchantId,
+    );
     records.push({
       recordId: `merchant-${merchantId}`,
       kind: "note" as const,

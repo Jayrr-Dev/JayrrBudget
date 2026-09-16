@@ -131,6 +131,9 @@ const paperTxnValidator = v.object({
   city: v.union(v.string(), v.null()),
   region: v.union(v.string(), v.null()),
   country: v.union(v.string(), v.null()),
+  foreignAmount: v.optional(v.union(v.number(), v.null())),
+  foreignCurrency: v.optional(v.union(v.string(), v.null())),
+  exchangeRate: v.optional(v.union(v.number(), v.null())),
 });
 
 const importResultValidator = v.object({
@@ -483,6 +486,9 @@ export const importPaperFacts = mutation({
         debit,
         credit,
         currency: args.currency,
+        foreignAmount: txn.foreignAmount ?? null,
+        foreignCurrency: txn.foreignCurrency ?? null,
+        exchangeRate: txn.exchangeRate ?? null,
         pending: txn.pending,
         city: txn.city,
         region: txn.region,

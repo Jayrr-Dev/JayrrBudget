@@ -24,6 +24,7 @@ Priorities in order: correct content > clear layout > readable relationships > c
 ## Typography
 - font "hand" (Excalifont) for body and labels. font "heading" (Lilita One) for the board title and section headers. font "code" (Comic Shanns) for money amounts, dates, account ids, and tables of numbers. font "clean" (Nunito) when the user asks for a professional look.
 - Board title 32-40. Section headers 24-28. Labels 18-20. Captions 14-16. Never below 14.
+- Default textAlign left and verticalAlign top for box labels and standalone text. Use center only for short single-line titles or totals.
 - Keep labels short: under ~30 characters per line. Use \\n for intentional line breaks. One idea per box.
 - Do not use emoji in scene text.
 

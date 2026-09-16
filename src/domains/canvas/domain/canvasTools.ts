@@ -37,19 +37,25 @@ const styleFields = {
   stroke: colorSchema.optional().describe("Outline color. Default black."),
   fill: colorSchema
     .optional()
-    .describe("Background color. Default transparent. Use *-light / *-tint names for readable pastel fills."),
+    .describe(
+      "Background color. Default transparent. Use *-light / *-tint names for readable pastel fills.",
+    ),
   fillStyle: z.enum(["solid", "hachure", "cross-hatch", "zigzag"]).optional(),
   strokeWidth: z.union([z.literal(1), z.literal(2), z.literal(4)]).optional(),
   strokeStyle: z.enum(["solid", "dashed", "dotted"]).optional(),
   roughness: z
     .union([z.literal(0), z.literal(1), z.literal(2)])
     .optional()
-    .describe("0 = clean architect lines, 1 = default sketchy, 2 = very rough."),
+    .describe(
+      "0 = clean architect lines, 1 = default sketchy, 2 = very rough.",
+    ),
   opacity: z.number().min(0).max(100).optional(),
   group: z
     .string()
     .optional()
-    .describe("Elements sharing the same group key get grouped so they move together."),
+    .describe(
+      "Elements sharing the same group key get grouped so they move together.",
+    ),
 };
 
 const refField = z
@@ -64,8 +70,8 @@ const labelFields = {
   fontSize: z.number().optional().describe("Default 20. Headings 28-36."),
   font: fontSchema.optional(),
   textColor: colorSchema.optional().describe("Label color. Default black."),
-  textAlign: textAlignSchema.optional(),
-  verticalAlign: verticalAlignSchema.optional(),
+  textAlign: textAlignSchema.optional().describe("Default left."),
+  verticalAlign: verticalAlignSchema.optional().describe("Default top."),
 };
 
 const containerSchema = z.object({
@@ -74,8 +80,13 @@ const containerSchema = z.object({
   x: z.number(),
   y: z.number(),
   w: z.number().describe("Width. Labeled boxes: at least 160."),
-  h: z.number().describe("Height. Labeled boxes: at least 60. Grows to fit text."),
-  rounded: z.boolean().optional().describe("Rounded corners (rectangles). Default true."),
+  h: z
+    .number()
+    .describe("Height. Labeled boxes: at least 60. Grows to fit text."),
+  rounded: z
+    .boolean()
+    .optional()
+    .describe("Rounded corners (rectangles). Default true."),
   ...labelFields,
   ...styleFields,
 });
@@ -85,8 +96,13 @@ const textSchema = z.object({
   ref: refField,
   x: z.number(),
   y: z.number(),
-  text: z.string().describe("Use \\n for line breaks. Size is measured automatically."),
-  fontSize: z.number().optional().describe("Default 20. Titles 32-40, captions 14-16."),
+  text: z
+    .string()
+    .describe("Use \\n for line breaks. Size is measured automatically."),
+  fontSize: z
+    .number()
+    .optional()
+    .describe("Default 20. Titles 32-40, captions 14-16."),
   font: fontSchema.optional(),
   color: colorSchema.optional().describe("Text color. Default black."),
   textAlign: textAlignSchema.optional(),
@@ -115,25 +131,36 @@ const arrowSchema = z.object({
   from: z
     .string()
     .optional()
-    .describe("ref (this call) or existing element id the arrow starts at. Anchor point is computed for you."),
+    .describe(
+      "ref (this call) or existing element id the arrow starts at. Anchor point is computed for you.",
+    ),
   to: z
     .string()
     .optional()
-    .describe("ref (this call) or existing element id the arrow points to. Anchor point is computed for you."),
+    .describe(
+      "ref (this call) or existing element id the arrow points to. Anchor point is computed for you.",
+    ),
   route: z
     .enum(["straight", "elbow", "curved"])
     .optional()
-    .describe("elbow = orthogonal segments (default for flows), straight, or curved."),
+    .describe(
+      "elbow = orthogonal segments (default for flows), straight, or curved.",
+    ),
   x: z.number().optional().describe("Only when from/to are omitted."),
   y: z.number().optional().describe("Only when from/to are omitted."),
   points: z
     .array(pointSchema)
     .min(2)
     .optional()
-    .describe("Only when from/to are omitted. Relative to x,y; first point is [0,0]."),
+    .describe(
+      "Only when from/to are omitted. Relative to x,y; first point is [0,0].",
+    ),
   startArrowhead: arrowheadSchema.optional().describe("Default none."),
   endArrowhead: arrowheadSchema.optional().describe("Default arrow."),
-  label: z.string().optional().describe("Short text on the arrow (under 20 chars)."),
+  label: z
+    .string()
+    .optional()
+    .describe("Short text on the arrow (under 20 chars)."),
   labelFontSize: z.number().optional(),
   stroke: styleFields.stroke,
   strokeWidth: styleFields.strokeWidth,
@@ -151,7 +178,9 @@ const lineSchema = z.object({
   points: z
     .array(pointSchema)
     .min(2)
-    .describe("Relative to x,y; first point is [0,0]. Use for axes, dividers, timelines, chart lines."),
+    .describe(
+      "Relative to x,y; first point is [0,0]. Use for axes, dividers, timelines, chart lines.",
+    ),
   stroke: styleFields.stroke,
   strokeWidth: styleFields.strokeWidth,
   strokeStyle: styleFields.strokeStyle,
@@ -167,8 +196,13 @@ const frameSchema = z.object({
   children: z
     .array(z.string())
     .min(1)
-    .describe("refs (this call) or existing ids. Frame bounds are computed from children plus padding."),
-  padding: z.number().optional().describe("Padding around children. Default 24."),
+    .describe(
+      "refs (this call) or existing ids. Frame bounds are computed from children plus padding.",
+    ),
+  padding: z
+    .number()
+    .optional()
+    .describe("Padding around children. Default 24."),
 });
 
 const createElementSchema = z.discriminatedUnion("type", [

@@ -1,25 +1,27 @@
 import { config } from "dotenv";
 config({ path: ".env.local" });
 
-import { hintAccountMask, resolveAccountMask } from "../src/domains/statements/application/accountMask";
-import { dedupeParsedTransactions, checkStatementBalance } from "../src/domains/statements/application/balanceStatement";
+import {
+  hintAccountMask,
+  resolveAccountMask,
+} from "../src/domains/statements/application/accountMask";
+import {
+  checkStatementBalance,
+  dedupeParsedTransactions,
+} from "../src/domains/statements/application/balanceStatement";
+import type { CategoryVocabulary } from "../src/domains/statements/application/categoryVocabulary";
 import {
   alignParsedAmountSigns,
   applyParseCategoryFixes,
   cleanStatementLine,
   polishParsedStatement,
 } from "../src/domains/statements/application/polishParsedStatement";
+import { extractFxFromDescription } from "../src/domains/statements/domain/extractFxFromDescription";
 import type { ParsedStatement } from "../src/domains/statements/domain/parsedStatement";
-import type { CategoryVocabulary } from "../src/domains/statements/application/categoryVocabulary";
 
 const vocab: CategoryVocabulary = {
   sections: ["Transfers", "Lifestyle", "Technology"],
-  categories: [
-    "Account Transfers",
-    "Personal Care",
-    "AI Services",
-    "Software",
-  ],
+  categories: ["Account Transfers", "Personal Care", "AI Services", "Software"],
   subcategories: [
     "Credit Card Payoffs",
     "Gym Memberships",
@@ -54,6 +56,7 @@ function txn(
     referenceNumber: null,
     foreignAmount: null,
     foreignCurrency: null,
+    exchangeRate: null,
     ...partial,
   };
 }
@@ -119,12 +122,22 @@ const chequingCash: ParsedStatement = {
 };
 
 const flipped = alignParsedAmountSigns(chequingCash);
-const gym = flipped.transactions.find((row) => row.description.includes("MOVATI"));
+const gym = flipped.transactions.find((row) =>
+  row.description.includes("MOVATI"),
+);
 assert(gym && gym.amount > 0, "chequing gym becomes money-out positive");
-const deposit = flipped.transactions.find((row) => row.description.includes("PAYROLL"));
-assert(deposit && deposit.amount < 0, "chequing payroll becomes money-in negative");
+const deposit = flipped.transactions.find((row) =>
+  row.description.includes("PAYROLL"),
+);
+assert(
+  deposit && deposit.amount < 0,
+  "chequing payroll becomes money-in negative",
+);
 const cheqBal = checkStatementBalance(flipped);
-assert(cheqBal.balanced === true, `chequing balance after flip, delta=${cheqBal.delta}`);
+assert(
+  cheqBal.balanced === true,
+  `chequing balance after flip, delta=${cheqBal.delta}`,
+);
 
 const card: ParsedStatement = {
   ...chequingCash,
@@ -162,7 +175,10 @@ const polished = polishParsedStatement(card, {
   dedupe: dedupeParsedTransactions,
 });
 assert(polished.accountMask === "1654", "polished mask");
-assert(polished.transactions.length === 2, "same-day payment thank you collapsed");
+assert(
+  polished.transactions.length === 2,
+  "same-day payment thank you collapsed",
+);
 const payment = polished.transactions.find((row) =>
   row.description.includes("PAYMENT"),
 );
@@ -195,5 +211,15 @@ assert(
   gymFix.transactions[0].subcategory === "Gym Memberships",
   "movati -> Gym Memberships",
 );
+
+const phpFx = extractFxFromDescription("ALDO CEBU CITY 12,280.00 PHP @ 0.024");
+assert(phpFx.foreignCurrency === "PHP", "php currency");
+assert(phpFx.foreignAmount === 12280, `php amount was ${phpFx.foreignAmount}`);
+assert(phpFx.exchangeRate === 0.024, `php rate was ${phpFx.exchangeRate}`);
+
+const usdFx = extractFxFromDescription("AIRBNB *X USD 12.00 @ 1.42");
+assert(usdFx.foreignCurrency === "USD", "usd currency");
+assert(usdFx.foreignAmount === 12, `usd amount was ${usdFx.foreignAmount}`);
+assert(usdFx.exchangeRate === 1.42, `usd rate was ${usdFx.exchangeRate}`);
 
 console.log("parse polish asserts ok");

@@ -16,11 +16,11 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 **App entry:** Convex React hooks (`useQuery` / `useMutation`) with `ConvexAuthNextjsProvider`, and `getAuthenticatedConvexClient()` in `src/shared/convex/httpClient.server.ts` for Next API routes.
 
-| Path | Agent rule |
-|------|------------|
-| `convex/` | Live schema, queries, mutations (must call requireUser) |
-| `archive/db/*.db` | Sealed local SQLite — inspect only if asked |
-| `DATABASE_URL` Turso | Legacy scripts only |
+| Path                 | Agent rule                                              |
+| -------------------- | ------------------------------------------------------- |
+| `convex/`            | Live schema, queries, mutations (must call requireUser) |
+| `archive/db/*.db`    | Sealed local SQLite — inspect only if asked             |
+| `DATABASE_URL` Turso | Legacy scripts only                                     |
 
 **Dev workflow:**
 
@@ -33,16 +33,17 @@ npm run dev
 
 ### Live Convex modules
 
-| Area | Convex file |
-|------|-------------|
-| Auth | `convex/auth.ts`, `convex/http.ts`, `convex/auth.config.ts` |
-| Auth helpers | `convex/lib/auth.ts`, `convex/users.ts` |
-| Backfill | `convex/migrations.ts` |
-| Dashboard / loans | `convex/dashboard.ts` |
-| Analysis | `convex/analysis.ts` |
-| Modules / tags / statements | `convex/modules.ts`, `transactions.ts`, `statements.ts` |
-| Scratch notes / store sheet | `convex/scratchNotes.ts` |
-| Freeform notes | `convex/userNotes.ts` |
+| Area                        | Convex file                                                 |
+| --------------------------- | ----------------------------------------------------------- |
+| Auth                        | `convex/auth.ts`, `convex/http.ts`, `convex/auth.config.ts` |
+| Auth helpers                | `convex/lib/auth.ts`, `convex/users.ts`                     |
+| Backfill                    | `convex/migrations.ts`                                      |
+| Dashboard / loans           | `convex/dashboard.ts`                                       |
+| Analysis                    | `convex/analysis.ts`                                        |
+| Modules / tags / statements | `convex/modules.ts`, `transactions.ts`, `statements.ts`     |
+| Scratch notes / store sheet | `convex/scratchNotes.ts`                                    |
+| Canvas scenes               | `convex/canvasScenes.ts`                                    |
+| Freeform notes              | `convex/userNotes.ts`                                       |
 
 ### AI security
 

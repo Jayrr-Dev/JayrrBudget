@@ -19,6 +19,7 @@ export type LedgerLineInput = {
   paymentChannel?: string | null;
   foreignAmount?: number | null;
   foreignCurrency?: string | null;
+  exchangeRate?: number | null;
   /** Parse-time cleaned merchant; seeds enrichment without full AI pass. */
   merchantClean?: string | null;
   section?: string | null;
@@ -29,7 +30,9 @@ export type LedgerLineInput = {
 const RETIRED =
   "Retired: flat transactions schema. Re-import CSV via scripts/rebuild-flat-transactions.ts";
 
-export async function insertLedgerLine(_line: LedgerLineInput): Promise<number> {
+export async function insertLedgerLine(
+  _line: LedgerLineInput,
+): Promise<number> {
   throw new Error(RETIRED);
 }
 

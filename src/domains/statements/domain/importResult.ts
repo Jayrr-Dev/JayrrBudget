@@ -67,6 +67,9 @@ export type ImportBankStatementSuccess = {
       city: string | null;
       region: string | null;
       country: string | null;
+      foreignAmount?: number | null;
+      foreignCurrency?: string | null;
+      exchangeRate?: number | null;
       merchantClean?: string | null;
       sectionName?: string | null;
       categoryName?: string | null;
