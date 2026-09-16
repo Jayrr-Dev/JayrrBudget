@@ -1,10 +1,5 @@
 "use client";
 
-import { api } from "@convex/_generated/api";
-import { useMutation, useQuery } from "convex/react";
-import { Info, PlusIcon, Trash2Icon } from "lucide-react";
-import { useEffect, useState } from "react";
-import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -29,6 +24,11 @@ import {
   USER_AI_RULES_MAX,
 } from "@/domains/statements/domain/userAiRules";
 import { errorMessage } from "@/shared/lib/error-message";
+import { api } from "@convex/_generated/api";
+import { useMutation, useQuery } from "convex/react";
+import { Info, PlusIcon, Trash2Icon } from "lucide-react";
+import { useEffect, useState } from "react";
+import { toast } from "sonner";
 
 type Props = {
   open: boolean;
@@ -92,7 +92,7 @@ export function StatementAiRulesDialog({ open, onOpenChange }: Props) {
               <PopoverTrigger asChild>
                 <button
                   type="button"
-                  className="inline-flex size-6 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
+                  className="inline-flex size-6 shrink-0 items-center justify-center rounded-full text-accent hover:bg-accent-subtle hover:text-accent"
                   aria-label="About upload rules"
                 >
                   <Info className="size-3.5" />
@@ -152,7 +152,7 @@ export function StatementAiRulesDialog({ open, onOpenChange }: Props) {
                   onClick={addRule}
                   disabled={!nextRule.trim() || atRuleCap}
                 >
-                  <PlusIcon />
+                  <PlusIcon className="text-accent" />
                 </Button>
               </div>
               <div className="flex items-center justify-between px-1 text-xs tabular-nums text-muted-foreground">

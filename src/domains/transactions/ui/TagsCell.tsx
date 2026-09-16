@@ -9,10 +9,13 @@ import {
 } from "@/components/ui/popover";
 import type { DashboardData } from "@/domains/dashboard/domain/types";
 import { queryKeys } from "@/domains/dashboard/queries/query-keys";
-import { patchEncryptedTransaction, vaultWriteReady } from "@/domains/vault/application/saveEncryptedLedger";
+import {
+  patchEncryptedTransaction,
+  vaultWriteReady,
+} from "@/domains/vault/application/saveEncryptedLedger";
 import { usePrivateLedger } from "@/domains/vault/ui/usePrivateLedger";
-import { useConvex } from "convex/react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useConvex } from "convex/react";
 import { PlusIcon } from "lucide-react";
 import { useState } from "react";
 
@@ -57,12 +60,23 @@ export function TagsCell({ transactionId, tags }: TagsCellProps) {
         client,
       });
       if (write) {
-        const tx = privateLedger.ledger.transactions.find((row) => row.recordId === input.transactionId);
+        const tx = privateLedger.ledger.transactions.find(
+          (row) => row.recordId === input.transactionId,
+        );
         if (!tx) throw new Error("Encrypted transaction not found.");
-        const nextTags = [...new Set([...(tx.tagNames ?? []), input.tag.trim()].filter(Boolean))];
+        const nextTags = [
+          ...new Set(
+            [...(tx.tagNames ?? []), input.tag.trim()].filter(Boolean),
+          ),
+        ];
         await patchEncryptedTransaction(write, tx, { tagNames: nextTags });
         privateLedger.reload();
-        return { ok: true as const, tags: nextTags, added: true, tag: input.tag.trim() };
+        return {
+          ok: true as const,
+          tags: nextTags,
+          added: true,
+          tag: input.tag.trim(),
+        };
       }
       return postAddTag(input);
     },
@@ -123,7 +137,7 @@ export function TagsCell({ transactionId, tags }: TagsCellProps) {
         <PopoverTrigger asChild>
           <button
             type="button"
-            className="inline-flex size-5 shrink-0 cursor-pointer items-center justify-center rounded-md text-[var(--muted-foreground)] opacity-50 transition-colors hover:bg-[var(--muted)] hover:opacity-100"
+            className="inline-flex size-5 shrink-0 cursor-pointer items-center justify-center rounded-md text-accent opacity-70 transition-colors hover:bg-accent-subtle hover:opacity-100"
             aria-label="Add tag"
           >
             <PlusIcon className="size-3" />

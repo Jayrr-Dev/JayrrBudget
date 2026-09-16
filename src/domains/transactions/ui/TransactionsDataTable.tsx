@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { DataTable } from "@/components/ui/data-table";
 import type { DataTableFeatures } from "@/components/ui/data-table-features";
@@ -92,7 +92,7 @@ function buildColumns(
   const amountWidth = autoMoneyWidth("Amount", amountLabels, { filter: true });
 
   // Left = paper facts (AI read from statement). Right = AI invent / labels.
-  const defs = columnHelper.columns([
+  return columnHelper.columns([
     columnHelper.display({
       id: "actions",
       header: () => (
@@ -114,66 +114,21 @@ function buildColumns(
       enableHiding: true,
       meta: { label: "Actions", width: "2rem" },
     }),
-    columnHelper.accessor("date", {
-      header: "Posted",
-      meta: bandMeta("9.5rem", "read", "Date the bank posted this line."),
-      cell: ({ getValue }) => (
-        <span className="whitespace-nowrap font-mono text-xs tabular-nums">
-          {formatDisplayDate(getValue())}
-        </span>
-      ),
-      filterFn: "dateWindow",
-      sortFn: "datetime",
-    }),
-    columnHelper.accessor("authorizedDate", {
-      header: "Authorized",
-      meta: bandMeta(
-        "9.5rem",
-        "read",
-        "Purchase/auth date when it differs from posted.",
-      ),
-      cell: ({ getValue }) => {
-        const value = getValue();
-        if (value == null || value === "") {
-          return (
-            <span className="text-sm text-[var(--muted-foreground)]">-</span>
-          );
-        }
-        return (
-          <span className="whitespace-nowrap font-mono text-xs tabular-nums">
-            {formatDisplayDate(value)}
-          </span>
-        );
-      },
-      filterFn: "fuzzy",
-      sortFn: "datetime",
-    }),
-    columnHelper.accessor(
-      (row) => accountNameById.get(row.accountId) ?? row.accountId,
-      {
-        id: "account",
-        header: "Account",
-        meta: bandMeta("22rem", "read", "Friendly account name."),
-        cell: ({ getValue }) => (
-          <span className="line-clamp-2 block text-sm leading-snug break-words">
-            {String(getValue())}
-          </span>
-        ),
-        filterFn: "fuzzy",
-        sortFn: "text",
-      },
-    ),
-    columnHelper.accessor("accountId", {
-      header: "accountId",
-      meta: bandMeta("22rem", "read", "Stable ledger account key."),
-      cell: ({ getValue }) => textOrDash(getValue()),
-      filterFn: "fuzzy",
-      sortFn: "text",
-    }),
     columnHelper.group({
       id: "main",
       header: "Main",
       columns: columnHelper.columns([
+        columnHelper.accessor("date", {
+          header: "Posted",
+          meta: bandMeta("9.5rem", "read", "Date the bank posted this line."),
+          cell: ({ getValue }) => (
+            <span className="whitespace-nowrap font-mono text-xs tabular-nums">
+              {formatDisplayDate(getValue())}
+            </span>
+          ),
+          filterFn: "dateWindow",
+          sortFn: "datetime",
+        }),
         columnHelper.accessor("name", {
           header: "Description",
           meta: bandMeta("28rem", "read", "Statement line text from the PDF."),
@@ -185,6 +140,195 @@ function buildColumns(
           filterFn: "equalsString",
           sortFn: "text",
         }),
+        columnHelper.accessor((row) => ledgerDebitCredit(row).debit, {
+          id: "debit",
+          header: "Debit",
+          meta: bandMeta(
+            debitWidth,
+            "read",
+            "Money out (purchases, fees, PAD).",
+          ),
+          cell: ({ row }) => {
+            const debit = ledgerDebitCredit(row.original).debit;
+            if (debit == null) {
+              return (
+                <span className="block text-right text-sm text-[var(--muted-foreground)]">
+                  -
+                </span>
+              );
+            }
+            return (
+              <MoneyText
+                amount={debit}
+                currency={row.original.isoCurrencyCode ?? "CAD"}
+                className="leading-snug text-foreground"
+              />
+            );
+          },
+          sortFn: "basic",
+        }),
+        columnHelper.accessor((row) => ledgerDebitCredit(row).credit, {
+          id: "credit",
+          header: "Credit",
+          meta: bandMeta(
+            creditWidth,
+            "read",
+            "Money in (deposits, refunds, payments).",
+          ),
+          cell: ({ row }) => {
+            const credit = ledgerDebitCredit(row.original).credit;
+            if (credit == null) {
+              return (
+                <span className="block text-right text-sm text-[var(--muted-foreground)]">
+                  -
+                </span>
+              );
+            }
+            return (
+              <MoneyText
+                amount={credit}
+                currency={row.original.isoCurrencyCode ?? "CAD"}
+                className="leading-snug text-foreground"
+              />
+            );
+          },
+          sortFn: "basic",
+        }),
+      ]),
+    }),
+    columnHelper.group({
+      id: "dates",
+      header: "Dates",
+      columns: columnHelper.columns([
+        columnHelper.accessor("authorizedDate", {
+          header: "Authorized",
+          meta: bandMeta(
+            "9.5rem",
+            "read",
+            "Purchase/auth date when it differs from posted.",
+          ),
+          cell: ({ getValue }) => {
+            const value = getValue();
+            if (value == null || value === "") {
+              return (
+                <span className="text-sm text-[var(--muted-foreground)]">
+                  -
+                </span>
+              );
+            }
+            return (
+              <span className="whitespace-nowrap font-mono text-xs tabular-nums">
+                {formatDisplayDate(value)}
+              </span>
+            );
+          },
+          filterFn: "fuzzy",
+          sortFn: "datetime",
+        }),
+        columnHelper.accessor("pending", {
+          header: "Pending",
+          meta: bandMeta(
+            "5rem",
+            "read",
+            "True when the charge is not settled yet.",
+          ),
+          cell: ({ getValue }) => textOrDash(getValue() ? "true" : "false"),
+          sortFn: "basic",
+        }),
+      ]),
+    }),
+    columnHelper.group({
+      id: "accountGroup",
+      header: "Account",
+      columns: columnHelper.columns([
+        columnHelper.accessor(
+          (row) => accountNameById.get(row.accountId) ?? row.accountId,
+          {
+            id: "account",
+            header: "Name",
+            meta: bandMeta("22rem", "read", "Friendly account name."),
+            cell: ({ getValue }) => (
+              <span className="line-clamp-2 block text-sm leading-snug break-words">
+                {String(getValue())}
+              </span>
+            ),
+            filterFn: "fuzzy",
+            sortFn: "text",
+          },
+        ),
+        columnHelper.accessor("accountId", {
+          header: "ID",
+          meta: bandMeta("22rem", "read", "Stable ledger account key."),
+          cell: ({ getValue }) => textOrDash(getValue()),
+          filterFn: "fuzzy",
+          sortFn: "text",
+        }),
+      ]),
+    }),
+    columnHelper.group({
+      id: "location",
+      header: "Location",
+      columns: columnHelper.columns([
+        columnHelper.accessor("locationCity", {
+          header: "City",
+          meta: bandMeta(
+            "10rem",
+            "read",
+            "City printed on the statement line.",
+          ),
+          cell: ({ getValue }) => textOrDash(getValue()),
+          filterFn: "fuzzy",
+          sortFn: "text",
+        }),
+        columnHelper.accessor("locationRegion", {
+          header: "Region",
+          meta: bandMeta("8rem", "read", "Province/state printed on the line."),
+          cell: ({ getValue }) => textOrDash(getValue()),
+          filterFn: "fuzzy",
+          sortFn: "text",
+        }),
+        columnHelper.accessor("locationCountry", {
+          header: "Country",
+          meta: bandMeta("8rem", "read", "Country printed on the line."),
+          cell: ({ getValue }) => textOrDash(getValue()),
+          filterFn: "fuzzy",
+          sortFn: "text",
+        }),
+      ]),
+    }),
+    columnHelper.group({
+      id: "money",
+      header: "Money",
+      columns: columnHelper.columns([
+        columnHelper.accessor("isoCurrencyCode", {
+          header: "CCY",
+          meta: bandMeta("4rem", "read", "Currency code (usually CAD)."),
+          cell: ({ getValue }) => textOrDash(getValue()),
+          sortFn: "text",
+        }),
+        columnHelper.accessor("amount", {
+          header: "Amount",
+          meta: bandMeta(
+            amountWidth,
+            "read",
+            "Signed amount. Positive = money out.",
+          ),
+          cell: ({ row, getValue }) => (
+            <MoneyText
+              amount={Number(getValue())}
+              currency={row.original.isoCurrencyCode ?? "CAD"}
+              className="text-sm leading-snug"
+            />
+          ),
+          filterFn: "amountLogRange",
+          sortFn: "basic",
+        }),
+      ]),
+    }),
+    columnHelper.group({
+      id: "source",
+      header: "Source",
+      columns: columnHelper.columns([
         columnHelper.accessor("originalDescription", {
           header: "Original description",
           meta: bandMeta(
@@ -196,331 +340,238 @@ function buildColumns(
           filterFn: "equalsString",
           sortFn: "text",
         }),
+        columnHelper.accessor("source", {
+          header: "Origin",
+          meta: bandMeta(
+            "9rem",
+            "read",
+            "Where this row came from (statement, CSV).",
+          ),
+          cell: ({ getValue }) => textOrDash(getValue()),
+          filterFn: "equalsString",
+          sortFn: "text",
+        }),
+        columnHelper.accessor("transactionId", {
+          header: "transactionId",
+          meta: bandMeta(
+            "20rem",
+            "read",
+            "Stable fingerprint for this ledger line.",
+          ),
+          cell: ({ getValue }) => (
+            <span className="line-clamp-2 block font-mono text-[11px] leading-snug break-all">
+              {String(getValue())}
+            </span>
+          ),
+          filterFn: "fuzzy",
+          sortFn: "text",
+        }),
       ]),
     }),
-    columnHelper.accessor("pending", {
-      header: "Pending",
-      meta: bandMeta(
-        "5rem",
-        "read",
-        "True when the charge is not settled yet.",
-      ),
-      cell: ({ getValue }) => textOrDash(getValue() ? "true" : "false"),
-      sortFn: "basic",
-    }),
-    columnHelper.accessor("locationCity", {
-      header: "City",
-      meta: bandMeta("10rem", "read", "City printed on the statement line."),
-      cell: ({ getValue }) => textOrDash(getValue()),
-      filterFn: "fuzzy",
-      sortFn: "text",
-    }),
-    columnHelper.accessor("locationRegion", {
-      header: "Region",
-      meta: bandMeta("8rem", "read", "Province/state printed on the line."),
-      cell: ({ getValue }) => textOrDash(getValue()),
-      filterFn: "fuzzy",
-      sortFn: "text",
-    }),
-    columnHelper.accessor("locationCountry", {
-      header: "Country",
-      meta: bandMeta("8rem", "read", "Country printed on the line."),
-      cell: ({ getValue }) => textOrDash(getValue()),
-      filterFn: "fuzzy",
-      sortFn: "text",
-    }),
-    columnHelper.accessor("isoCurrencyCode", {
-      header: "CCY",
-      meta: bandMeta("4rem", "read", "Currency code (usually CAD)."),
-      cell: ({ getValue }) => textOrDash(getValue()),
-      sortFn: "text",
-    }),
-    columnHelper.accessor((row) => ledgerDebitCredit(row).debit, {
-      id: "debit",
-      header: "Debit",
-      meta: bandMeta(debitWidth, "read", "Money out (purchases, fees, PAD)."),
-      cell: ({ row }) => {
-        const debit = ledgerDebitCredit(row.original).debit;
-        if (debit == null) {
-          return (
-            <span className="block text-right text-sm text-[var(--muted-foreground)]">
-              -
-            </span>
-          );
-        }
-        return (
-          <MoneyText
-            amount={debit}
-            currency={row.original.isoCurrencyCode ?? "CAD"}
-            className="leading-snug text-foreground"
-          />
-        );
-      },
-      sortFn: "basic",
-    }),
-    columnHelper.accessor((row) => ledgerDebitCredit(row).credit, {
-      id: "credit",
-      header: "Credit",
-      meta: bandMeta(
-        creditWidth,
-        "read",
-        "Money in (deposits, refunds, payments).",
-      ),
-      cell: ({ row }) => {
-        const credit = ledgerDebitCredit(row.original).credit;
-        if (credit == null) {
-          return (
-            <span className="block text-right text-sm text-[var(--muted-foreground)]">
-              -
-            </span>
-          );
-        }
-        return (
-          <MoneyText
-            amount={credit}
-            currency={row.original.isoCurrencyCode ?? "CAD"}
-            className="leading-snug text-foreground"
-          />
-        );
-      },
-      sortFn: "basic",
-    }),
-    columnHelper.accessor("amount", {
-      header: "Amount",
-      meta: bandMeta(
-        amountWidth,
-        "read",
-        "Signed amount. Positive = money out.",
-      ),
-      cell: ({ row, getValue }) => (
-        <MoneyText
-          amount={Number(getValue())}
-          currency={row.original.isoCurrencyCode ?? "CAD"}
-          className="text-sm leading-snug"
-        />
-      ),
-      filterFn: "amountLogRange",
-      sortFn: "basic",
-    }),
-    columnHelper.accessor("source", {
-      header: "Source",
-      meta: bandMeta(
-        "9rem",
-        "read",
-        "Where this row came from (statement, CSV).",
-      ),
-      cell: ({ getValue }) => textOrDash(getValue()),
-      filterFn: "equalsString",
-      sortFn: "text",
-    }),
-    columnHelper.accessor("transactionId", {
-      header: "transactionId",
-      meta: bandMeta(
-        "20rem",
-        "read",
-        "Stable fingerprint for this ledger line.",
-      ),
-      cell: ({ getValue }) => (
-        <span className="line-clamp-2 block font-mono text-[11px] leading-snug break-all">
-          {String(getValue())}
-        </span>
-      ),
-      filterFn: "fuzzy",
-      sortFn: "text",
-    }),
-
-    // -- AI invent / labels (right) --
-    columnHelper.accessor(
-      (row) =>
-        row.merchantClean ||
-        row.brandName ||
-        row.companyName ||
-        row.merchantName ||
-        null,
-      {
-        id: "merchant",
-        header: "Merchant",
-        meta: bandMeta(
-          "16rem",
-          "invent",
-          "Clean store name from enrichment (falls back to brand / company).",
+    columnHelper.group({
+      id: "labels",
+      header: "Labels",
+      columns: columnHelper.columns([
+        columnHelper.accessor(
+          (row) =>
+            row.merchantClean ||
+            row.brandName ||
+            row.companyName ||
+            row.merchantName ||
+            null,
+          {
+            id: "merchant",
+            header: "Merchant",
+            meta: bandMeta(
+              "16rem",
+              "invent",
+              "Clean store name from enrichment (falls back to brand / company).",
+            ),
+            cell: ({ getValue }) => {
+              const value = getValue();
+              if (!value) {
+                return (
+                  <span className="text-sm text-[var(--muted-foreground)]">
+                    -
+                  </span>
+                );
+              }
+              return (
+                <span className="line-clamp-2 block text-sm leading-snug font-medium break-words">
+                  {String(value)}
+                </span>
+              );
+            },
+            filterFn: "fuzzy",
+            sortFn: "text",
+          },
         ),
-        cell: ({ getValue }) => {
-          const value = getValue();
-          if (!value) {
+        columnHelper.accessor("sectionName", {
+          header: "Section",
+          meta: bandMeta(
+            "14rem",
+            "invent",
+            "Top spend bucket (Lifestyle, Transport).",
+          ),
+          cell: ({ row, getValue }) => (
+            <TaxonomyCell
+              transactionId={row.original.transactionId}
+              field="section"
+              value={getValue()}
+            />
+          ),
+          filterFn: "equalsString",
+          sortFn: "text",
+        }),
+        columnHelper.accessor("categoryName", {
+          header: "Category",
+          meta: bandMeta("20rem", "invent", "Mid spend bucket under Section."),
+          cell: ({ row, getValue }) => (
+            <TaxonomyCell
+              transactionId={row.original.transactionId}
+              field="category"
+              value={getValue()}
+              sectionName={row.original.sectionName}
+            />
+          ),
+          filterFn: "equalsString",
+          sortFn: "text",
+        }),
+        columnHelper.accessor("subcategoryName", {
+          header: "Subcategories",
+          meta: bandMeta(
+            "20rem",
+            "invent",
+            "Fine spend label (leaf category).",
+          ),
+          cell: ({ row, getValue }) => (
+            <TaxonomyCell
+              transactionId={row.original.transactionId}
+              field="subcategory"
+              value={getValue()}
+              categoryName={row.original.categoryName}
+            />
+          ),
+          filterFn: "equalsString",
+          sortFn: "text",
+        }),
+        columnHelper.accessor("spreadName", {
+          header: "Spread",
+          meta: bandMeta("10rem", "invent", "Needs / Wants / Savings bucket."),
+          cell: ({ row, getValue }) => (
+            <TaxonomyCell
+              transactionId={row.original.transactionId}
+              field="spread"
+              value={getValue()}
+            />
+          ),
+          filterFn: "equalsString",
+          sortFn: "text",
+        }),
+        columnHelper.accessor((row) => row.tagNames ?? [], {
+          id: "tags",
+          header: "Tags",
+          meta: bandMeta(
+            "18rem",
+            "invent",
+            "Manual tags you add to rows.",
+            "Tags",
+          ),
+          cell: ({ row, getValue }) => (
+            <TagsCell
+              transactionId={row.original.transactionId}
+              tags={[...(getValue() as string[])]}
+            />
+          ),
+          filterFn: "includesTag",
+          sortFn: "textList",
+        }),
+      ]),
+    }),
+    columnHelper.group({
+      id: "type",
+      header: "Type",
+      columns: columnHelper.columns([
+        columnHelper.accessor("transactionTypeName", {
+          header: "Transaction type",
+          meta: bandMeta(
+            "10rem",
+            "invent",
+            "Cash-flow bucket: income / transfers / expenses.",
+          ),
+          cell: ({ getValue }) => textOrDash(getValue()),
+          filterFn: "equalsString",
+          sortFn: "text",
+        }),
+        columnHelper.accessor("transactionCode", {
+          header: "Code",
+          meta: bandMeta(
+            "10rem",
+            "invent",
+            "Line nature: purchase / payment / refund / fee / interest / subscription / transfer / ...",
+          ),
+          cell: ({ getValue }) => textOrDash(getValue()),
+          filterFn: "equalsString",
+          sortFn: "text",
+        }),
+        columnHelper.accessor("paymentChannel", {
+          header: "Channel",
+          meta: bandMeta("9rem", "invent", "Online, in store, or other."),
+          cell: ({ getValue }) => textOrDash(getValue()),
+          filterFn: "equalsString",
+          sortFn: "text",
+        }),
+      ]),
+    }),
+    columnHelper.group({
+      id: "status",
+      header: "Status",
+      columns: columnHelper.columns([
+        columnHelper.accessor("historyMatch", {
+          header: "Cross-check",
+          meta: bandMeta(
+            "12rem",
+            "invent",
+            "Match status against bank history.",
+          ),
+          cell: ({ getValue }) => {
+            const raw = String(getValue() ?? "");
+            const label = historyMatchLabel(raw);
+            if (!raw) {
+              return (
+                <span className="text-sm text-[var(--muted-foreground)]">
+                  -
+                </span>
+              );
+            }
             return (
-              <span className="text-sm text-[var(--muted-foreground)]">-</span>
+              <div className="min-w-0">
+                <p className="line-clamp-2 text-sm leading-snug break-words">
+                  {label}
+                </p>
+                <p className="line-clamp-2 text-[11px] leading-snug break-words text-[var(--muted-foreground)]">
+                  {raw}
+                </p>
+              </div>
             );
-          }
-          return (
-            <span className="line-clamp-2 block text-sm leading-snug font-medium break-words">
-              {String(value)}
-            </span>
-          );
-        },
-        filterFn: "fuzzy",
-        sortFn: "text",
-      },
-    ),
-    columnHelper.accessor("sectionName", {
-      header: "Section",
-      meta: bandMeta(
-        "14rem",
-        "invent",
-        "Top spend bucket (Lifestyle, Transport).",
-      ),
-      cell: ({ row, getValue }) => (
-        <TaxonomyCell
-          transactionId={row.original.transactionId}
-          field="section"
-          value={getValue()}
-        />
-      ),
-      filterFn: "equalsString",
-      sortFn: "text",
-    }),
-    columnHelper.accessor("categoryName", {
-      header: "Category",
-      meta: bandMeta("20rem", "invent", "Mid spend bucket under Section."),
-      cell: ({ row, getValue }) => (
-        <TaxonomyCell
-          transactionId={row.original.transactionId}
-          field="category"
-          value={getValue()}
-          sectionName={row.original.sectionName}
-        />
-      ),
-      filterFn: "equalsString",
-      sortFn: "text",
-    }),
-    columnHelper.accessor("subcategoryName", {
-      header: "Subcategories",
-      meta: bandMeta("20rem", "invent", "Fine spend label (leaf category)."),
-      cell: ({ row, getValue }) => (
-        <TaxonomyCell
-          transactionId={row.original.transactionId}
-          field="subcategory"
-          value={getValue()}
-          categoryName={row.original.categoryName}
-        />
-      ),
-      filterFn: "equalsString",
-      sortFn: "text",
-    }),
-    columnHelper.accessor("spreadName", {
-      header: "Spread",
-      meta: bandMeta("10rem", "invent", "Needs / Wants / Savings bucket."),
-      cell: ({ row, getValue }) => (
-        <TaxonomyCell
-          transactionId={row.original.transactionId}
-          field="spread"
-          value={getValue()}
-        />
-      ),
-      filterFn: "equalsString",
-      sortFn: "text",
-    }),
-    columnHelper.accessor((row) => row.tagNames ?? [], {
-      id: "tags",
-      header: "Tags",
-      meta: bandMeta("18rem", "invent", "Manual tags you add to rows.", "Tags"),
-      cell: ({ row, getValue }) => (
-        <TagsCell
-          transactionId={row.original.transactionId}
-          tags={[...(getValue() as string[])]}
-        />
-      ),
-      filterFn: "includesTag",
-      sortFn: "textList",
-    }),
-    columnHelper.accessor("transactionTypeName", {
-      header: "Transaction type",
-      meta: bandMeta(
-        "10rem",
-        "invent",
-        "Cash-flow bucket: income / transfers / expenses.",
-      ),
-      cell: ({ getValue }) => textOrDash(getValue()),
-      filterFn: "equalsString",
-      sortFn: "text",
-    }),
-    columnHelper.accessor("transactionCode", {
-      header: "Code",
-      meta: bandMeta(
-        "10rem",
-        "invent",
-        "Line nature: purchase / payment / refund / fee / interest / subscription / transfer / …",
-      ),
-      cell: ({ getValue }) => textOrDash(getValue()),
-      filterFn: "equalsString",
-      sortFn: "text",
-    }),
-    columnHelper.accessor("paymentChannel", {
-      header: "Channel",
-      meta: bandMeta("9rem", "invent", "Online, in store, or other."),
-      cell: ({ getValue }) => textOrDash(getValue()),
-      filterFn: "equalsString",
-      sortFn: "text",
-    }),
-    columnHelper.accessor("historyMatch", {
-      header: "Cross-check",
-      meta: bandMeta("12rem", "invent", "Match status against bank history."),
-      cell: ({ getValue }) => {
-        const raw = String(getValue() ?? "");
-        const label = historyMatchLabel(raw);
-        if (!raw) {
-          return (
-            <span className="text-sm text-[var(--muted-foreground)]">-</span>
-          );
-        }
-        return (
-          <div className="min-w-0">
-            <p className="line-clamp-2 text-sm leading-snug break-words">
-              {label}
-            </p>
-            <p className="line-clamp-2 text-[11px] leading-snug break-words text-[var(--muted-foreground)]">
-              {raw}
-            </p>
-          </div>
-        );
-      },
-      filterFn: "equalsString",
-      sortFn: "text",
-    }),
-    columnHelper.accessor("enrichmentStatus", {
-      header: "Enrichment",
-      meta: bandMeta(
-        "10rem",
-        "invent",
-        "pending = not cleaned yet. done = messy bank text cleaned into a normal store name. failed = cleanup didn't finish.",
-      ),
-      cell: ({ getValue }) => textOrDash(getValue()),
-      filterFn: "equalsString",
-      sortFn: "text",
+          },
+          filterFn: "equalsString",
+          sortFn: "text",
+        }),
+        columnHelper.accessor("enrichmentStatus", {
+          header: "Enrichment",
+          meta: bandMeta(
+            "10rem",
+            "invent",
+            "pending = not cleaned yet. done = messy bank text cleaned into a normal store name. failed = cleanup didn't finish.",
+          ),
+          cell: ({ getValue }) => textOrDash(getValue()),
+          filterFn: "equalsString",
+          sortFn: "text",
+        }),
+      ]),
     }),
   ]);
-
-  return columnHelper.columns(
-    defs.map((def) => {
-      if (def.columns && def.columns.length > 0) {
-        return def;
-      }
-      const leafId =
-        def.id ??
-        ("accessorKey" in def && def.accessorKey != null
-          ? String(def.accessorKey)
-          : "column");
-      const header =
-        typeof def.header === "string" && def.header
-          ? def.header
-          : ((def.meta as { label?: string } | undefined)?.label ?? leafId);
-      return columnHelper.group({
-        id: `${leafId}Group`,
-        header,
-        columns: columnHelper.columns([def]),
-      });
-    }),
-  );
 }
 
 export function TransactionsDataTable({
@@ -615,7 +666,7 @@ export function TransactionsDataTable({
       initialSorting={[{ id: "date", desc: true }]}
       enableGlobalFilter
       globalFilterFn="fuzzy"
-      searchPlaceholder="Search all columns…"
+      searchPlaceholder="Search all columns..."
       enableColumnToggle
       dateColumnId="date"
       csvFilename="transactions.csv"

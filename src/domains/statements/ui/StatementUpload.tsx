@@ -1,21 +1,5 @@
 "use client";
 
-import { useMutation, useQuery } from "convex/react";
-import {
-  CameraIcon,
-  CheckIcon,
-  CopyCheckIcon,
-  FileTextIcon,
-  FileUpIcon,
-  FileWarningIcon,
-  Info,
-  ListChecks,
-  UploadIcon,
-  XIcon,
-} from "lucide-react";
-import { useEffect, useRef, useState } from "react";
-import { toast } from "sonner";
-import { api } from "@convex/_generated/api";
 import {
   Attachment,
   AttachmentAction,
@@ -36,6 +20,12 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
   Popover,
   PopoverContent,
   PopoverDescription,
@@ -44,41 +34,59 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Spinner } from "@/components/ui/spinner";
+import { getVaultMasterKey } from "@/crypto/session";
+import type { MutationClient } from "@/crypto/vaultRecords";
+import { useFeatureFlags } from "@/domains/feature-flags/ui/useFeatureFlag";
 import {
   normalizeStatementFilename,
   sha256FileHex,
 } from "@/domains/statements/domain/fileFingerprint";
-import { isOcrDocumentFile } from "@/domains/statements/domain/ocrDocumentTypes";
 import { describeImportResult } from "@/domains/statements/domain/importCopy";
 import {
   formatImportProgress,
   STATEMENT_IMPORT_STEPS,
   type StatementImportProgress,
 } from "@/domains/statements/domain/importProgress";
-import { uploadBankStatement, isUploadAbortError } from "@/domains/statements/queries/uploadBankStatement";
-import { StatementAiRulesDialog } from "@/domains/statements/ui/StatementAiRulesDialog";
+import { isOcrDocumentFile } from "@/domains/statements/domain/ocrDocumentTypes";
+import {
+  isUploadAbortError,
+  uploadBankStatement,
+} from "@/domains/statements/queries/uploadBankStatement";
 import {
   OCR_UPLOAD_HINT_POINTER,
   OCR_UPLOAD_HINT_TOUCH,
   useOcrDocumentInputs,
 } from "@/domains/statements/ui/OcrDocumentPickerButton";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { getVaultMasterKey } from "@/crypto/session";
-import { hydrateVaultSession, type VaultClient } from "@/domains/vault/application/ensureVaultFromPasscode";
-import { useFeatureFlags } from "@/domains/feature-flags/ui/useFeatureFlag";
+import { StatementAiRulesDialog } from "@/domains/statements/ui/StatementAiRulesDialog";
 import { encryptStatementImportToVault } from "@/domains/vault/application/encryptStatementImport";
-import { loadPrivateLedger, type VaultListClient } from "@/domains/vault/application/loadPrivateLedger";
+import {
+  hydrateVaultSession,
+  type VaultClient,
+} from "@/domains/vault/application/ensureVaultFromPasscode";
+import {
+  loadPrivateLedger,
+  type VaultListClient,
+} from "@/domains/vault/application/loadPrivateLedger";
 import { ImportLedgerCsv } from "@/domains/vault/ui/ImportLedgerCsv";
 import { usePrivateLedger } from "@/domains/vault/ui/usePrivateLedger";
-import { useConvex } from "convex/react";
 import { cn } from "@/lib/utils";
 import { errorMessage } from "@/shared/lib/error-message";
-import type { MutationClient } from "@/crypto/vaultRecords";
+import { api } from "@convex/_generated/api";
+import { useConvex, useMutation, useQuery } from "convex/react";
+import {
+  CameraIcon,
+  CheckIcon,
+  CopyCheckIcon,
+  FileTextIcon,
+  FileUpIcon,
+  FileWarningIcon,
+  Info,
+  ListChecks,
+  UploadIcon,
+  XIcon,
+} from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 
 const UPLOAD_TOAST = "statement-upload";
 const MERCHANT_BACKFILL_KEY = "jayrr-budget.merchant-backfill-v1";
@@ -439,7 +447,9 @@ export function StatementUpload({ onImported }: Props) {
           persistMode: vaultPersist ? "vault" : "convex",
           onProgress: (progress) => {
             const state: ItemState =
-              progress.step === "parse" || progress.step === "save" || progress.step === "categorize"
+              progress.step === "parse" ||
+              progress.step === "save" ||
+              progress.step === "categorize"
                 ? "processing"
                 : "uploading";
             patchItem(item.id, { state, progress });
@@ -455,19 +465,26 @@ export function StatementUpload({ onImported }: Props) {
 
         if (vaultPersist) {
           if (!flags.cloudProcessing) {
-            throw new Error("Turn on Cloud Processing in Modules before uploading a document.");
+            throw new Error(
+              "Turn on Cloud Processing in Modules before uploading a document.",
+            );
           }
-          const opened = await hydrateVaultSession(client as unknown as VaultClient);
+          const opened = await hydrateVaultSession(
+            client as unknown as VaultClient,
+          );
           const masterKey = getVaultMasterKey();
           const vaultId = privateLedger.vaultId ?? opened?.vaultId ?? null;
           const keyId = privateLedger.keyId ?? opened?.keyId ?? null;
           if (!privateLedger.userId || !vaultId || !keyId || !masterKey) {
             throw new Error("Sign in again, then retry the upload.");
           }
-          const ledger = await loadPrivateLedger(client as unknown as VaultListClient, {
-            userId: privateLedger.userId,
-            vaultId,
-          });
+          const ledger = await loadPrivateLedger(
+            client as unknown as VaultListClient,
+            {
+              userId: privateLedger.userId,
+              vaultId,
+            },
+          );
           await encryptStatementImportToVault({
             client: client as unknown as MutationClient,
             userId: privateLedger.userId,
@@ -482,7 +499,9 @@ export function StatementUpload({ onImported }: Props) {
 
         const copy = describeImportResult(result);
         if (result.categorization?.ok === false) {
-          toast.warning("Imported; categorization needs attention", { description: copy.description });
+          toast.warning("Imported; categorization needs attention", {
+            description: copy.description,
+          });
         }
         if (copy.tone === "warning") warningCount += 1;
         else okCount += 1;
@@ -529,7 +548,9 @@ export function StatementUpload({ onImported }: Props) {
           cursor = backfillResult.continueCursor;
           localStorage.setItem(
             MERCHANT_BACKFILL_KEY,
-            backfillResult.isDone ? "done" : (backfillResult.continueCursor ?? ""),
+            backfillResult.isDone
+              ? "done"
+              : (backfillResult.continueCursor ?? ""),
           );
           if (backfillResult.isDone) break;
         }
@@ -559,10 +580,9 @@ export function StatementUpload({ onImported }: Props) {
     }
 
     if (failCount === 0) {
-      toast.warning(
-        `${okCount} imported · ${warningCount} with warnings`,
-        { id: UPLOAD_TOAST },
-      );
+      toast.warning(`${okCount} imported · ${warningCount} with warnings`, {
+        id: UPLOAD_TOAST,
+      });
       return;
     }
 
@@ -579,16 +599,13 @@ export function StatementUpload({ onImported }: Props) {
       item.duplicateKind !== "queue",
   ).length;
   const dupCount = items.filter(
-    (item) =>
-      item.duplicateKind === "exact" || item.duplicateKind === "queue",
+    (item) => item.duplicateKind === "exact" || item.duplicateKind === "queue",
   ).length;
   const checkingCount = items.filter(
     (item) => item.dupCheck === "pending" && item.state === "idle",
   ).length;
 
-  const triggerLabel = busy
-    ? "Uploading…"
-    : "Upload statement";
+  const triggerLabel = busy ? "Uploading…" : "Upload statement";
 
   return (
     <div className="flex flex-col items-start gap-1.5">
@@ -601,29 +618,48 @@ export function StatementUpload({ onImported }: Props) {
           onClick={() => setDialogOpen(true)}
         >
           {triggerLabel}
-        </Button>
-        <Popover>
-          <PopoverTrigger asChild>
-            <Button
-              type="button"
-              variant="outline"
-              size="icon"
-              aria-label="How statement upload works"
+          <Popover>
+            <PopoverTrigger asChild>
+              <span
+                role="button"
+                tabIndex={0}
+                className="inline-flex size-5 shrink-0 items-center justify-center rounded-full text-accent hover:bg-accent-subtle hover:text-accent"
+                aria-label="How statement upload works"
+                onClick={(event) => {
+                  event.stopPropagation();
+                }}
+                onPointerDown={(event) => {
+                  event.stopPropagation();
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.stopPropagation();
+                  }
+                }}
+              >
+                <Info className="size-3.5" />
+              </span>
+            </PopoverTrigger>
+            <PopoverContent
+              align="end"
+              side="bottom"
+              sideOffset={8}
+              className="w-80 gap-0 p-3.5"
             >
-              <Info />
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent align="end" className="w-80">
-            <PopoverHeader>
-              <PopoverTitle>Manual import path</PopoverTitle>
-              <PopoverDescription>
-                Opens a picker for up to 24 PDFs or photos. Duplicates are marked
-                in the list before scan. Your upload rules apply only to your own
-                statements. CSV import is encrypted.
-              </PopoverDescription>
-            </PopoverHeader>
-          </PopoverContent>
-        </Popover>
+              <PopoverHeader className="gap-1.5">
+                <PopoverTitle>Manual import path</PopoverTitle>
+                <PopoverDescription>
+                  Opens a picker for PDFs or photos.
+                </PopoverDescription>
+                <ul className="mt-1.5 list-disc space-y-1 pl-4 text-muted-foreground">
+                  <li>Up to 24 files. Duplicates are marked before scan.</li>
+                  <li>Upload rules apply only to your own statements.</li>
+                  <li>CSV import is encrypted.</li>
+                </ul>
+              </PopoverHeader>
+            </PopoverContent>
+          </Popover>
+        </Button>
         <Button
           type="button"
           variant="outline"
@@ -674,7 +710,7 @@ export function StatementUpload({ onImported }: Props) {
                 <PopoverTrigger asChild>
                   <button
                     type="button"
-                    className="inline-flex size-6 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
+                    className="inline-flex size-6 shrink-0 items-center justify-center rounded-full text-accent hover:bg-accent-subtle hover:text-accent"
                     aria-label="About statement upload"
                   >
                     <Info className="size-3.5" />
@@ -689,8 +725,9 @@ export function StatementUpload({ onImported }: Props) {
                   <PopoverHeader className="gap-1.5">
                     <PopoverTitle>How upload works</PopoverTitle>
                     <PopoverDescription className="sr-only">
-                      Drag PDFs or photos here or choose files. Up to {MAX_FILES} ·
-                      20MB each. Already-imported files are marked before scan.
+                      Drag PDFs or photos here or choose files. Up to{" "}
+                      {MAX_FILES} · 20MB each. Already-imported files are marked
+                      before scan.
                       {vaultPersist
                         ? " The scan is encrypted. Only you can read it."
                         : ""}
@@ -700,9 +737,7 @@ export function StatementUpload({ onImported }: Props) {
                       <li>Up to {MAX_FILES} · 20MB each.</li>
                       <li>Already-imported files are marked before scan.</li>
                       {vaultPersist ? (
-                        <li>
-                          The scan is encrypted. Only you can read it.
-                        </li>
+                        <li>The scan is encrypted. Only you can read it.</li>
                       ) : null}
                     </ul>
                   </PopoverHeader>

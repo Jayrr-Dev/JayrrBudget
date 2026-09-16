@@ -1,49 +1,5 @@
 "use client";
 
-import { Spinner } from "@/components/ui/spinner";
-import {
-  encryptLoanDocumentToVault,
-  linkEncryptedLoanDocument,
-} from "@/domains/loans/application/encryptLoanDocument";
-import { loanFieldsToFormFill } from "@/domains/loans/domain/loanDocumentFields";
-import { formatLoanDocumentProgress } from "@/domains/loans/domain/loanDocumentProgress";
-import {
-  isLoanUploadAbortError,
-  uploadLoanDocument,
-} from "@/domains/loans/queries/uploadLoanDocument";
-import {
-  LOAN_TYPES,
-  RATE_TYPES,
-  loanTypeMeta,
-  type LoanType,
-  type RateType,
-} from "@/domains/loans/domain/loanTypes";
-import {
-  PAYMENT_FREQUENCIES,
-  type PaymentFrequency,
-} from "@/domains/loans/domain/paymentFrequency";
-import {
-  isOcrDocumentFile,
-} from "@/domains/statements/domain/ocrDocumentTypes";
-import { OcrDocumentPickerButton } from "@/domains/statements/ui/OcrDocumentPickerButton";
-import { useFeatureFlags } from "@/domains/feature-flags/ui/useFeatureFlag";
-import { hydrateVaultSession, type VaultClient } from "@/domains/vault/application/ensureVaultFromPasscode";
-import { loadPrivateLedger, type VaultListClient } from "@/domains/vault/application/loadPrivateLedger";
-import {
-  saveEncryptedLoan,
-  saveEncryptedRecords,
-  vaultWriteReady,
-} from "@/domains/vault/application/saveEncryptedLedger";
-import { usePrivateLedger } from "@/domains/vault/ui/usePrivateLedger";
-import { errorMessage } from "@/shared/lib/error-message";
-import { useRouter } from "next/navigation";
-import { useRef, useState } from "react";
-import { toast } from "sonner";
-import { Info, UploadIcon } from "lucide-react";
-import { api } from "@convex/_generated/api";
-import { useConvex, useMutation } from "convex/react";
-import type { MutationClient } from "@/crypto/vaultRecords";
-import { getVaultMasterKey } from "@/crypto/session";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -67,6 +23,54 @@ import {
   PopoverTitle,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { Spinner } from "@/components/ui/spinner";
+import { getVaultMasterKey } from "@/crypto/session";
+import type { MutationClient } from "@/crypto/vaultRecords";
+import { useFeatureFlags } from "@/domains/feature-flags/ui/useFeatureFlag";
+import {
+  encryptLoanDocumentToVault,
+  linkEncryptedLoanDocument,
+} from "@/domains/loans/application/encryptLoanDocument";
+import { loanFieldsToFormFill } from "@/domains/loans/domain/loanDocumentFields";
+import { formatLoanDocumentProgress } from "@/domains/loans/domain/loanDocumentProgress";
+import {
+  LOAN_TYPES,
+  RATE_TYPES,
+  loanTypeMeta,
+  type LoanType,
+  type RateType,
+} from "@/domains/loans/domain/loanTypes";
+import {
+  PAYMENT_FREQUENCIES,
+  type PaymentFrequency,
+} from "@/domains/loans/domain/paymentFrequency";
+import {
+  isLoanUploadAbortError,
+  uploadLoanDocument,
+} from "@/domains/loans/queries/uploadLoanDocument";
+import { isOcrDocumentFile } from "@/domains/statements/domain/ocrDocumentTypes";
+import { OcrDocumentPickerButton } from "@/domains/statements/ui/OcrDocumentPickerButton";
+import {
+  hydrateVaultSession,
+  type VaultClient,
+} from "@/domains/vault/application/ensureVaultFromPasscode";
+import {
+  loadPrivateLedger,
+  type VaultListClient,
+} from "@/domains/vault/application/loadPrivateLedger";
+import {
+  saveEncryptedLoan,
+  saveEncryptedRecords,
+  vaultWriteReady,
+} from "@/domains/vault/application/saveEncryptedLedger";
+import { usePrivateLedger } from "@/domains/vault/ui/usePrivateLedger";
+import { errorMessage } from "@/shared/lib/error-message";
+import { api } from "@convex/_generated/api";
+import { useConvex, useMutation } from "convex/react";
+import { Info, UploadIcon } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
+import { toast } from "sonner";
 
 type AddLoanDialogProps = {
   open: boolean;
@@ -355,7 +359,7 @@ export function AddLoanDialog({ open, onOpenChange }: AddLoanDialogProps) {
                 <PopoverTrigger asChild>
                   <button
                     type="button"
-                    className="inline-flex size-6 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
+                    className="inline-flex size-6 shrink-0 items-center justify-center rounded-full text-accent hover:bg-accent-subtle hover:text-accent"
                     aria-label="Register Lending Account info"
                   >
                     <Info className="size-3.5" />
@@ -368,8 +372,12 @@ export function AddLoanDialog({ open, onOpenChange }: AddLoanDialogProps) {
                       Track a loan with amortization terms.
                     </PopoverDescription>
                     <ul className="mt-1.5 list-disc space-y-1 pl-4 text-muted-foreground">
-                      <li>Mortgage, auto, student, personal, HELOC, or other</li>
-                      <li>Upload a PDF or photo (or take one) to fill the form</li>
+                      <li>
+                        Mortgage, auto, student, personal, HELOC, or other
+                      </li>
+                      <li>
+                        Upload a PDF or photo (or take one) to fill the form
+                      </li>
                       <li>OCR stays encrypted for later viewing</li>
                     </ul>
                   </PopoverHeader>
@@ -435,10 +443,7 @@ export function AddLoanDialog({ open, onOpenChange }: AddLoanDialogProps) {
               />
             </Field>
             {typeMeta.showCollateral ? (
-              <Field
-                label={typeMeta.collateralLabel}
-                htmlFor="loan-collateral"
-              >
+              <Field label={typeMeta.collateralLabel} htmlFor="loan-collateral">
                 <Input
                   id="loan-collateral"
                   value={form.vehicleLabel}
@@ -641,7 +646,7 @@ function Field({
             <PopoverTrigger asChild>
               <button
                 type="button"
-                className="inline-flex size-5 shrink-0 items-center justify-center rounded-full text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]"
+                className="inline-flex size-5 shrink-0 items-center justify-center rounded-full text-accent hover:bg-accent-subtle hover:text-accent"
                 aria-label={`${info.title} info`}
               >
                 <Info className="size-3.5" />

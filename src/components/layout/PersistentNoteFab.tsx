@@ -343,7 +343,7 @@ function StoreSheetPanel({
               type="button"
               aria-label="Add store sheet tab"
               title="Add tab"
-              className="mb-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-sm text-[var(--muted-foreground)] hover:bg-[var(--muted)]/70 hover:text-[var(--foreground)]"
+              className="mb-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-sm text-accent hover:bg-accent-subtle hover:text-accent"
               onClick={() => actions.addTab()}
             >
               <PlusIcon className="size-3" strokeWidth={2} />
@@ -545,7 +545,7 @@ function NotesPanel({
               type="button"
               aria-label="Add note tab"
               title="Add tab"
-              className="mb-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-sm text-[var(--muted-foreground)] hover:bg-[var(--muted)]/70 hover:text-[var(--foreground)]"
+              className="mb-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-sm text-accent hover:bg-accent-subtle hover:text-accent"
               onClick={() => {
                 void actions.insertTab().then((created) => {
                   setActiveId(created.id);

@@ -22,14 +22,21 @@ type MerchantRow = {
   updatedAt: number;
 };
 
+const HIDDEN_COLUMNS = {
+  slug: false,
+  company: false,
+  brand: false,
+  website: false,
+};
+
 const columnHelper = createColumnHelper<DataTableFeatures, MerchantRow>();
 
-function textOrDash(value: string | null | undefined) {
+function cellText(value: string | null | undefined, className = "text-sm") {
   if (value == null || value === "") {
     return <span className="text-sm text-[var(--muted-foreground)]">-</span>;
   }
   return (
-    <span className="line-clamp-2 block text-sm leading-snug break-words">
+    <span className={`block truncate ${className}`} title={value}>
       {value}
     </span>
   );
@@ -38,62 +45,79 @@ function textOrDash(value: string | null | undefined) {
 function formatWhen(ms: number) {
   if (!Number.isFinite(ms) || ms <= 0) return null;
   return new Date(ms).toLocaleString(undefined, {
-    dateStyle: "medium",
-    timeStyle: "short",
+    month: "short",
+    day: "numeric",
+    year: "numeric",
   });
 }
 
 const columns = columnHelper.columns([
   columnHelper.accessor("name", {
     header: "Merchant",
-    cell: ({ getValue }) => <span className="font-medium">{getValue()}</span>,
+    cell: ({ getValue }) => cellText(getValue(), "text-sm font-medium"),
     filterFn: "includesString",
     sortFn: "text",
-    meta: { width: "14rem" },
-  }),
-  columnHelper.accessor("slug", {
-    header: "Slug",
-    cell: ({ getValue }) => (
-      <span className="font-mono text-xs text-[var(--muted-foreground)]">
-        {getValue()}
-      </span>
-    ),
-    filterFn: "includesString",
-    sortFn: "text",
-    meta: { width: "12rem" },
+    meta: { width: "18rem", nowrap: true },
   }),
   columnHelper.accessor("rawName", {
     header: "Raw name",
-    cell: ({ getValue }) => textOrDash(getValue()),
+    cell: ({ getValue }) => cellText(getValue()),
     filterFn: "fuzzy",
     sortFn: "text",
-    meta: { width: "14rem" },
-  }),
-  columnHelper.accessor("company", {
-    header: "Company",
-    cell: ({ getValue }) => textOrDash(getValue()),
-    filterFn: "equalsString",
-    sortFn: "text",
-    meta: { width: "12rem" },
-  }),
-  columnHelper.accessor("brand", {
-    header: "Brand",
-    cell: ({ getValue }) => textOrDash(getValue()),
-    filterFn: "fuzzy",
-    sortFn: "text",
-    meta: { width: "12rem" },
+    meta: { width: "18rem", nowrap: true },
   }),
   columnHelper.accessor("updatedAt", {
     header: "Updated",
-    cell: ({ getValue }) => {
-      const label = formatWhen(getValue());
-      if (!label) return textOrDash(null);
-      return <span className="whitespace-nowrap text-sm">{label}</span>;
-    },
+    cell: ({ getValue }) => cellText(formatWhen(getValue())),
     sortFn: "basic",
-    meta: { width: "10rem" },
+    meta: { width: "8.5rem", nowrap: true },
+  }),
+  columnHelper.accessor("slug", {
+    header: "Slug",
+    cell: ({ getValue }) =>
+      cellText(getValue(), "font-mono text-xs text-[var(--muted-foreground)]"),
+    filterFn: "includesString",
+    sortFn: "text",
+    meta: { width: "14rem", nowrap: true },
+  }),
+  columnHelper.accessor("company", {
+    header: "Company",
+    cell: ({ getValue }) => cellText(getValue()),
+    filterFn: "equalsString",
+    sortFn: "text",
+    meta: { width: "14rem", nowrap: true },
+  }),
+  columnHelper.accessor("brand", {
+    header: "Brand",
+    cell: ({ getValue }) => cellText(getValue()),
+    filterFn: "fuzzy",
+    sortFn: "text",
+    meta: { width: "12rem", nowrap: true },
+  }),
+  columnHelper.accessor("website", {
+    header: "Website",
+    cell: ({ getValue }) => cellText(getValue()),
+    filterFn: "includesString",
+    sortFn: "text",
+    meta: { width: "16rem", nowrap: true },
   }),
 ]);
+
+function MerchantsTable({ rows }: { rows: MerchantRow[] }) {
+  return (
+    <DataTable
+      columns={columns}
+      data={rows}
+      enableGlobalFilter
+      globalFilterFn="fuzzy"
+      searchPlaceholder="Filter merchants…"
+      pageSize={25}
+      enableColumnToggle
+      csvFilename="merchants.csv"
+      initialColumnVisibility={HIDDEN_COLUMNS}
+    />
+  );
+}
 
 export function MerchantsPanel() {
   const privateLedger = usePrivateLedger();
@@ -143,59 +167,30 @@ export function MerchantsPanel() {
   ]);
 
   if (privateLedger.encryptedLedger) {
-    if (privateLedger.loading) {
+    if (privateLedger.loading || !privateLedger.unlocked) {
       return <PageSpinner />;
     }
-    return (
-      <div className="space-y-4">
-        {privateLedger.loading || !privateLedger.unlocked ? (
-          <PageSpinner />
-        ) : (
-          <>
-            <p className="text-sm text-[var(--muted-foreground)]">
-              {encryptedRows.length === 0
-                ? "No merchants yet."
-                : `${encryptedRows.length} merchant${encryptedRows.length === 1 ? "" : "s"}`}
-            </p>
-            {encryptedRows.length === 0 ? null : (
-              <DataTable
-                columns={columns}
-                data={encryptedRows}
-                searchKey="name"
-                searchPlaceholder="Filter merchants…"
-                pageSize={25}
-                enableColumnToggle
-                csvFilename="merchants.csv"
-              />
-            )}
-          </>
-        )}
-      </div>
-    );
+    if (encryptedRows.length === 0) {
+      return (
+        <p className="text-sm text-[var(--muted-foreground)]">
+          No merchants yet.
+        </p>
+      );
+    }
+    return <MerchantsTable rows={encryptedRows} />;
   }
 
   if (merchants === undefined) {
     return <PageSpinner />;
   }
 
-  return (
-    <div className="space-y-4">
+  if (merchants.length === 0) {
+    return (
       <p className="text-sm text-[var(--muted-foreground)]">
-        {merchants.length === 0
-          ? "No merchants yet. They appear after ledger rows have merchant labels."
-          : `${merchants.length} merchant${merchants.length === 1 ? "" : "s"}`}
+        No merchants yet. They appear after ledger rows have merchant labels.
       </p>
-      {merchants.length === 0 ? null : (
-        <DataTable
-          columns={columns}
-          data={merchants as MerchantRow[]}
-          searchKey="name"
-          searchPlaceholder="Filter merchants…"
-          pageSize={25}
-          enableColumnToggle
-          csvFilename="merchants.csv"
-        />
-      )}
-    </div>
-  );
+    );
+  }
+
+  return <MerchantsTable rows={merchants as MerchantRow[]} />;
 }

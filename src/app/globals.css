@@ -50,8 +50,10 @@
 }
 
 /*
- * Semantic tokens
- * Components should use these instead of raw palette values.
+ * Semantic tokens (60-30-10)
+ * 60 sand: page, large panels, type
+ * 30 evergreen: buttons, links, selected nav, focus
+ * 10 piggy: logo, info icons, + add marks, rare badges
  */
 :root {
   --background: #f5f1e8;

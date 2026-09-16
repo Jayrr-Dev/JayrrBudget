@@ -77,7 +77,7 @@ export default function StatementsPage() {
             <PopoverTrigger asChild>
               <button
                 type="button"
-                className="inline-flex size-6 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
+                className="inline-flex size-6 shrink-0 items-center justify-center rounded-full text-accent hover:bg-accent-subtle hover:text-accent"
                 aria-label="About parse logs"
               >
                 <Info className="size-3.5" />

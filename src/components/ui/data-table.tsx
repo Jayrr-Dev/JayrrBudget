@@ -1,5 +1,6 @@
 "use client";
 
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import {
@@ -66,6 +67,9 @@ type ColumnMeta = {
   band?: "read" | "invent";
   label?: string;
   description?: string;
+  nowrap?: boolean;
+  /** Skip max-width so table-fixed leftover space can go to this column. */
+  grow?: boolean;
 };
 
 function HeaderLabel({
@@ -128,6 +132,8 @@ interface DataTableProps<TData extends RowData> {
   enableColumnToggle?: boolean;
   /** When set, toolbar shows Export CSV for filtered rows. */
   csvFilename?: string;
+  /** Stretch the table to the card width instead of hugging column mins. */
+  fillWidth?: boolean;
   /** When set, toolbar shows Refresh to reload table data. */
   onRefresh?: () => void | Promise<void>;
   isRefreshing?: boolean;
@@ -214,6 +220,7 @@ export function DataTable<TData extends RowData>({
   toolbar,
   enableColumnToggle = false,
   csvFilename,
+  fillWidth = false,
   onRefresh,
   isRefreshing = false,
   isLoading = false,
@@ -565,15 +572,15 @@ export function DataTable<TData extends RowData>({
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-auto min-w-44">
                   {columnMenuSections.map((section, index) => {
-                    const showGroupLabel = section.columns.length > 1;
                     const prev = columnMenuSections[index - 1];
                     const showSeparator =
                       index > 0 &&
-                      (showGroupLabel || (prev?.columns.length ?? 0) > 1);
+                      (section.columns.length > 1 ||
+                        (prev?.columns.length ?? 0) > 1);
                     return (
                       <DropdownMenuGroup key={section.id}>
                         {showSeparator ? <DropdownMenuSeparator /> : null}
-                        {showGroupLabel && section.label ? (
+                        {section.label ? (
                           <DropdownMenuLabel>{section.label}</DropdownMenuLabel>
                         ) : null}
                         {section.columns.map((column) => (
@@ -742,7 +749,13 @@ export function DataTable<TData extends RowData>({
           )}
         </div>
         <div className="hidden overflow-hidden rounded-xl border border-[var(--border)] bg-surface-elevated md:block">
-          <Table className="w-max min-w-max table-fixed">
+          <Table
+            className={
+              fillWidth
+                ? "w-full min-w-full table-fixed"
+                : "w-max min-w-max table-fixed"
+            }
+          >
             <colgroup>
               {table.getVisibleLeafColumns().map((column) => {
                 const width = (column.columnDef.meta as ColumnMeta | undefined)
@@ -761,26 +774,8 @@ export function DataTable<TData extends RowData>({
                     }
                     const isGroupParent =
                       header.subHeaders.length > 0 && !header.isPlaceholder;
-                    const isSoloGroupParent =
-                      isGroupParent &&
-                      header.subHeaders.length === 1 &&
-                      header.column.id !== "main";
-                    const visibleParentLeaves =
-                      header.column.parent?.columns.filter((column) =>
-                        column.getIsVisible(),
-                      ) ?? [];
-                    const isSoloGroupLeaf =
-                      !isGroupParent &&
-                      header.column.parent != null &&
-                      header.column.parent.id !== "main" &&
-                      visibleParentLeaves.length === 1;
-                    if (isSoloGroupLeaf) {
-                      return null;
-                    }
-                    const renderHeader = isSoloGroupParent
-                      ? header.subHeaders[0]!
-                      : header;
-                    const renderColumn = renderHeader.column;
+                    const renderHeader = header;
+                    const renderColumn = header.column;
                     const canSort = renderColumn.getCanSort();
                     const sorted = renderColumn.getIsSorted();
                     const columnFilter = filtersByColumnId.get(renderColumn.id);
@@ -790,7 +785,7 @@ export function DataTable<TData extends RowData>({
                     const filterActive = Boolean(
                       columnFilter && filterValue !== "all",
                     );
-                    const showGroupTitle = isGroupParent && !isSoloGroupParent;
+                    const showGroupTitle = isGroupParent;
                     const columnMeta = renderColumn.columnDef.meta as
                       | ColumnMeta
                       | undefined;
@@ -813,12 +808,13 @@ export function DataTable<TData extends RowData>({
                     const sortLabel =
                       csvColumnLabel(renderColumn) ?? renderColumn.id;
                     const isActionsCol = renderColumn.id === "actions";
-                    const isStickyCol = renderColumn.id === firstLeafColumnId;
-                    const headerRowSpan = isSoloGroupParent
-                      ? 2
-                      : header.rowSpan > 1
-                        ? header.rowSpan
-                        : undefined;
+                    const isStickyCol =
+                      renderColumn.id === firstLeafColumnId ||
+                      header.subHeaders.some(
+                        (child) => child.column.id === firstLeafColumnId,
+                      );
+                    const headerRowSpan =
+                      header.rowSpan > 1 ? header.rowSpan : undefined;
                     const labelNode = (
                       <HeaderLabel description={description}>
                         <span className="line-clamp-2 text-left leading-snug">
@@ -959,11 +955,12 @@ export function DataTable<TData extends RowData>({
                   >
                     {row.getVisibleCells().map((cell) => {
                       const cellMeta = cell.column.columnDef.meta as
-                        | { width?: string; band?: "read" | "invent" }
+                        | ColumnMeta
                         | undefined;
                       const width = cellMeta?.width;
                       const inventBand = cellMeta?.band === "invent";
                       const isActionsCol = cell.column.id === "actions";
+                      const nowrap = cellMeta?.nowrap === true;
                       return (
                         <TableCell
                           key={cell.id}
@@ -978,7 +975,9 @@ export function DataTable<TData extends RowData>({
                               : undefined
                           }
                           className={[
-                            "whitespace-normal align-top",
+                            nowrap
+                              ? "whitespace-nowrap align-middle"
+                              : "whitespace-normal align-top",
                             width ? "overflow-hidden" : "",
                             isActionsCol ? "px-0" : "",
                             inventBand

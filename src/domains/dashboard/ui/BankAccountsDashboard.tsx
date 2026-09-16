@@ -500,7 +500,7 @@ export function BankAccountsDashboard({
                   type="button"
                   variant="ghost"
                   size="icon-sm"
-                  className="size-4 shrink-0 rounded-full border border-[var(--border)] text-[var(--muted-foreground)]"
+                  className="size-4 shrink-0 rounded-full border border-border text-accent hover:bg-accent-subtle hover:text-accent"
                   aria-label="Register Lending Account"
                   onClick={() => setAddLoanOpen(true)}
                 >
@@ -548,7 +548,7 @@ export function BankAccountsDashboard({
                 type="button"
                 variant="ghost"
                 size="icon-sm"
-                className="size-4 shrink-0 rounded-full border border-[var(--border)] text-[var(--muted-foreground)]"
+                className="size-4 shrink-0 rounded-full border border-border text-accent hover:bg-accent-subtle hover:text-accent"
                 aria-label="Register Lending Account"
                 onClick={() => setAddLoanOpen(true)}
               >

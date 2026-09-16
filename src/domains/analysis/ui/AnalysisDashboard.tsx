@@ -249,7 +249,7 @@ function InfoTip({ label, children }: { label: string; children: string }) {
       <TooltipTrigger asChild>
         <button
           type="button"
-          className="inline-flex size-5 shrink-0 items-center justify-center rounded-md text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)] sm:size-6"
+          className="inline-flex size-5 shrink-0 items-center justify-center rounded-md text-accent hover:bg-accent-subtle hover:text-accent sm:size-6"
           aria-label={label}
         >
           <IconInfoCircle className="size-3.5 sm:size-4" />
@@ -3013,7 +3013,7 @@ function RowTxnsPopover({
             aria-label={`Transactions for ${label}`}
             onClick={(event) => event.stopPropagation()}
             onPointerDown={(event) => event.stopPropagation()}
-            className="inline-flex size-5 shrink-0 items-center justify-center rounded-md text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]"
+            className="inline-flex size-5 shrink-0 items-center justify-center rounded-md text-accent hover:bg-accent-subtle hover:text-accent"
           >
             <IconInfoCircle className="size-3.5" />
           </button>
@@ -3169,6 +3169,7 @@ function LeaderboardTable({
       ? "grid-cols-[1.75rem_minmax(0,1fr)_9rem_4rem_3.75rem_1.25rem]"
       : "grid-cols-[1.75rem_minmax(0,1fr)_9rem_4rem_3.75rem]";
   const grid = `grid w-full items-center gap-x-3 px-3 ${gridCols}`;
+  const rankCol = "flex h-5 w-full items-center justify-center";
 
   return (
     <section className="space-y-3 rounded-xl border border-border bg-surface-elevated p-3 sm:space-y-4 sm:p-6">
@@ -3196,7 +3197,7 @@ function LeaderboardTable({
           <div
             className={`${grid} border-b border-[var(--border)] py-2 text-xs text-[var(--muted-foreground)]`}
           >
-            <span className="text-left tabular-nums">#</span>
+            <span className={`${rankCol} tabular-nums`}>#</span>
             <span className="min-w-0 truncate text-left">{nameLabel}</span>
             <span className="w-full text-left">Spend</span>
             <span className="w-full text-left">Count</span>
@@ -3225,7 +3226,9 @@ function LeaderboardTable({
               ) : null;
               const mainCells = (
                 <>
-                  <span className="text-left text-[var(--muted-foreground)] tabular-nums">
+                  <span
+                    className={`${rankCol} text-[var(--muted-foreground)] tabular-nums`}
+                  >
                     {index + 1}
                   </span>
                   <span className="min-w-0 truncate font-medium">
@@ -3297,7 +3300,7 @@ function LeaderboardTable({
                                 <button
                                   type="button"
                                   aria-label={`Add ${vendor.name} to store sheet`}
-                                  className="inline-flex size-5 items-center justify-center rounded text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]"
+                                  className={`${rankCol} rounded text-accent hover:bg-accent-subtle hover:text-accent`}
                                   onClick={(event) => {
                                     event.stopPropagation();
                                     void addRow({
@@ -3587,6 +3590,7 @@ function AverageLeaderboardTable({
       ? "grid-cols-[1.75rem_minmax(0,1fr)_9rem_5.5rem_1.25rem]"
       : "grid-cols-[1.75rem_minmax(0,1fr)_9rem_5.5rem]";
   const grid = `grid w-full items-center gap-x-3 px-3 ${gridCols}`;
+  const rankCol = "flex h-5 w-full items-center justify-center";
 
   return (
     <section className="space-y-3 rounded-xl border border-border bg-surface-elevated p-3 sm:space-y-4 sm:p-6">
@@ -3611,7 +3615,7 @@ function AverageLeaderboardTable({
           <div
             className={`${grid} border-b border-[var(--border)] py-2 text-xs text-[var(--muted-foreground)]`}
           >
-            <span className="tabular-nums">#</span>
+            <span className={`${rankCol} tabular-nums`}>#</span>
             <span className="min-w-0 truncate text-left">{nameLabel}</span>
             <span className="w-full whitespace-nowrap text-right">
               {meta.avgCostLabel}
@@ -3630,7 +3634,9 @@ function AverageLeaderboardTable({
               const avgCount = (row.count ?? 0) / divisor;
               const mainCells = (
                 <>
-                  <span className="text-[var(--muted-foreground)] tabular-nums">
+                  <span
+                    className={`${rankCol} text-[var(--muted-foreground)] tabular-nums`}
+                  >
                     {index + 1}
                   </span>
                   <span className="min-w-0 truncate font-medium">
@@ -3713,7 +3719,7 @@ function AverageLeaderboardTable({
                                 <button
                                   type="button"
                                   aria-label={`Add ${vendor.name} to store sheet`}
-                                  className="inline-flex size-5 items-center justify-center rounded text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]"
+                                  className={`${rankCol} rounded text-accent hover:bg-accent-subtle hover:text-accent`}
                                   onClick={(event) => {
                                     event.stopPropagation();
                                     void addRow({
