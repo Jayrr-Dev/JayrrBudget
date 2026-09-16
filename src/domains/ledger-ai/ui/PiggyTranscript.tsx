@@ -20,6 +20,7 @@ import {
 } from "@/domains/ledger-ai/ui/PiggyMascot";
 import { cn } from "@/lib/utils";
 import type { ReactNode } from "react";
+import styles from "./PiggyTranscript.module.css";
 
 /** Shared scroll shell for bottom Piggy and Canvas Piggy. */
 export function PiggyTranscript({
@@ -70,7 +71,7 @@ export function PiggyUserMessage({ text }: { text: string }) {
   return (
     <Message align="end" className="motion-safe:animate-piggy-pop">
       <MessageContent>
-        <Bubble align="end" variant="default">
+        <Bubble align="end" variant="default" className={styles.userBubble}>
           <BubbleContent className="whitespace-pre-wrap">{text}</BubbleContent>
         </Bubble>
       </MessageContent>
@@ -90,7 +91,7 @@ export function PiggyAssistantMessage({
   return (
     <Message
       align="start"
-      className={cn("motion-safe:animate-piggy-pop", className)}
+      className={cn("motion-safe:animate-piggy-pop", styles.assistant, className)}
     >
       <MessageAvatar className="size-10 self-start overflow-visible rounded-none bg-transparent">
         <PiggyMascot mood={mood} iconClassName="size-10" />
@@ -109,7 +110,7 @@ export function PiggyTextBubble({
 }) {
   return (
     <Bubble align={align} variant="piggy">
-      <BubbleContent>{children}</BubbleContent>
+      <BubbleContent className="whitespace-pre-wrap">{children}</BubbleContent>
     </Bubble>
   );
 }

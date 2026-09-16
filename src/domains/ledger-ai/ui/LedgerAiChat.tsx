@@ -16,7 +16,6 @@ import { useFeatureFlag } from "@/domains/feature-flags/ui/useFeatureFlag";
 import {
   piggyMoodFromChat,
   piggyMoodFromMessage,
-  PiggyMascot,
   type PiggyMood,
 } from "@/domains/ledger-ai/ui/PiggyMascot";
 import {
@@ -184,12 +183,15 @@ function PiggyChatPaneSession({
       >
         {messages.length === 0 ? (
           <PiggyTranscriptItem messageId="piggy-empty">
-            <PiggyMascot mood="happy" iconClassName="mx-auto size-16" />
-            <p className="px-1 py-2 text-xs text-muted-foreground">
-              What&apos;s rattling in the bank? Try &quot;How much did I spend
-              on groceries last month?&quot; or &quot;Move Uber Eats to Food /
-              Delivery.&quot;
-            </p>
+            <PiggyAssistantMessage mood="happy">
+              <PiggyTextBubble>
+                <p className="font-medium">What&apos;s rattling in the bank?</p>
+                <p className="mt-1.5 text-xs leading-relaxed">
+                  Try &quot;How much did I spend on groceries last month?&quot;
+                  {" "}or &quot;Move Uber Eats to Food / Delivery.&quot;
+                </p>
+              </PiggyTextBubble>
+            </PiggyAssistantMessage>
           </PiggyTranscriptItem>
         ) : (
           messages.map((message) => {
