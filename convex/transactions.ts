@@ -792,3 +792,309 @@ export const renameDescriptions = mutation({
     return { updated };
   },
 });
+
+function merchantKey(value: string | null | undefined) {
+  return (value ?? "").trim().toLowerCase();
+}
+
+function rowMatchesMerchantName(
+  row: {
+    merchantClean: string | null;
+    merchantName: string | null;
+  },
+  merchant: string,
+) {
+  const key = merchantKey(merchant);
+  if (!key) return false;
+  return (
+    merchantKey(row.merchantClean) === key ||
+    merchantKey(row.merchantName) === key
+  );
+}
+
+const taxonomyPatchValidator = v.object({
+  section: v.union(v.string(), v.null()),
+  category: v.union(v.string(), v.null()),
+  subcategory: v.union(v.string(), v.null()),
+});
+
+/** Apply section / category / subcategory to every row for one payee. */
+export const recategorizeByMerchant = mutation({
+  args: {
+    merchant: v.string(),
+    merchantId: v.optional(v.id("merchants")),
+    taxonomy: taxonomyPatchValidator,
+  },
+  returns: v.object({ updated: v.number() }),
+  handler: async (ctx, args) => {
+    const user = await requireUser(ctx);
+    const merchant = args.merchant.trim();
+    if (!merchant) throw new Error("Merchant is required");
+
+    const tax = await resolveNamedTaxonomyPath(ctx, user._id, args.taxonomy);
+    const patch = {
+      section: tax.section,
+      sectionLegacyId: tax.sectionLegacyId,
+      category: tax.category,
+      categoryLegacyId: tax.categoryLegacyId,
+      subcategory: tax.subcategory,
+      subcategoryLegacyId: tax.subcategoryLegacyId,
+      spread: tax.spread,
+      spreadLegacyId: tax.spreadLegacyId,
+      updatedAt: Date.now(),
+    };
+
+    let rows;
+    if (args.merchantId) {
+      const owned = await ctx.db.get(args.merchantId);
+      if (!owned || owned.userId !== user._id) {
+        throw new Error("Merchant not found");
+      }
+      rows = await ctx.db
+        .query("transactions")
+        .withIndex("by_userId_merchantId", (q) =>
+          q.eq("userId", user._id).eq("merchantId", args.merchantId),
+        )
+        .collect();
+    } else {
+      const all = await ctx.db
+        .query("transactions")
+        .withIndex("by_userId", (q) => q.eq("userId", user._id))
+        .collect();
+      rows = all.filter((row) => rowMatchesMerchantName(row, merchant));
+    }
+
+    let updated = 0;
+    for (const row of rows) {
+      await ctx.db.patch(row._id, patch);
+      const updatedRow = await ctx.db.get(row._id);
+      if (updatedRow) await rememberCategorization(ctx, updatedRow);
+      updated += 1;
+    }
+    return { updated };
+  },
+});
+
+const aiTxnRow = v.object({
+  transactionId: v.string(),
+  date: v.string(),
+  description: v.string(),
+  merchant: v.union(v.string(), v.null()),
+  amount: v.number(),
+  currency: v.string(),
+  section: v.union(v.string(), v.null()),
+  category: v.union(v.string(), v.null()),
+  subcategory: v.union(v.string(), v.null()),
+  tags: v.union(v.string(), v.null()),
+});
+
+function haystack(row: {
+  description: string;
+  merchantClean: string | null;
+  merchantName: string | null;
+  section: string | null;
+  category: string | null;
+  subcategory: string | null;
+}) {
+  return [
+    row.description,
+    row.merchantClean,
+    row.merchantName,
+    row.section,
+    row.category,
+    row.subcategory,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+}
+
+function toAiTxn(row: {
+  transactionId: string;
+  posted: string;
+  description: string;
+  merchantClean: string | null;
+  merchantName: string | null;
+  amount: number;
+  currency: string;
+  section: string | null;
+  category: string | null;
+  subcategory: string | null;
+  tags: string | null;
+}) {
+  return {
+    transactionId: row.transactionId,
+    date: row.posted,
+    description: row.description,
+    merchant: row.merchantClean ?? row.merchantName,
+    amount: row.amount,
+    currency: row.currency,
+    section: row.section,
+    category: row.category,
+    subcategory: row.subcategory,
+    tags: row.tags,
+  };
+}
+
+/** Bounded search over the signed-in user's ledger for Ledger AI. */
+export const searchForAi = query({
+  args: {
+    query: v.optional(v.string()),
+    merchant: v.optional(v.string()),
+    section: v.optional(v.string()),
+    category: v.optional(v.string()),
+    subcategory: v.optional(v.string()),
+    startDate: v.optional(v.string()),
+    endDate: v.optional(v.string()),
+    limit: v.optional(v.number()),
+  },
+  returns: v.object({
+    matches: v.array(aiTxnRow),
+    scanned: v.number(),
+    truncated: v.boolean(),
+  }),
+  handler: async (ctx, args) => {
+    const user = await requireUser(ctx);
+    const limit = Math.min(50, Math.max(1, Math.floor(args.limit ?? 25)));
+    const qText = args.query?.trim().toLowerCase() ?? "";
+    const merchant = args.merchant?.trim().toLowerCase() ?? "";
+    const section = args.section?.trim().toLowerCase() ?? "";
+    const category = args.category?.trim().toLowerCase() ?? "";
+    const subcategory = args.subcategory?.trim().toLowerCase() ?? "";
+    const startDate = args.startDate?.trim() || null;
+    const endDate = args.endDate?.trim() || null;
+
+    const rows = await ctx.db
+      .query("transactions")
+      .withIndex("by_userId_posted", (q) => {
+        const base = q.eq("userId", user._id);
+        if (startDate && endDate) {
+          return base.gte("posted", startDate).lte("posted", endDate);
+        }
+        if (startDate) return base.gte("posted", startDate);
+        if (endDate) return base.lte("posted", endDate);
+        return base;
+      })
+      .order("desc")
+      .take(500);
+
+    const matches = [];
+    for (const row of rows) {
+      if (merchant) {
+        const label = `${row.merchantClean ?? ""} ${row.merchantName ?? ""}`.toLowerCase();
+        if (!label.includes(merchant)) continue;
+      }
+      if (section && norm(row.section) !== section) continue;
+      if (category && norm(row.category) !== category) continue;
+      if (subcategory && norm(row.subcategory) !== subcategory) continue;
+      if (qText && !haystack(row).includes(qText)) continue;
+      matches.push(toAiTxn(row));
+      if (matches.length >= limit) break;
+    }
+
+    return {
+      matches,
+      scanned: rows.length,
+      truncated: rows.length === 500,
+    };
+  },
+});
+
+/** Spend totals for the signed-in user, grouped for Ledger AI. */
+export const summarizeForAi = query({
+  args: {
+    groupBy: v.union(
+      v.literal("merchant"),
+      v.literal("section"),
+      v.literal("category"),
+      v.literal("subcategory"),
+    ),
+    startDate: v.optional(v.string()),
+    endDate: v.optional(v.string()),
+  },
+  returns: v.object({
+    groupBy: v.string(),
+    scanned: v.number(),
+    truncated: v.boolean(),
+    spendTotal: v.number(),
+    incomeTotal: v.number(),
+    groups: v.array(
+      v.object({
+        name: v.string(),
+        spend: v.number(),
+        income: v.number(),
+        count: v.number(),
+      }),
+    ),
+  }),
+  handler: async (ctx, args) => {
+    const user = await requireUser(ctx);
+    const startDate = args.startDate?.trim() || null;
+    const endDate = args.endDate?.trim() || null;
+
+    const rows = await ctx.db
+      .query("transactions")
+      .withIndex("by_userId_posted", (q) => {
+        const base = q.eq("userId", user._id);
+        if (startDate && endDate) {
+          return base.gte("posted", startDate).lte("posted", endDate);
+        }
+        if (startDate) return base.gte("posted", startDate);
+        if (endDate) return base.lte("posted", endDate);
+        return base;
+      })
+      .order("desc")
+      .take(1500);
+
+    const buckets = new Map<
+      string,
+      { spend: number; income: number; count: number }
+    >();
+    let spendTotal = 0;
+    let incomeTotal = 0;
+
+    for (const row of rows) {
+      let name = "Unlabeled";
+      if (args.groupBy === "merchant") {
+        name = row.merchantClean || row.merchantName || "Unknown";
+      } else if (args.groupBy === "section") {
+        name = row.section || "Unlabeled";
+      } else if (args.groupBy === "category") {
+        name = row.category || "Unlabeled";
+      } else {
+        name = row.subcategory || "Unlabeled";
+      }
+
+      const bucket = buckets.get(name) ?? { spend: 0, income: 0, count: 0 };
+      bucket.count += 1;
+      if (row.amount > 0) {
+        bucket.spend += row.amount;
+        spendTotal += row.amount;
+      } else if (row.amount < 0) {
+        const income = Math.abs(row.amount);
+        bucket.income += income;
+        incomeTotal += income;
+      }
+      buckets.set(name, bucket);
+    }
+
+    const groups = [...buckets.entries()]
+      .map(([name, bucket]) => ({
+        name,
+        spend: Number(bucket.spend.toFixed(2)),
+        income: Number(bucket.income.toFixed(2)),
+        count: bucket.count,
+      }))
+      .sort((a, b) => b.spend - a.spend)
+      .slice(0, 20);
+
+    return {
+      groupBy: args.groupBy,
+      scanned: rows.length,
+      truncated: rows.length === 1500,
+      spendTotal: Number(spendTotal.toFixed(2)),
+      incomeTotal: Number(incomeTotal.toFixed(2)),
+      groups,
+    };
+  },
+});

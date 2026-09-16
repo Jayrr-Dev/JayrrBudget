@@ -48,6 +48,8 @@ export type PrivateMerchant = {
   company?: string | null;
   brand?: string | null;
   website?: string | null;
+  /** HTTPS URL or data URL; ciphertext-only in the vault envelope. */
+  logoUrl?: string | null;
   /** Envelope timestamps from encryptedRecords (ms since epoch). */
   createdAt?: number;
   updatedAt?: number;

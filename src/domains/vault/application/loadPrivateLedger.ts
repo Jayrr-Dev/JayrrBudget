@@ -108,6 +108,7 @@ function asMerchant(
     company: row.company == null ? null : String(row.company),
     brand: row.brand == null ? null : String(row.brand),
     website: row.website == null ? null : String(row.website),
+    logoUrl: row.logoUrl == null ? null : String(row.logoUrl),
     createdAt: timestamps?.createdAt,
     updatedAt: timestamps?.updatedAt,
   };

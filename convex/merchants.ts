@@ -1,4 +1,5 @@
 import { v } from "convex/values";
+import type { Doc, Id } from "./_generated/dataModel";
 import {
   mutation,
   query,
@@ -7,15 +8,18 @@ import {
 } from "./_generated/server";
 import { requireUser } from "./lib/auth";
 import {
+  drainMergeSources,
   ensureMerchant,
   linkTxnsToMerchant,
   merchantLabelFromTxn,
   merchantLogoSrc,
   updateMerchantOrMerge,
 } from "./lib/ensureMerchant";
-import { countTxnsForMerchant, retargetTxnMerchant } from "./lib/merchantTxnCount";
 import { merchantSlug } from "./lib/merchantSlug";
-import type { Doc, Id } from "./_generated/dataModel";
+import {
+  countTxnsForMerchant,
+  retargetTxnMerchant,
+} from "./lib/merchantTxnCount";
 
 const merchantDoc = v.object({
   id: v.id("merchants"),
@@ -36,7 +40,8 @@ async function toMerchantDoc(
   ctx: QueryCtx | MutationCtx,
   row: Doc<"merchants">,
 ) {
-  const createdAt = row.createdAt > 0 ? row.createdAt : (row._creationTime ?? 0);
+  const createdAt =
+    row.createdAt > 0 ? row.createdAt : (row._creationTime ?? 0);
   const updatedAt = row.updatedAt > 0 ? row.updatedAt : createdAt;
   return {
     id: row._id,
@@ -263,6 +268,65 @@ export const editImpact = query({
   },
 });
 
+/**
+ * Rename keeper if needed, then move source payee rows onto it.
+ * Paginated. Call again until isDone.
+ */
+export const mergeCluster = mutation({
+  args: {
+    keeperId: v.id("merchants"),
+    sourceIds: v.array(v.id("merchants")),
+    name: v.optional(v.string()),
+    txnLimit: v.optional(v.number()),
+  },
+  returns: v.object({
+    keeperId: v.id("merchants"),
+    keeperName: v.string(),
+    transactionsUpdated: v.number(),
+    sourcesDeleted: v.number(),
+    sourcesRemaining: v.number(),
+    isDone: v.boolean(),
+  }),
+  handler: async (ctx, args) => {
+    const user = await requireUser(ctx);
+    let keeperId = args.keeperId;
+    const nextName = args.name?.trim();
+    if (nextName) {
+      const current = await ctx.db.get(args.keeperId);
+      if (!current || current.userId !== user._id) {
+        throw new Error("Merchant not found");
+      }
+      if (
+        current.name !== nextName ||
+        merchantSlug(nextName) !== current.slug
+      ) {
+        const renamed = await updateMerchantOrMerge(
+          ctx,
+          user._id,
+          args.keeperId,
+          { name: nextName },
+        );
+        keeperId = renamed.merchant._id;
+      }
+    }
+    const drained = await drainMergeSources(
+      ctx,
+      user._id,
+      keeperId,
+      args.sourceIds,
+      args.txnLimit,
+    );
+    return {
+      keeperId: drained.keeper._id,
+      keeperName: drained.keeper.name,
+      transactionsUpdated: drained.transactionsUpdated,
+      sourcesDeleted: drained.sourcesDeleted,
+      sourcesRemaining: drained.sourcesRemaining,
+      isDone: drained.isDone,
+    };
+  },
+});
+
 /** Upload URL for a merchant logo image. */
 export const generateLogoUploadUrl = mutation({
   args: {},
@@ -484,5 +548,53 @@ export const syncTransactionCounts = mutation({
       isDone: page.isDone,
       continueCursor: page.isDone ? null : page.continueCursor,
     };
+  },
+});
+
+const TXN_PEEK_LIMIT = 48;
+const TXN_PEEK_SCAN = 200;
+
+const merchantTxnPeekDoc = v.object({
+  date: v.string(),
+  description: v.string(),
+  amount: v.number(),
+  currency: v.string(),
+});
+
+/** Latest linked ledger rows for a merchant popover (capped). */
+export const listTransactionPeeks = query({
+  args: {
+    merchantId: v.id("merchants"),
+  },
+  returns: v.array(merchantTxnPeekDoc),
+  handler: async (ctx, args) => {
+    const user = await requireUser(ctx);
+    const merchant = await ctx.db.get(args.merchantId);
+    if (!merchant) return [];
+    if (merchant.userId !== user._id) {
+      throw new Error("Unauthorized");
+    }
+
+    const page = await ctx.db
+      .query("transactions")
+      .withIndex("by_userId_merchantId", (q) =>
+        q.eq("userId", user._id).eq("merchantId", args.merchantId),
+      )
+      .paginate({ numItems: TXN_PEEK_SCAN, cursor: null });
+
+    return page.page
+      .slice()
+      .sort((left, right) => {
+        const byPosted = right.posted.localeCompare(left.posted);
+        if (byPosted !== 0) return byPosted;
+        return right._id.localeCompare(left._id);
+      })
+      .slice(0, TXN_PEEK_LIMIT)
+      .map((txn) => ({
+        date: txn.posted,
+        description: txn.description,
+        amount: txn.amount,
+        currency: txn.currency,
+      }));
   },
 });

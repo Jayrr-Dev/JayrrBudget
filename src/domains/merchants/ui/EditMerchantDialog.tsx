@@ -19,21 +19,41 @@ import {
   PopoverTitle,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { toSlug } from "@/domains/enrichment/domain/slug";
+import { MerchantLogoAvatar } from "@/domains/merchants/ui/MerchantLogoAvatar";
+import {
+  saveEncryptedMerchant,
+  saveEncryptedRecords,
+  vaultWriteReady,
+} from "@/domains/vault/application/saveEncryptedLedger";
 import { usePrivateLedger } from "@/domains/vault/ui/usePrivateLedger";
 import { errorMessage } from "@/shared/lib/error-message";
+import {
+  blobToDataUrl,
+  optimizeImageToWebpAvatar,
+} from "@/shared/lib/optimizeImageToWebp";
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
-import { useMutation, useQuery } from "convex/react";
+import { useConvex, useMutation, useQuery } from "convex/react";
 import { Info } from "lucide-react";
-import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+} from "react";
 import { toast } from "sonner";
 
 const LOGO_MAX_BYTES = 2 * 1024 * 1024;
 const LOGO_ACCEPT = "image/png,image/jpeg,image/webp,image/gif,image/svg+xml";
+const TX_CHUNK = 40;
 
 export type EditableMerchant = {
   id: string;
   name: string;
+  slug?: string;
   logoUrl: string | null;
   logoSrc?: string | null;
 };
@@ -64,6 +84,7 @@ export function EditMerchantDialog({ merchant, open, onOpenChange }: Props) {
   const generateLogoUploadUrl = useMutation(
     api.merchants.generateLogoUploadUrl,
   );
+  const client = useConvex();
   const privateLedger = usePrivateLedger();
   const fileRef = useRef<HTMLInputElement>(null);
   const [name, setName] = useState("");
@@ -71,6 +92,9 @@ export function EditMerchantDialog({ merchant, open, onOpenChange }: Props) {
   const [previewSrc, setPreviewSrc] = useState<string | null>(null);
   const [pendingStorageId, setPendingStorageId] =
     useState<Id<"_storage"> | null>(null);
+  const [pendingLogoDataUrl, setPendingLogoDataUrl] = useState<string | null>(
+    null,
+  );
   const [busy, setBusy] = useState(false);
 
   const convexImpactArgs =
@@ -109,16 +133,24 @@ export function EditMerchantDialog({ merchant, open, onOpenChange }: Props) {
     );
   })();
 
+  const replacePreview = useCallback((next: string | null) => {
+    setPreviewSrc((prev) => {
+      if (prev?.startsWith("blob:")) URL.revokeObjectURL(prev);
+      return next;
+    });
+  }, []);
+
   useEffect(() => {
     if (!open || !merchant) return;
     setName(merchant.name);
     setLogoUrl(merchant.logoUrl ?? "");
-    setPreviewSrc(merchant.logoSrc ?? merchant.logoUrl ?? null);
+    replacePreview(merchant.logoSrc ?? merchant.logoUrl ?? null);
     setPendingStorageId(null);
-  }, [open, merchant]);
+    setPendingLogoDataUrl(null);
+  }, [open, merchant, replacePreview]);
 
   async function onPickLogo(file: File | undefined) {
-    if (!file || privateLedger.encryptedLedger) return;
+    if (!file) return;
     if (!file.type.startsWith("image/")) {
       toast.error("Choose an image file");
       return;
@@ -128,14 +160,21 @@ export function EditMerchantDialog({ merchant, open, onOpenChange }: Props) {
       return;
     }
     setBusy(true);
-    const localUrl = URL.createObjectURL(file);
-    setPreviewSrc(localUrl);
     try {
+      const optimized = await optimizeImageToWebpAvatar(file);
+      if (privateLedger.encryptedLedger) {
+        const dataUrl = await blobToDataUrl(optimized);
+        replacePreview(dataUrl);
+        setPendingLogoDataUrl(dataUrl);
+        return;
+      }
+      const localUrl = URL.createObjectURL(optimized);
+      replacePreview(localUrl);
       const uploadUrl = await generateLogoUploadUrl();
       const response = await fetch(uploadUrl, {
         method: "POST",
-        headers: { "Content-Type": file.type },
-        body: file,
+        headers: { "Content-Type": optimized.type },
+        body: optimized,
       });
       if (!response.ok) {
         throw new Error("Upload failed");
@@ -146,7 +185,7 @@ export function EditMerchantDialog({ merchant, open, onOpenChange }: Props) {
       }
       setPendingStorageId(payload.storageId as Id<"_storage">);
     } catch (error) {
-      setPreviewSrc(merchant?.logoSrc ?? merchant?.logoUrl ?? null);
+      replacePreview(merchant?.logoSrc ?? merchant?.logoUrl ?? null);
       toast.error(errorMessage(error, "Could not upload logo"));
     } finally {
       setBusy(false);
@@ -163,6 +202,85 @@ export function EditMerchantDialog({ merchant, open, onOpenChange }: Props) {
     }
     setBusy(true);
     try {
+      if (privateLedger.encryptedLedger) {
+        const write = vaultWriteReady({
+          encryptedLedger: true,
+          userId: privateLedger.userId,
+          vaultId: privateLedger.vaultId,
+          keyId: privateLedger.keyId,
+          client,
+        });
+        if (!write) {
+          throw new Error("Unlock the private ledger to save this merchant.");
+        }
+        const existing = privateLedger.ledger.merchants.find(
+          (row) => row.recordId === merchant.id || row.name === merchant.name,
+        );
+        const merchantId =
+          existing?.merchantId ?? merchant.slug ?? toSlug(trimmed) ?? trimmed;
+        const nextLogo =
+          pendingLogoDataUrl ?? (logoUrl.trim() || existing?.logoUrl || null);
+        await saveEncryptedMerchant(write, {
+          merchantId,
+          name: trimmed,
+          rawName: existing?.rawName ?? trimmed,
+          company: existing?.company ?? null,
+          brand: existing?.brand ?? null,
+          website: existing?.website ?? null,
+          logoUrl: nextLogo,
+          expectedRevision: existing?.revision ?? null,
+        });
+        const previous = merchant.name.trim();
+        if (previous && previous !== trimmed) {
+          const matches = privateLedger.ledger.transactions.filter((tx) => {
+            const label = (tx.merchantClean ?? tx.merchantName ?? "").trim();
+            return label === previous;
+          });
+          for (let i = 0; i < matches.length; i += TX_CHUNK) {
+            const chunk = matches.slice(i, i + TX_CHUNK);
+            await saveEncryptedRecords(
+              write,
+              chunk.map((tx) => {
+                const next = { ...tx, merchantClean: trimmed };
+                const { recordId, revision, ...value } = next;
+                return {
+                  recordId,
+                  kind: "tx" as const,
+                  value: {
+                    date: value.date,
+                    authorizedDate: value.authorizedDate ?? null,
+                    description: value.description,
+                    amount: value.amount,
+                    currency: value.currency,
+                    accountId: value.accountId ?? null,
+                    pending: Boolean(value.pending),
+                    city: value.city ?? null,
+                    region: value.region ?? null,
+                    country: value.country ?? null,
+                    merchantName: value.merchantName ?? null,
+                    merchantClean: trimmed,
+                    sectionName: value.sectionName ?? null,
+                    categoryName: value.categoryName ?? null,
+                    subcategoryName: value.subcategoryName ?? null,
+                    spreadName: value.spreadName ?? null,
+                    transactionTypeName: value.transactionTypeName ?? null,
+                    txnCode: value.txnCode ?? null,
+                    channel: value.channel ?? null,
+                    statementRecordId: value.statementRecordId ?? null,
+                    source: value.source ?? "statement",
+                    tagNames: value.tagNames ?? [],
+                  },
+                  expectedRevision: revision,
+                };
+              }),
+            );
+          }
+        }
+        privateLedger.reload();
+        toast.success(`Saved ${trimmed}`);
+        onOpenChange(false);
+        return;
+      }
       const result = await update({
         merchantId: merchant.id as Id<"merchants">,
         name: trimmed,
@@ -223,7 +341,9 @@ export function EditMerchantDialog({ merchant, open, onOpenChange }: Props) {
                     </PopoverDescription>
                     <ul className="mt-1.5 list-disc space-y-1 pl-4 text-muted-foreground">
                       <li>Name and logo only</li>
-                      <li>Upload an image or paste a logo URL</li>
+                      <li>Uploads become a small WebP avatar</li>
+                      <li>Private ledger keeps that avatar encrypted</li>
+                      <li>Or paste a logo URL</li>
                       <li>
                         Same name as another merchant merges this row into that
                         one
@@ -253,23 +373,13 @@ export function EditMerchantDialog({ merchant, open, onOpenChange }: Props) {
             <div className="grid gap-1.5">
               <Label>Logo</Label>
               <div className="flex items-center gap-3">
-                <div className="flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-control-border bg-surface-elevated">
-                  {previewSrc ? (
-                    <img
-                      src={previewSrc}
-                      alt=""
-                      className="size-full object-contain"
-                    />
-                  ) : (
-                    <span className="text-xs text-muted-foreground">None</span>
-                  )}
-                </div>
+                <MerchantLogoAvatar src={previewSrc} name={name} size="lg" />
                 <input
                   ref={fileRef}
                   type="file"
                   accept={LOGO_ACCEPT}
                   className="sr-only"
-                  disabled={busy || privateLedger.encryptedLedger}
+                  disabled={busy}
                   onChange={(event) => {
                     void onPickLogo(event.target.files?.[0]);
                     event.target.value = "";
@@ -278,7 +388,7 @@ export function EditMerchantDialog({ merchant, open, onOpenChange }: Props) {
                 <Button
                   type="button"
                   variant="outline"
-                  disabled={busy || privateLedger.encryptedLedger}
+                  disabled={busy}
                   onClick={() => fileRef.current?.click()}
                 >
                   Upload image
@@ -293,8 +403,8 @@ export function EditMerchantDialog({ merchant, open, onOpenChange }: Props) {
                 onChange={(event) => {
                   const next = event.target.value;
                   setLogoUrl(next);
-                  if (!pendingStorageId) {
-                    setPreviewSrc(next.trim() || null);
+                  if (!pendingStorageId && !pendingLogoDataUrl) {
+                    replacePreview(next.trim() || null);
                   }
                 }}
                 placeholder="https://"

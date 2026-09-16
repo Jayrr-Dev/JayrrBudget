@@ -30,6 +30,8 @@ import {
 } from "@/domains/user-notes/userNotesStore";
 import { cn } from "@/lib/utils";
 import { downloadCsv, toCsv } from "@/shared/lib/csv";
+import { LedgerAiChat } from "@/domains/ledger-ai/ui/LedgerAiChat";
+import { PiggyMascot, type PiggyMood } from "@/domains/ledger-ai/ui/PiggyMascot";
 import {
   ChevronLeft,
   FileSpreadsheet,
@@ -59,6 +61,7 @@ const FAB_EXPANDED_ICON_ONLY_SEGMENT_PX = 28;
 const FAB_EXPANDED_PILL_INNER_PADDING_PX = 8;
 const FAB_EXPANDED_DUAL_SEGMENT_GAP_PX = 2;
 const FAB_EXPANDED_BASE_PX = 56;
+const FAB_EXPANDED_PIGGY_PX = 72;
 const FAB_EXPANDED_EXTRA_PER_COUNT_DIGIT_PX = 6;
 const FAB_EXPANDED_MAX_PX = 88;
 const BADGE_CAP = 99;
@@ -82,6 +85,7 @@ function expandedPillWidthPx(
   noteCount: number,
   sheetOpen: boolean,
   notesOpen: boolean,
+  aiOpen: boolean,
 ): number {
   const sheetPx = sheetOpen
     ? expandedSegmentWidthPx(sheetCount)
@@ -89,11 +93,16 @@ function expandedPillWidthPx(
   const notePx = notesOpen
     ? expandedSegmentWidthPx(noteCount)
     : FAB_EXPANDED_ICON_ONLY_SEGMENT_PX;
+  const aiPx = aiOpen
+    ? FAB_EXPANDED_PIGGY_PX
+    : FAB_EXPANDED_ICON_ONLY_SEGMENT_PX;
   return (
     FAB_EXPANDED_PILL_INNER_PADDING_PX +
     sheetPx +
     FAB_EXPANDED_DUAL_SEGMENT_GAP_PX +
-    notePx
+    notePx +
+    FAB_EXPANDED_DUAL_SEGMENT_GAP_PX +
+    aiPx
   );
 }
 
@@ -593,6 +602,8 @@ export function PersistentNoteFab() {
   const [hovered, setHovered] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [notesOpen, setNotesOpen] = useState(false);
+  const [aiOpen, setAiOpen] = useState(false);
+  const [piggyMood, setPiggyMood] = useState<PiggyMood>("still");
   const { tabs, activeId } = useScratchNote();
   const notes = useUserNotes();
   useScratchNoteLocalMigration();
@@ -604,18 +615,25 @@ export function PersistentNoteFab() {
     [tabs],
   );
   const noteCount = notes.length;
-  const isExpanded = hovered || sheetOpen || notesOpen;
+  const isExpanded = hovered || sheetOpen || notesOpen || aiOpen;
   const badgeLabel = formatBadge(totalSheetRows);
   const showBadge = totalSheetRows > 0;
 
   const pillWidth = isExpanded
-    ? expandedPillWidthPx(sheetRowCount, noteCount, sheetOpen, notesOpen)
+    ? expandedPillWidthPx(
+        sheetRowCount,
+        noteCount,
+        sheetOpen,
+        notesOpen,
+        aiOpen,
+      )
     : FAB_COLLAPSED_PX;
 
   useEffect(
     () =>
       subscribeScratchNoteOpen(() => {
         setNotesOpen(false);
+        setAiOpen(false);
         setSheetOpen(true);
       }),
     [],
@@ -623,12 +641,26 @@ export function PersistentNoteFab() {
 
   const handleSheetOpenChange = (next: boolean) => {
     setSheetOpen(next);
-    if (next) setNotesOpen(false);
+    if (next) {
+      setNotesOpen(false);
+      setAiOpen(false);
+    }
   };
 
   const handleNotesOpenChange = (next: boolean) => {
     setNotesOpen(next);
-    if (next) setSheetOpen(false);
+    if (next) {
+      setSheetOpen(false);
+      setAiOpen(false);
+    }
+  };
+
+  const handleAiOpenChange = (next: boolean) => {
+    setAiOpen(next);
+    if (next) {
+      setSheetOpen(false);
+      setNotesOpen(false);
+    }
   };
 
   const segmentBtn = (active: boolean) =>
@@ -653,16 +685,17 @@ export function PersistentNoteFab() {
           )}
         >
           {!isExpanded ? (
-            <FabTooltip label="Open store sheet and notes">
+            <FabTooltip label="Open store sheet, notes, and AI">
               <button
                 type="button"
                 aria-label={
                   showBadge
                     ? `Workspace, ${totalSheetRows} store sheet lines`
-                    : "Open store sheet and notes"
+                    : "Open store sheet, notes, and AI"
                 }
                 onClick={() => {
                   setNotesOpen(false);
+                  setAiOpen(false);
                   setSheetOpen(true);
                 }}
                 className="flex h-full w-full cursor-pointer items-center justify-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-1"
@@ -764,6 +797,31 @@ export function PersistentNoteFab() {
                         >
                           {noteCount}
                         </span>
+                      </span>
+                    ) : null}
+                  </button>
+                }
+              />
+
+              <LedgerAiChat
+                open={aiOpen}
+                onOpenChange={handleAiOpenChange}
+                onMoodChange={setPiggyMood}
+                trigger={
+                  <button
+                    type="button"
+                    aria-expanded={aiOpen}
+                    aria-haspopup="dialog"
+                    aria-label="Piggy"
+                    className={segmentBtn(aiOpen)}
+                  >
+                    <PiggyMascot
+                      mood={aiOpen ? piggyMood : "idle"}
+                      iconClassName="size-3 shrink-0"
+                    />
+                    {aiOpen ? (
+                      <span className="flex min-w-0 select-none items-center pr-0.5 text-[11px] font-medium tracking-tight whitespace-nowrap">
+                        Piggy
                       </span>
                     ) : null}
                   </button>

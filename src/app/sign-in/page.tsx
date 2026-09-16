@@ -40,13 +40,18 @@ export default function SignInPage() {
         </div>
         <div className="order-1 w-full max-w-sm justify-self-center space-y-6 lg:order-2 lg:max-w-none lg:justify-self-stretch">
           <div className="flex flex-col items-center space-y-4 text-center">
-            <img
-              src="/logo.svg"
-              alt=""
-              width={72}
-              height={72}
-              className="size-[72px]"
-            />
+            <div className="flex flex-col items-center gap-2">
+              <img
+                src="/logo.svg"
+                alt=""
+                width={72}
+                height={72}
+                className="size-[72px]"
+              />
+              <p className="type-lead max-w-xs">
+                Harness your finances and save money.
+              </p>
+            </div>
             <div className="space-y-2">
               <h1 className="type-page">Jayrr&apos;s Budget</h1>
               <p className="type-lead">

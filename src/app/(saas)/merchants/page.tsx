@@ -8,6 +8,7 @@ import {
   PopoverTitle,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { CleanMerchantsButton } from "@/domains/merchants/ui/CleanMerchantsButton";
 import { MerchantsPanel } from "@/domains/merchants/ui/MerchantsPanel";
 import { Info } from "lucide-react";
 
@@ -40,6 +41,7 @@ function MerchantsTitleInfo() {
             <li>Edit from the actions menu; linked ledger rows follow</li>
             <li>Rename to an existing merchant to merge them</li>
             <li>Add a logo with an upload or a URL</li>
+            <li>Clean groups similar names, then AI merges the same payee</li>
           </ul>
         </PopoverHeader>
       </PopoverContent>
@@ -50,15 +52,19 @@ function MerchantsTitleInfo() {
 export default function MerchantsPage() {
   return (
     <div className="space-y-8">
-      <header className="border-b border-[var(--border)] pb-6">
-        <h1 className="type-page flex items-center gap-2">
-          Merchants
-          <MerchantsTitleInfo />
-        </h1>
-        <p className="sr-only">
-          Stores and payees you spend with. Edit from the actions menu. Rename
-          to an existing merchant to merge them.
-        </p>
+      <header className="flex flex-col gap-4 border-b border-[var(--border)] pb-6 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="type-page flex items-center gap-2">
+            Merchants
+            <MerchantsTitleInfo />
+          </h1>
+          <p className="sr-only">
+            Stores and payees you spend with. Edit from the actions menu. Rename
+            to an existing merchant to merge them. Clean groups similar names,
+            then AI merges the same payee.
+          </p>
+        </div>
+        <CleanMerchantsButton />
       </header>
       <MerchantsPanel />
     </div>

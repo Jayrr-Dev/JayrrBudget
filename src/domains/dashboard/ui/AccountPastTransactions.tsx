@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/table";
 import type { DashboardTransaction } from "@/domains/dashboard/domain/types";
 import { MoneyText } from "@/domains/dashboard/ui/MoneyText";
+import { MerchantLabel } from "@/domains/merchants/ui/MerchantLabel";
 import { inferredBankDirection } from "@/domains/transactions/domain/debitCredit";
 import { formatDisplayDate } from "@/shared/lib/format-date";
 import { isValid, parseISO, subMonths, subWeeks } from "date-fns";
@@ -412,12 +413,14 @@ export function AccountPastTransactions({
                     {formatDisplayDate(txn.date)}
                   </TableCell>
                   <TableCell className="min-w-0 px-3 py-2">
-                    <span
-                      className="block truncate text-sm"
-                      title={txnLabel(txn)}
-                    >
-                      {txnLabel(txn)}
-                    </span>
+                    <MerchantLabel
+                      name={txnLabel(txn)}
+                      src={txn.logoUrl}
+                      lookupName={
+                        txn.merchantClean ?? txn.merchantName ?? null
+                      }
+                      className="text-sm"
+                    />
                   </TableCell>
                   <TableCell className="px-3 py-2">
                     <MoneyText

@@ -16,6 +16,7 @@ import {
   rememberDashboard,
 } from "@/domains/dashboard/ui/ledgerQuerySnapshot";
 import { useFeatureFlags } from "@/domains/feature-flags/ui/useFeatureFlag";
+import { MerchantLabel } from "@/domains/merchants/ui/MerchantLabel";
 import { StatementUpload } from "@/domains/statements/ui/StatementUpload";
 import { dashboardFromPrivateLedger } from "@/domains/vault/application/dashboardFromPrivateLedger";
 import { usePrivateLedger } from "@/domains/vault/ui/usePrivateLedger";
@@ -224,8 +225,14 @@ export function TransactionsList({
                 className="flex items-start justify-between gap-4 px-4 py-3"
               >
                 <div className="min-w-0">
-                  <p className="truncate font-medium">
-                    {txn.merchantClean ?? txn.merchantName ?? txn.name}
+                  <p className="min-w-0">
+                    <MerchantLabel
+                      name={
+                        txn.merchantClean ?? txn.merchantName ?? txn.name
+                      }
+                      src={txn.logoUrl}
+                      className="font-medium"
+                    />
                   </p>
                   <p className="text-sm text-[var(--muted-foreground)]">
                     {formatDisplayDate(txn.date)}

@@ -68,13 +68,13 @@ const CATEGORY_FIXES: CategoryFix[] = [
       /\bcursor\b/i.test(text),
     section: "Technology",
     category: "AI Services",
-    subcategory: "AI Assistants & Chat",
+    subcategory: "Assistants",
   },
   {
     test: (text) => /wealthsimple\s*tax/i.test(text),
     section: "Technology",
     category: "Software",
-    subcategory: "Productivity & Creative",
+    subcategory: "Productivity",
   },
   {
     test: (text) =>
@@ -93,7 +93,7 @@ const CATEGORY_FIXES: CategoryFix[] = [
       /buy\s*now\s*pay\s*later/i.test(text) ||
       /\bbnpl\b/i.test(text),
     section: "Finance",
-    category: "Debt & Loans",
+    category: "Loans",
     subcategory: "Student Loans",
   },
   {

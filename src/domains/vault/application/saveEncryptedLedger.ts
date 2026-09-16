@@ -130,6 +130,50 @@ export async function renameEncryptedDescriptions(
   return matches.length;
 }
 
+function merchantKey(value: string | null | undefined) {
+  return (value ?? "").trim().toLowerCase();
+}
+
+/** Apply taxonomy to every encrypted tx for one payee name. */
+export async function recategorizeEncryptedByMerchant(
+  ctx: VaultWriteContext,
+  txs: PrivateTransaction[],
+  merchant: string,
+  taxonomy: EncryptedDescriptionTaxonomy,
+) {
+  const key = merchantKey(merchant);
+  if (!key) throw new Error("Merchant is required");
+  const matches = txs.filter((tx) => {
+    return (
+      merchantKey(tx.merchantClean) === key ||
+      merchantKey(tx.merchantName) === key
+    );
+  });
+  if (matches.length === 0) throw new Error("No matching transactions.");
+  for (let i = 0; i < matches.length; i += RENAME_CHUNK) {
+    const chunk = matches.slice(i, i + RENAME_CHUNK);
+    await saveEncryptedRecords(
+      ctx,
+      chunk.map((tx) => {
+        const next = {
+          ...tx,
+          sectionName: taxonomy.sectionName,
+          categoryName: taxonomy.categoryName,
+          subcategoryName: taxonomy.subcategoryName,
+        };
+        const { recordId, revision, ...value } = next;
+        return {
+          recordId,
+          kind: "tx" as const,
+          value: encryptedTxValue(value),
+          expectedRevision: revision,
+        };
+      }),
+    );
+  }
+  return matches.length;
+}
+
 export async function saveEncryptedMerchant(
   ctx: VaultWriteContext,
   input: {
@@ -139,6 +183,7 @@ export async function saveEncryptedMerchant(
     company?: string | null;
     brand?: string | null;
     website?: string | null;
+    logoUrl?: string | null;
     expectedRevision?: number | null;
   },
 ) {
@@ -153,6 +198,7 @@ export async function saveEncryptedMerchant(
         company: input.company ?? null,
         brand: input.brand ?? null,
         website: input.website ?? null,
+        logoUrl: input.logoUrl ?? null,
       },
       expectedRevision: input.expectedRevision ?? null,
     },

@@ -263,3 +263,95 @@ export async function updateMerchantOrMerge(
     transactionsUpdated,
   };
 }
+
+const MERGE_TXN_PAGE = 80;
+
+async function adoptRicherFields(
+  ctx: MutationCtx,
+  keeper: Doc<"merchants">,
+  source: Doc<"merchants">,
+) {
+  const patch: Partial<Doc<"merchants">> = {};
+  if (!keeper.company && source.company) patch.company = source.company;
+  if (!keeper.brand && source.brand) patch.brand = source.brand;
+  if (!keeper.website && source.website) patch.website = source.website;
+  if (!keeper.logoUrl && source.logoUrl) patch.logoUrl = source.logoUrl;
+  if (!keeper.logoStorageId && source.logoStorageId) {
+    patch.logoStorageId = source.logoStorageId;
+  }
+  if (Object.keys(patch).length === 0) return keeper;
+  await ctx.db.patch(keeper._id, patch);
+  return { ...keeper, ...patch };
+}
+
+/**
+ * Move ledger rows from source payees onto keeper, then delete empty sources.
+ * Paginated so a cluster can drain across mutation calls.
+ */
+export async function drainMergeSources(
+  ctx: MutationCtx,
+  userId: Id<"users">,
+  keeperId: Id<"merchants">,
+  sourceIds: Id<"merchants">[],
+  txnLimit = MERGE_TXN_PAGE,
+): Promise<{
+  keeper: Doc<"merchants">;
+  transactionsUpdated: number;
+  sourcesDeleted: number;
+  sourcesRemaining: number;
+  isDone: boolean;
+}> {
+  let keeper = await ctx.db.get(keeperId);
+  if (!keeper || keeper.userId !== userId) {
+    throw new Error("Merchant not found");
+  }
+
+  const uniqueSources = [...new Set(sourceIds)].filter((id) => id !== keeperId);
+  let budget = Math.min(Math.max(txnLimit, 1), 200);
+  let transactionsUpdated = 0;
+  let sourcesDeleted = 0;
+  let sourcesRemaining = 0;
+
+  for (const sourceId of uniqueSources) {
+    const source = await ctx.db.get(sourceId);
+    if (!source || source.userId !== userId) continue;
+
+    if (budget <= 0) {
+      sourcesRemaining += 1;
+      continue;
+    }
+
+    const page = await ctx.db
+      .query("transactions")
+      .withIndex("by_userId_merchantId", (q) =>
+        q.eq("userId", userId).eq("merchantId", source._id),
+      )
+      .paginate({ numItems: budget, cursor: null });
+
+    for (const txn of page.page) {
+      await applyMerchantToTxn(ctx, txn, keeper);
+      transactionsUpdated += 1;
+      budget -= 1;
+    }
+
+    if (!page.isDone) {
+      sourcesRemaining += 1;
+      continue;
+    }
+
+    keeper = await adoptRicherFields(ctx, keeper, source);
+    if (source.logoStorageId && source.logoStorageId !== keeper.logoStorageId) {
+      await ctx.storage.delete(source.logoStorageId);
+    }
+    await ctx.db.delete(source._id);
+    sourcesDeleted += 1;
+  }
+
+  return {
+    keeper,
+    transactionsUpdated,
+    sourcesDeleted,
+    sourcesRemaining,
+    isDone: sourcesRemaining === 0,
+  };
+}

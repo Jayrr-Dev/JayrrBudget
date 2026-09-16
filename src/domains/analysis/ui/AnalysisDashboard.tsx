@@ -2,13 +2,13 @@
 
 import { badgeVariants } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { EmptyPrompt } from "@/components/ui/empty-prompt";
 import {
   ChartContainer,
   ChartTooltip,
   ChartTooltipContent,
   type ChartConfig,
 } from "@/components/ui/chart";
+import { EmptyPrompt } from "@/components/ui/empty-prompt";
 import {
   NativeSelect,
   NativeSelectOption,
@@ -69,6 +69,8 @@ import {
   formatMoneyParts,
 } from "@/domains/dashboard/domain/money";
 import { MoneyText } from "@/domains/dashboard/ui/MoneyText";
+import { MerchantLabel } from "@/domains/merchants/ui/MerchantLabel";
+import { MerchantMoveActionRow } from "@/domains/merchants/ui/MoveMerchantDialog";
 import { useScratchNoteActions } from "@/domains/scratch-note/scratchNoteStore";
 import {
   DescriptionActionsButton,
@@ -127,6 +129,10 @@ const TAB_OPTIONS: { value: AnalysisTab; label: string }[] = [
   { value: "income", label: "Income" },
   { value: "patterns", label: "Patterns" },
 ];
+
+function isMerchantNameLabel(label: string) {
+  return /merchant/i.test(label);
+}
 
 const FACET_PANE_OPTIONS: { value: FacetPane; label: string }[] = [
   { value: "visualizations", label: "Visualizations" },
@@ -2119,6 +2125,7 @@ function TaxonomyBreakdownTable({
   nestedLabel?: string;
   stacked?: AnalysisStackedRankedBreakdown;
 }) {
+  const asMerchant = isMerchantNameLabel(nameLabel);
   const series = useMemo(
     () => rows.map((row) => ({ key: row.name, label: row.name })),
     [rows],
@@ -2186,7 +2193,7 @@ function TaxonomyBreakdownTable({
                     )}
                     title={row.name}
                   >
-                    {row.name}
+                    {asMerchant ? <MerchantLabel name={row.name} /> : row.name}
                   </button>
                 </TableCell>
                 {nestedLabel ? (
@@ -2821,7 +2828,7 @@ function CategoryDrilldown({
       <div className="grid gap-6 lg:grid-cols-2">
         <RankedBarChart
           title={`${breakdown.category} subcategories`}
-          info="Finer labels under this category (Food Delivery, Gym Memberships, AI Code Editors & IDEs)."
+          info="Finer labels under this category (Food Delivery, Gym Memberships, Code Editors)."
           rows={breakdown.types}
           currency={data.currency}
           color="oklch(0.52 0.1 155)"
@@ -3001,10 +3008,12 @@ function RowTxnsPopover({
   label,
   currency,
   transactions,
+  canMoveMerchant = false,
 }: {
   label: string;
   currency: string;
   transactions: AnalysisTxnPeek[];
+  canMoveMerchant?: boolean;
 }) {
   const [editDescription, setEditDescription] = useState<string | null>(null);
   return (
@@ -3031,7 +3040,8 @@ function RowTxnsPopover({
             if (
               target.closest("[data-slot=dropdown-menu-content]") ||
               target.closest("[data-slot=dialog-content]") ||
-              target.closest("[data-slot=dropdown-menu]")
+              target.closest("[data-slot=dropdown-menu]") ||
+              target.closest("[data-slot=combobox-content]")
             ) {
               event.preventDefault();
             }
@@ -3041,7 +3051,8 @@ function RowTxnsPopover({
             if (!(target instanceof Element)) return;
             if (
               target.closest("[data-slot=dropdown-menu-content]") ||
-              target.closest("[data-slot=dialog-content]")
+              target.closest("[data-slot=dialog-content]") ||
+              target.closest("[data-slot=combobox-content]")
             ) {
               event.preventDefault();
             }
@@ -3055,6 +3066,7 @@ function RowTxnsPopover({
               {transactions.length === 1 ? "" : "s"}
             </span>
           </div>
+          {canMoveMerchant ? <MerchantMoveActionRow merchantName={label} /> : null}
           <div className="max-h-72 overflow-auto">
             {transactions.length === 0 ? (
               <p className="px-3 py-4 text-sm text-[var(--muted-foreground)]">
@@ -3164,6 +3176,7 @@ function LeaderboardTable({
   const topCount = top.reduce((sum, row) => sum + (row.count ?? 0), 0);
   const canExpand = Boolean(vendorsByRow);
   const showTxns = Boolean(transactionsForRow);
+  const asMerchant = isMerchantNameLabel(nameLabel);
   const gridCols = canExpand
     ? showTxns
       ? "grid-cols-[1.75rem_minmax(0,1fr)_9rem_4rem_3.75rem_1rem_1.25rem]"
@@ -3216,6 +3229,7 @@ function LeaderboardTable({
                 <RowTxnsPopover
                   label={row.name}
                   currency={currency}
+                  canMoveMerchant={asMerchant}
                   transactions={rowPeeksWithVendorFallback(
                     transactionsForRow?.(row.name) ?? [],
                     mergeTxnPeeks(
@@ -3235,7 +3249,7 @@ function LeaderboardTable({
                     {index + 1}
                   </span>
                   <span className="min-w-0 truncate text-left font-medium">
-                    {row.name}
+                    {asMerchant ? <MerchantLabel name={row.name} /> : row.name}
                   </span>
                   <span className="text-left font-mono text-sm tabular-nums">
                     <MoneyText
@@ -3330,7 +3344,7 @@ function LeaderboardTable({
                               </TooltipContent>
                             </Tooltip>
                             <span className="min-w-0 truncate text-[var(--muted-foreground)]">
-                              {vendor.name}
+                              <MerchantLabel name={vendor.name} />
                             </span>
                             <span className="text-left font-mono tabular-nums">
                               <MoneyText
@@ -3350,6 +3364,7 @@ function LeaderboardTable({
                               <RowTxnsPopover
                                 label={vendor.name}
                                 currency={currency}
+                                canMoveMerchant
                                 transactions={
                                   transactionsForVendor?.(
                                     row.name,
@@ -3461,6 +3476,7 @@ function RangeLeaderboardTable({
   otherByPeriod?: Record<string, AnalysisRankedItem[]>;
   transactionsForRow?: (rowName: string) => AnalysisTxnPeek[];
 }) {
+  const asMerchant = isMerchantNameLabel(nameLabel);
   const showTxns = Boolean(transactionsForRow);
   const ranked = useMemo(() => {
     return rows
@@ -3517,7 +3533,7 @@ function RangeLeaderboardTable({
                     {index + 1}
                   </span>
                   <span className="min-w-0 truncate font-medium text-[var(--foreground)]">
-                    {row.name}
+                    {asMerchant ? <MerchantLabel name={row.name} /> : row.name}
                   </span>
                   <span className="text-right font-mono tabular-nums text-[var(--foreground)]">
                     <MoneyText amount={row.high} currency={currency} />
@@ -3532,6 +3548,7 @@ function RangeLeaderboardTable({
                     <RowTxnsPopover
                       label={row.name}
                       currency={currency}
+                      canMoveMerchant={asMerchant}
                       transactions={transactionsForRow?.(row.name) ?? []}
                     />
                   ) : null}
@@ -3585,6 +3602,7 @@ function AverageLeaderboardTable({
     visible.reduce((sum, row) => sum + (row.count ?? 0), 0) / divisor;
   const canExpand = Boolean(vendorsByRow);
   const showTxns = Boolean(transactionsForRow);
+  const asMerchant = isMerchantNameLabel(nameLabel);
   const gridCols = canExpand
     ? showTxns
       ? "grid-cols-[1.75rem_minmax(0,1fr)_9rem_5.5rem_1rem_1.25rem]"
@@ -3643,7 +3661,7 @@ function AverageLeaderboardTable({
                     {index + 1}
                   </span>
                   <span className="min-w-0 truncate text-left font-medium">
-                    {row.name}
+                    {asMerchant ? <MerchantLabel name={row.name} /> : row.name}
                   </span>
                   <span className="text-right font-mono text-sm tabular-nums">
                     <MoneyText amount={avgCost} currency={currency} />
@@ -3749,7 +3767,7 @@ function AverageLeaderboardTable({
                               </TooltipContent>
                             </Tooltip>
                             <span className="min-w-0 truncate text-[var(--muted-foreground)]">
-                              {vendor.name}
+                              <MerchantLabel name={vendor.name} />
                             </span>
                             <span className="text-right font-mono tabular-nums">
                               <MoneyText
@@ -3765,6 +3783,7 @@ function AverageLeaderboardTable({
                               <RowTxnsPopover
                                 label={vendor.name}
                                 currency={currency}
+                                canMoveMerchant
                                 transactions={
                                   transactionsForVendor?.(
                                     row.name,
@@ -5253,7 +5272,7 @@ function MerchantDrilldown({
                     }
                     onClick={() => onSelect(item.merchant)}
                   >
-                    {item.merchant}
+                    <MerchantLabel name={item.merchant} />
                   </Button>
                 ))}
               </div>

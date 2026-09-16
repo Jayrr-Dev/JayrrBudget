@@ -64,7 +64,15 @@ export async function applyVaultCategorization(input: {
     records.push({
       recordId: `merchant-${merchantId}`,
       kind: "note" as const,
-      value: { merchantId, name, rawName: name, company: null, brand: null, website: null },
+      value: {
+        merchantId,
+        name,
+        rawName: existing?.rawName ?? name,
+        company: existing?.company ?? null,
+        brand: existing?.brand ?? null,
+        website: existing?.website ?? null,
+        logoUrl: existing?.logoUrl ?? null,
+      },
       expectedRevision: existing?.revision ?? null,
     });
   }

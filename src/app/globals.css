@@ -197,6 +197,57 @@
   --radius-2xl: calc(var(--radius) * 1.8);
   --radius-3xl: calc(var(--radius) * 2.2);
   --radius-4xl: calc(var(--radius) * 2.6);
+
+  --animate-piggy-idle: piggy-idle 2.6s ease-in-out infinite;
+  --animate-piggy-listen: piggy-listen 0.7s ease-in-out infinite;
+  --animate-piggy-think: piggy-think 0.55s ease-in-out infinite;
+  --animate-piggy-talk: piggy-talk 0.45s ease-in-out infinite;
+}
+
+@keyframes piggy-idle {
+  0%,
+  100% {
+    transform: translateY(0) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-1.5px) rotate(-7deg);
+  }
+}
+
+@keyframes piggy-listen {
+  0%,
+  100% {
+    transform: rotate(-10deg) scale(1);
+  }
+  45% {
+    transform: rotate(8deg) scale(1.08);
+  }
+}
+
+@keyframes piggy-think {
+  0%,
+  100% {
+    transform: translateY(0) rotate(0deg) scale(1);
+  }
+  40% {
+    transform: translateY(-4px) rotate(-9deg) scale(1.1);
+  }
+}
+
+@keyframes piggy-talk {
+  0%,
+  100% {
+    transform: translateY(0) rotate(0deg) scale(1);
+  }
+  25% {
+    transform: translateY(-3px) rotate(-12deg) scale(1.12);
+  }
+  50% {
+    transform: translateY(0) rotate(10deg) scale(1.06);
+  }
+  75% {
+    transform: translateY(-2px) rotate(-8deg) scale(1.1);
+  }
 }
 
 body {

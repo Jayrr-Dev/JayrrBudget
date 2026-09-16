@@ -42,40 +42,49 @@ export function dashboardFromPrivateLedger(ledger: PrivateLedger): DashboardData
     }
   }
 
-  const transactions: DashboardTransaction[] = ledger.transactions.map((tx) => ({
-    transactionId: tx.recordId,
-    accountId: tx.accountId ?? "private",
-    name: tx.description,
-    merchantName: tx.merchantName ?? null,
-    merchantClean: tx.merchantClean ?? null,
-    companyName: null,
-    brandName: null,
-    sectionName: tx.sectionName ?? null,
-    categoryName: tx.categoryName ?? null,
-    spreadName: tx.spreadName ?? null,
-    transactionTypeName: tx.transactionTypeName ?? null,
-    typeName: tx.subcategoryName ?? null,
-    typeNames: [],
-    subcategoryName: tx.subcategoryName ?? null,
-    tagNames: tx.tagNames ?? [],
-    enrichmentStatus: null,
-    amount: tx.amount,
-    isoCurrencyCode: tx.currency,
-    date: tx.date,
-    authorizedDate: tx.authorizedDate ?? null,
-    pending: Boolean(tx.pending),
-    paymentChannel: tx.channel ?? null,
-    transactionCode: tx.txnCode ?? null,
-    website: null,
-    logoUrl: null,
-    locationCity: tx.city ?? null,
-    locationRegion: tx.region ?? null,
-    locationCountry: tx.country ?? null,
-    originalDescription: tx.description,
-    source: tx.source ?? "statement",
-    bankDirection: null,
-    historyMatch: null,
-  }));
+  const logoByName = new Map<string, string>();
+  for (const merchant of ledger.merchants) {
+    if (!merchant.logoUrl) continue;
+    logoByName.set(merchant.name, merchant.logoUrl);
+  }
+
+  const transactions: DashboardTransaction[] = ledger.transactions.map((tx) => {
+    const merchantLabel = tx.merchantClean ?? tx.merchantName ?? "";
+    return {
+      transactionId: tx.recordId,
+      accountId: tx.accountId ?? "private",
+      name: tx.description,
+      merchantName: tx.merchantName ?? null,
+      merchantClean: tx.merchantClean ?? null,
+      companyName: null,
+      brandName: null,
+      sectionName: tx.sectionName ?? null,
+      categoryName: tx.categoryName ?? null,
+      spreadName: tx.spreadName ?? null,
+      transactionTypeName: tx.transactionTypeName ?? null,
+      typeName: tx.subcategoryName ?? null,
+      typeNames: [],
+      subcategoryName: tx.subcategoryName ?? null,
+      tagNames: tx.tagNames ?? [],
+      enrichmentStatus: null,
+      amount: tx.amount,
+      isoCurrencyCode: tx.currency,
+      date: tx.date,
+      authorizedDate: tx.authorizedDate ?? null,
+      pending: Boolean(tx.pending),
+      paymentChannel: tx.channel ?? null,
+      transactionCode: tx.txnCode ?? null,
+      website: null,
+      logoUrl: logoByName.get(merchantLabel) ?? null,
+      locationCity: tx.city ?? null,
+      locationRegion: tx.region ?? null,
+      locationCountry: tx.country ?? null,
+      originalDescription: tx.description,
+      source: tx.source ?? "statement",
+      bankDirection: null,
+      historyMatch: null,
+    };
+  });
 
   const dates = transactions.map((tx) => tx.date).filter(Boolean).sort();
   const totalBalance = accounts.reduce((sum, account) => sum + (account.currentBalance ?? 0), 0);

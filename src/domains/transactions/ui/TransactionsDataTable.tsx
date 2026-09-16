@@ -9,6 +9,7 @@ import type {
 } from "@/domains/dashboard/domain/types";
 import { queryKeys } from "@/domains/dashboard/queries/query-keys";
 import { MoneyText } from "@/domains/dashboard/ui/MoneyText";
+import { MerchantLabel } from "@/domains/merchants/ui/MerchantLabel";
 import { LOG_MONEY_RANGE_OPTIONS } from "@/domains/transactions/domain/amountLogRange";
 import { historyMatchLabel } from "@/domains/transactions/domain/debitCredit";
 import { TagsCell } from "@/domains/transactions/ui/TagsCell";
@@ -393,7 +394,7 @@ function buildColumns(accountNameById: Map<string, string>) {
               "invent",
               "Clean store name from enrichment (falls back to brand / company).",
             ),
-            cell: ({ getValue }) => {
+            cell: ({ row, getValue }) => {
               const value = getValue();
               if (!value) {
                 return (
@@ -403,12 +404,12 @@ function buildColumns(accountNameById: Map<string, string>) {
                 );
               }
               return (
-                <span
-                  className="block truncate text-sm font-medium"
-                  title={String(value)}
-                >
-                  {String(value)}
-                </span>
+                <MerchantLabel
+                  name={String(value)}
+                  src={row.original.logoUrl}
+                  lookupName={row.original.merchantClean}
+                  className="text-sm font-medium"
+                />
               );
             },
             filterFn: "fuzzy",

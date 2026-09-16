@@ -70,7 +70,7 @@ export const SEED_TAXONOMY: SeedTaxonomyNode[] = [
   },
   {
     facet: "category",
-    name: "Attractions & Tours",
+    name: "Attractions",
     parentSlug: "travel",
   },
   {
@@ -195,7 +195,7 @@ export const SEED_TAXONOMY: SeedTaxonomyNode[] = [
   },
   {
     facet: "category",
-    name: "Cash & ATM",
+    name: "ATM",
     parentSlug: "transfers",
   },
 

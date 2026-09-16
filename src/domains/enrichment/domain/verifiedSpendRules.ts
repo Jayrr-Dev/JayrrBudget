@@ -7,7 +7,7 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
     tree: {
       section: "Income",
       category: "Employment",
-      type: "Salary & Wages",
+      type: "Salary",
     },
     patterns: [
       /pay\s*utilitek/i,
@@ -19,8 +19,8 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
   {
     tree: {
       section: "Income",
-      category: "Government & Tax",
-      type: "Tax Credits & GST",
+      category: "Tax",
+      type: "Tax Credits",
     },
     patterns: [
       /tps\s*\/\s*gst/i,
@@ -33,7 +33,7 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
   {
     tree: {
       section: "Income",
-      category: "Government & Tax",
+      category: "Tax",
       type: "Tax Refunds",
     },
     patterns: [/tax\s*refund/i],
@@ -41,7 +41,7 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
   {
     tree: {
       section: "Income",
-      category: "Cashback & Rebates",
+      category: "Cashback",
       type: "Cashback Rewards",
     },
     patterns: [/cashback/i, /remise\s*en\s*argent/i],
@@ -96,7 +96,7 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
     tree: {
       section: "Technology",
       category: "AI Services",
-      type: "Model APIs & Inference",
+      type: "Model APIs",
     },
     patterns: [
       /openrouter/i,
@@ -112,7 +112,7 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
     tree: {
       section: "Technology",
       category: "AI Services",
-      type: "AI Assistants & Chat",
+      type: "Assistants",
     },
     patterns: [
       /openai/i,
@@ -128,17 +128,17 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
     tree: {
       section: "Technology",
       category: "AI Services",
-      type: "AI Code Editors & IDEs",
+      type: "Code Editors",
     },
     patterns: [/\bcursor\b/i, /windsurf/i, /ai\s*powered\s*ide/i],
   },
 
-  // --- Cloud & Hosting ---
+  // --- Cloud ---
   {
     tags: ["Dev Tools", "Online"],
     tree: {
       section: "Technology",
-      category: "Cloud & Hosting",
+      category: "Cloud",
       type: "Infrastructure",
     },
     patterns: [
@@ -157,8 +157,8 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
     tags: ["Dev Tools", "Online"],
     tree: {
       section: "Technology",
-      category: "Cloud & Hosting",
-      type: "Domains & Registrars",
+      category: "Cloud",
+      type: "Domains",
     },
     patterns: [
       /name[-\s]?cheap/i,
@@ -172,8 +172,8 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
     tags: ["Dev Tools", "Online"],
     tree: {
       section: "Technology",
-      category: "Cloud & Hosting",
-      type: "Developer & Payment Platforms",
+      category: "Cloud",
+      type: "Developer",
     },
     patterns: [
       /stripe/i,
@@ -192,7 +192,7 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
     tree: {
       section: "Technology",
       category: "Software",
-      type: "Productivity & Creative",
+      type: "Productivity",
     },
     patterns: [
       /canva/i,
@@ -208,7 +208,7 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
     tree: {
       section: "Technology",
       category: "Software",
-      type: "Productivity & Creative",
+      type: "Productivity",
     },
     patterns: [
       /excalidraw/i,
@@ -223,7 +223,7 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
     tree: {
       section: "Technology",
       category: "Software",
-      type: "Communication & Social",
+      type: "Communication",
     },
     patterns: [
       /discord/i,
@@ -238,7 +238,7 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
     tree: {
       section: "Technology",
       category: "Software",
-      type: "Security & Utilities",
+      type: "Security",
     },
     patterns: [/nord/i, /start\.me/i, /google\s*one/i],
   },
@@ -370,7 +370,7 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
     tags: ["In Store"],
     tree: {
       section: "Transport",
-      category: "Auto Care & Expenses",
+      category: "Auto",
       type: "Parking",
     },
     patterns: [/epark/i, /honk\s*(mobile|parking)/i, /nyc\s*parking\s*meter/i],
@@ -379,7 +379,7 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
     tags: ["In Store"],
     tree: {
       section: "Transport",
-      category: "Auto Care & Expenses",
+      category: "Auto",
       type: "Car Wash",
     },
     patterns: [/uwash\s*carwash/i, /car\s*wash/i],
@@ -388,7 +388,7 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
     tags: ["In Store"],
     tree: {
       section: "Transport",
-      category: "Auto Care & Expenses",
+      category: "Auto",
       type: "Maintenance",
     },
     patterns: [/kal\s*tire/i, /truckland/i],
@@ -398,7 +398,7 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
     tree: {
       section: "Transport",
       category: "Dealership",
-      type: "Service & Sales",
+      type: "Service",
     },
     patterns: [/lexus\s*of\s*edmonton/i],
   },
@@ -445,7 +445,7 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
     tree: {
       section: "Travel",
       category: "Sightseeing",
-      type: "Attractions & Tours",
+      type: "Attractions",
     },
     patterns: [
       /circle\s*line/i,
@@ -460,7 +460,7 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
     tree: {
       section: "Health",
       category: "Medical",
-      type: "Clinics & Telehealth",
+      type: "Clinics",
     },
     patterns: [
       /morality\s*med/i,
@@ -476,7 +476,7 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
     tree: {
       section: "Lifestyle",
       category: "Personal Care",
-      type: "Barbers & Salons",
+      type: "Barbers",
     },
     patterns: [/barber/i, /salon/i, /natan\s*barber/i],
   },
@@ -524,7 +524,7 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
     tree: {
       section: "Development",
       category: "Education",
-      type: "Courses & Training",
+      type: "Courses",
     },
     patterns: [/\bnait\b/i],
   },
@@ -533,7 +533,7 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
     tree: {
       section: "Lifestyle",
       category: "Entertainment",
-      type: "Video Games & Digital Goods",
+      type: "Games",
     },
     patterns: [/steamgames/i, /steam\s*games/i, /\bsteam\b/i, /itch\.?\s*io/i],
   },
@@ -550,7 +550,7 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
     tree: {
       section: "Lifestyle",
       category: "Shopping",
-      type: "Department & Online Stores",
+      type: "Online Stores",
     },
     patterns: [
       /amzn\s*mktp/i,
@@ -602,8 +602,8 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
     tags: ["Subscription", "Online"],
     tree: {
       section: "Home",
-      category: "Utilities & Telecom",
-      type: "Mobile & Wireless",
+      category: "Utilities",
+      type: "Mobile",
     },
     patterns: [
       /\bfizz\b/i,
@@ -620,7 +620,7 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
     tree: {
       section: "Home",
       category: "Home Maintenance",
-      type: "Hardware & Tools",
+      type: "Hardware",
     },
     patterns: [/home\s*depot/i, /west-end\s*registries/i, /registry/i],
   },
@@ -629,7 +629,7 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
   {
     tree: {
       section: "Finance",
-      category: "Debt & Loans",
+      category: "Loans",
       type: "Student Loans",
     },
     patterns: [
@@ -642,7 +642,7 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
   {
     tree: {
       section: "Finance",
-      category: "Debt & Loans",
+      category: "Loans",
       type: "BNPL",
     },
     patterns: [/affirm/i],
@@ -650,7 +650,7 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
   {
     tree: {
       section: "Finance",
-      category: "Debt & Loans",
+      category: "Loans",
       type: "Personal Financing",
     },
     patterns: [
@@ -672,7 +672,7 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
     tree: {
       section: "Finance",
       category: "Banking Fees",
-      type: "Overdraft & Interest",
+      type: "Interest",
     },
     patterns: [/plc\s*interest/i, /\binterest\b/i, /interest\s*reversal/i],
   },
@@ -688,7 +688,7 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
     tree: {
       section: "Finance",
       category: "Insurance",
-      type: "Property & Auto Insurance",
+      type: "Home Insurance",
     },
     patterns: [/security\s*national/i, /meloche\s*monnex/i, /td\s*insurance/i],
   },
@@ -705,16 +705,16 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
     tree: {
       section: "Finance",
       category: "Investments",
-      type: "Brokerage & Crypto",
+      type: "Brokerage",
     },
     patterns: [/wealthsimple/i, /coinbase/i],
   },
 
-  // --- Cash & ATM ---
+  // --- ATM ---
   {
     tree: {
       section: "Transfers",
-      category: "Cash & ATM",
+      category: "ATM",
       type: "Cash Advances",
     },
     patterns: [/cash\s*advance/i, /avance\s*de\s*fonds/i],
@@ -722,7 +722,7 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
   {
     tree: {
       section: "Transfers",
-      category: "Cash & ATM",
+      category: "ATM",
       type: "ATM Withdrawals",
     },
     patterns: [/\batm\b/i, /banking\s*centre/i, /namao\s*banking/i],

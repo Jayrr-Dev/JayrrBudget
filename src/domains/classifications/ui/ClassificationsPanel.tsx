@@ -3,7 +3,6 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
-import { EmptyPrompt } from "@/components/ui/empty-prompt";
 import { DataTable } from "@/components/ui/data-table";
 import type { DataTableFeatures } from "@/components/ui/data-table-features";
 import {
@@ -20,6 +19,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { EmptyPrompt } from "@/components/ui/empty-prompt";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -41,7 +41,6 @@ import { useMutation, useQuery } from "convex/react";
 import { Info } from "lucide-react";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { toast } from "sonner";
-import { useRouter } from "next/navigation";
 
 type Scope = "shared" | "user";
 type Tab = "sections" | "categories" | "subcategories" | "tags";
@@ -182,8 +181,7 @@ function TitleInfo({ isAdmin }: { isAdmin: boolean }) {
               Software, Pets)
             </li>
             <li>
-              Subcategory is the specific flavor (Supermarket, Bars & Pubs,
-              Audiobooks)
+              Subcategory is the specific flavor (Supermarket, Bars, Audiobooks)
             </li>
             <li>Tag is an extra sticker that can sit on many kinds of spend</li>
             <li>Shared is the catalog every new user starts with</li>
@@ -223,7 +221,6 @@ export function ClassificationsPanel({
   initialTab?: Tab;
   openCreate?: boolean;
 } = {}) {
-  const router = useRouter();
   const catalog = useQuery(api.classifications.catalog, {});
   const repairHierarchy = useMutation(api.classifications.repairHierarchy);
   const createSection = useMutation(api.classifications.createSection);

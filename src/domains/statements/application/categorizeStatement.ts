@@ -247,7 +247,7 @@ export async function labelDescriptionGroups(
             MERCHANT_CLEAN_AI_RULES,
             "Section: the top bucket for this line (Finance, Income, Transfers, Home, Food, Lifestyle, Development, Technology, Transport, Health, Travel, Family). One section per line.",
             "Category: the kind of spend inside that bucket (Groceries, Restaurants, Software, Education, Pets, Flights). One category per line.",
-            "Subcategory: the specific flavor under that category (Supermarket, Food Delivery, Bars & Pubs, Print & Ebooks). Prefer a subcategory when it fits. One path only.",
+            "Subcategory: the specific flavor under that category (Supermarket, Food Delivery, Bars, Ebooks). Prefer a subcategory when it fits. One path only.",
             "Tag: an extra sticker that can sit on many kinds of spend. It does not replace the path. Never use Travel as a tag.",
             "Choose the best EXISTING path index for section and category. Prefer an existing subcategory leaf when it fits.",
             "If no catalog subcategory under that category fits, set newSubcategory to a short Title Case spend flavor (2-4 words). Name the kind of spend, not the merchant (Vacation Rentals, not Airbnb).",

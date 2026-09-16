@@ -2,19 +2,26 @@
 
 import { DataTable } from "@/components/ui/data-table";
 import type { DataTableFeatures } from "@/components/ui/data-table-features";
-import { EmptyPrompt } from "@/components/ui/empty-prompt";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { EmptyPrompt } from "@/components/ui/empty-prompt";
 import { PageSpinner } from "@/components/ui/spinner";
 import {
   peekMerchants,
   rememberMerchants,
 } from "@/domains/dashboard/ui/ledgerQuerySnapshot";
 import { EditMerchantDialog } from "@/domains/merchants/ui/EditMerchantDialog";
+import { MerchantLabel } from "@/domains/merchants/ui/MerchantLabel";
+import {
+  MERCHANT_TXN_PEEK_LIMIT,
+  MerchantTxnsPopover,
+  type MerchantTxnPeek,
+} from "@/domains/merchants/ui/MerchantTxnsPopover";
+import type { PrivateTransaction } from "@/domains/vault/domain/privateLedger";
 import { usePrivateLedger } from "@/domains/vault/ui/usePrivateLedger";
 import { api } from "@convex/_generated/api";
 import { Icon } from "@iconify/react";
@@ -74,7 +81,34 @@ function actionsHeader() {
   );
 }
 
-function MerchantsTable({ rows }: { rows: MerchantRow[] }) {
+function vaultPeeksByMerchantName(txns: PrivateTransaction[]) {
+  const byName = new Map<string, MerchantTxnPeek[]>();
+  for (const tx of txns) {
+    const name = tx.merchantClean ?? tx.merchantName ?? tx.description;
+    if (!name) continue;
+    const list = byName.get(name) ?? [];
+    list.push({
+      date: tx.date,
+      description: tx.description,
+      amount: tx.amount,
+      currency: tx.currency,
+    });
+    byName.set(name, list);
+  }
+  for (const [name, list] of byName) {
+    list.sort((left, right) => right.date.localeCompare(left.date));
+    byName.set(name, list.slice(0, MERCHANT_TXN_PEEK_LIMIT));
+  }
+  return byName;
+}
+
+function MerchantsTable({
+  rows,
+  vaultPeeksByName,
+}: {
+  rows: MerchantRow[];
+  vaultPeeksByName?: Map<string, MerchantTxnPeek[]>;
+}) {
   const [editing, setEditing] = useState<MerchantRow | null>(null);
   const columns = useMemo(
     () =>
@@ -106,32 +140,15 @@ function MerchantsTable({ rows }: { rows: MerchantRow[] }) {
           enableHiding: false,
           meta: { label: "Actions", width: "2.5rem" },
         }),
-        columnHelper.display({
-          id: "logo",
-          header: "Logo",
-          cell: ({ row }) => {
-            const src = row.original.logoSrc ?? row.original.logoUrl;
-            if (!src) {
-              return (
-                <span className="text-sm text-[var(--muted-foreground)]">
-                  -
-                </span>
-              );
-            }
-            return (
-              <img
-                src={src}
-                alt=""
-                className="size-8 rounded-md object-contain"
-              />
-            );
-          },
-          enableSorting: false,
-          meta: { label: "Logo", width: "3.5rem" },
-        }),
         columnHelper.accessor("name", {
           header: "Merchant",
-          cell: ({ getValue }) => cellText(getValue(), "text-sm font-medium"),
+          cell: ({ row, getValue }) => (
+            <MerchantLabel
+              name={getValue()}
+              src={row.original.logoSrc ?? row.original.logoUrl}
+              className="text-sm font-medium"
+            />
+          ),
           filterFn: "includesString",
           sortFn: "text",
           meta: { width: "18rem", nowrap: true, grow: true },
@@ -163,8 +180,28 @@ function MerchantsTable({ rows }: { rows: MerchantRow[] }) {
           sortFn: "text",
           meta: { width: "14rem", nowrap: true },
         }),
+        columnHelper.display({
+          id: "txnsInfo",
+          header: () => <span className="sr-only">Transactions</span>,
+          cell: ({ row }) => (
+            <div className="flex items-center justify-center">
+              <MerchantTxnsPopover
+                merchantId={row.original.id}
+                merchantName={row.original.name}
+                vaultPeeks={
+                  vaultPeeksByName
+                    ? (vaultPeeksByName.get(row.original.name) ?? [])
+                    : undefined
+                }
+              />
+            </div>
+          ),
+          enableSorting: false,
+          enableHiding: false,
+          meta: { label: "Transactions", width: "2.5rem" },
+        }),
       ]),
-    [],
+    [vaultPeeksByName],
   );
 
   return (
@@ -256,8 +293,8 @@ export function MerchantsPanel() {
       id: merchant.recordId,
       slug: merchant.merchantId,
       name: merchant.name,
-      logoUrl: null as string | null,
-      logoSrc: null as string | null,
+      logoUrl: merchant.logoUrl ?? null,
+      logoSrc: merchant.logoUrl ?? null,
       transactionCount: counts.get(merchant.name) ?? 0,
       createdAt: merchant.createdAt ?? 0,
       updatedAt: merchant.updatedAt ?? merchant.createdAt ?? 0,
@@ -283,6 +320,17 @@ export function MerchantsPanel() {
     privateLedger.unlocked,
   ]);
 
+  const encryptedPeeksByName = useMemo(() => {
+    if (!privateLedger.encryptedLedger || !privateLedger.unlocked) {
+      return undefined;
+    }
+    return vaultPeeksByMerchantName(privateLedger.ledger.transactions);
+  }, [
+    privateLedger.encryptedLedger,
+    privateLedger.ledger.transactions,
+    privateLedger.unlocked,
+  ]);
+
   if (privateLedger.encryptedLedger) {
     if (privateLedger.loading || !privateLedger.unlocked) {
       return <PageSpinner />;
@@ -298,7 +346,12 @@ export function MerchantsPanel() {
         />
       );
     }
-    return <MerchantsTable rows={encryptedRows} />;
+    return (
+      <MerchantsTable
+        rows={encryptedRows}
+        vaultPeeksByName={encryptedPeeksByName}
+      />
+    );
   }
 
   if (merchants !== undefined) {

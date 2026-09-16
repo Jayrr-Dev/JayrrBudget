@@ -109,10 +109,11 @@ export async function encryptStatementImportToVault(input: {
         value: {
           merchantId,
           name,
-          rawName: name,
-          company: null,
-          brand: null,
-          website: null,
+          rawName: existing?.rawName ?? name,
+          company: existing?.company ?? null,
+          brand: existing?.brand ?? null,
+          website: existing?.website ?? null,
+          logoUrl: existing?.logoUrl ?? null,
         },
         expectedRevision: existing?.revision ?? null,
       };
