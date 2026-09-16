@@ -72,6 +72,13 @@ type ColumnMeta = {
   grow?: boolean;
 };
 
+function columnSizeStyle(meta: ColumnMeta | undefined) {
+  const width = meta?.width;
+  if (!width) return undefined;
+  if (meta?.grow) return { width, minWidth: width };
+  return { width, minWidth: width, maxWidth: width };
+}
+
 function HeaderLabel({
   description,
   children,
@@ -444,7 +451,7 @@ export function DataTable<TData extends RowData>({
       if (!parent) {
         sections.push({
           id: column.id,
-          label: menuColumnLabel(column),
+          label: null,
           columns: [column],
         });
         continue;
@@ -467,11 +474,14 @@ export function DataTable<TData extends RowData>({
       });
     }
 
-    const mainIndex = sections.findIndex((section) => section.id === "main");
-    if (mainIndex > 0) {
-      const [mainSection] = sections.splice(mainIndex, 1);
-      if (mainSection) {
-        sections.unshift(mainSection);
+    const preferredOrder = ["class", "main"];
+    for (const id of [...preferredOrder].reverse()) {
+      const index = sections.findIndex((section) => section.id === id);
+      if (index > 0) {
+        const [section] = sections.splice(index, 1);
+        if (section) {
+          sections.unshift(section);
+        }
       }
     }
 
@@ -514,6 +524,21 @@ export function DataTable<TData extends RowData>({
     }
 
     table.getColumn(columnId)?.toggleVisibility(false);
+  };
+
+  const groupFilterSections = columnMenuSections.filter((section) =>
+    section.columns.some((column) => Boolean(column.parent)),
+  );
+
+  const toggleGroupColumns = (
+    section: (typeof groupFilterSections)[number],
+  ) => {
+    const anyVisible = section.columns.some((column) => column.getIsVisible());
+    const next: ColumnVisibilityState = { ...columnVisibility };
+    for (const column of section.columns) {
+      next[column.id] = !anyVisible;
+    }
+    setColumnVisibility(next);
   };
 
   return (
@@ -698,6 +723,31 @@ export function DataTable<TData extends RowData>({
           </p>
         </div>
       ) : null}
+      {groupFilterSections.length > 0 ? (
+        <div className="flex flex-wrap gap-1.5">
+          {groupFilterSections.map((section) => {
+            const active = section.columns.some((column) =>
+              column.getIsVisible(),
+            );
+            return (
+              <Badge
+                key={section.id}
+                asChild
+                variant={active ? "default" : "outline"}
+                className="h-7 cursor-pointer px-2.5"
+              >
+                <button
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() => toggleGroupColumns(section)}
+                >
+                  {section.label ?? section.id}
+                </button>
+              </Badge>
+            );
+          })}
+        </div>
+      ) : null}
       <TooltipProvider>
         <div className="md:hidden">
           {table.getRowModel().rows?.length ? (
@@ -766,185 +816,190 @@ export function DataTable<TData extends RowData>({
               })}
             </colgroup>
             <TableHeader>
-              {table.getHeaderGroups().map((headerGroup) => (
-                <TableRow key={headerGroup.id}>
-                  {headerGroup.headers.map((header) => {
-                    if (header.colSpan === 0 || header.rowSpan === 0) {
-                      return null;
-                    }
-                    const isGroupParent =
-                      header.subHeaders.length > 0 && !header.isPlaceholder;
-                    const renderHeader = header;
-                    const renderColumn = header.column;
-                    const canSort = renderColumn.getCanSort();
-                    const sorted = renderColumn.getIsSorted();
-                    const columnFilter = filtersByColumnId.get(renderColumn.id);
-                    const filterValue =
-                      (renderColumn.getFilterValue() as string | undefined) ??
-                      "all";
-                    const filterActive = Boolean(
-                      columnFilter && filterValue !== "all",
-                    );
-                    const showGroupTitle = isGroupParent;
-                    const columnMeta = renderColumn.columnDef.meta as
-                      | ColumnMeta
-                      | undefined;
-                    const groupLeafWidth =
-                      showGroupTitle && header.colSpan === 1
-                        ? (
-                            header.subHeaders[0]?.column.columnDef.meta as
-                              | ColumnMeta
-                              | undefined
-                          )?.width
-                        : undefined;
-                    const width = showGroupTitle
-                      ? groupLeafWidth
-                      : columnMeta?.width;
-                    const inventBand = columnMeta?.band === "invent";
-                    const description = columnMeta?.description;
-                    const isAmount = renderColumn.id === "amount";
-                    const headerDef = renderColumn.columnDef.header;
-                    const customHeader = typeof headerDef === "function";
-                    const sortLabel =
-                      csvColumnLabel(renderColumn) ?? renderColumn.id;
-                    const isActionsCol = renderColumn.id === "actions";
-                    const isStickyCol =
-                      renderColumn.id === firstLeafColumnId ||
-                      header.subHeaders.some(
-                        (child) => child.column.id === firstLeafColumnId,
+              {table.getHeaderGroups().map((headerGroup) => {
+                const isGroupTitleRow = headerGroup.headers.some(
+                  (header) =>
+                    header.subHeaders.length > 0 && !header.isPlaceholder,
+                );
+                if (isGroupTitleRow) return null;
+                return (
+                  <TableRow key={headerGroup.id}>
+                    {headerGroup.headers.map((header) => {
+                      if (header.colSpan === 0) {
+                        return null;
+                      }
+                      const isGroupParent =
+                        header.subHeaders.length > 0 && !header.isPlaceholder;
+                      const renderHeader = header;
+                      const renderColumn = header.column;
+                      const canSort = renderColumn.getCanSort();
+                      const sorted = renderColumn.getIsSorted();
+                      const columnFilter = filtersByColumnId.get(
+                        renderColumn.id,
                       );
-                    const headerRowSpan =
-                      header.rowSpan > 1 ? header.rowSpan : undefined;
-                    const labelNode = (
-                      <HeaderLabel description={description}>
-                        <span className="line-clamp-2 text-left leading-snug">
-                          {customHeader ? (
-                            sortLabel
-                          ) : (
-                            <table.FlexRender header={renderHeader} />
-                          )}
-                        </span>
-                      </HeaderLabel>
-                    );
-                    return (
-                      <TableHead
-                        key={header.id}
-                        colSpan={header.colSpan}
-                        rowSpan={headerRowSpan}
-                        data-sticky-col={isStickyCol ? true : undefined}
-                        style={
-                          width
-                            ? { width, minWidth: width, maxWidth: width }
-                            : undefined
-                        }
-                        className={[
-                          "h-auto min-h-10 whitespace-normal",
-                          width ? "overflow-hidden" : "",
-                          isActionsCol ? "px-0" : "",
-                          showGroupTitle
-                            ? "bg-[var(--muted)]/40 text-center text-xs font-semibold tracking-wide uppercase"
-                            : "",
-                          inventBand && !showGroupTitle
-                            ? "border-l border-[var(--border)] bg-[var(--muted)]/35"
-                            : "",
-                        ]
-                          .filter(Boolean)
-                          .join(" ")}
-                      >
-                        {showGroupTitle ? (
-                          <span className="block px-2 py-1">
-                            <table.FlexRender header={header} />
-                          </span>
-                        ) : header.isPlaceholder &&
-                          header.rowSpan <= 1 ? null : canSort ||
-                          columnFilter ? (
-                          <div
-                            className={`-ml-2 inline-flex max-w-full items-center gap-0.5 ${
-                              isAmount ? "w-full justify-end" : ""
-                            }`}
-                          >
-                            {canSort ? (
-                              <button
-                                type="button"
-                                className="inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-md px-2 py-1 font-medium transition-colors hover:bg-[var(--muted)]"
-                                onClick={renderColumn.getToggleSortingHandler()}
-                              >
-                                {labelNode}
-                                {sorted === "asc" ? (
-                                  <ArrowUpIcon className="size-3.5 shrink-0 opacity-70" />
-                                ) : sorted === "desc" ? (
-                                  <ArrowDownIcon className="size-3.5 shrink-0 opacity-70" />
-                                ) : (
-                                  <ArrowUpDownIcon className="size-3.5 shrink-0 opacity-40" />
-                                )}
-                              </button>
-                            ) : (
-                              <span className="px-2 py-1 font-medium">
-                                {labelNode}
-                              </span>
-                            )}
+                      const filterValue =
+                        (renderColumn.getFilterValue() as string | undefined) ??
+                        "all";
+                      const filterActive = Boolean(
+                        columnFilter && filterValue !== "all",
+                      );
+                      const showGroupTitle = isGroupParent;
+                      const columnMeta = renderColumn.columnDef.meta as
+                        | ColumnMeta
+                        | undefined;
+                      const groupLeafWidth =
+                        showGroupTitle && header.colSpan === 1
+                          ? (
+                              header.subHeaders[0]?.column.columnDef.meta as
+                                | ColumnMeta
+                                | undefined
+                            )?.width
+                          : undefined;
+                      const width = showGroupTitle
+                        ? groupLeafWidth
+                        : columnMeta?.width;
+                      const inventBand = columnMeta?.band === "invent";
+                      const description = columnMeta?.description;
+                      const isAmount = renderColumn.id === "amount";
+                      const headerDef = renderColumn.columnDef.header;
+                      const customHeader = typeof headerDef === "function";
+                      const sortLabel =
+                        csvColumnLabel(renderColumn) ?? renderColumn.id;
+                      const isActionsCol = renderColumn.id === "actions";
+                      const isStickyCol =
+                        renderColumn.id === firstLeafColumnId ||
+                        header.subHeaders.some(
+                          (child) => child.column.id === firstLeafColumnId,
+                        );
+                      const headerRowSpan =
+                        header.rowSpan > 1 ? header.rowSpan : undefined;
+                      const labelNode = (
+                        <HeaderLabel description={description}>
+                          <span className="line-clamp-2 text-left leading-snug">
                             {customHeader ? (
+                              sortLabel
+                            ) : (
                               <table.FlexRender header={renderHeader} />
-                            ) : null}
-                            {columnFilter ? (
-                              <DropdownMenu>
-                                <DropdownMenuTrigger
-                                  className={`inline-flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-md transition-colors ${
-                                    filterActive
-                                      ? "bg-primary text-primary-foreground hover:bg-primary-hover"
-                                      : "text-foreground-muted opacity-50 hover:bg-[var(--muted)] hover:opacity-80"
-                                  }`}
-                                  aria-label={`Filter ${columnFilter.label}`}
-                                  aria-pressed={filterActive}
+                            )}
+                          </span>
+                        </HeaderLabel>
+                      );
+                      return (
+                        <TableHead
+                          key={header.id}
+                          colSpan={header.colSpan}
+                          rowSpan={headerRowSpan}
+                          data-sticky-col={isStickyCol ? true : undefined}
+                          style={columnSizeStyle(columnMeta)}
+                          className={[
+                            "h-auto min-h-10 whitespace-normal",
+                            width ? "overflow-hidden" : "",
+                            isActionsCol ? "px-0" : "",
+                            showGroupTitle
+                              ? "bg-[var(--muted)]/40 text-center text-xs font-semibold tracking-wide uppercase"
+                              : "",
+                            inventBand && !showGroupTitle
+                              ? "border-l border-[var(--border)] bg-[var(--muted)]/35"
+                              : "",
+                          ]
+                            .filter(Boolean)
+                            .join(" ")}
+                        >
+                          {showGroupTitle ? (
+                            <span className="block px-2 py-1">
+                              <table.FlexRender header={header} />
+                            </span>
+                          ) : header.isPlaceholder &&
+                            header.rowSpan <= 1 ? null : canSort ||
+                            columnFilter ? (
+                            <div
+                              className={`-ml-2 inline-flex max-w-full items-center gap-0.5 ${
+                                isAmount ? "w-full justify-end" : ""
+                              }`}
+                            >
+                              {canSort ? (
+                                <button
+                                  type="button"
+                                  className="inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-md px-2 py-1 font-medium transition-colors hover:bg-[var(--muted)]"
+                                  onClick={renderColumn.getToggleSortingHandler()}
                                 >
-                                  <ListFilterIcon className="size-3.5" />
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent
-                                  align="start"
-                                  className="max-h-72 min-w-44"
-                                >
-                                  <DropdownMenuRadioGroup
-                                    value={filterValue}
-                                    onValueChange={(value) =>
-                                      setColumnFilterValue(
-                                        columnFilter.columnId,
-                                        value,
-                                      )
-                                    }
+                                  {labelNode}
+                                  {sorted === "asc" ? (
+                                    <ArrowUpIcon className="size-3.5 shrink-0 opacity-70" />
+                                  ) : sorted === "desc" ? (
+                                    <ArrowDownIcon className="size-3.5 shrink-0 opacity-70" />
+                                  ) : (
+                                    <ArrowUpDownIcon className="size-3.5 shrink-0 opacity-40" />
+                                  )}
+                                </button>
+                              ) : (
+                                <span className="px-2 py-1 font-medium">
+                                  {labelNode}
+                                </span>
+                              )}
+                              {customHeader ? (
+                                <table.FlexRender header={renderHeader} />
+                              ) : null}
+                              {columnFilter ? (
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger
+                                    className={`inline-flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-md transition-colors ${
+                                      filterActive
+                                        ? "bg-primary text-primary-foreground hover:bg-primary-hover"
+                                        : "text-foreground-muted opacity-50 hover:bg-[var(--muted)] hover:opacity-80"
+                                    }`}
+                                    aria-label={`Filter ${columnFilter.label}`}
+                                    aria-pressed={filterActive}
                                   >
-                                    <DropdownMenuLabel>
-                                      Filter {columnFilter.label}
-                                    </DropdownMenuLabel>
-                                    <DropdownMenuSeparator />
-                                    <DropdownMenuRadioItem value="all">
-                                      {columnFilter.allLabel ??
-                                        `All ${columnFilter.label.toLowerCase()}`}
-                                    </DropdownMenuRadioItem>
-                                    {optionsForFilter(columnFilter).map(
-                                      (option) => (
-                                        <DropdownMenuRadioItem
-                                          key={option.value}
-                                          value={option.value}
-                                        >
-                                          {option.label}
-                                        </DropdownMenuRadioItem>
-                                      ),
-                                    )}
-                                  </DropdownMenuRadioGroup>
-                                </DropdownMenuContent>
-                              </DropdownMenu>
-                            ) : null}
-                          </div>
-                        ) : (
-                          <HeaderLabel description={description}>
-                            <table.FlexRender header={renderHeader} />
-                          </HeaderLabel>
-                        )}
-                      </TableHead>
-                    );
-                  })}
-                </TableRow>
-              ))}
+                                    <ListFilterIcon className="size-3.5" />
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent
+                                    align="start"
+                                    className="max-h-72 min-w-44"
+                                  >
+                                    <DropdownMenuRadioGroup
+                                      value={filterValue}
+                                      onValueChange={(value) =>
+                                        setColumnFilterValue(
+                                          columnFilter.columnId,
+                                          value,
+                                        )
+                                      }
+                                    >
+                                      <DropdownMenuLabel>
+                                        Filter {columnFilter.label}
+                                      </DropdownMenuLabel>
+                                      <DropdownMenuSeparator />
+                                      <DropdownMenuRadioItem value="all">
+                                        {columnFilter.allLabel ??
+                                          `All ${columnFilter.label.toLowerCase()}`}
+                                      </DropdownMenuRadioItem>
+                                      {optionsForFilter(columnFilter).map(
+                                        (option) => (
+                                          <DropdownMenuRadioItem
+                                            key={option.value}
+                                            value={option.value}
+                                          >
+                                            {option.label}
+                                          </DropdownMenuRadioItem>
+                                        ),
+                                      )}
+                                    </DropdownMenuRadioGroup>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              ) : null}
+                            </div>
+                          ) : (
+                            <HeaderLabel description={description}>
+                              <table.FlexRender header={renderHeader} />
+                            </HeaderLabel>
+                          )}
+                        </TableHead>
+                      );
+                    })}
+                  </TableRow>
+                );
+              })}
             </TableHeader>
             <TableBody>
               {table.getRowModel().rows?.length ? (
@@ -969,11 +1024,7 @@ export function DataTable<TData extends RowData>({
                               ? true
                               : undefined
                           }
-                          style={
-                            width
-                              ? { width, minWidth: width, maxWidth: width }
-                              : undefined
-                          }
+                          style={columnSizeStyle(cellMeta)}
                           className={[
                             nowrap
                               ? "whitespace-nowrap align-middle"

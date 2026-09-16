@@ -115,6 +115,61 @@ function buildColumns(
       meta: { label: "Actions", width: "2rem" },
     }),
     columnHelper.group({
+      id: "class",
+      header: "Class",
+      columns: columnHelper.columns([
+        columnHelper.accessor("sectionName", {
+          header: "Section",
+          meta: bandMeta(
+            "14rem",
+            "invent",
+            "Top spend bucket (Lifestyle, Transport).",
+          ),
+          cell: ({ row, getValue }) => (
+            <TaxonomyCell
+              transactionId={row.original.transactionId}
+              field="section"
+              value={getValue()}
+            />
+          ),
+          filterFn: "equalsString",
+          sortFn: "text",
+        }),
+        columnHelper.accessor("categoryName", {
+          header: "Category",
+          meta: bandMeta("20rem", "invent", "Mid spend bucket under Section."),
+          cell: ({ row, getValue }) => (
+            <TaxonomyCell
+              transactionId={row.original.transactionId}
+              field="category"
+              value={getValue()}
+              sectionName={row.original.sectionName}
+            />
+          ),
+          filterFn: "equalsString",
+          sortFn: "text",
+        }),
+        columnHelper.accessor("subcategoryName", {
+          header: "Subcategories",
+          meta: bandMeta(
+            "20rem",
+            "invent",
+            "Fine spend label (leaf category).",
+          ),
+          cell: ({ row, getValue }) => (
+            <TaxonomyCell
+              transactionId={row.original.transactionId}
+              field="subcategory"
+              value={getValue()}
+              categoryName={row.original.categoryName}
+            />
+          ),
+          filterFn: "equalsString",
+          sortFn: "text",
+        }),
+      ]),
+    }),
+    columnHelper.group({
       id: "main",
       header: "Main",
       columns: columnHelper.columns([
@@ -406,55 +461,6 @@ function buildColumns(
             sortFn: "text",
           },
         ),
-        columnHelper.accessor("sectionName", {
-          header: "Section",
-          meta: bandMeta(
-            "14rem",
-            "invent",
-            "Top spend bucket (Lifestyle, Transport).",
-          ),
-          cell: ({ row, getValue }) => (
-            <TaxonomyCell
-              transactionId={row.original.transactionId}
-              field="section"
-              value={getValue()}
-            />
-          ),
-          filterFn: "equalsString",
-          sortFn: "text",
-        }),
-        columnHelper.accessor("categoryName", {
-          header: "Category",
-          meta: bandMeta("20rem", "invent", "Mid spend bucket under Section."),
-          cell: ({ row, getValue }) => (
-            <TaxonomyCell
-              transactionId={row.original.transactionId}
-              field="category"
-              value={getValue()}
-              sectionName={row.original.sectionName}
-            />
-          ),
-          filterFn: "equalsString",
-          sortFn: "text",
-        }),
-        columnHelper.accessor("subcategoryName", {
-          header: "Subcategories",
-          meta: bandMeta(
-            "20rem",
-            "invent",
-            "Fine spend label (leaf category).",
-          ),
-          cell: ({ row, getValue }) => (
-            <TaxonomyCell
-              transactionId={row.original.transactionId}
-              field="subcategory"
-              value={getValue()}
-              categoryName={row.original.categoryName}
-            />
-          ),
-          filterFn: "equalsString",
-          sortFn: "text",
-        }),
         columnHelper.accessor("spreadName", {
           header: "Spread",
           meta: bandMeta("10rem", "invent", "Needs / Wants / Savings bucket."),

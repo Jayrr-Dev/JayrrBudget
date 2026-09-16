@@ -57,14 +57,14 @@ const columns = columnHelper.columns([
     cell: ({ getValue }) => cellText(getValue(), "text-sm font-medium"),
     filterFn: "includesString",
     sortFn: "text",
-    meta: { width: "18rem", nowrap: true },
+    meta: { width: "18rem", nowrap: true, grow: true },
   }),
   columnHelper.accessor("rawName", {
     header: "Raw name",
     cell: ({ getValue }) => cellText(getValue()),
     filterFn: "fuzzy",
     sortFn: "text",
-    meta: { width: "18rem", nowrap: true },
+    meta: { width: "18rem", nowrap: true, grow: true },
   }),
   columnHelper.accessor("updatedAt", {
     header: "Updated",
@@ -114,6 +114,7 @@ function MerchantsTable({ rows }: { rows: MerchantRow[] }) {
       pageSize={25}
       enableColumnToggle
       csvFilename="merchants.csv"
+      fillWidth
       initialColumnVisibility={HIDDEN_COLUMNS}
     />
   );

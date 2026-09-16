@@ -13,32 +13,19 @@ function MoneyGrid({
   className?: string;
   align?: "left" | "right";
 }) {
-  const isLeft = align === "left";
   return (
     <span
       className={cn(
         "inline-grid items-baseline gap-x-1 font-mono tabular-nums",
-        isLeft
-          ? parts.negative
-            ? "w-max grid-cols-[auto_auto_auto]"
-            : "w-max grid-cols-[auto_auto]"
+        align === "left"
+          ? "w-max grid-cols-[3.5ch_1ch_auto]"
           : "w-full grid-cols-[3.5ch_1ch_minmax(0,1fr)]",
         className,
       )}
     >
-      <span className={isLeft ? "text-left" : "text-right"}>
-        {parts.symbol}
-      </span>
-      {isLeft ? (
-        parts.negative ? (
-          <span>−</span>
-        ) : null
-      ) : (
-        <span className="text-center">{parts.negative ? "−" : ""}</span>
-      )}
-      <span className={cn("min-w-0", isLeft ? "text-left" : "text-right")}>
-        {parts.number}
-      </span>
+      <span className="text-right">{parts.symbol}</span>
+      <span className="text-center">{parts.negative ? "−" : ""}</span>
+      <span className="min-w-0 text-right">{parts.number}</span>
     </span>
   );
 }

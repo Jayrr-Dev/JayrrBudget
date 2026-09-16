@@ -3231,7 +3231,7 @@ function LeaderboardTable({
                   >
                     {index + 1}
                   </span>
-                  <span className="min-w-0 truncate font-medium">
+                  <span className="min-w-0 truncate text-left font-medium">
                     {row.name}
                   </span>
                   <span className="text-left font-mono text-sm tabular-nums">
@@ -3271,7 +3271,7 @@ function LeaderboardTable({
                             current === row.name ? null : row.name,
                           )
                         }
-                        className="contents"
+                        className="contents text-left"
                       >
                         {mainCells}
                       </button>
@@ -3639,7 +3639,7 @@ function AverageLeaderboardTable({
                   >
                     {index + 1}
                   </span>
-                  <span className="min-w-0 truncate font-medium">
+                  <span className="min-w-0 truncate text-left font-medium">
                     {row.name}
                   </span>
                   <span className="text-right font-mono text-sm tabular-nums">
@@ -3672,7 +3672,7 @@ function AverageLeaderboardTable({
                             current === row.name ? null : row.name,
                           )
                         }
-                        className="contents"
+                        className="contents text-left"
                       >
                         {mainCells}
                       </button>
