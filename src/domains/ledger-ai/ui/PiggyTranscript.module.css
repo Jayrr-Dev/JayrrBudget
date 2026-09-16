@@ -1,21 +1,28 @@
+/* Piggy + user speech bubbles: rounded body + CSS triangle tail. */
+
 .assistant [data-slot="bubble"][data-variant="piggy"],
 .userBubble {
+  /* Shared paint */
   --bubble-fill: color-mix(in srgb, var(--background) 88%, var(--accent));
   --bubble-ink: color-mix(in srgb, var(--foreground) 45%, var(--accent));
+  --tail: 10px; /* INNER triangle size */
+  --tail-border: 1.5px; /* outline thickness between inner and outer */
+  --tail-outer: calc(var(--tail) + var(--tail-border)); /* OUTER triangle size */
+  /* Extra ink on the tail's lower diagonal (that edge reads thin at 45deg). */
+  --tail-bottom-extra: 1.5px;
   position: relative;
   max-width: 100%;
   margin-top: 3px;
   margin-bottom: 5px;
-  isolation: isolate;
 }
 
+/* Bubble body: the rounded box with fill, outline, and text. */
 .assistant [data-slot="bubble"][data-variant="piggy"] > [data-slot="bubble-content"],
 .userBubble > [data-slot="bubble-content"] {
   position: relative;
-  z-index: 1;
   background: var(--bubble-fill);
   color: var(--foreground);
-  border: 1.5px solid var(--bubble-ink);
+  border: var(--tail-border) solid var(--bubble-ink);
   border-radius: 19px 23px 18px 12px / 15px 17px 21px 18px;
   box-shadow: 1px 3px 0 color-mix(in srgb, var(--bubble-ink) 12%, transparent);
   padding: 10px 13px;
@@ -23,38 +30,66 @@
   overflow-wrap: anywhere;
 }
 
-/* Folded corner tucked under the fill so it stays glued at any height. */
-.assistant [data-slot="bubble"][data-variant="piggy"]::after,
-.userBubble::after {
+/*
+  Tail = two stacked CSS triangles on bubble-content:
+  OUTER  ::before  ink outline
+  INNER  ::after   fill (sits on top, 1.5px inset)
+*/
+.assistant [data-slot="bubble"][data-variant="piggy"] > [data-slot="bubble-content"]::before,
+.assistant [data-slot="bubble"][data-variant="piggy"] > [data-slot="bubble-content"]::after,
+.userBubble > [data-slot="bubble-content"]::before,
+.userBubble > [data-slot="bubble-content"]::after {
   content: "";
   position: absolute;
-  top: 12px;
-  left: -3px;
-  z-index: 0;
-  width: 12px;
-  height: 12px;
-  background: var(--bubble-fill);
-  border-left: 1.5px solid var(--bubble-ink);
-  border-bottom: 1.5px solid var(--bubble-ink);
-  transform: rotate(42deg);
+  top: 15px;
+  border: calc(var(--tail-outer) - 1px) solid transparent;
   pointer-events: none;
 }
 
+/* OUTER triangle (::before) — Piggy, points left */
+.assistant [data-slot="bubble"][data-variant="piggy"] > [data-slot="bubble-content"]::before {
+  right: 100%;
+  border-right-color: var(--bubble-ink);
+}
+
+/* INNER triangle (::after) — both sides: smaller fill so OUTER ring shows */
+.assistant [data-slot="bubble"][data-variant="piggy"] > [data-slot="bubble-content"]::after,
+.userBubble > [data-slot="bubble-content"]::after {
+  top: calc(14px + var(--tail-border));
+  border-width: calc(var(--tail));
+  border-bottom-width: calc(var(--tail) - var(--tail-bottom-extra) + 1px);
+}
+
+/* INNER triangle (::after) — Piggy, points left */
+.assistant [data-slot="bubble"][data-variant="piggy"] > [data-slot="bubble-content"]::after {
+  right: 100%;
+  transform: translateX(1px);
+  border-right-color: var(--bubble-fill);
+}
+
+/* User bubble: own colors, room on the right for the tail. */
 .userBubble.userBubble {
   --bubble-fill: color-mix(in srgb, var(--background) 84%, var(--primary));
   --bubble-ink: color-mix(in srgb, var(--foreground) 35%, var(--primary));
   max-width: 85%;
-  margin-right: 6px;
+  margin-right: 14px;
 }
 
 .userBubble.userBubble > [data-slot="bubble-content"] {
   border-radius: 22px 16px 12px 21px / 17px 21px 16px 19px;
 }
 
-.userBubble.userBubble::after {
-  left: auto;
-  right: -3px;
-  border-left: none;
-  border-right: 1.5px solid var(--bubble-ink);
-  transform: rotate(-42deg);
+/* OUTER triangle (::before) — user, points right */
+.userBubble.userBubble > [data-slot="bubble-content"]::before {
+  left: 100%;
+  right: auto;
+  border-left-color: var(--bubble-ink);
+}
+
+/* INNER triangle (::after) — user, points right */
+.userBubble.userBubble > [data-slot="bubble-content"]::after {
+  left: 100%;
+  right: auto;
+  transform: translateX(-1px);
+  border-left-color: var(--bubble-fill);
 }
