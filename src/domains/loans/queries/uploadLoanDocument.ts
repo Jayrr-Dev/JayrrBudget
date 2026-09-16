@@ -4,6 +4,8 @@ import {
   type LoanDocumentProgress,
 } from "@/domains/loans/domain/loanDocumentProgress";
 import type { ParseLoanDocumentSuccess } from "@/domains/loans/domain/loanDocumentResult";
+import type { OcrMode } from "@/domains/statements/domain/ocrMode";
+import { ocrDocumentLocally } from "@/domains/statements/infrastructure/localOcr";
 
 type StreamEvent =
   | { type: "progress"; progress: LoanDocumentProgress }
@@ -14,6 +16,7 @@ export type UploadLoanDocumentOptions = {
   onProgress?: (progress: LoanDocumentProgress) => void;
   signal?: AbortSignal;
   persistMode?: "convex" | "vault";
+  ocrMode?: OcrMode;
 };
 
 export function isLoanUploadAbortError(error: unknown) {
@@ -35,6 +38,29 @@ export async function uploadLoanDocument(
     step: "receive",
     ...LOAN_DOCUMENT_STEPS.receive,
   });
+
+  if (options?.ocrMode === "local") {
+    options.onProgress?.({
+      step: "ocr",
+      percent: LOAN_DOCUMENT_STEPS.ocr.percent,
+      label: "Scanning pages on this device…",
+    });
+    const local = await ocrDocumentLocally(file, {
+      signal: options.signal,
+      onProgress: (progress) => {
+        options.onProgress?.({
+          step: "ocr",
+          percent: LOAN_DOCUMENT_STEPS.ocr.percent,
+          label: progress.label,
+        });
+      },
+    });
+    if (!local.markdown.trim()) {
+      throw new Error("Local scan found no readable text. Try Server scan.");
+    }
+    form.append("ocrMarkdown", local.markdown);
+    form.append("ocrPageCount", String(local.pageCount));
+  }
 
   const response = await fetch("/api/loans/parse-document", {
     method: "POST",

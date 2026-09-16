@@ -50,6 +50,7 @@ import {
 } from "@/domains/loans/queries/uploadLoanDocument";
 import { isOcrDocumentFile } from "@/domains/statements/domain/ocrDocumentTypes";
 import { OcrDocumentPickerButton } from "@/domains/statements/ui/OcrDocumentPickerButton";
+import { useOcrMode } from "@/domains/statements/ui/useOcrMode";
 import {
   hydrateVaultSession,
   type VaultClient,
@@ -98,6 +99,7 @@ export function AddLoanDialog({ open, onOpenChange }: AddLoanDialogProps) {
   const client = useConvex();
   const privateLedger = usePrivateLedger();
   const flags = useFeatureFlags();
+  const ocrMode = useOcrMode();
   const createCustomLoan = useMutation(api.dashboard.createCustomLoan);
   const linkLoanDocument = useMutation(api.loanDocuments.linkToAccount);
   const [form, setForm] = useState(emptyForm);
@@ -140,6 +142,7 @@ export function AddLoanDialog({ open, onOpenChange }: AddLoanDialogProps) {
     try {
       const result = await uploadLoanDocument(file, {
         persistMode: vaultPersist ? "vault" : "convex",
+        ocrMode,
         onProgress: (progress) => {
           toast.loading(formatLoanDocumentProgress(progress), {
             id: UPLOAD_TOAST,

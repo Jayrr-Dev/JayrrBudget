@@ -8,12 +8,6 @@ import {
 import { MessageCircle, SendHorizonal } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import {
-  DefaultQuickActions,
-  DefaultQuickActionsContent,
-  TldrawUiButton,
-  useEditor,
-} from "tldraw";
 import { Bubble, BubbleContent } from "@/components/ui/bubble";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -37,6 +31,7 @@ import { dashboardFromPrivateLedger } from "@/domains/vault/application/dashboar
 import { useFeatureFlag } from "@/domains/feature-flags/ui/useFeatureFlag";
 import { usePrivateLedger } from "@/domains/vault/ui/usePrivateLedger";
 import { errorMessage } from "@/shared/lib/error-message";
+import { useCanvasApi } from "@/domains/canvas/ui/canvasApiContext";
 
 function messageText(parts: Array<{ type: string; text?: string }>) {
   return parts
@@ -46,7 +41,7 @@ function messageText(parts: Array<{ type: string; text?: string }>) {
 }
 
 export function CanvasAiChat() {
-  const editor = useEditor();
+  const api = useCanvasApi();
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState("");
   const encryptedLedger = useFeatureFlag("encryptedLedger");
@@ -61,7 +56,9 @@ export function CanvasAiChat() {
           const useClientBudget = encryptedLedger;
           const budget = useClientBudget
             ? privateLedger.unlocked
-              ? buildBudgetContextFromDashboard(dashboardFromPrivateLedger(privateLedger.ledger))
+              ? buildBudgetContextFromDashboard(
+                  dashboardFromPrivateLedger(privateLedger.ledger),
+                )
               : { error: "Sign in again, then try chat." }
             : undefined;
           return {
@@ -69,14 +66,14 @@ export function CanvasAiChat() {
               ...body,
               id,
               messages,
-              canvas: getCanvasSnapshot(editor),
+              canvas: api ? getCanvasSnapshot(api) : null,
               useClientBudget,
               budget,
             },
           };
         },
       }),
-    [editor, encryptedLedger, privateLedger.ledger, privateLedger.unlocked],
+    [api, encryptedLedger, privateLedger.ledger, privateLedger.unlocked],
   );
 
   const { messages, sendMessage, addToolOutput, status, error } = useChat({
@@ -91,8 +88,17 @@ export function CanvasAiChat() {
       if (toolCall.dynamic) return;
 
       try {
+        if (!api) {
+          addToolOutput({
+            tool: toolCall.toolName,
+            toolCallId: toolCall.toolCallId,
+            state: "output-error",
+            errorText: "Canvas is still loading",
+          });
+          return;
+        }
         const output = applyCanvasTool(
-          editor,
+          api,
           toolCall.toolName,
           toolCall.input,
         );
@@ -121,18 +127,21 @@ export function CanvasAiChat() {
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <TldrawUiButton
-          type="icon"
+        <Button
+          type="button"
+          variant="outline"
+          size="icon-sm"
           title="Canvas AI chat"
           aria-label="Canvas AI chat"
+          className="bg-[var(--surface)]"
         >
           <MessageCircle className="size-4" />
-        </TldrawUiButton>
+        </Button>
       </PopoverTrigger>
       <PopoverContent
-        align="start"
+        align="end"
         side="bottom"
-        className="z-[1000] w-[22rem] gap-4 p-3"
+        className="z-[2000] w-[22rem] gap-4 p-3"
       >
         <PopoverHeader className="gap-1">
           <PopoverTitle>Canvas AI</PopoverTitle>
@@ -205,14 +214,5 @@ export function CanvasAiChat() {
         </form>
       </PopoverContent>
     </Popover>
-  );
-}
-
-export function CanvasQuickActions() {
-  return (
-    <DefaultQuickActions>
-      <DefaultQuickActionsContent />
-      <CanvasAiChat />
-    </DefaultQuickActions>
   );
 }

@@ -15,6 +15,11 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { MoneyText } from "@/domains/dashboard/ui/MoneyText";
+import { LedgerAiChat } from "@/domains/ledger-ai/ui/LedgerAiChat";
+import {
+  PiggyMascot,
+  type PiggyMood,
+} from "@/domains/ledger-ai/ui/PiggyMascot";
 import {
   subscribeScratchNoteOpen,
   useScratchNote,
@@ -30,8 +35,6 @@ import {
 } from "@/domains/user-notes/userNotesStore";
 import { cn } from "@/lib/utils";
 import { downloadCsv, toCsv } from "@/shared/lib/csv";
-import { LedgerAiChat } from "@/domains/ledger-ai/ui/LedgerAiChat";
-import { PiggyMascot, type PiggyMood } from "@/domains/ledger-ai/ui/PiggyMascot";
 import {
   ChevronLeft,
   FileSpreadsheet,
@@ -816,7 +819,7 @@ export function PersistentNoteFab() {
                     className={segmentBtn(aiOpen)}
                   >
                     <PiggyMascot
-                      mood={aiOpen ? piggyMood : "idle"}
+                      mood={aiOpen ? piggyMood : "still"}
                       iconClassName="size-3 shrink-0"
                     />
                     {aiOpen ? (

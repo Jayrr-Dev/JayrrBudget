@@ -844,16 +844,17 @@ export const recategorizeByMerchant = mutation({
       updatedAt: Date.now(),
     };
 
+    const merchantId = args.merchantId;
     let rows;
-    if (args.merchantId) {
-      const owned = await ctx.db.get(args.merchantId);
+    if (merchantId) {
+      const owned = await ctx.db.get(merchantId);
       if (!owned || owned.userId !== user._id) {
         throw new Error("Merchant not found");
       }
       rows = await ctx.db
         .query("transactions")
         .withIndex("by_userId_merchantId", (q) =>
-          q.eq("userId", user._id).eq("merchantId", args.merchantId),
+          q.eq("userId", user._id).eq("merchantId", merchantId),
         )
         .collect();
     } else {

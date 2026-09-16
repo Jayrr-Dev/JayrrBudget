@@ -4,6 +4,8 @@ import {
   type StatementImportProgress,
 } from "@/domains/statements/domain/importProgress";
 import type { ImportBankStatementSuccess } from "@/domains/statements/domain/importResult";
+import type { OcrMode } from "@/domains/statements/domain/ocrMode";
+import { ocrDocumentLocally } from "@/domains/statements/infrastructure/localOcr";
 
 type StreamEvent =
   | { type: "progress"; progress: StatementImportProgress }
@@ -14,6 +16,7 @@ export type UploadBankStatementOptions = {
   onProgress?: (progress: StatementImportProgress) => void;
   signal?: AbortSignal;
   persistMode?: "convex" | "vault";
+  ocrMode?: OcrMode;
 };
 
 export function isUploadAbortError(error: unknown) {
@@ -35,6 +38,29 @@ export async function uploadBankStatement(
     step: "receive",
     ...STATEMENT_IMPORT_STEPS.receive,
   });
+
+  if (options?.ocrMode === "local") {
+    options.onProgress?.({
+      step: "ocr",
+      percent: STATEMENT_IMPORT_STEPS.ocr.percent,
+      label: "Scanning pages on this device…",
+    });
+    const local = await ocrDocumentLocally(file, {
+      signal: options.signal,
+      onProgress: (progress) => {
+        options.onProgress?.({
+          step: "ocr",
+          percent: STATEMENT_IMPORT_STEPS.ocr.percent,
+          label: progress.label,
+        });
+      },
+    });
+    if (!local.markdown.trim()) {
+      throw new Error("Local scan found no readable text. Try Server scan.");
+    }
+    form.append("ocrMarkdown", local.markdown);
+    form.append("ocrPageCount", String(local.pageCount));
+  }
 
   const response = await fetch("/api/statements/upload", {
     method: "POST",

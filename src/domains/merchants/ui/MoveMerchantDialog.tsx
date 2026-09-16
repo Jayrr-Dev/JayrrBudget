@@ -159,36 +159,21 @@ function TaxonomyPicker({
   );
 }
 
-export function MerchantMoveActionRow({
-  merchantName,
-  merchantId,
-}: {
-  merchantName: string;
-  merchantId?: string;
-}) {
-  const [open, setOpen] = useState(false);
+export function MerchantMoveActionRow({ onMove }: { onMove: () => void }) {
   return (
-    <>
-      <div className="flex items-center gap-2 border-b border-[var(--border)] px-3 py-1.5">
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          onClick={(event) => {
-            event.stopPropagation();
-            setOpen(true);
-          }}
-        >
-          Move
-        </Button>
-      </div>
-      <MoveMerchantDialog
-        open={open}
-        onOpenChange={setOpen}
-        merchantName={merchantName}
-        merchantId={merchantId}
-      />
-    </>
+    <div className="flex items-center gap-2 border-b border-border px-3 py-1.5">
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        onClick={(event) => {
+          event.stopPropagation();
+          onMove();
+        }}
+      >
+        Move
+      </Button>
+    </div>
   );
 }
 
@@ -205,7 +190,9 @@ export function MoveMerchantDialog({
 }) {
   const queryClient = useQueryClient();
   const client = useConvex();
-  const recategorize = useConvexMutation(api.transactions.recategorizeByMerchant);
+  const recategorize = useConvexMutation(
+    api.transactions.recategorizeByMerchant,
+  );
   const privateLedger = usePrivateLedger();
   const taxonomy = useQuery({
     queryKey: queryKeys.transactionTaxonomy,
@@ -336,9 +323,7 @@ export function MoveMerchantDialog({
       onOpenChange(false);
       if (updated === 0) return;
       toast.success(
-        updated === 1
-          ? "Moved 1 transaction"
-          : `Moved ${updated} transactions`,
+        updated === 1 ? "Moved 1 transaction" : `Moved ${updated} transactions`,
       );
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.dashboard }),
@@ -459,7 +444,9 @@ export function MoveMerchantDialog({
               id="move-merchant-category"
               value={category}
               options={categoryOptions}
-              placeholder={mixedTaxonomy && category == null ? "Mixed" : "Category"}
+              placeholder={
+                mixedTaxonomy && category == null ? "Mixed" : "Category"
+              }
               disabled={taxonomyDisabled}
               onChange={(next) => {
                 setCategory(next);

@@ -1,4 +1,5 @@
 import { parseLoanDocument } from "@/domains/loans/application/parseLoanDocument";
+import { parseClientOcrForm } from "@/domains/statements/domain/ocrMode";
 import type { LoanDocumentProgress } from "@/domains/loans/domain/loanDocumentProgress";
 import type { ParseLoanDocumentSuccess } from "@/domains/loans/domain/loanDocumentResult";
 import {
@@ -42,6 +43,15 @@ export async function POST(request: Request) {
 
   const file = form.get("file");
   const persistMode = form.get("persistMode") === "vault" ? "vault" : "convex";
+  let clientOcr;
+  try {
+    clientOcr = parseClientOcrForm(form);
+  } catch (error) {
+    return Response.json(
+      { error: errorMessage(error, "Local scan text is too large.") },
+      { status: 400 },
+    );
+  }
 
   if (!(file instanceof File)) {
     return Response.json(
@@ -68,6 +78,7 @@ export async function POST(request: Request) {
           mimeType,
           client,
           persistMode,
+          clientOcr,
           onProgress: (progress) => {
             send({ type: "progress", progress });
           },

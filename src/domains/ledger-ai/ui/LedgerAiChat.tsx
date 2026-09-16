@@ -192,7 +192,7 @@ export function LedgerAiChat({
                   {message.role === "assistant" ? (
                     <MessageAvatar className="size-7 bg-accent-subtle">
                       <PiggyMascot
-                        mood={assistantTalking ? "talk" : "idle"}
+                        mood={assistantTalking ? "talk" : "still"}
                         iconClassName="size-3.5"
                       />
                     </MessageAvatar>

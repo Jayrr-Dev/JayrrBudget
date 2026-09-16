@@ -70,7 +70,10 @@ import {
 } from "@/domains/dashboard/domain/money";
 import { MoneyText } from "@/domains/dashboard/ui/MoneyText";
 import { MerchantLabel } from "@/domains/merchants/ui/MerchantLabel";
-import { MerchantMoveActionRow } from "@/domains/merchants/ui/MoveMerchantDialog";
+import {
+  MerchantMoveActionRow,
+  MoveMerchantDialog,
+} from "@/domains/merchants/ui/MoveMerchantDialog";
 import { useScratchNoteActions } from "@/domains/scratch-note/scratchNoteStore";
 import {
   DescriptionActionsButton,
@@ -3016,6 +3019,7 @@ function RowTxnsPopover({
   canMoveMerchant?: boolean;
 }) {
   const [editDescription, setEditDescription] = useState<string | null>(null);
+  const [moveOpen, setMoveOpen] = useState(false);
   return (
     <>
       <Popover>
@@ -3066,7 +3070,13 @@ function RowTxnsPopover({
               {transactions.length === 1 ? "" : "s"}
             </span>
           </div>
-          {canMoveMerchant ? <MerchantMoveActionRow merchantName={label} /> : null}
+          {canMoveMerchant ? (
+            <MerchantMoveActionRow
+              onMove={() => {
+                window.setTimeout(() => setMoveOpen(true), 0);
+              }}
+            />
+          ) : null}
           <div className="max-h-72 overflow-auto">
             {transactions.length === 0 ? (
               <p className="px-3 py-4 text-sm text-[var(--muted-foreground)]">
@@ -3141,6 +3151,13 @@ function RowTxnsPopover({
         }}
         currentDescription={editDescription ?? ""}
       />
+      {canMoveMerchant ? (
+        <MoveMerchantDialog
+          open={moveOpen}
+          onOpenChange={setMoveOpen}
+          merchantName={label}
+        />
+      ) : null}
     </>
   );
 }
@@ -3704,6 +3721,7 @@ function AverageLeaderboardTable({
                       <RowTxnsPopover
                         label={row.name}
                         currency={currency}
+                        canMoveMerchant={asMerchant}
                         transactions={rowPeeksWithVendorFallback(
                           transactionsForRow?.(row.name) ?? [],
                           mergeTxnPeeks(

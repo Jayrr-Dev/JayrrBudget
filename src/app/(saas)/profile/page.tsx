@@ -1,9 +1,20 @@
 "use client";
 
 import { VaultSecurityCard } from "@/components/layout/VaultSecurityCard";
+import {
+  Popover,
+  PopoverContent,
+  PopoverDescription,
+  PopoverHeader,
+  PopoverTitle,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { PageSpinner } from "@/components/ui/spinner";
+import { resolveOcrMode } from "@/domains/statements/domain/ocrMode";
+import { ProfileOcrModeCard } from "@/domains/statements/ui/ProfileOcrModeCard";
 import { api } from "@convex/_generated/api";
 import { useConvexAuth, useMutation, useQuery } from "convex/react";
+import { Info } from "lucide-react";
 import { useEffect, useState } from "react";
 
 function splitName(fullName: string | null | undefined) {
@@ -38,10 +49,39 @@ export default function ProfilePage() {
   return (
     <div className="mx-auto max-w-lg space-y-8">
       <header className="space-y-2 border-b border-[var(--border)] pb-6">
-        <h1 className="type-page">Profile</h1>
-        <p className="type-lead">
-          Your name, sign-in, and encryption settings. The same password
-          protects ledger data on this device.
+        <h1 className="type-page flex items-center gap-2">
+          Profile
+          <Popover>
+            <PopoverTrigger asChild>
+              <button
+                type="button"
+                className="inline-flex size-6 shrink-0 items-center justify-center rounded-full text-accent hover:bg-accent-subtle hover:text-accent"
+                aria-label="About profile"
+              >
+                <Info className="size-3.5" />
+              </button>
+            </PopoverTrigger>
+            <PopoverContent
+              align="start"
+              side="bottom"
+              sideOffset={8}
+              className="w-80 gap-0 p-3.5"
+            >
+              <PopoverHeader className="gap-1.5">
+                <PopoverTitle>Profile</PopoverTitle>
+                <PopoverDescription>
+                  Your name, sign-in, scan, and encryption settings.
+                </PopoverDescription>
+                <ul className="mt-1.5 list-disc space-y-1 pl-4 text-muted-foreground">
+                  <li>The same password protects ledger data on this device</li>
+                </ul>
+              </PopoverHeader>
+            </PopoverContent>
+          </Popover>
+        </h1>
+        <p className="sr-only">
+          Your name, sign-in, and encryption settings. The same password protects
+          ledger data on this device.
         </p>
       </header>
 
@@ -123,6 +163,8 @@ export default function ProfilePage() {
           {pending ? "Saving…" : "Save changes"}
         </button>
       </form>
+
+      <ProfileOcrModeCard ocrMode={resolveOcrMode(me.ocrMode)} />
 
       <VaultSecurityCard />
     </div>

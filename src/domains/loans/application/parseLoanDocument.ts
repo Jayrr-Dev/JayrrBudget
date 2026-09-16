@@ -38,9 +38,10 @@ export async function parseLoanDocument(params: {
   client: ConvexHttpClient;
   mimeType?: string | null;
   persistMode?: "convex" | "vault";
+  clientOcr?: { markdown: string; pageCount: number } | null;
   onProgress?: (progress: LoanDocumentProgress) => void;
 }): Promise<ParseLoanDocumentResult> {
-  if (!isMistralConfigured()) {
+  if (!params.clientOcr && !isMistralConfigured()) {
     return {
       ok: false,
       status: 503,
@@ -95,11 +96,16 @@ export async function parseLoanDocument(params: {
     }
 
     emitProgress(params.onProgress, "ocr");
-    const ocr = await ocrDocument({
-      filename: params.filename,
-      bytes: params.bytes,
-      mimeType: params.mimeType,
-    });
+    const ocr = params.clientOcr
+      ? {
+          markdown: params.clientOcr.markdown,
+          pageCount: params.clientOcr.pageCount,
+        }
+      : await ocrDocument({
+          filename: params.filename,
+          bytes: params.bytes,
+          mimeType: params.mimeType,
+        });
 
     if (!ocr.markdown.trim()) {
       return {

@@ -69,9 +69,11 @@ export async function importBankStatement(params: {
   mimeType?: string | null;
   /** convex = write plaintext ledger; vault = return facts for client encrypt. */
   persistMode?: "convex" | "vault";
+  /** Browser Tesseract scan; skips server OCR when present. */
+  clientOcr?: { markdown: string; pageCount: number } | null;
   onProgress?: (progress: StatementImportProgress) => void;
 }): Promise<ImportBankStatementResult> {
-  if (!isMistralConfigured()) {
+  if (!params.clientOcr && !isMistralConfigured()) {
     return {
       ok: false,
       status: 503,
@@ -131,13 +133,20 @@ export async function importBankStatement(params: {
 
     emitProgress(params.onProgress, "ocr");
     const ocrStarted = Date.now();
-    const ocr = await ocrDocument({
-      filename: params.filename,
-      bytes: params.bytes,
-      mimeType: params.mimeType,
-    });
+    const ocr = params.clientOcr
+      ? {
+          markdown: params.clientOcr.markdown,
+          pageCount: params.clientOcr.pageCount,
+        }
+      : await ocrDocument({
+          filename: params.filename,
+          bytes: params.bytes,
+          mimeType: params.mimeType,
+        });
     console.info(
-      `[statements] OCR pages=${ocr.pageCount} in ${Date.now() - ocrStarted}ms`,
+      `[statements] OCR pages=${ocr.pageCount} in ${Date.now() - ocrStarted}ms${
+        params.clientOcr ? " (local)" : ""
+      }`,
     );
 
     if (!ocr.markdown.trim()) {

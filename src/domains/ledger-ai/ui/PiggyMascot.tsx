@@ -1,7 +1,7 @@
 "use client";
 
-import { PiggyBank } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { PiggyBank } from "lucide-react";
 
 export type PiggyMood = "still" | "idle" | "listen" | "think" | "talk";
 
@@ -19,7 +19,7 @@ export function piggyMoodFromChat({
 }
 
 export function PiggyMascot({
-  mood = "idle",
+  mood = "still",
   className,
   iconClassName,
 }: {

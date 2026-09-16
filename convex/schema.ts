@@ -117,6 +117,8 @@ export default defineSchema({
         v.literal("premium"),
       ),
     ),
+    /** Document OCR: local (device) or server. Defaults to server when missing. */
+    ocrMode: v.optional(v.union(v.literal("local"), v.literal("server"))),
     // Legacy Clerk / bootstrap fields (remove after cutover clear)
     tokenIdentifier: v.optional(v.string()),
     clerkUserId: v.optional(v.string()),

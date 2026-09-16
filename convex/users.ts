@@ -22,7 +22,21 @@ export const me = query({
       email: user.email ?? null,
       name: user.name ?? null,
       role: userRole(user),
+      ocrMode: user.ocrMode === "local" ? "local" : "server",
     };
+  },
+});
+
+const ocrModeValidator = v.union(v.literal("local"), v.literal("server"));
+
+/** Local vs server document scan. */
+export const updateOcrMode = mutation({
+  args: { ocrMode: ocrModeValidator },
+  returns: v.object({ ocrMode: ocrModeValidator }),
+  handler: async (ctx, args) => {
+    const user = await requireUser(ctx);
+    await ctx.db.patch(user._id, { ocrMode: args.ocrMode });
+    return { ocrMode: args.ocrMode };
   },
 });
 

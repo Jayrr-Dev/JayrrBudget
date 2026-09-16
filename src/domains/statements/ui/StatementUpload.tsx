@@ -58,6 +58,7 @@ import {
   useOcrDocumentInputs,
 } from "@/domains/statements/ui/OcrDocumentPickerButton";
 import { StatementAiRulesDialog } from "@/domains/statements/ui/StatementAiRulesDialog";
+import { useOcrMode } from "@/domains/statements/ui/useOcrMode";
 import { encryptStatementImportToVault } from "@/domains/vault/application/encryptStatementImport";
 import {
   hydrateVaultSession,
@@ -191,6 +192,7 @@ export function StatementUpload({ onImported }: Props) {
   const [busy, setBusy] = useState(false);
   const client = useConvex();
   const flags = useFeatureFlags();
+  const ocrMode = useOcrMode();
   const privateLedger = usePrivateLedger();
   const vaultPersist = flags.encryptedLedger;
 
@@ -445,6 +447,7 @@ export function StatementUpload({ onImported }: Props) {
         const result = await uploadBankStatement(item.file, {
           signal: controller.signal,
           persistMode: vaultPersist ? "vault" : "convex",
+          ocrMode,
           onProgress: (progress) => {
             const state: ItemState =
               progress.step === "parse" ||

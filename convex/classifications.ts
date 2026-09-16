@@ -1,4 +1,5 @@
 import { v } from "convex/values";
+import { internal } from "./_generated/api";
 import { internalMutation, mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { requireRole, requireUser, userRole } from "./lib/auth";
@@ -462,24 +463,30 @@ export const reconcileSharedPaths = internalMutation({
         .withIndex("by_userId", (q) => q.eq("userId", user._id))
         .collect();
       for (const category of categories) {
-        const rename = CATEGORY_RENAMES.find((row) => row.from === category.name);
+        const rename = CATEGORY_RENAMES.find(
+          (row) => norm(row.from) === norm(category.name),
+        );
         if (!rename) continue;
         await ctx.db.patch(category._id, {
           name: rename.to,
           description: taxonomyDescription("category", rename.to),
         });
+        category.name = rename.to;
       }
       const subs = await ctx.db
         .query("transactionSubcategories")
         .withIndex("by_userId", (q) => q.eq("userId", user._id))
         .collect();
       for (const sub of subs) {
-        const rename = SUBCATEGORY_RENAMES.find((row) => row.from === sub.name);
+        const rename = SUBCATEGORY_RENAMES.find(
+          (row) => norm(row.from) === norm(sub.name),
+        );
         if (!rename) continue;
         await ctx.db.patch(sub._id, {
           name: rename.to,
           description: taxonomyDescription("subcategory", rename.to),
         });
+        sub.name = rename.to;
       }
       await remountFoodSectionForUser(ctx, user._id);
       await remountCategorySectionsForUser(ctx, user._id);
@@ -574,6 +581,10 @@ export const reconcileSharedPaths = internalMutation({
       }
     }
 
+    await ctx.scheduler.runAfter(0, internal.classifications.rewriteTxnTaxonomyLabels, {
+      cursor: null,
+    });
+
     return {
       sharedAdded,
       sharedRemoved: retired.length,
@@ -582,6 +593,73 @@ export const reconcileSharedPaths = internalMutation({
       userSectionsAdded,
       userCategoriesAdded,
       userSubcategoriesAdded,
+    };
+  },
+});
+
+/** Copy catalog names onto denormalized transaction.category / subcategory. */
+export const rewriteTxnTaxonomyLabels = internalMutation({
+  args: { cursor: v.union(v.string(), v.null()) },
+  returns: v.object({
+    patched: v.number(),
+    isDone: v.boolean(),
+    continueCursor: v.union(v.string(), v.null()),
+  }),
+  handler: async (ctx, args) => {
+    const page = await ctx.db.query("transactions").paginate({
+      numItems: 40,
+      cursor: args.cursor,
+    });
+    const categoryRename = new Map(
+      CATEGORY_RENAMES.map((row) => [norm(row.from), row.to]),
+    );
+    const subRename = new Map(
+      SUBCATEGORY_RENAMES.map((row) => [norm(row.from), row.to]),
+    );
+    let patched = 0;
+    for (const tx of page.page) {
+      let nextCategory = tx.category;
+      let nextSub = tx.subcategory;
+      if (tx.categoryLegacyId != null) {
+        const category = await ctx.db
+          .query("transactionCategories")
+          .withIndex("by_userId_legacyId", (q) =>
+            q.eq("userId", tx.userId).eq("legacyId", tx.categoryLegacyId!),
+          )
+          .unique();
+        if (category) nextCategory = category.name;
+      } else if (tx.category) {
+        nextCategory = categoryRename.get(norm(tx.category)) ?? tx.category;
+      }
+      if (tx.subcategoryLegacyId != null) {
+        const sub = await ctx.db
+          .query("transactionSubcategories")
+          .withIndex("by_userId_legacyId", (q) =>
+            q.eq("userId", tx.userId).eq("legacyId", tx.subcategoryLegacyId!),
+          )
+          .unique();
+        if (sub) nextSub = sub.name;
+      } else if (tx.subcategory) {
+        nextSub = subRename.get(norm(tx.subcategory)) ?? tx.subcategory;
+      }
+      const patch: { category?: string | null; subcategory?: string | null } = {};
+      if (nextCategory !== tx.category) patch.category = nextCategory;
+      if (nextSub !== tx.subcategory) patch.subcategory = nextSub;
+      if (Object.keys(patch).length === 0) continue;
+      await ctx.db.patch(tx._id, patch);
+      patched += 1;
+    }
+    if (!page.isDone) {
+      await ctx.scheduler.runAfter(
+        0,
+        internal.classifications.rewriteTxnTaxonomyLabels,
+        { cursor: page.continueCursor },
+      );
+    }
+    return {
+      patched,
+      isDone: page.isDone,
+      continueCursor: page.continueCursor,
     };
   },
 });
