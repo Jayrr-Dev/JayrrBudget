@@ -18,6 +18,10 @@ import { formatDisplayDate } from "@/shared/lib/format-date";
 import { api } from "@convex/_generated/api";
 import { useConvexAuth, useQuery } from "convex/react";
 import { useMemo } from "react";
+import {
+  peekDashboard,
+  rememberDashboard,
+} from "@/domains/dashboard/ui/ledgerQuerySnapshot";
 
 export function useDashboard(transactionLimit: number | null = 250) {
   const { isAuthenticated, isLoading: authLoading } = useConvexAuth();
@@ -48,12 +52,15 @@ export function useDashboard(transactionLimit: number | null = 250) {
   ]);
 
   if (authLoading || flags.loading) {
+    const cached = privateLedger.encryptedLedger
+      ? undefined
+      : peekDashboard(transactionLimit);
     return {
-      data: undefined,
+      data: cached,
       error: null,
-      isPending: true,
+      isPending: cached === undefined,
       isError: false,
-      isSuccess: false,
+      isSuccess: Boolean(cached),
       encryptedLedger: privateLedger.encryptedLedger,
       locked: false,
       reload: privateLedger.reload,
@@ -75,12 +82,17 @@ export function useDashboard(transactionLimit: number | null = 250) {
     };
   }
 
+  const live = result?.ok ? result.data : undefined;
+  if (live) rememberDashboard(transactionLimit, live);
+  const cached =
+    live ?? (result === undefined ? peekDashboard(transactionLimit) : undefined);
+
   return {
-    data: result?.ok ? result.data : undefined,
+    data: cached,
     error: result && !result.ok ? new Error(result.error) : null,
-    isPending: authLoading || (isAuthenticated && result === undefined),
+    isPending: isAuthenticated && result === undefined && cached === undefined,
     isError: Boolean(result && !result.ok),
-    isSuccess: Boolean(result?.ok),
+    isSuccess: Boolean(live ?? cached),
     encryptedLedger: false as const,
     locked: false,
     reload: undefined as undefined | (() => void),

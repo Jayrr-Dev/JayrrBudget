@@ -16,6 +16,10 @@ import { Icon } from "@iconify/react";
 import { createColumnHelper } from "@tanstack/react-table";
 import { useQuery } from "convex/react";
 import { useMemo, useState } from "react";
+import {
+  peekMerchants,
+  rememberMerchants,
+} from "@/domains/dashboard/ui/ledgerQuerySnapshot";
 
 type MerchantRow = {
   id: string;
@@ -83,7 +87,7 @@ function MerchantsTable({ rows }: { rows: MerchantRow[] }) {
             <div className="flex items-center justify-center">
               <DropdownMenu>
                 <DropdownMenuTrigger
-                  className="inline-flex size-6 cursor-pointer items-center justify-center rounded-[min(var(--radius-md),12px)] text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]"
+                  className="inline-flex size-6 max-w-6 shrink-0 cursor-pointer items-center justify-center rounded-[min(var(--radius-md),12px)] text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]"
                   aria-label={`Actions for ${row.original.name}`}
                 >
                   <Icon icon="basil:menu-outline" className="size-4" />
@@ -236,11 +240,16 @@ export function MerchantsPanel() {
     return <MerchantsTable rows={encryptedRows} />;
   }
 
-  if (merchants === undefined) {
+  if (merchants !== undefined) {
+    rememberMerchants(merchants as MerchantRow[]);
+  }
+  const merchantRows = merchants ?? peekMerchants<MerchantRow>();
+
+  if (merchantRows === undefined) {
     return <PageSpinner />;
   }
 
-  if (merchants.length === 0) {
+  if (merchantRows.length === 0) {
     return (
       <p className="text-sm text-[var(--muted-foreground)]">
         No merchants yet. They appear after ledger rows have merchant labels.
@@ -248,5 +257,5 @@ export function MerchantsPanel() {
     );
   }
 
-  return <MerchantsTable rows={merchants as MerchantRow[]} />;
+  return <MerchantsTable rows={merchantRows} />;
 }

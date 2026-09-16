@@ -266,7 +266,10 @@ export function EditMerchantDialog({ merchant, open, onOpenChange }: Props) {
           </div>
           <DialogFooter className="sm:items-center sm:justify-between">
             {impactLabel ? (
-              <p className="text-sm text-muted-foreground sm:mr-auto">
+              <p
+                role="status"
+                className="text-sm text-muted-foreground sm:mr-auto"
+              >
                 {impactLabel}
               </p>
             ) : null}

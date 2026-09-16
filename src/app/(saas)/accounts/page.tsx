@@ -1,81 +1,12 @@
-"use client";
+import { AccountsView } from "@/domains/dashboard/ui/AccountsView";
 
-import { BankAccountsDashboard } from "@/domains/dashboard/ui/BankAccountsDashboard";
-import { useDashboard } from "@/domains/dashboard/ui/DashboardPanels";
-import { useSearchParams } from "next/navigation";
-import { Suspense } from "react";
-
-function AccountsContent() {
-  const dashboard = useDashboard();
-  const data = dashboard.data;
-  const searchParams = useSearchParams();
-  const selectedAccountId = searchParams.get("account");
-
-  if (selectedAccountId) {
-    if (dashboard.isPending && !data) {
-      return (
-        <BankAccountsDashboard
-          accounts={[]}
-          loading
-          selectedAccountId={selectedAccountId}
-        />
-      );
-    }
-    if (dashboard.locked) {
-      return (
-        <BankAccountsDashboard
-          accounts={[]}
-          loading
-          selectedAccountId={selectedAccountId}
-        />
-      );
-    }
-    if (!data) return null;
-    return (
-      <BankAccountsDashboard
-        accounts={data.accounts}
-        transactions={data.transactions}
-        selectedAccountId={selectedAccountId}
-      />
-    );
-  }
-
-  return (
-    <div className="space-y-8">
-      <header className="space-y-2 border-b border-[var(--border)] pb-6">
-        <h1 className="type-page">Accounts</h1>
-        <p className="type-lead">
-          Open an account to see its balance and recent activity.
-        </p>
-      </header>
-      {dashboard.isPending && !data ? (
-        <BankAccountsDashboard accounts={[]} loading />
-      ) : data ? (
-        <BankAccountsDashboard
-          accounts={data.accounts}
-          transactions={data.transactions}
-        />
-      ) : null}
-    </div>
-  );
-}
-
-export default function AccountsPage() {
-  return (
-    <Suspense
-      fallback={
-        <div className="space-y-8">
-          <header className="space-y-2 border-b border-[var(--border)] pb-6">
-            <h1 className="type-page">Accounts</h1>
-            <p className="type-lead">
-              Open an account to see its balance and recent activity.
-            </p>
-          </header>
-          <BankAccountsDashboard accounts={[]} loading />
-        </div>
-      }
-    >
-      <AccountsContent />
-    </Suspense>
-  );
+export default async function AccountsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ account?: string | string[] }>;
+}) {
+  const params = await searchParams;
+  const raw = params.account;
+  const selectedAccountId = Array.isArray(raw) ? (raw[0] ?? null) : (raw ?? null);
+  return <AccountsView selectedAccountId={selectedAccountId} />;
 }

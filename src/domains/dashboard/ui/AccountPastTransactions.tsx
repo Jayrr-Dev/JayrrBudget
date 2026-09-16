@@ -3,11 +3,24 @@
 import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
 import { Input } from "@/components/ui/input";
-import { ScrollTopX } from "@/components/ui/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import type { DashboardTransaction } from "@/domains/dashboard/domain/types";
 import { MoneyText } from "@/domains/dashboard/ui/MoneyText";
 import { formatDisplayDate } from "@/shared/lib/format-date";
 import { isValid, parseISO, subMonths, subWeeks } from "date-fns";
+import {
+  ArrowDownIcon,
+  ArrowUpDownIcon,
+  ArrowUpIcon,
+  SearchIcon,
+} from "lucide-react";
 import { useMemo, useState } from "react";
 
 type RangeKey = "4w" | "3m" | "6m" | "12m";
@@ -119,7 +132,7 @@ function SortHeader({
   sortKey,
   sortDir,
   align = "left",
-  inset = false,
+  sticky = false,
   onSort,
 }: {
   label: string;
@@ -127,37 +140,38 @@ function SortHeader({
   sortKey: SortKey;
   sortDir: SortDir;
   align?: "left" | "right";
-  inset?: boolean;
+  sticky?: boolean;
   onSort: (column: SortKey) => void;
 }) {
   const active = sortKey === column;
   return (
-    <th
-      className={`overflow-hidden py-3 font-semibold ${
-        column === "date" ? "sticky left-0 z-20 bg-surface-elevated" : ""
-      } ${align === "right" ? "pl-3 text-right" : `${inset ? "pl-3" : ""} pr-3 text-left`}`}
+    <TableHead
+      data-sticky-col={sticky ? true : undefined}
       aria-sort={
         active ? (sortDir === "asc" ? "ascending" : "descending") : "none"
       }
+      className={`px-3 ${align === "right" ? "text-right" : "text-left"}`}
     >
-      <Button
+      <button
         type="button"
-        variant="ghost"
-        size="sm"
         onClick={() => onSort(column)}
-        className={`h-7 max-w-full gap-1 px-1.5 uppercase tracking-wide ${
-          active ? "text-[#1a2330]" : "text-[#4b5563]"
-        } ${align === "right" ? "ml-auto pr-0" : inset ? "ml-0" : "-ml-1.5"}`}
+        className={`inline-flex max-w-full items-center gap-1.5 rounded-md px-1 py-1 font-medium transition-colors hover:bg-[var(--muted)] ${
+          align === "right" ? "ml-auto" : ""
+        }`}
       >
         {label}
-        <span
-          className={`text-[#7a1f2b] ${active ? "opacity-100" : "opacity-30"}`}
-          aria-hidden
-        >
-          {active ? (sortDir === "asc" ? "↑" : "↓") : "↕"}
-        </span>
-      </Button>
-    </th>
+        {active && sortDir === "asc" ? (
+          <ArrowUpIcon className="size-3.5 shrink-0 opacity-70" aria-hidden />
+        ) : active && sortDir === "desc" ? (
+          <ArrowDownIcon className="size-3.5 shrink-0 opacity-70" aria-hidden />
+        ) : (
+          <ArrowUpDownIcon
+            className="size-3.5 shrink-0 opacity-40"
+            aria-hidden
+          />
+        )}
+      </button>
+    </TableHead>
   );
 }
 
@@ -236,19 +250,17 @@ export function AccountPastTransactions({
 
   return (
     <section className="space-y-4">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <h2 className="text-xl font-semibold tracking-wide text-[#1a2330] uppercase sm:text-2xl">
+      <div>
+        <h2 className="text-lg font-semibold tracking-tight">
           Past transactions
-          <span className="mt-1 block text-sm font-normal tracking-normal text-[#6b7280] normal-case sm:mt-0 sm:ml-2 sm:inline">
-            ({rangeLabel})
-          </span>
         </h2>
+        <p className="text-sm text-[var(--muted-foreground)]">{rangeLabel}</p>
       </div>
 
-      <div className="flex flex-col gap-4 border-b border-[#d8dee6] pb-4">
+      <div className="flex flex-col gap-4 border-b border-[var(--border)] pb-4">
         <div className="flex flex-wrap items-center gap-2">
           <div className="relative min-w-[14rem] flex-1 sm:max-w-xs">
-            <SearchIcon className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-[#6b7280]" />
+            <SearchIcon className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-[var(--muted-foreground)]" />
             <Input
               type="search"
               value={search}
@@ -272,7 +284,7 @@ export function AccountPastTransactions({
 
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-xs font-medium tracking-wide text-[#6b7280] uppercase">
+            <span className="text-xs font-medium tracking-wide text-[var(--muted-foreground)] uppercase">
               Status
             </span>
             <ButtonGroup>
@@ -292,7 +304,7 @@ export function AccountPastTransactions({
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-xs font-medium tracking-wide text-[#6b7280] uppercase">
+            <span className="text-xs font-medium tracking-wide text-[var(--muted-foreground)] uppercase">
               Range
             </span>
             <ButtonGroup>
@@ -313,21 +325,22 @@ export function AccountPastTransactions({
         </div>
       </div>
 
-      <ScrollTopX className="overscroll-x-contain">
-        <table className="w-full min-w-[40rem] table-fixed border-collapse text-sm">
+      <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-surface-elevated">
+        <Table className="min-w-[40rem] table-fixed">
           <colgroup>
             <col className="w-[10rem]" />
             <col />
             <col className="w-[9.75rem]" />
             <col className="w-[9.75rem]" />
           </colgroup>
-          <thead>
-            <tr className="border-b border-[#1a2330] text-xs">
+          <TableHeader>
+            <TableRow className="border-b border-[var(--border)] hover:bg-transparent">
               <SortHeader
                 label="Date"
                 column="date"
                 sortKey={sortKey}
                 sortDir={sortDir}
+                sticky
                 onSort={handleSort}
               />
               <SortHeader
@@ -336,7 +349,6 @@ export function AccountPastTransactions({
                 sortKey={sortKey}
                 sortDir={sortDir}
                 onSort={handleSort}
-                inset
               />
               <SortHeader
                 label="Amount"
@@ -354,60 +366,50 @@ export function AccountPastTransactions({
                 align="right"
                 onSort={handleSort}
               />
-            </tr>
-          </thead>
-          <tbody>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
             {rows.length === 0 ? (
-              <tr>
-                <td colSpan={4} className="py-10 text-center text-[#6b7280]">
+              <TableRow className="hover:bg-transparent">
+                <TableCell
+                  colSpan={4}
+                  className="h-40 px-3 text-center text-[var(--muted-foreground)]"
+                >
                   No transactions in this range.
-                </td>
-              </tr>
+                </TableCell>
+              </TableRow>
             ) : (
               rows.map((txn) => (
-                  <tr
-                    key={txn.transactionId}
-                    className="border-b border-[#e5e9ef]"
+                <TableRow key={txn.transactionId}>
+                  <TableCell
+                    data-sticky-col
+                    className="px-3 py-2 font-mono text-xs tabular-nums"
                   >
-                    <td className="sticky left-0 z-10 whitespace-nowrap bg-surface-elevated py-3.5 pr-3 font-mono tabular-nums text-[#1a2330]">
-                      {formatDisplayDate(txn.date)}
-                    </td>
-                    <td className="min-w-0 py-3.5 pr-3 pl-3 text-[#1a2330]">
-                      <span className="block truncate" title={txnLabel(txn)}>
-                        {txnLabel(txn)}
-                      </span>
-                    </td>
-                    <td className="whitespace-nowrap py-3.5 pr-3 text-right text-[#1a2330]">
-                      <MoneyText amount={txn.amount} currency={currency} />
-                    </td>
-                    <td className="whitespace-nowrap py-3.5 text-right text-[#1a2330]">
-                      <MoneyText
-                        amount={txn.runningBalance}
-                        currency={currency}
-                      />
-                    </td>
-                  </tr>
-                ))
+                    {formatDisplayDate(txn.date)}
+                  </TableCell>
+                  <TableCell className="min-w-0 px-3 py-2">
+                    <span
+                      className="block truncate text-sm"
+                      title={txnLabel(txn)}
+                    >
+                      {txnLabel(txn)}
+                    </span>
+                  </TableCell>
+                  <TableCell className="px-3 py-2">
+                    <MoneyText amount={txn.amount} currency={currency} />
+                  </TableCell>
+                  <TableCell className="px-3 py-2">
+                    <MoneyText
+                      amount={txn.runningBalance}
+                      currency={currency}
+                    />
+                  </TableCell>
+                </TableRow>
+              ))
             )}
-          </tbody>
-        </table>
-      </ScrollTopX>
+          </TableBody>
+        </Table>
+      </div>
     </section>
-  );
-}
-
-function SearchIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      viewBox="0 0 16 16"
-      className={className}
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.6"
-      aria-hidden
-    >
-      <circle cx="7" cy="7" r="4.5" />
-      <path d="M10.5 10.5 14 14" strokeLinecap="round" />
-    </svg>
   );
 }

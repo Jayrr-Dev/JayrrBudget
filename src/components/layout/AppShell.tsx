@@ -29,6 +29,8 @@ import { budgetBrandLabel } from "@/shared/lib/budget-brand";
 import { useAuthActions } from "@convex-dev/auth/react";
 import { api } from "@convex/_generated/api";
 import { IconLogout, IconUser } from "@tabler/icons-react";
+import { WarmSaasQueries } from "@/domains/dashboard/ui/WarmSaasQueries";
+import { clearLedgerQuerySnapshots } from "@/domains/dashboard/ui/ledgerQuerySnapshot";
 import { useQueryClient } from "@tanstack/react-query";
 import { useConvexAuth, useQuery } from "convex/react";
 import { motion } from "motion/react";
@@ -228,6 +230,7 @@ function SignOutButton() {
               void signOut()
                 .then(() => {
                   queryClient.clear();
+                  clearLedgerQuerySnapshots();
                   window.location.assign("/sign-in");
                 })
                 .catch(() => setPending(false));
@@ -278,6 +281,7 @@ export function AppShell({
         className,
       )}
     >
+      <WarmSaasQueries />
       <Sidebar open={open} setOpen={setOpen} animate>
         <SidebarBody
           className="w-full justify-between gap-8"

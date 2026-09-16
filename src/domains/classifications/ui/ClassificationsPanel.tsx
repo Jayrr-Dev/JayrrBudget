@@ -108,7 +108,7 @@ function childNamesCell(names: string[], emptyLabel: string) {
     );
   }
   return (
-    <div className="flex max-w-full flex-nowrap gap-1 overflow-hidden">
+    <div className="flex max-w-full min-w-0 flex-wrap gap-1">
       {names.map((name) => (
         <Badge key={name} variant="secondary" className="shrink-0">
           {name}
