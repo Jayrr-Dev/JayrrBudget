@@ -2,6 +2,14 @@ import {
   ASK_USER_TOOL_NAME,
   askUserTool,
 } from "@/domains/ledger-ai/domain/askUserTool";
+import {
+  SHOW_SKETCH_TOOL_NAME,
+  showSketchTool,
+} from "@/domains/ledger-ai/domain/sketchBoard";
+import {
+  EXPORT_FILE_TOOL_NAME,
+  exportFileTool,
+} from "@/domains/ledger-ai/domain/exportFileTool";
 import { invalidateConvexUserCache } from "@/shared/convex/cachedRead";
 import { api } from "@/shared/convex/httpClient";
 import type { Id } from "@convex/_generated/dataModel";
@@ -94,8 +102,10 @@ function createWorkspaceTools(
   options: LedgerAiToolOptions,
 ) {
   return {
-    // Answered in the browser (no execute); see PiggyQuestionnaire.
+    // Answered in the browser (no execute); see PiggyQuestionnaire / PiggyAttachment.
     [ASK_USER_TOOL_NAME]: askUserTool,
+    [EXPORT_FILE_TOOL_NAME]: exportFileTool,
+    [SHOW_SKETCH_TOOL_NAME]: showSketchTool,
 
     list_store_sheet: tool({
       description:

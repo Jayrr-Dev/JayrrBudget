@@ -33,14 +33,26 @@ import { errorMessage } from "@/shared/lib/error-message";
 import { logAiUsageFromMessageMetadata } from "@/shared/debug/aiUsageDebug";
 import {
   ASK_USER_TOOL_NAME,
-  isAskUserPart,
   type AskUserOutput,
-  type PiggyUIMessage,
 } from "@/domains/ledger-ai/domain/askUserTool";
+import {
+  EXPORT_FILE_TOOL_NAME,
+  type ExportFileOutput,
+} from "@/domains/ledger-ai/domain/exportFileTool";
+import {
+  isAskUserPart,
+  isExportFilePart,
+  isPiggyCardPart,
+  isShowSketchPart,
+  type PiggyUIMessage,
+} from "@/domains/ledger-ai/domain/piggyUiMessage";
+import { PiggyAttachment } from "@/domains/ledger-ai/ui/PiggyAttachment";
 import {
   PiggyQuestionnaire,
   PiggyQuestionnaireAnswers,
 } from "@/domains/ledger-ai/ui/PiggyQuestionnaire";
+import { PiggySketchChip } from "@/domains/ledger-ai/ui/PiggySketchChip";
+import { showPiggySketch } from "@/domains/ledger-ai/ui/piggySketchStore";
 import { useChat } from "@ai-sdk/react";
 import {
   DefaultChatTransport,
@@ -110,6 +122,8 @@ function PiggyAboutInfo() {
             <li>Edit sections, categories, and subcategories</li>
             <li>Read and update your store sheet and notes</li>
             <li>Asks you a quick multiple-choice question when unsure</li>
+            <li>Builds CSV or PDF files you can download</li>
+            <li>Can open a sketch dialog to picture a split or flow</li>
             <li>Summarize spend by merchant or category</li>
             <li>Open extra tabs for separate chats</li>
             <li>Chats and drafts are saved on this browser for your account</li>
@@ -186,7 +200,10 @@ function PiggyChatPaneSession({
     );
   const answerAsk = (toolCallId: string, output: AskUserOutput) =>
     void addToolResult({ tool: ASK_USER_TOOL_NAME, toolCallId, output });
+  const reportExport = (toolCallId: string, output: ExportFileOutput) =>
+    void addToolResult({ tool: EXPORT_FILE_TOOL_NAME, toolCallId, output });
   const bornMessageIds = useRef(new Set(messages.map((message) => message.id)));
+  const openedSketchIds = useRef(new Set<string>());
   const mood = piggyMoodFromChat({
     status,
     listening: inputFocused || input.trim().length > 0,
@@ -199,6 +216,22 @@ function PiggyChatPaneSession({
     if (!active) return;
     onMoodChange?.(open ? mood : "still");
   }, [active, mood, onMoodChange, open]);
+
+  useEffect(() => {
+    for (const message of messages) {
+      if (bornMessageIds.current.has(message.id)) continue;
+      for (const part of message.parts) {
+        if (!isShowSketchPart(part)) continue;
+        if (part.state !== "input-available" && part.state !== "output-available") {
+          continue;
+        }
+        if (openedSketchIds.current.has(part.toolCallId)) continue;
+        if (!part.input) continue;
+        openedSketchIds.current.add(part.toolCallId);
+        showPiggySketch(part.input);
+      }
+    }
+  }, [messages]);
 
   return (
     <div className="flex flex-col" hidden={!active}>
@@ -228,8 +261,8 @@ function PiggyChatPaneSession({
         ) : (
           messages.map((message) => {
             const text = messageText(message.parts ?? []);
-            const asks = message.parts.filter(isAskUserPart);
-            if (!text && asks.length === 0) return null;
+            const cards = message.parts.filter(isPiggyCardPart);
+            if (!text && cards.length === 0) return null;
             const assistantTalking =
               message.role === "assistant" &&
               status === "streaming" &&
@@ -254,7 +287,39 @@ function PiggyChatPaneSession({
                         />
                       </PiggyTextBubble>
                     ) : null}
-                    {asks.map((part) => {
+                    {cards.map((part) => {
+                      if (isExportFilePart(part)) {
+                        if (
+                          part.state !== "input-available" &&
+                          part.state !== "output-available"
+                        ) {
+                          return null;
+                        }
+                        return (
+                          <PiggyAttachment
+                            key={part.toolCallId}
+                            input={part.input}
+                            pending={part.state === "input-available"}
+                            onBuilt={(output) =>
+                              reportExport(part.toolCallId, output)
+                            }
+                          />
+                        );
+                      }
+                      if (isShowSketchPart(part)) {
+                        if (
+                          part.state !== "input-available" &&
+                          part.state !== "output-available"
+                        ) {
+                          return null;
+                        }
+                        return (
+                          <PiggySketchChip
+                            key={part.toolCallId}
+                            input={part.input}
+                          />
+                        );
+                      }
                       if (part.state === "output-available") {
                         return (
                           <PiggyQuestionnaireAnswers

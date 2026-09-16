@@ -234,6 +234,11 @@
   background-color: var(--border);
 }
 
+/* Extra tools: keep frame / embed / laser. Hide Generate + Mermaid. */
+.jayrr-excalidraw .excalidraw .App-toolbar__extra-tools-dropdown > :nth-child(n + 4) {
+  display: none;
+}
+
 /* Piggy art lives on ::after so Excalidraw's selected `background` shorthand
    cannot wipe the image. */
 .jayrr-excalidraw .excalidraw [data-testid="toolbar-selection"] + .ToolIcon__icon,
@@ -247,13 +252,19 @@
 .jayrr-excalidraw .excalidraw [data-testid="toolbar-image"] + .ToolIcon__icon,
 .jayrr-excalidraw .excalidraw [data-testid="toolbar-eraser"] + .ToolIcon__icon,
 .jayrr-excalidraw .excalidraw [data-testid="toolbar-hand"] + .ToolIcon__icon,
-.jayrr-excalidraw .excalidraw [data-testid="toolbar-frame"] .ToolIcon__icon,
-.jayrr-excalidraw .excalidraw [data-testid="toolbar-laser"] .ToolIcon__icon,
 .jayrr-excalidraw .excalidraw [data-testid="button-undo"] .ToolIcon__icon,
 .jayrr-excalidraw .excalidraw [data-testid="button-redo"] .ToolIcon__icon,
 .jayrr-excalidraw .excalidraw .ToolIcon__lock .ToolIcon__icon,
+.jayrr-excalidraw .excalidraw .zoom-in-button .ToolIcon__icon,
+.jayrr-excalidraw .excalidraw .zoom-out-button .ToolIcon__icon,
 .jayrr-excalidraw .excalidraw .App-toolbar__extra-tools-trigger,
-.jayrr-excalidraw .excalidraw [data-testid="main-menu-trigger"] {
+.jayrr-excalidraw .excalidraw [data-testid="main-menu-trigger"],
+.jayrr-excalidraw .excalidraw .help-icon,
+.jayrr-excalidraw .excalidraw .scroll-back-to-content,
+.jayrr-excalidraw .excalidraw .default-sidebar-trigger .sidebar-trigger,
+.jayrr-excalidraw .excalidraw [data-testid="toolbar-frame"] .dropdown-menu-item__icon,
+.jayrr-excalidraw .excalidraw [data-testid="toolbar-laser"] .dropdown-menu-item__icon,
+.jayrr-excalidraw .excalidraw [data-testid="toolbar-embeddable"] .dropdown-menu-item__icon {
   position: relative;
 }
 
@@ -268,13 +279,19 @@
 .jayrr-excalidraw .excalidraw [data-testid="toolbar-image"] + .ToolIcon__icon::after,
 .jayrr-excalidraw .excalidraw [data-testid="toolbar-eraser"] + .ToolIcon__icon::after,
 .jayrr-excalidraw .excalidraw [data-testid="toolbar-hand"] + .ToolIcon__icon::after,
-.jayrr-excalidraw .excalidraw [data-testid="toolbar-frame"] .ToolIcon__icon::after,
-.jayrr-excalidraw .excalidraw [data-testid="toolbar-laser"] .ToolIcon__icon::after,
 .jayrr-excalidraw .excalidraw [data-testid="button-undo"] .ToolIcon__icon::after,
 .jayrr-excalidraw .excalidraw [data-testid="button-redo"] .ToolIcon__icon::after,
 .jayrr-excalidraw .excalidraw .ToolIcon__lock .ToolIcon__icon::after,
+.jayrr-excalidraw .excalidraw .zoom-in-button .ToolIcon__icon::after,
+.jayrr-excalidraw .excalidraw .zoom-out-button .ToolIcon__icon::after,
 .jayrr-excalidraw .excalidraw .App-toolbar__extra-tools-trigger::after,
-.jayrr-excalidraw .excalidraw [data-testid="main-menu-trigger"]::after {
+.jayrr-excalidraw .excalidraw [data-testid="main-menu-trigger"]::after,
+.jayrr-excalidraw .excalidraw .help-icon::after,
+.jayrr-excalidraw .excalidraw .scroll-back-to-content::after,
+.jayrr-excalidraw .excalidraw .default-sidebar-trigger .sidebar-trigger::after,
+.jayrr-excalidraw .excalidraw [data-testid="toolbar-frame"] .dropdown-menu-item__icon::after,
+.jayrr-excalidraw .excalidraw [data-testid="toolbar-laser"] .dropdown-menu-item__icon::after,
+.jayrr-excalidraw .excalidraw [data-testid="toolbar-embeddable"] .dropdown-menu-item__icon::after {
   content: "";
   position: absolute;
   inset: 0;
@@ -296,14 +313,20 @@
 .jayrr-excalidraw .excalidraw [data-testid="toolbar-image"] + .ToolIcon__icon::after { background-image: url("/icons/piggy/draw-image.svg"); }
 .jayrr-excalidraw .excalidraw [data-testid="toolbar-eraser"] + .ToolIcon__icon::after { background-image: url("/icons/piggy/draw-eraser.svg"); }
 .jayrr-excalidraw .excalidraw [data-testid="toolbar-hand"] + .ToolIcon__icon::after { background-image: url("/icons/piggy/draw-hand.svg"); }
-.jayrr-excalidraw .excalidraw [data-testid="toolbar-frame"] .ToolIcon__icon::after { background-image: url("/icons/piggy/draw-frame.svg"); }
-.jayrr-excalidraw .excalidraw [data-testid="toolbar-laser"] .ToolIcon__icon::after { background-image: url("/icons/piggy/draw-laser.svg"); }
 .jayrr-excalidraw .excalidraw [data-testid="button-undo"] .ToolIcon__icon::after { background-image: url("/icons/piggy/draw-undo.svg"); }
 .jayrr-excalidraw .excalidraw [data-testid="button-redo"] .ToolIcon__icon::after { background-image: url("/icons/piggy/draw-redo.svg"); }
 .jayrr-excalidraw .excalidraw .ToolIcon__lock .ToolIcon__icon::after { background-image: url("/icons/piggy/draw-unlock.svg"); }
 .jayrr-excalidraw .excalidraw .ToolIcon__lock:has(input:checked) .ToolIcon__icon::after { background-image: url("/icons/piggy/draw-lock.svg"); }
+.jayrr-excalidraw .excalidraw .zoom-in-button .ToolIcon__icon::after { background-image: url("/icons/piggy/draw-zoom-in.svg"); }
+.jayrr-excalidraw .excalidraw .zoom-out-button .ToolIcon__icon::after { background-image: url("/icons/piggy/draw-zoom-out.svg"); }
 .jayrr-excalidraw .excalidraw .App-toolbar__extra-tools-trigger::after { background-image: url("/icons/piggy/draw-more.svg"); }
 .jayrr-excalidraw .excalidraw [data-testid="main-menu-trigger"]::after { background-image: url("/icons/piggy/menu.svg"); }
+.jayrr-excalidraw .excalidraw .help-icon::after { background-image: url("/icons/piggy/draw-help.svg"); }
+.jayrr-excalidraw .excalidraw .scroll-back-to-content::after { background-image: url("/icons/piggy/draw-scroll-back.svg"); }
+.jayrr-excalidraw .excalidraw .default-sidebar-trigger .sidebar-trigger::after { background-image: url("/icons/piggy/draw-library.svg"); }
+.jayrr-excalidraw .excalidraw [data-testid="toolbar-frame"] .dropdown-menu-item__icon::after { background-image: url("/icons/piggy/draw-frame.svg"); }
+.jayrr-excalidraw .excalidraw [data-testid="toolbar-laser"] .dropdown-menu-item__icon::after { background-image: url("/icons/piggy/draw-laser.svg"); }
+.jayrr-excalidraw .excalidraw [data-testid="toolbar-embeddable"] .dropdown-menu-item__icon::after { background-image: url("/icons/piggy/draw-embed.svg"); }
 
 .jayrr-excalidraw .excalidraw [data-testid="toolbar-selection"] + .ToolIcon__icon svg,
 .jayrr-excalidraw .excalidraw [data-testid="toolbar-rectangle"] + .ToolIcon__icon svg,
@@ -316,13 +339,19 @@
 .jayrr-excalidraw .excalidraw [data-testid="toolbar-image"] + .ToolIcon__icon svg,
 .jayrr-excalidraw .excalidraw [data-testid="toolbar-eraser"] + .ToolIcon__icon svg,
 .jayrr-excalidraw .excalidraw [data-testid="toolbar-hand"] + .ToolIcon__icon svg,
-.jayrr-excalidraw .excalidraw [data-testid="toolbar-frame"] .ToolIcon__icon svg,
-.jayrr-excalidraw .excalidraw [data-testid="toolbar-laser"] .ToolIcon__icon svg,
 .jayrr-excalidraw .excalidraw [data-testid="button-undo"] .ToolIcon__icon svg,
 .jayrr-excalidraw .excalidraw [data-testid="button-redo"] .ToolIcon__icon svg,
 .jayrr-excalidraw .excalidraw .ToolIcon__lock .ToolIcon__icon svg,
+.jayrr-excalidraw .excalidraw .zoom-in-button .ToolIcon__icon svg,
+.jayrr-excalidraw .excalidraw .zoom-out-button .ToolIcon__icon svg,
 .jayrr-excalidraw .excalidraw .App-toolbar__extra-tools-trigger svg,
-.jayrr-excalidraw .excalidraw [data-testid="main-menu-trigger"] svg {
+.jayrr-excalidraw .excalidraw [data-testid="main-menu-trigger"] svg,
+.jayrr-excalidraw .excalidraw .help-icon > svg,
+.jayrr-excalidraw .excalidraw .scroll-back-to-content > svg,
+.jayrr-excalidraw .excalidraw .default-sidebar-trigger .sidebar-trigger svg,
+.jayrr-excalidraw .excalidraw [data-testid="toolbar-frame"] .dropdown-menu-item__icon svg,
+.jayrr-excalidraw .excalidraw [data-testid="toolbar-laser"] .dropdown-menu-item__icon svg,
+.jayrr-excalidraw .excalidraw [data-testid="toolbar-embeddable"] .dropdown-menu-item__icon svg {
   opacity: 0;
 }
 

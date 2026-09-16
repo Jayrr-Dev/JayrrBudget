@@ -157,6 +157,7 @@ export function BudgetCanvas() {
           initialData={initialData ?? undefined}
           onChange={onChange}
           theme="light"
+          aiEnabled={false}
           UIOptions={{ canvasActions: { toggleTheme: false } }}
           renderTopRightUI={() => <CanvasAiChat />}
         >

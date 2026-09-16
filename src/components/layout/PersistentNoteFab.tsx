@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/tooltip";
 import { MoneyText } from "@/domains/dashboard/ui/MoneyText";
 import { LedgerAiChat } from "@/domains/ledger-ai/ui/LedgerAiChat";
+import { PiggySketchDialog } from "@/domains/ledger-ai/ui/PiggySketchDialog";
 import {
   PiggyMascot,
   type PiggyMood,
@@ -677,6 +678,8 @@ export function PersistentNoteFab({
           </button>
         }
       />
+
+      <PiggySketchDialog />
 
       <LedgerAiChat
         open={aiOpen}

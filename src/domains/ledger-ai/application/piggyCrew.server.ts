@@ -1,5 +1,7 @@
 import { createLedgerAiTools, type LedgerAiToolOptions } from "@/domains/ledger-ai/application/createLedgerAiTools";
 import { ASK_USER_TOOL_NAME } from "@/domains/ledger-ai/domain/askUserTool";
+import { EXPORT_FILE_TOOL_NAME } from "@/domains/ledger-ai/domain/exportFileTool";
+import { SHOW_SKETCH_TOOL_NAME } from "@/domains/ledger-ai/domain/sketchBoard";
 import { persistAiUsage, type AiBilledTo } from "@/shared/ai/aiMeter.server";
 import { chatModel } from "@/shared/ai/openRouter";
 import { errorMessage } from "@/shared/lib/error-message";
@@ -70,6 +72,8 @@ async function runHelper(options: {
   });
   const readTools = { ...packed };
   delete readTools[ASK_USER_TOOL_NAME];
+  delete readTools[EXPORT_FILE_TOOL_NAME];
+  delete readTools[SHOW_SKETCH_TOOL_NAME];
   const helperTools = {
     ...readTools,
     reply_to_lead: tool({
