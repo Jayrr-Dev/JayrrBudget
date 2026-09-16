@@ -110,6 +110,7 @@ function mergeTwin(keeper: ParsedTxn, drop: ParsedTxn): ParsedTxn {
     merchantName: keeper.merchantName ?? drop.merchantName,
     foreignAmount: keeper.foreignAmount ?? drop.foreignAmount,
     foreignCurrency: keeper.foreignCurrency ?? drop.foreignCurrency,
+    exchangeRate: keeper.exchangeRate ?? drop.exchangeRate,
   };
 }
 

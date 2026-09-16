@@ -6,6 +6,7 @@ import type {
 import type { PrivateLedger } from "@/domains/vault/domain/privateLedger";
 import type { AnalysisSourceRow } from "@convex/lib/analysisTypes";
 import { computeAnalysis } from "@convex/lib/computeAnalysis";
+import { isoDay } from "@convex/lib/periods";
 import { rewriteTaxonomyLabel } from "@convex/lib/seedCategoryPaths";
 
 function toSourceRows(ledger: PrivateLedger): AnalysisSourceRow[] {
@@ -20,7 +21,7 @@ function toSourceRows(ledger: PrivateLedger): AnalysisSourceRow[] {
       accountType: account?.type ?? null,
       amount: tx.amount,
       currencyCode: tx.currency,
-      postedDate: tx.date,
+      postedDate: isoDay(tx.date),
       authorizedDate: tx.authorizedDate ?? null,
       transactionCode: tx.txnCode ?? null,
       paymentChannel: tx.channel ?? null,
@@ -48,8 +49,8 @@ export function analysisFromPrivateLedger(
 ): AnalysisData {
   const rows = toSourceRows(ledger);
   const dates = rows
-    .map((row) => row.postedDate)
-    .filter(Boolean)
+    .map((row) => isoDay(row.postedDate))
+    .filter((posted) => /^\d{4}-\d{2}-\d{2}$/.test(posted))
     .sort();
   return computeAnalysis({
     range,

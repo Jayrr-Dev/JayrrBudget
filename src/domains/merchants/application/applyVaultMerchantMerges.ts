@@ -1,4 +1,7 @@
-import { deletePrivateRecords } from "@/crypto/vaultRecords";
+import {
+  deletePrivateRecords,
+  type MutationClient,
+} from "@/crypto/vaultRecords";
 import {
   saveEncryptedMerchant,
   saveEncryptedRecords,
@@ -120,10 +123,13 @@ export async function applyVaultMerchantMerges(input: {
     }
 
     if (sources.length > 0) {
-      await deletePrivateRecords(input.ctx.client, {
-        vaultId: input.ctx.vaultId,
-        recordIds: sources.map((source) => source.recordId),
-      });
+      await deletePrivateRecords(
+        input.ctx.client as unknown as MutationClient,
+        {
+          vaultId: input.ctx.vaultId,
+          recordIds: sources.map((source) => source.recordId),
+        },
+      );
       merchantsDeleted += sources.length;
       for (const source of sources) {
         const index = merchants.findIndex(

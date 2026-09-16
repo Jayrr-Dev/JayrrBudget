@@ -2,7 +2,32 @@ import {
   formatMoneyParts,
   type MoneyParts,
 } from "@/domains/dashboard/domain/money";
+import { resolveBankDirection } from "@/domains/transactions/domain/debitCredit";
 import { cn } from "@/lib/utils";
+
+/** Credit = income green + plus; debit = spend tone. Matches account ledger. */
+export function flowMoneyProps(txn: {
+  amount: number;
+  bankDirection?: string | null;
+}): {
+  signMark: "plus" | "auto";
+  className: string | undefined;
+} {
+  const flow = resolveBankDirection(txn);
+  if (flow === "credit") {
+    return {
+      signMark: "plus",
+      className: "text-[var(--income)]",
+    };
+  }
+  if (flow === "debit") {
+    return {
+      signMark: "auto",
+      className: "text-[var(--spend)]",
+    };
+  }
+  return { signMark: "auto", className: undefined };
+}
 
 function MoneyGrid({
   parts,
@@ -41,12 +66,15 @@ export function MoneyText({
   className,
   align = "right",
   signMark = "auto",
+  showSymbol = true,
 }: {
   amount: number | null | undefined;
   currency?: string;
   className?: string;
   align?: "left" | "right";
   signMark?: "minus" | "plus" | "auto";
+  /** When false, omit currency code/symbol (compact table cells). */
+  showSymbol?: boolean;
 }) {
   const parts = formatMoneyParts(amount, currency);
   if (!parts) {
@@ -59,6 +87,28 @@ export function MoneyText({
         )}
       >
         -
+      </span>
+    );
+  }
+  if (!showSymbol) {
+    const mark =
+      signMark === "plus"
+        ? "+"
+        : signMark === "minus"
+          ? "−"
+          : parts.negative
+            ? "−"
+            : "";
+    return (
+      <span
+        className={cn(
+          "block font-mono tabular-nums",
+          align === "left" ? "text-left" : "text-right",
+          className,
+        )}
+      >
+        {mark}
+        {parts.number}
       </span>
     );
   }

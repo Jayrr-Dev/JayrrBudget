@@ -89,7 +89,7 @@ import {
 } from "@/shared/lib/format-date";
 import { api } from "@convex/_generated/api";
 import { IconInfoCircle } from "@tabler/icons-react";
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useAction } from "convex/react";
 import { ChevronDownIcon, PlusIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
@@ -207,6 +207,7 @@ function useAnalysis(range: AnalysisRange, period: AnalysisPeriod) {
       privateLedger.ledger.transactions.length,
       privateLedger.version,
     ],
+    placeholderData: keepPreviousData,
     staleTime: privateLedger.encryptedLedger ? 0 : 5 * 60_000,
     gcTime: 30 * 60_000,
     enabled:
@@ -2885,6 +2886,27 @@ function SegmentedControl<T extends string>({
   );
 }
 
+type RankedTableUi = {
+  openName: string | null;
+  showAll: boolean;
+};
+
+const rankedTableUi = new Map<string, RankedTableUi>();
+
+function useRankedTableUi(tableId: string) {
+  const saved = rankedTableUi.get(tableId);
+  const [openName, setOpenName] = useState<string | null>(
+    () => saved?.openName ?? null,
+  );
+  const [showAll, setShowAll] = useState(() => saved?.showAll ?? false);
+
+  useEffect(() => {
+    rankedTableUi.set(tableId, { openName, showAll });
+  }, [tableId, openName, showAll]);
+
+  return { openName, setOpenName, showAll, setShowAll };
+}
+
 function FacetPaneShell({
   pane,
   onPaneChange,
@@ -3186,7 +3208,7 @@ function LeaderboardTable({
     vendorName: string,
   ) => AnalysisTxnPeek[];
 }) {
-  const [openName, setOpenName] = useState<string | null>(null);
+  const { openName, setOpenName } = useRankedTableUi(title);
   const { addRow } = useScratchNoteActions();
   const top = rows.slice(0, 10);
   const topTotal = top.reduce((sum, row) => sum + row.spend, 0);
@@ -3606,8 +3628,8 @@ function AverageLeaderboardTable({
     vendorName: string,
   ) => AnalysisTxnPeek[];
 }) {
-  const [openName, setOpenName] = useState<string | null>(null);
-  const [showAll, setShowAll] = useState(false);
+  const { openName, setOpenName, showAll, setShowAll } =
+    useRankedTableUi(title);
   const { addRow } = useScratchNoteActions();
   const meta = ANALYSIS_PERIOD_META[period];
   const divisor = Math.max(periodCount, 1);
@@ -3622,13 +3644,13 @@ function AverageLeaderboardTable({
   const asMerchant = isMerchantNameLabel(nameLabel);
   const gridCols = canExpand
     ? showTxns
-      ? "grid-cols-[1.75rem_minmax(0,1fr)_9rem_5.5rem_1rem_1.25rem]"
-      : "grid-cols-[1.75rem_minmax(0,1fr)_9rem_5.5rem_1rem]"
+      ? "grid-cols-[1.15rem_minmax(0,1fr)_6.5rem_4rem_1rem_1.25rem]"
+      : "grid-cols-[1.15rem_minmax(0,1fr)_6.5rem_4rem_1rem]"
     : showTxns
-      ? "grid-cols-[1.75rem_minmax(0,1fr)_9rem_5.5rem_1.25rem]"
-      : "grid-cols-[1.75rem_minmax(0,1fr)_9rem_5.5rem]";
-  const grid = `grid w-full items-center gap-x-3 px-3 ${gridCols}`;
-  const rankCol = "flex h-5 w-full items-center justify-center";
+      ? "grid-cols-[1.15rem_minmax(0,1fr)_6.5rem_4rem_1.25rem]"
+      : "grid-cols-[1.15rem_minmax(0,1fr)_6.5rem_4rem]";
+  const grid = `grid w-full items-center gap-x-2 px-2 sm:gap-x-3 sm:px-3 ${gridCols}`;
+  const rankCol = "flex h-5 w-full items-center justify-center text-xs";
 
   return (
     <section className="space-y-3 rounded-xl border border-border bg-surface-elevated p-3 sm:space-y-4 sm:p-6">
@@ -3681,7 +3703,11 @@ function AverageLeaderboardTable({
                     {asMerchant ? <MerchantLabel name={row.name} /> : row.name}
                   </span>
                   <span className="text-right font-mono text-sm tabular-nums">
-                    <MoneyText amount={avgCost} currency={currency} />
+                    <MoneyText
+                      amount={avgCost}
+                      currency={currency}
+                      showSymbol={false}
+                    />
                   </span>
                   <span className="text-right font-mono text-sm tabular-nums text-[var(--muted-foreground)]">
                     {formatAvgCount(avgCount)}
@@ -3791,6 +3817,7 @@ function AverageLeaderboardTable({
                               <MoneyText
                                 amount={vendor.spend / divisor}
                                 currency={currency}
+                                showSymbol={false}
                               />
                             </span>
                             <span className="text-right font-mono tabular-nums text-[var(--muted-foreground)]">
@@ -3827,7 +3854,11 @@ function AverageLeaderboardTable({
               {showAll ? `All ${visible.length}` : `Top ${visible.length}`}
             </span>
             <span className="text-right font-mono tabular-nums">
-              <MoneyText amount={visibleAvgCost} currency={currency} />
+              <MoneyText
+                amount={visibleAvgCost}
+                currency={currency}
+                showSymbol={false}
+              />
             </span>
             <span className="text-right font-mono tabular-nums">
               {formatAvgCount(visibleAvgCount)}
@@ -6025,28 +6056,36 @@ export function AnalysisDashboard() {
               Charts and breakdowns of spending over time.
             </p>
           </div>
-          <div className="flex shrink-0 items-center justify-end gap-2">
-            <SegmentedControl
-              ariaLabel="Timeline"
-              options={RANGE_OPTIONS}
-              value={range}
-              onChange={setRange}
-            />
-            <NativeSelect
-              aria-label="Period"
-              size="sm"
-              value={period}
-              onChange={(event) =>
-                setPeriod(parseAnalysisPeriod(event.target.value))
-              }
-              className="[&_select]:h-6 [&_select]:rounded-md [&_select]:py-0 [&_select]:pr-7 [&_select]:pl-2 [&_select]:text-xs [&_[data-slot=native-select-icon]]:right-2 [&_[data-slot=native-select-icon]]:size-3.5"
-            >
-              {ANALYSIS_PERIOD_OPTIONS.map((option) => (
-                <NativeSelectOption key={option.value} value={option.value}>
-                  {option.label}
-                </NativeSelectOption>
-              ))}
-            </NativeSelect>
+          <div className="flex shrink-0 flex-wrap items-end justify-end gap-x-3 gap-y-1">
+            <div className="flex flex-col items-center gap-0.5">
+              <span className="type-caption">Range</span>
+              <SegmentedControl
+                ariaLabel="Range"
+                options={RANGE_OPTIONS}
+                value={range}
+                onChange={setRange}
+              />
+            </div>
+            <div className="flex flex-col items-center gap-0.5">
+              <label htmlFor="analysis-period" className="type-caption">
+                Period
+              </label>
+              <NativeSelect
+                id="analysis-period"
+                size="sm"
+                value={period}
+                onChange={(event) =>
+                  setPeriod(parseAnalysisPeriod(event.target.value))
+                }
+                className="[&_select]:h-6 [&_select]:rounded-md [&_select]:py-0 [&_select]:pr-7 [&_select]:pl-2 [&_select]:text-xs [&_[data-slot=native-select-icon]]:right-2 [&_[data-slot=native-select-icon]]:size-3.5"
+              >
+                {ANALYSIS_PERIOD_OPTIONS.map((option) => (
+                  <NativeSelectOption key={option.value} value={option.value}>
+                    {option.label}
+                  </NativeSelectOption>
+                ))}
+              </NativeSelect>
+            </div>
           </div>
         </header>
 

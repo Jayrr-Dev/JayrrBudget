@@ -14,6 +14,7 @@ import {
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuGroup,
+  DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
@@ -57,6 +58,7 @@ import {
   ArrowUpDownIcon,
   ArrowUpIcon,
   CalendarIcon,
+  EllipsisIcon,
   ListFilterIcon,
 } from "lucide-react";
 import { useMemo, useState, type ReactNode } from "react";
@@ -670,92 +672,28 @@ export function DataTable<TData extends RowData>({
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3 sm:space-y-4">
       {showToolbar ? (
-        <div className="flex flex-col gap-4">
-          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
-            {showSearch ? (
-              <Input
-                placeholder={searchPlaceholder}
-                value={useGlobalSearch ? globalFilter : legacyFilterValue}
-                onChange={(event) => {
-                  const value = event.target.value;
-                  if (useGlobalSearch) {
-                    setGlobalFilter(value);
-                  } else if (searchKey) {
-                    setLegacyFilterValue(value);
-                    table.getColumn(searchKey)?.setFilterValue(value);
-                  }
-                  setPagination((prev) => ({ ...prev, pageIndex: 0 }));
-                }}
-                className="w-full max-w-sm"
-                aria-label={searchPlaceholder}
-              />
-            ) : null}
-            {toolbar}
-            {onRefresh ? (
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => {
-                  void onRefresh();
-                }}
-                disabled={isRefreshing}
-              >
-                {isRefreshing ? "Refreshing…" : "Refresh"}
-              </Button>
-            ) : null}
-            {csvFilename ? (
-              <Button
-                type="button"
-                variant="outline"
-                onClick={exportFilteredCsv}
-                disabled={filteredCount === 0}
-              >
-                Export CSV
-              </Button>
-            ) : null}
-            {enableColumnToggle ? (
-              <DropdownMenu>
-                <DropdownMenuTrigger
-                  aria-label="Toggle columns"
-                  render={<Button type="button" variant="outline" />}
-                >
-                  Columns
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-auto min-w-44">
-                  {columnMenuSections.map((section, index) => {
-                    const prev = columnMenuSections[index - 1];
-                    const showSeparator =
-                      index > 0 &&
-                      (section.columns.length > 1 ||
-                        (prev?.columns.length ?? 0) > 1);
-                    return (
-                      <DropdownMenuGroup key={section.id}>
-                        {showSeparator ? <DropdownMenuSeparator /> : null}
-                        {section.label ? (
-                          <DropdownMenuLabel>{section.label}</DropdownMenuLabel>
-                        ) : null}
-                        {section.columns.map((column) => (
-                          <DropdownMenuCheckboxItem
-                            key={column.id}
-                            checked={column.getIsVisible()}
-                            onCheckedChange={(checked) =>
-                              handleColumnVisibilityToggle(
-                                column.id,
-                                Boolean(checked),
-                              )
-                            }
-                          >
-                            {menuColumnLabel(column)}
-                          </DropdownMenuCheckboxItem>
-                        ))}
-                      </DropdownMenuGroup>
-                    );
-                  })}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            ) : null}
+        <div className="flex flex-col gap-2">
+          {showSearch ? (
+            <Input
+              placeholder={searchPlaceholder}
+              value={useGlobalSearch ? globalFilter : legacyFilterValue}
+              onChange={(event) => {
+                const value = event.target.value;
+                if (useGlobalSearch) {
+                  setGlobalFilter(value);
+                } else if (searchKey) {
+                  setLegacyFilterValue(value);
+                  table.getColumn(searchKey)?.setFilterValue(value);
+                }
+                setPagination((prev) => ({ ...prev, pageIndex: 0 }));
+              }}
+              className="w-full md:max-w-sm"
+              aria-label={searchPlaceholder}
+            />
+          ) : null}
+          <div className="flex flex-wrap items-center gap-2">
             {dateColumnId ? (
               <>
                 <DropdownMenu>
@@ -801,7 +739,9 @@ export function DataTable<TData extends RowData>({
                         data-icon="inline-start"
                         className="opacity-70"
                       />
-                      {formatRangeLabel(dateWindow.from, dateWindow.to)}
+                      <span className="max-w-36 truncate sm:max-w-none">
+                        {formatRangeLabel(dateWindow.from, dateWindow.to)}
+                      </span>
                     </Button>
                   </PopoverTrigger>
                   <PopoverContent align="start" className="w-auto gap-4 p-3">
@@ -844,15 +784,161 @@ export function DataTable<TData extends RowData>({
                 Clear filters
               </Button>
             ) : null}
+
+            <div className="hidden flex-wrap items-center gap-2 md:flex">
+              {toolbar}
+              {onRefresh ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    void onRefresh();
+                  }}
+                  disabled={isRefreshing}
+                >
+                  {isRefreshing ? "Refreshing…" : "Refresh"}
+                </Button>
+              ) : null}
+              {csvFilename ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={exportFilteredCsv}
+                  disabled={filteredCount === 0}
+                >
+                  Export CSV
+                </Button>
+              ) : null}
+              {enableColumnToggle ? (
+                <DropdownMenu>
+                  <DropdownMenuTrigger
+                    aria-label="Toggle columns"
+                    render={<Button type="button" variant="outline" />}
+                  >
+                    Columns
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-auto min-w-44">
+                    {columnMenuSections.map((section, index) => {
+                      const prev = columnMenuSections[index - 1];
+                      const showSeparator =
+                        index > 0 &&
+                        (section.columns.length > 1 ||
+                          (prev?.columns.length ?? 0) > 1);
+                      return (
+                        <DropdownMenuGroup key={section.id}>
+                          {showSeparator ? <DropdownMenuSeparator /> : null}
+                          {section.label ? (
+                            <DropdownMenuLabel>
+                              {section.label}
+                            </DropdownMenuLabel>
+                          ) : null}
+                          {section.columns.map((column) => (
+                            <DropdownMenuCheckboxItem
+                              key={column.id}
+                              checked={column.getIsVisible()}
+                              onCheckedChange={(checked) =>
+                                handleColumnVisibilityToggle(
+                                  column.id,
+                                  Boolean(checked),
+                                )
+                              }
+                            >
+                              {menuColumnLabel(column)}
+                            </DropdownMenuCheckboxItem>
+                          ))}
+                        </DropdownMenuGroup>
+                      );
+                    })}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              ) : null}
+            </div>
+
+            {isMobile &&
+            (toolbar || onRefresh || csvFilename || enableColumnToggle) ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  aria-label="More table actions"
+                  render={
+                    <Button type="button" variant="outline" size="icon" />
+                  }
+                >
+                  <EllipsisIcon className="size-4" />
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-auto min-w-44">
+                  {toolbar ? (
+                    <div className="border-b border-border p-1 [&_button]:w-full">
+                      {toolbar}
+                    </div>
+                  ) : null}
+                  {onRefresh ? (
+                    <DropdownMenuItem
+                      disabled={isRefreshing}
+                      onClick={() => {
+                        void onRefresh();
+                      }}
+                    >
+                      {isRefreshing ? "Refreshing…" : "Refresh"}
+                    </DropdownMenuItem>
+                  ) : null}
+                  {csvFilename ? (
+                    <DropdownMenuItem
+                      disabled={filteredCount === 0}
+                      onClick={exportFilteredCsv}
+                    >
+                      Export CSV
+                    </DropdownMenuItem>
+                  ) : null}
+                  {enableColumnToggle
+                    ? columnMenuSections.map((section, index) => {
+                        const prev = columnMenuSections[index - 1];
+                        const showSeparator =
+                          index > 0 &&
+                          (section.columns.length > 1 ||
+                            (prev?.columns.length ?? 0) > 1);
+                        return (
+                          <DropdownMenuGroup key={section.id}>
+                            {showSeparator || index === 0 ? (
+                              <DropdownMenuSeparator />
+                            ) : null}
+                            {section.label ? (
+                              <DropdownMenuLabel>
+                                {section.label}
+                              </DropdownMenuLabel>
+                            ) : index === 0 ? (
+                              <DropdownMenuLabel>Columns</DropdownMenuLabel>
+                            ) : null}
+                            {section.columns.map((column) => (
+                              <DropdownMenuCheckboxItem
+                                key={column.id}
+                                checked={column.getIsVisible()}
+                                onCheckedChange={(checked) =>
+                                  handleColumnVisibilityToggle(
+                                    column.id,
+                                    Boolean(checked),
+                                  )
+                                }
+                              >
+                                {menuColumnLabel(column)}
+                              </DropdownMenuCheckboxItem>
+                            ))}
+                          </DropdownMenuGroup>
+                        );
+                      })
+                    : null}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : null}
+
+            <p className="w-full text-xs text-foreground-muted sm:ml-auto sm:w-auto sm:text-sm">
+              Showing {filteredCount} of {totalCount}
+              {activeFilterCount > 0 ? " (filtered)" : ""}
+            </p>
           </div>
-          <p className="text-sm text-foreground-muted">
-            Showing {filteredCount} of {totalCount}
-            {activeFilterCount > 0 ? " (filtered)" : ""}
-          </p>
         </div>
       ) : null}
       {groupFilterSections.length > 0 ? (
-        <div className="flex flex-wrap gap-1.5">
+        <div className="hidden flex-wrap gap-1.5 md:flex">
           {groupFilterSections.map((section) => {
             const active = section.columns.some((column) =>
               column.getIsVisible(),
@@ -1168,9 +1254,9 @@ export function DataTable<TData extends RowData>({
                           style={columnSizeStyle(cellMeta)}
                           className={[
                             wrap
-                              ? "whitespace-normal align-top"
+                              ? "whitespace-normal align-top wrap-break-word"
                               : "overflow-hidden text-ellipsis whitespace-nowrap align-middle",
-                            width ? "overflow-hidden" : "",
+                            width && !wrap ? "overflow-hidden" : "",
                             isActionsCol ? "w-10 max-w-10 px-0" : "",
                             inventBand
                               ? "border-l border-[var(--border)] bg-[var(--muted)]/20"
@@ -1205,31 +1291,33 @@ export function DataTable<TData extends RowData>({
           </Table>
         </div>
       </TooltipProvider>
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-sm text-foreground-muted">
-          Page {pagination.pageIndex + 1} of {Math.max(table.getPageCount(), 1)}
-        </p>
-        <div className="flex gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => table.previousPage()}
-            disabled={!table.getCanPreviousPage()}
-          >
-            Previous
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => table.nextPage()}
-            disabled={!table.getCanNextPage()}
-          >
-            Next
-          </Button>
+      {table.getPageCount() > 1 ? (
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-sm text-foreground-muted">
+            Page {pagination.pageIndex + 1} of {table.getPageCount()}
+          </p>
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => table.previousPage()}
+              disabled={!table.getCanPreviousPage()}
+            >
+              Previous
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => table.nextPage()}
+              disabled={!table.getCanNextPage()}
+            >
+              Next
+            </Button>
+          </div>
         </div>
-      </div>
+      ) : null}
     </div>
   );
 }

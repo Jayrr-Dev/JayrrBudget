@@ -8,10 +8,12 @@ import type {
 } from "./analysisTypes";
 import { classifyCashFlow, spendCategoryLabel } from "./cashFlow";
 import { singularCategoryKey } from "./categoryKey";
+import { cleanMerchantDescriptor } from "./cleanMerchantDescriptor";
 import { applyDescriptorInference } from "./descriptorCategoryFixes";
 import {
   addDays,
   addMonths,
+  isoDay,
   monthKey,
   periodKey,
   periodLabel,
@@ -19,7 +21,6 @@ import {
 } from "./periods";
 import { classifySpread, SPREAD_DEFINITIONS, type SpreadName } from "./spreads";
 import { splitTags } from "./tags";
-import { cleanMerchantDescriptor } from "./cleanMerchantDescriptor";
 import { typeLabelsFromTxnCode } from "./txnCodes";
 
 const TOP_STACKED_CATEGORY_ROWS = 15;
@@ -139,12 +140,13 @@ function chartKey(label: string) {
 }
 
 export function rangeStartDate(latestDate: string, range: AnalysisRange) {
+  const latest = isoDay(latestDate);
   if (range === "all") return null;
-  if (range === "1w") return addDays(latestDate, -6);
-  if (range === "1m") return addDays(latestDate, -29);
+  if (range === "1w") return addDays(latest, -6);
+  if (range === "1m") return addDays(latest, -29);
 
   const monthsBack = range === "3m" ? 2 : range === "6m" ? 5 : 11;
-  return `${addMonths(monthKey(latestDate), -monthsBack)}-01`;
+  return `${addMonths(monthKey(latest), -monthsBack)}-01`;
 }
 
 function resolveCategory(input: {
@@ -897,23 +899,39 @@ export function computeAnalysis(args: {
   }
 
   // Newest posted first - peek caps keep recent txns when callers forget to order.
+  const latestIso = isoDay(latestDate);
+  const earliestIso = earliestDate ? isoDay(earliestDate) : null;
+  const startDate =
+    range !== "all" ? rangeStartDate(latestIso, range) : earliestIso;
+
   const orderedRows = filtered
     .slice()
-    .sort((a, b) =>
-      a.postedDate < b.postedDate ? 1 : a.postedDate > b.postedDate ? -1 : 0,
-    )
+    .sort((a, b) => {
+      const aDay = isoDay(a.postedDate);
+      const bDay = isoDay(b.postedDate);
+      return aDay < bDay ? 1 : aDay > bDay ? -1 : 0;
+    })
     .map(applyDescriptorInference);
 
-  const startDate =
-    range !== "all" ? rangeStartDate(latestDate, range) : earliestDate;
+  const rangedRows = orderedRows.filter((row) => {
+    if (!row.postedDate) return false;
+    const posted = isoDay(row.postedDate);
+    if (startDate && posted < startDate) return false;
+    if (posted > latestIso) return false;
+    return true;
+  });
+
+  if (rangedRows.length === 0) {
+    return emptyAnalysis(range, period);
+  }
 
   const currency =
-    orderedRows.find((row) => row.currencyCode)?.currencyCode ?? "CAD";
+    rangedRows.find((row) => row.currencyCode)?.currencyCode ?? "CAD";
 
   let rangeEarliest: string | null = null;
   let rangeLatest: string | null = null;
-  for (const row of orderedRows) {
-    const posted = row.postedDate;
+  for (const row of rangedRows) {
+    const posted = isoDay(row.postedDate);
     if (!posted) continue;
     if (!rangeEarliest || posted < rangeEarliest) rangeEarliest = posted;
     if (!rangeLatest || posted > rangeLatest) rangeLatest = posted;
@@ -1032,7 +1050,7 @@ export function computeAnalysis(args: {
     categoryMonthSpend.set(name, byMonth);
   }
 
-  for (const row of orderedRows) {
+  for (const row of rangedRows) {
     const major = row.amount;
     const amountMinor = Math.round(major * 100);
     const abs = Math.abs(major);
@@ -1341,8 +1359,12 @@ export function computeAnalysis(args: {
   }
 
   const monthKeys =
-    startDate && latestDate
-      ? periodsBetween(startDate, latestDate, period)
+    (startDate ?? rangeEarliest) && latestIso
+      ? periodsBetween(
+          startDate ?? rangeEarliest ?? latestIso,
+          latestIso,
+          period,
+        )
       : [...monthlyMap.keys()].sort();
 
   const monthly = monthKeys.map((month) => {
@@ -1373,7 +1395,7 @@ export function computeAnalysis(args: {
   const avgPeriodSpend =
     periodsWithSpend > 0 ? totalSpend / periodsWithSpend : 0;
   const periodBucketCount = Math.max(monthKeys.length, 1);
-  const transactionsPerPeriod = filtered.length / periodBucketCount;
+  const transactionsPerPeriod = rangedRows.length / periodBucketCount;
   const incomePerPeriod = totalIncome / periodBucketCount;
 
   const categories = rankAll(categorySpend);
@@ -1952,7 +1974,7 @@ export function computeAnalysis(args: {
     period,
     earliestDate: rangeEarliest,
     latestDate: rangeLatest,
-    transactionCount: filtered.length,
+    transactionCount: rangedRows.length,
     summary: {
       totalSpend: roundMoney(totalSpend),
       totalIncome: roundMoney(totalIncome),
@@ -1963,7 +1985,7 @@ export function computeAnalysis(args: {
       internalTransfers: roundMoney(internalTransfers),
       transferCount,
       spendCount,
-      transactionCount: filtered.length,
+      transactionCount: rangedRows.length,
       transactionsPerPeriod: roundMoney(transactionsPerPeriod),
       incomePerPeriod: roundMoney(incomePerPeriod),
       refunds: roundMoney(refunds),

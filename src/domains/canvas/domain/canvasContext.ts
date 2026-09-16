@@ -1,49 +1,75 @@
 import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
 
+const DEFAULT_SNAPSHOT_LIMIT = 120;
+
 export type CanvasShapeSnapshot = {
   id: string;
   type: string;
   x: number;
   y: number;
-  rotation: number;
+  w: number;
+  h: number;
   text?: string;
-  w?: number;
-  h?: number;
-  geo?: string;
-  color?: string;
+  stroke?: string;
+  fill?: string;
+  from?: string;
+  to?: string;
+  frameId?: string;
+  name?: string;
 };
 
-function elementText(element: {
-  type: string;
-  text?: string;
-}): string | undefined {
-  if (element.type !== "text") return undefined;
-  const text = element.text?.trim();
-  return text || undefined;
-}
-
-/** Compact board snapshot for the model. Caps element count. */
+/**
+ * Compact board snapshot for the model.
+ * Bound label text is folded into its container; arrows expose from/to ids.
+ */
 export function getCanvasSnapshot(
   api: ExcalidrawImperativeAPI,
-  limit = 80,
+  limit = DEFAULT_SNAPSHOT_LIMIT,
 ) {
   const elements = api.getSceneElements();
-  return {
-    pageId: "canvas",
-    pageName: "Board",
-    shapeCount: elements.length,
-    shapes: elements.slice(0, limit).map((element) => ({
+  const labelByContainer = new Map<string, string>();
+  for (const element of elements) {
+    if (element.type === "text" && element.containerId) {
+      labelByContainer.set(element.containerId, element.originalText || element.text);
+    }
+  }
+
+  const visible = elements.filter(
+    (element) => !(element.type === "text" && element.containerId),
+  );
+
+  const shapes: CanvasShapeSnapshot[] = visible.slice(0, limit).map((element) => {
+    const shape: CanvasShapeSnapshot = {
       id: element.id,
       type: element.type,
       x: Math.round(element.x),
       y: Math.round(element.y),
-      rotation: element.angle,
-      text: elementText(element),
       w: Math.round(element.width),
       h: Math.round(element.height),
-      geo: element.type,
-      color: element.strokeColor,
-    })),
+    };
+    const text =
+      element.type === "text"
+        ? element.originalText || element.text
+        : labelByContainer.get(element.id);
+    if (text?.trim()) shape.text = text.trim();
+    if (element.strokeColor !== "#1e1e1e") shape.stroke = element.strokeColor;
+    if (element.backgroundColor !== "transparent") {
+      shape.fill = element.backgroundColor;
+    }
+    if (element.type === "arrow") {
+      if (element.startBinding) shape.from = element.startBinding.elementId;
+      if (element.endBinding) shape.to = element.endBinding.elementId;
+    }
+    if (element.type === "frame") shape.name = element.name ?? undefined;
+    if (element.frameId) shape.frameId = element.frameId;
+    return shape;
+  });
+
+  return {
+    pageId: "canvas",
+    pageName: "Board",
+    shapeCount: visible.length,
+    shapes,
   };
 }
 

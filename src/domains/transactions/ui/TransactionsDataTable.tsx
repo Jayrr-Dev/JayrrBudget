@@ -8,7 +8,7 @@ import type {
   DashboardTransaction,
 } from "@/domains/dashboard/domain/types";
 import { queryKeys } from "@/domains/dashboard/queries/query-keys";
-import { MoneyText } from "@/domains/dashboard/ui/MoneyText";
+import { flowMoneyProps, MoneyText } from "@/domains/dashboard/ui/MoneyText";
 import { MerchantLabel } from "@/domains/merchants/ui/MerchantLabel";
 import { LOG_MONEY_RANGE_OPTIONS } from "@/domains/transactions/domain/amountLogRange";
 import { historyMatchLabel } from "@/domains/transactions/domain/debitCredit";
@@ -16,6 +16,7 @@ import { TagsCell } from "@/domains/transactions/ui/TagsCell";
 import { CreateTagButton } from "@/domains/transactions/ui/TagsColumnHeader";
 import { TaxonomyCell } from "@/domains/transactions/ui/TaxonomyCell";
 import { TransactionRowActions } from "@/domains/transactions/ui/TransactionRowActions";
+import { cn } from "@/lib/utils";
 import { formatDisplayDate } from "@/shared/lib/format-date";
 import { Icon } from "@iconify/react";
 import { useIsFetching, useQueryClient } from "@tanstack/react-query";
@@ -105,12 +106,10 @@ function buildColumns(accountNameById: Map<string, string>) {
           meta: {
             ...bandMeta("28rem", "read", "Statement line text from the PDF."),
             grow: true,
+            wrap: true,
           },
           cell: ({ getValue }) => (
-            <span
-              className="block truncate text-sm font-medium"
-              title={String(getValue())}
-            >
+            <span className="block text-sm font-medium leading-snug wrap-break-word">
               {String(getValue())}
             </span>
           ),
@@ -125,7 +124,7 @@ function buildColumns(accountNameById: Map<string, string>) {
               "read",
               "Signed amount. Positive = money out.",
             ),
-            autoWidth: (_value, row) => {
+            autoWidth: (_value: unknown, row: unknown) => {
               const txn = row as DashboardTransaction;
               return formatMoney(
                 Number(txn.amount),
@@ -135,13 +134,21 @@ function buildColumns(accountNameById: Map<string, string>) {
             autoWidthPadCh: 3,
             autoWidthMinCh: 16,
           },
-          cell: ({ row, getValue }) => (
-            <MoneyText
-              amount={Number(getValue())}
-              currency={row.original.isoCurrencyCode ?? "CAD"}
-              className="leading-snug text-foreground"
-            />
-          ),
+          cell: ({ row, getValue }) => {
+            const amount = Number(getValue());
+            const flow = flowMoneyProps({
+              amount,
+              bankDirection: row.original.bankDirection,
+            });
+            return (
+              <MoneyText
+                amount={amount}
+                currency={row.original.isoCurrencyCode ?? "CAD"}
+                signMark={flow.signMark}
+                className={cn("leading-snug", flow.className)}
+              />
+            );
+          },
           filterFn: "amountLogRange",
           sortFn: "basic",
         }),
@@ -335,12 +342,26 @@ function buildColumns(accountNameById: Map<string, string>) {
       columns: columnHelper.columns([
         columnHelper.accessor("originalDescription", {
           header: "Original description",
-          meta: bandMeta(
-            "28rem",
-            "read",
-            "Raw description before any cleanup.",
-          ),
-          cell: ({ getValue }) => textOrDash(getValue()),
+          meta: {
+            ...bandMeta("28rem", "read", "Raw description before any cleanup."),
+            wrap: true,
+          },
+          cell: ({ getValue }) => {
+            const value = getValue();
+            if (value == null || value === "") {
+              return (
+                <span className="text-sm text-[var(--muted-foreground)]">
+                  -
+                </span>
+              );
+            }
+            const label = String(value);
+            return (
+              <span className="block text-sm leading-snug wrap-break-word">
+                {label}
+              </span>
+            );
+          },
           filterFn: "equalsString",
           sortFn: "text",
         }),
@@ -510,7 +531,7 @@ function buildColumns(accountNameById: Map<string, string>) {
             }
             return (
               <div className="min-w-0">
-                <p className="truncate text-sm" title={label}>
+                <p className="truncate text-sm" title={label ?? undefined}>
                   {label}
                 </p>
                 <p
@@ -642,7 +663,7 @@ export function TransactionsDataTable({
       initialSorting={[{ id: "date", desc: true }]}
       enableGlobalFilter
       globalFilterFn="fuzzy"
-      searchPlaceholder="Search all columns..."
+      searchPlaceholder="Search…"
       enableColumnToggle
       dateColumnId="date"
       csvFilename="transactions.csv"

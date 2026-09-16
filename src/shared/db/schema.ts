@@ -248,6 +248,12 @@ export const transactions = sqliteTable(
     website: text("website"),
     logoUrl: text("logo_url"),
     currency: text("currency").notNull().default("CAD"),
+    /** Original purchase currency when the line is FX (e.g. PHP, USD). */
+    foreignCurrency: text("foreign_currency"),
+    /** Original amount in foreignCurrency when printed on the statement. */
+    foreignAmount: real("foreign_amount"),
+    /** Statement FX rate when printed (e.g. 0.024 on `PHP @ 0.024`). */
+    exchangeRate: real("exchange_rate"),
     debit: real("debit"),
     credit: real("credit"),
     /** Signed amount as in CSV (positive = money out). */

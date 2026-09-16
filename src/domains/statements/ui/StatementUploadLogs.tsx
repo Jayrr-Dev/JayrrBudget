@@ -84,7 +84,7 @@ const columns = columnHelper.columns([
   columnHelper.accessor("createdAt", {
     header: "When",
     enableHiding: false,
-    meta: { width: "8.5rem", nowrap: true },
+    meta: { width: "7rem", nowrap: true },
     cell: ({ getValue }) => (
       <span className="whitespace-nowrap text-sm">
         {formatWhen(String(getValue()))}
@@ -94,7 +94,7 @@ const columns = columnHelper.columns([
   columnHelper.accessor("filename", {
     header: "File",
     enableHiding: false,
-    meta: { width: "18rem", nowrap: true, grow: true },
+    meta: { width: "14rem", nowrap: true, grow: true },
     cell: ({ row }) => {
       const extra = [row.original.institutionName, row.original.accountMask]
         .filter(Boolean)
@@ -113,7 +113,7 @@ const columns = columnHelper.columns([
   columnHelper.accessor("status", {
     header: "Status",
     enableHiding: false,
-    meta: { width: "8rem", nowrap: true },
+    meta: { width: "6.25rem", nowrap: true },
     cell: ({ row }) => (
       <Badge
         variant={statusVariant(row.original.status)}
@@ -127,7 +127,7 @@ const columns = columnHelper.columns([
     id: "categorized",
     header: "Categories",
     enableHiding: false,
-    meta: { width: "4.5rem", nowrap: true },
+    meta: { width: "5.5rem", nowrap: true },
     cell: ({ row }) => {
       const { categorized, categorizedCount, transactionCount } = row.original;
       const total = transactionCount ?? 0;
@@ -150,14 +150,14 @@ const columns = columnHelper.columns([
   columnHelper.accessor("pageCount", {
     header: "Pg",
     enableHiding: false,
-    meta: { width: "3.5rem", nowrap: true, label: "Pages" },
+    meta: { width: "2.75rem", nowrap: true, label: "Pages" },
     cell: ({ getValue }) => String(getValue() ?? "-"),
   }),
   columnHelper.display({
     id: "counts",
     header: "Txns",
     enableHiding: false,
-    meta: { width: "3.5rem", nowrap: true },
+    meta: { width: "3rem", nowrap: true },
     cell: ({ row }) => {
       const { insertedCount, transactionCount, updatedCount } = row.original;
       const title = `${transactionCount ?? 0} total · ${insertedCount ?? 0} new · ${updatedCount ?? 0} existing`;
@@ -172,7 +172,7 @@ const columns = columnHelper.columns([
     id: "balance",
     header: "Statement",
     enableHiding: false,
-    meta: { width: "10.5rem", nowrap: true },
+    meta: { width: "16rem", nowrap: true },
     cell: ({ row }) => {
       const {
         balanceOk,

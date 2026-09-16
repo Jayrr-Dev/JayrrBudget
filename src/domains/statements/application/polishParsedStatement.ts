@@ -5,6 +5,7 @@ import {
   normalizeParsedCategories,
 } from "@/domains/statements/application/normalizeParsedCategories";
 import type { CategoryVocabulary } from "@/domains/statements/application/categoryVocabulary";
+import { fillFxGapsFromDescription } from "@/domains/statements/domain/extractFxFromDescription";
 import type { ParsedStatement } from "@/domains/statements/domain/parsedStatement";
 
 type ParsedTxn = ParsedStatement["transactions"][number];
@@ -285,5 +286,9 @@ export function polishPaperFactsStatement(
     }),
   };
   const deduped = options.dedupe(withMask);
-  return alignParsedAmountSigns(deduped);
+  const withFx = {
+    ...deduped,
+    transactions: deduped.transactions.map(fillFxGapsFromDescription),
+  };
+  return alignParsedAmountSigns(withFx);
 }

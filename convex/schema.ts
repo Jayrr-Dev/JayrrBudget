@@ -411,6 +411,12 @@ export default defineSchema({
     website: v.union(v.string(), v.null()),
     logoUrl: v.union(v.string(), v.null()),
     currency: v.string(),
+    /** Original purchase currency when the line is FX (e.g. PHP, USD). */
+    foreignCurrency: v.optional(v.union(v.string(), v.null())),
+    /** Original amount in foreignCurrency when printed on the statement. */
+    foreignAmount: v.optional(v.union(v.number(), v.null())),
+    /** Statement FX rate when printed (e.g. 0.024 on `PHP @ 0.024`). */
+    exchangeRate: v.optional(v.union(v.number(), v.null())),
     debit: v.union(v.number(), v.null()),
     credit: v.union(v.number(), v.null()),
     amount: v.number(),

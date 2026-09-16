@@ -75,13 +75,15 @@ async function ensurePdfWorker() {
   return pdfjs;
 }
 
-async function renderPdfPage(page: {
-  getViewport: (opts: { scale: number }) => { width: number; height: number };
+async function renderPdfPage<
+  TViewport extends { width: number; height: number },
+>(page: {
+  getViewport: (opts: { scale: number }) => TViewport;
   render: (opts: {
     canvasContext: CanvasRenderingContext2D;
-    viewport: { width: number; height: number };
+    viewport: TViewport;
     canvas: HTMLCanvasElement;
-  }) => { promise: Promise<void> };
+  }) => { promise: Promise<unknown> };
 }) {
   const viewport = page.getViewport({ scale: PDF_RENDER_SCALE });
   const canvas = document.createElement("canvas");

@@ -10,6 +10,16 @@ export function inferredBankDirection(
   return null;
 }
 
+/** Prefer explicit bankDirection; else infer from signed ledger amount. */
+export function resolveBankDirection(txn: {
+  amount: number;
+  bankDirection?: string | null;
+}): BankDirectionLabel | null {
+  const labeled = String(txn.bankDirection ?? "").toLowerCase();
+  if (labeled === "credit" || labeled === "debit") return labeled;
+  return inferredBankDirection(txn.amount);
+}
+
 export function ledgerDebitCredit(txn: {
   amount: number;
   bankDirection?: string | null;

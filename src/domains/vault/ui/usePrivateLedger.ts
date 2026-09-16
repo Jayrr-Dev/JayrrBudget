@@ -32,10 +32,26 @@ const EMPTY: PrivateLedger = {
 
 const ledgerListeners = new Set<() => void>();
 let ledgerEpoch = 0;
+let skipNextVaultReload = false;
 
 function bumpLedgerEpoch() {
   ledgerEpoch += 1;
   for (const listener of ledgerListeners) listener();
+}
+
+/** Scratch-only writes bump vault.updatedAt; skip the following full ledger reload. */
+export function skipNextPrivateLedgerReload() {
+  skipNextVaultReload = true;
+}
+
+export function clearSkipNextPrivateLedgerReload() {
+  skipNextVaultReload = false;
+}
+
+function consumeSkipNextVaultReload() {
+  if (!skipNextVaultReload) return false;
+  skipNextVaultReload = false;
+  return true;
 }
 
 export function usePrivateLedger() {
@@ -98,6 +114,9 @@ export function usePrivateLedger() {
         setLedger(EMPTY);
         setLoading(false);
         setError(null);
+        return;
+      }
+      if (consumeSkipNextVaultReload() && hasLedger.current) {
         return;
       }
       if (!hasLedger.current) setLoading(true);

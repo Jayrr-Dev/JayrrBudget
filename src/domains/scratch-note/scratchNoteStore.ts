@@ -4,7 +4,11 @@ import {
   saveEncryptedScratchPad,
   vaultWriteReady,
 } from "@/domains/vault/application/saveEncryptedLedger";
-import { usePrivateLedger } from "@/domains/vault/ui/usePrivateLedger";
+import {
+  clearSkipNextPrivateLedgerReload,
+  skipNextPrivateLedgerReload,
+  usePrivateLedger,
+} from "@/domains/vault/ui/usePrivateLedger";
 import { api } from "@convex/_generated/api";
 import { useConvex, useMutation, useQuery } from "convex/react";
 import { useEffect, useRef, useState } from "react";
@@ -274,6 +278,7 @@ async function flushEncryptedScratch() {
     const deps = scratchWriteDeps;
     if (!payload || !deps) return;
     const expected = scratchRevision ?? deps.ledgerRevision;
+    skipNextPrivateLedgerReload();
     try {
       const nextRevision = await deps.persist(payload, expected);
       scratchRevision = nextRevision ?? (expected ?? 0) + 1;
@@ -282,7 +287,6 @@ async function flushEncryptedScratch() {
       const nextRevision = await deps.persist(payload, null);
       scratchRevision = nextRevision ?? (expected ?? 0) + 1;
     }
-    deps.reload();
   }
 }
 
@@ -296,6 +300,7 @@ function queueEncryptedScratch(next: ScratchNoteState) {
       pendingScratch = null;
       scratchDirty = false;
       scratchRevision = null;
+      clearSkipNextPrivateLedgerReload();
       notifyScratchUi();
       scratchWriteDeps?.reload();
     });

@@ -70,6 +70,7 @@ import {
 } from "@/domains/vault/application/loadPrivateLedger";
 import { ImportLedgerCsv } from "@/domains/vault/ui/ImportLedgerCsv";
 import { usePrivateLedger } from "@/domains/vault/ui/usePrivateLedger";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
 import { errorMessage } from "@/shared/lib/error-message";
 import { api } from "@convex/_generated/api";
@@ -78,6 +79,7 @@ import {
   CameraIcon,
   CheckIcon,
   CopyCheckIcon,
+  EllipsisIcon,
   FileTextIcon,
   FileUpIcon,
   FileWarningIcon,
@@ -608,71 +610,116 @@ export function StatementUpload({ onImported }: Props) {
     (item) => item.dupCheck === "pending" && item.state === "idle",
   ).length;
 
+  const isMobile = useIsMobile();
   const triggerLabel = busy ? "Uploading…" : "Upload statement";
+
+  const uploadHelp = (
+    <Popover>
+      <PopoverTrigger asChild>
+        <span
+          role="button"
+          tabIndex={0}
+          className="inline-flex size-5 shrink-0 items-center justify-center rounded-full text-accent hover:bg-accent-subtle hover:text-accent"
+          aria-label="How statement upload works"
+          onClick={(event) => {
+            event.stopPropagation();
+          }}
+          onPointerDown={(event) => {
+            event.stopPropagation();
+          }}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" || event.key === " ") {
+              event.stopPropagation();
+            }
+          }}
+        >
+          <Info className="size-3.5" />
+        </span>
+      </PopoverTrigger>
+      <PopoverContent
+        align="end"
+        side="bottom"
+        sideOffset={8}
+        className="w-80 gap-0 p-3.5"
+      >
+        <PopoverHeader className="gap-1.5">
+          <PopoverTitle>Manual import path</PopoverTitle>
+          <PopoverDescription>
+            Opens a picker for PDFs or photos.
+          </PopoverDescription>
+          <ul className="mt-1.5 list-disc space-y-1 pl-4 text-muted-foreground">
+            <li>Up to 24 files. Duplicates are marked before scan.</li>
+            <li>Upload rules apply only to your own statements.</li>
+            <li>CSV import is encrypted.</li>
+          </ul>
+        </PopoverHeader>
+      </PopoverContent>
+    </Popover>
+  );
+
+  const uploadButton = (
+    <Button
+      type="button"
+      variant="outline"
+      disabled={busy}
+      onClick={() => setDialogOpen(true)}
+    >
+      {triggerLabel}
+      {uploadHelp}
+    </Button>
+  );
 
   return (
     <div className="flex flex-col items-start gap-1.5">
-      <ButtonGroup>
-        <ImportLedgerCsv onImported={onImported} />
-        <Button
-          type="button"
-          variant="outline"
-          disabled={busy}
-          onClick={() => setDialogOpen(true)}
-        >
-          {triggerLabel}
-          <Popover>
-            <PopoverTrigger asChild>
-              <span
-                role="button"
-                tabIndex={0}
-                className="inline-flex size-5 shrink-0 items-center justify-center rounded-full text-accent hover:bg-accent-subtle hover:text-accent"
-                aria-label="How statement upload works"
-                onClick={(event) => {
-                  event.stopPropagation();
-                }}
-                onPointerDown={(event) => {
-                  event.stopPropagation();
-                }}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" || event.key === " ") {
-                    event.stopPropagation();
-                  }
-                }}
-              >
-                <Info className="size-3.5" />
-              </span>
-            </PopoverTrigger>
-            <PopoverContent
-              align="end"
-              side="bottom"
-              sideOffset={8}
-              className="w-80 gap-0 p-3.5"
+      {isMobile ? (
+        <div className="flex items-center gap-2">
+          {uploadButton}
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              aria-label="More import options"
+              render={
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  disabled={busy}
+                />
+              }
             >
-              <PopoverHeader className="gap-1.5">
-                <PopoverTitle>Manual import path</PopoverTitle>
-                <PopoverDescription>
-                  Opens a picker for PDFs or photos.
-                </PopoverDescription>
-                <ul className="mt-1.5 list-disc space-y-1 pl-4 text-muted-foreground">
-                  <li>Up to 24 files. Duplicates are marked before scan.</li>
-                  <li>Upload rules apply only to your own statements.</li>
-                  <li>CSV import is encrypted.</li>
-                </ul>
-              </PopoverHeader>
-            </PopoverContent>
-          </Popover>
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          disabled={busy}
-          onClick={() => setRulesOpen(true)}
-        >
-          <ListChecks data-icon="inline-start" />
-          Upload Rules
-        </Button>
-      </ButtonGroup>
+              <EllipsisIcon className="size-4" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="min-w-44">
+              <DropdownMenuItem
+                className="p-0 focus:bg-transparent"
+                onSelect={(event) => event.preventDefault()}
+              >
+                <ImportLedgerCsv onImported={onImported} variant="item" />
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                disabled={busy}
+                onClick={() => setRulesOpen(true)}
+              >
+                <ListChecks />
+                Upload Rules
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      ) : (
+        <ButtonGroup>
+          <ImportLedgerCsv onImported={onImported} />
+          {uploadButton}
+          <Button
+            type="button"
+            variant="outline"
+            disabled={busy}
+            onClick={() => setRulesOpen(true)}
+          >
+            <ListChecks data-icon="inline-start" />
+            Upload Rules
+          </Button>
+        </ButtonGroup>
+      )}
 
       <Dialog
         open={dialogOpen}

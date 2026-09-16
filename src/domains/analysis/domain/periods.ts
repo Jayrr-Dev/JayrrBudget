@@ -41,8 +41,8 @@ export const ANALYSIS_PERIOD_META: Record<
     peakLabel: "Peak month",
     txnRateLabel: "Transactions /m",
     incomeRateLabel: "Income /m",
-    avgCostLabel: "Avg cost /m",
-    avgCountLabel: "Avg count /m",
+    avgCostLabel: "Avg $/m",
+    avgCountLabel: "Avg #/m",
   },
   biweekly: {
     label: "Biweekly",
@@ -52,8 +52,8 @@ export const ANALYSIS_PERIOD_META: Record<
     peakLabel: "Peak 2 weeks",
     txnRateLabel: "Transactions /BiWk",
     incomeRateLabel: "Income /BiWk",
-    avgCostLabel: "Avg cost /BiWk",
-    avgCountLabel: "Avg count /BiWk",
+    avgCostLabel: "Avg $/BiWk",
+    avgCountLabel: "Avg #/BiWk",
   },
   weekly: {
     label: "Weekly",
@@ -63,8 +63,8 @@ export const ANALYSIS_PERIOD_META: Record<
     peakLabel: "Peak week",
     txnRateLabel: "Transactions /Wk",
     incomeRateLabel: "Income /Wk",
-    avgCostLabel: "Avg cost /Wk",
-    avgCountLabel: "Avg count /Wk",
+    avgCostLabel: "Avg $/Wk",
+    avgCountLabel: "Avg #/Wk",
   },
   daily: {
     label: "Daily",
@@ -74,13 +74,20 @@ export const ANALYSIS_PERIOD_META: Record<
     peakLabel: "Peak day",
     txnRateLabel: "Transactions /d",
     incomeRateLabel: "Income /d",
-    avgCostLabel: "Avg cost /d",
-    avgCountLabel: "Avg count /d",
+    avgCostLabel: "Avg $/d",
+    avgCountLabel: "Avg #/d",
   },
 };
 
+/** Calendar day (`YYYY-MM-DD`) from a posted timestamp or date string. */
+export function isoDay(value: string) {
+  const trimmed = value.trim();
+  const match = trimmed.match(/^(\d{4}-\d{2}-\d{2})/);
+  return match?.[1] ?? trimmed;
+}
+
 function parseUtcDate(isoDate: string) {
-  const [year, month, day] = isoDate.split("-").map(Number);
+  const [year, month, day] = isoDay(isoDate).split("-").map(Number);
   return new Date(Date.UTC(year, (month ?? 1) - 1, day ?? 1));
 }
 
@@ -100,7 +107,7 @@ export function addDays(isoDate: string, delta: number) {
 
 /** YYYY-MM bucket for a posted date. */
 export function monthKey(isoDate: string) {
-  return isoDate.slice(0, 7);
+  return isoDay(isoDate).slice(0, 7);
 }
 
 /** Shift a YYYY-MM key by whole months. */
@@ -141,12 +148,14 @@ function startOfUtcBiweek(isoDate: string) {
   return formatUtcDate(start);
 }
 
-function shortUtc(isoDate: string, withYear: boolean) {
+/** Hover / series label: "Fri, Aug 6, 26". */
+function displayUtcDay(isoDate: string, withYear = true) {
   const date = parseUtcDate(isoDate);
   return new Intl.DateTimeFormat("en-US", {
+    weekday: "short",
     month: "short",
     day: "numeric",
-    year: withYear ? "numeric" : undefined,
+    year: withYear ? "2-digit" : undefined,
     timeZone: "UTC",
   }).format(date);
 }
@@ -156,7 +165,7 @@ function monthLabel(key: string) {
   if (!year || !month) return key;
   return new Intl.DateTimeFormat("en-US", {
     month: "short",
-    year: "numeric",
+    year: "2-digit",
     timeZone: "UTC",
   }).format(new Date(Date.UTC(year, month - 1, 1)));
 }
@@ -165,19 +174,10 @@ function rangeLabel(start: string, end: string) {
   const startDate = parseUtcDate(start);
   const endDate = parseUtcDate(end);
   const sameYear = startDate.getUTCFullYear() === endDate.getUTCFullYear();
-  const sameMonth =
-    sameYear && startDate.getUTCMonth() === endDate.getUTCMonth();
-  if (sameMonth) {
-    const month = new Intl.DateTimeFormat("en-US", {
-      month: "short",
-      timeZone: "UTC",
-    }).format(startDate);
-    return `${month} ${startDate.getUTCDate()}-${endDate.getUTCDate()}, ${startDate.getUTCFullYear()}`;
-  }
   if (sameYear) {
-    return `${shortUtc(start, false)}-${shortUtc(end, true)}`;
+    return `${displayUtcDay(start, false)} – ${displayUtcDay(end, true)}`;
   }
-  return `${shortUtc(start, true)}-${shortUtc(end, true)}`;
+  return `${displayUtcDay(start, true)} – ${displayUtcDay(end, true)}`;
 }
 
 /**
@@ -195,7 +195,7 @@ export function periodKey(isoDate: string, period: AnalysisPeriod) {
 /** Axis / table label for a period key. */
 export function periodLabel(key: string, period: AnalysisPeriod) {
   if (period === "monthly") return monthLabel(key);
-  if (period === "daily") return shortUtc(key, true);
+  if (period === "daily") return displayUtcDay(key);
   if (period === "weekly") return rangeLabel(key, addDays(key, 6));
   return rangeLabel(key, addDays(key, 13));
 }

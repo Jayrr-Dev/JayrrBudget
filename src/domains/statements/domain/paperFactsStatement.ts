@@ -26,6 +26,24 @@ export const paperFactsTransactionSchema = z.object({
   locationCity: z.string().nullable(),
   locationRegion: z.string().nullable(),
   locationCountry: z.string().nullable(),
+  foreignAmount: z
+    .number()
+    .nullable()
+    .describe(
+      "Original foreign charge size when printed (e.g. 12280 from `12,280.00 PHP @ 0.024`). Null when domestic.",
+    ),
+  foreignCurrency: z
+    .string()
+    .nullable()
+    .describe(
+      "ISO 4217 code of the foreign charge (PHP, USD, EUR). Null when already in statement currency.",
+    ),
+  exchangeRate: z
+    .number()
+    .nullable()
+    .describe(
+      "FX rate printed on the line (e.g. 0.024 or 1.42). Null when absent.",
+    ),
 });
 
 export const paperFactsStatementSchema = parsedStatementSchema
@@ -61,8 +79,9 @@ export function paperFactsToParsed(
       locationCountry: txn.locationCountry,
       checkNumber: null,
       referenceNumber: null,
-      foreignAmount: null,
-      foreignCurrency: null,
+      foreignAmount: txn.foreignAmount,
+      foreignCurrency: txn.foreignCurrency,
+      exchangeRate: txn.exchangeRate,
     })),
   };
 }

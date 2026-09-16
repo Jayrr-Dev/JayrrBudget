@@ -12,9 +12,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import type { DashboardTransaction } from "@/domains/dashboard/domain/types";
-import { MoneyText } from "@/domains/dashboard/ui/MoneyText";
+import { flowMoneyProps, MoneyText } from "@/domains/dashboard/ui/MoneyText";
 import { MerchantLabel } from "@/domains/merchants/ui/MerchantLabel";
-import { inferredBankDirection } from "@/domains/transactions/domain/debitCredit";
 import { formatDisplayDate } from "@/shared/lib/format-date";
 import { isValid, parseISO, subMonths, subWeeks } from "date-fns";
 import {
@@ -59,29 +58,6 @@ function rangeStart(key: RangeKey, now: Date) {
     case "12m":
       return subMonths(now, 12);
   }
-}
-
-function txnFlow(txn: DashboardTransaction) {
-  const labeled = String(txn.bankDirection ?? "").toLowerCase();
-  if (labeled === "credit" || labeled === "debit") return labeled;
-  return inferredBankDirection(txn.amount);
-}
-
-function flowMoneyProps(txn: DashboardTransaction) {
-  const flow = txnFlow(txn);
-  if (flow === "credit") {
-    return {
-      signMark: "plus" as const,
-      className: "text-[var(--income)]",
-    };
-  }
-  if (flow === "debit") {
-    return {
-      signMark: "auto" as const,
-      className: "text-[var(--spend)]",
-    };
-  }
-  return { signMark: "auto" as const, className: undefined };
 }
 
 function txnLabel(txn: DashboardTransaction) {
@@ -416,9 +392,7 @@ export function AccountPastTransactions({
                     <MerchantLabel
                       name={txnLabel(txn)}
                       src={txn.logoUrl}
-                      lookupName={
-                        txn.merchantClean ?? txn.merchantName ?? null
-                      }
+                      lookupName={txn.merchantClean ?? txn.merchantName ?? null}
                       className="text-sm"
                     />
                   </TableCell>

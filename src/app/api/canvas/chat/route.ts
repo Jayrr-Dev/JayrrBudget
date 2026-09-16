@@ -1,5 +1,6 @@
 import { getBudgetContextForCanvas } from "@/domains/canvas/application/getBudgetContextForCanvas";
 import type { CanvasSnapshot } from "@/domains/canvas/domain/canvasContext";
+import { CANVAS_SYSTEM_PROMPT } from "@/domains/canvas/domain/canvasSystemPrompt";
 import { canvasClientTools } from "@/domains/canvas/domain/canvasTools";
 import {
   chatModel,
@@ -139,14 +140,9 @@ export async function POST(request: Request) {
     }
 
     const system = [
-      "You are the JayrrBudget canvas assistant inside Excalidraw.",
-      "You can read the live canvas snapshot and the signed-in user's budget ledger only.",
-      "Never invent other users' data. When the user asks to draw, rearrange, label, or clear the board, use tools.",
-      "Keep layouts readable: space shapes, use short labels, prefer geo + text/notes.",
-      "Geo types: rectangle, ellipse, diamond. Notes are yellow sticky cards.",
+      CANVAS_SYSTEM_PROMPT,
+      "",
       "Coordinate space: x increases right, y increases down. Origin is top-left.",
-      "After tool calls, briefly say what changed.",
-      "Cloud Processing notice: this chat receives readable budget context. It is not end-to-end encrypted.",
       "",
       "BUDGET DATA (JSON):",
       JSON.stringify(budget),

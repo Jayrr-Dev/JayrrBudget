@@ -53,8 +53,8 @@ function storeSheetCsvFilename(tabName: string) {
   return `${slug || "store-sheet"}.csv`;
 }
 
-const FAB_COLLAPSED_PX = 32;
-const FAB_EXPANDED_ICON_ONLY_SEGMENT_PX = 28;
+const FAB_COLLAPSED_PX = 44;
+const FAB_EXPANDED_ICON_ONLY_SEGMENT_PX = 36;
 const FAB_EXPANDED_PILL_INNER_PADDING_PX = 8;
 const FAB_EXPANDED_DUAL_SEGMENT_GAP_PX = 2;
 const FAB_EXPANDED_BASE_PX = 56;
@@ -64,7 +64,10 @@ const FAB_EXPANDED_MAX_PX = 88;
 const BADGE_CAP = 99;
 
 const CORNER_BADGE_CLASS =
-  "pointer-events-none absolute -top-0.5 -right-0.5 z-[1] flex min-h-3 min-w-3 items-center justify-center rounded-full border border-[var(--background)] bg-[var(--muted-foreground)] px-0.5 text-[9px] font-semibold leading-none text-[var(--background)] shadow-sm";
+  "pointer-events-none absolute z-[1] flex min-h-5 min-w-5 items-center justify-center rounded-full border-2 border-[var(--background)] bg-[var(--muted-foreground)] px-1 text-[11px] font-semibold leading-none text-[var(--background)] shadow-sm";
+
+const FAB_PILL_BADGE_CLASS = cn(CORNER_BADGE_CLASS, "-top-1 -right-1");
+const FAB_SEGMENT_BADGE_CLASS = cn(CORNER_BADGE_CLASS, "top-0 right-0");
 
 function formatBadge(value: number): string {
   const n = Math.max(0, Math.floor(value));
@@ -196,7 +199,7 @@ function StoreSheetPanel({
   );
 
   return (
-    <Popover open={open} onOpenChange={onOpenChange}>
+    <Popover modal={false} open={open} onOpenChange={onOpenChange}>
       <FabTooltip label="Open store sheet">
         <PopoverTrigger asChild>{trigger}</PopoverTrigger>
       </FabTooltip>
@@ -206,8 +209,10 @@ function StoreSheetPanel({
         sideOffset={8}
         className="pointer-events-auto w-[min(24rem,calc(100vw-1rem))] gap-0 overflow-hidden border border-[var(--border)] bg-[var(--background)] p-0 shadow-lg duration-0 data-closed:animate-none data-open:animate-none"
         onOpenAutoFocus={(event) => event.preventDefault()}
-        // Stay open while clicking Analysis + / page; close via Sheet FAB or Escape.
+        onCloseAutoFocus={(event) => event.preventDefault()}
         onInteractOutside={(event) => event.preventDefault()}
+        onFocusOutside={(event) => event.preventDefault()}
+        onPointerDownOutside={(event) => event.preventDefault()}
       >
         <div className="relative border-b border-[var(--border)] bg-[var(--muted)]/25">
           <div
@@ -546,169 +551,171 @@ export function PersistentNoteFab() {
   const segmentBtn = (active: boolean) =>
     cn(
       "relative flex shrink-0 cursor-pointer items-center rounded-full outline-none",
-      active ? "flex-row gap-0.5" : "size-7 justify-center",
+      active ? "flex-row gap-0.5" : "size-9 justify-center",
       "focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-1",
     );
 
   return (
-    <div className="pointer-events-none fixed right-2 bottom-2 z-40 flex flex-col items-end">
+    <div className="pointer-events-none fixed right-3 bottom-3 z-40 flex flex-col items-end">
       <TooltipProvider>
         <div
-          onMouseEnter={() => setHovered(true)}
-          onMouseLeave={() => setHovered(false)}
+          className="relative transition-[width] duration-300 ease-out"
           style={{ width: pillWidth, height: FAB_COLLAPSED_PX }}
-          className={cn(
-            "pointer-events-auto flex shrink-0 flex-row items-center overflow-hidden rounded-full border border-[var(--border)]/80",
-            "bg-[var(--background)] text-[var(--foreground)] shadow-md ring-1 ring-[var(--border)]/40",
-            "transition-[width,box-shadow] duration-300 ease-out hover:shadow-lg",
-            isExpanded ? "justify-start gap-0 px-1" : "justify-center px-0",
-          )}
         >
-          {!isExpanded ? (
-            <FabTooltip label="Open store sheet, notes, and AI">
-              <button
-                type="button"
-                aria-label={
-                  showBadge
-                    ? `Workspace, ${totalSheetRows} store sheet lines`
-                    : "Open store sheet, notes, and AI"
-                }
-                onClick={() => {
-                  setNotesOpen(false);
-                  setAiOpen(false);
-                  setSheetOpen(true);
-                }}
-                className="flex h-full w-full cursor-pointer items-center justify-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-1"
-              >
-                <ChevronLeft
-                  className="size-3 shrink-0"
-                  strokeWidth={2}
-                  aria-hidden
-                />
-                {showBadge ? (
-                  <span
-                    className={cn(
-                      CORNER_BADGE_CLASS,
-                      badgeLabel.length > 1
-                        ? "min-w-4 px-0.5"
-                        : "aspect-square px-0",
-                    )}
+          <div
+            onMouseEnter={() => setHovered(true)}
+            onMouseLeave={() => setHovered(false)}
+            className={cn(
+              "pointer-events-auto flex h-full w-full shrink-0 flex-row items-center overflow-hidden rounded-full border border-[var(--border)]/80",
+              "bg-[var(--background)] text-[var(--foreground)] shadow-md ring-1 ring-[var(--border)]/40",
+              "transition-[box-shadow] duration-300 ease-out hover:shadow-lg",
+              isExpanded ? "justify-start gap-0 px-1" : "justify-center px-0",
+            )}
+          >
+            {!isExpanded ? (
+              <FabTooltip label="Open store sheet, notes, and AI">
+                <button
+                  type="button"
+                  aria-label={
+                    showBadge
+                      ? `Workspace, ${totalSheetRows} store sheet lines`
+                      : "Open store sheet, notes, and AI"
+                  }
+                  onClick={() => {
+                    setNotesOpen(false);
+                    setAiOpen(false);
+                    setSheetOpen(true);
+                  }}
+                  className="relative flex h-full w-full cursor-pointer items-center justify-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-1"
+                >
+                  <ChevronLeft
+                    className="size-4 shrink-0"
+                    strokeWidth={2}
                     aria-hidden
-                  >
-                    {badgeLabel}
-                  </span>
-                ) : null}
-              </button>
-            </FabTooltip>
-          ) : (
-            <>
-              <StoreSheetPanel
-                open={sheetOpen}
-                onOpenChange={handleSheetOpenChange}
-                trigger={
-                  <button
-                    type="button"
-                    aria-expanded={sheetOpen}
-                    aria-haspopup="dialog"
-                    aria-label={
-                      sheetRowCount > 0
-                        ? `Store sheet, ${sheetRowCount} lines`
-                        : "Store sheet"
-                    }
-                    className={segmentBtn(sheetOpen)}
-                  >
-                    <FileSpreadsheet
-                      className="size-3 shrink-0"
-                      strokeWidth={2}
-                      aria-hidden
-                    />
-                    {sheetOpen ? (
-                      <span className="flex min-w-0 select-none items-center gap-1 pr-0.5 text-[11px] font-medium tracking-tight whitespace-nowrap">
-                        <span>Sheet</span>
-                        <span
-                          className="tabular-nums text-[var(--muted-foreground)]"
-                          aria-hidden
-                        >
-                          {sheetRowCount}
-                        </span>
-                      </span>
-                    ) : null}
-                    {showBadge && !sheetOpen ? (
-                      <span
-                        className={cn(
-                          CORNER_BADGE_CLASS,
-                          badgeLabel.length > 1
-                            ? "min-w-4 px-0.5"
-                            : "aspect-square px-0",
-                        )}
+                  />
+                </button>
+              </FabTooltip>
+            ) : (
+              <>
+                <StoreSheetPanel
+                  open={sheetOpen}
+                  onOpenChange={handleSheetOpenChange}
+                  trigger={
+                    <button
+                      type="button"
+                      aria-expanded={sheetOpen}
+                      aria-haspopup="dialog"
+                      aria-label={
+                        sheetRowCount > 0
+                          ? `Store sheet, ${sheetRowCount} lines`
+                          : "Store sheet"
+                      }
+                      className={segmentBtn(sheetOpen)}
+                    >
+                      <FileSpreadsheet
+                        className="size-5 shrink-0"
+                        strokeWidth={2}
                         aria-hidden
-                      >
-                        {badgeLabel}
-                      </span>
-                    ) : null}
-                  </button>
-                }
-              />
-
-              <NotesPanel
-                open={notesOpen}
-                onOpenChange={handleNotesOpenChange}
-                trigger={
-                  <button
-                    type="button"
-                    aria-expanded={notesOpen}
-                    aria-haspopup="dialog"
-                    aria-label={
-                      noteCount > 0 ? `Notes, ${noteCount} tabs` : "Notes"
-                    }
-                    className={segmentBtn(notesOpen)}
-                  >
-                    <StickyNote
-                      className="size-3 shrink-0"
-                      strokeWidth={2}
-                      aria-hidden
-                    />
-                    {notesOpen ? (
-                      <span className="flex min-w-0 select-none items-center gap-1 pr-0.5 text-[11px] font-medium tracking-tight whitespace-nowrap">
-                        <span>Note</span>
+                      />
+                      {sheetOpen ? (
+                        <span className="flex min-w-0 select-none items-center gap-1 pr-0.5 text-[11px] font-medium tracking-tight whitespace-nowrap">
+                          <span>Sheet</span>
+                          <span
+                            className="tabular-nums text-[var(--muted-foreground)]"
+                            aria-hidden
+                          >
+                            {sheetRowCount}
+                          </span>
+                        </span>
+                      ) : null}
+                      {showBadge && !sheetOpen ? (
                         <span
-                          className="tabular-nums text-[var(--muted-foreground)]"
+                          className={cn(
+                            FAB_SEGMENT_BADGE_CLASS,
+                            badgeLabel.length > 1
+                              ? "min-w-6 px-1"
+                              : "aspect-square px-0",
+                          )}
                           aria-hidden
                         >
-                          {noteCount}
+                          {badgeLabel}
                         </span>
-                      </span>
-                    ) : null}
-                  </button>
-                }
-              />
+                      ) : null}
+                    </button>
+                  }
+                />
 
-              <LedgerAiChat
-                open={aiOpen}
-                onOpenChange={handleAiOpenChange}
-                onMoodChange={setPiggyMood}
-                trigger={
-                  <button
-                    type="button"
-                    aria-expanded={aiOpen}
-                    aria-haspopup="dialog"
-                    aria-label="Piggy"
-                    className={segmentBtn(aiOpen)}
-                  >
-                    <PiggyMascot
-                      mood={aiOpen ? piggyMood : "still"}
-                      iconClassName="size-3 shrink-0"
-                    />
-                    {aiOpen ? (
-                      <span className="flex min-w-0 select-none items-center pr-0.5 text-[11px] font-medium tracking-tight whitespace-nowrap">
-                        Piggy
-                      </span>
-                    ) : null}
-                  </button>
-                }
-              />
-            </>
-          )}
+                <NotesPanel
+                  open={notesOpen}
+                  onOpenChange={handleNotesOpenChange}
+                  trigger={
+                    <button
+                      type="button"
+                      aria-expanded={notesOpen}
+                      aria-haspopup="dialog"
+                      aria-label={
+                        noteCount > 0 ? `Notes, ${noteCount} tabs` : "Notes"
+                      }
+                      className={segmentBtn(notesOpen)}
+                    >
+                      <StickyNote
+                        className="size-5 shrink-0"
+                        strokeWidth={2}
+                        aria-hidden
+                      />
+                      {notesOpen ? (
+                        <span className="flex min-w-0 select-none items-center gap-1 pr-0.5 text-[11px] font-medium tracking-tight whitespace-nowrap">
+                          <span>Note</span>
+                          <span
+                            className="tabular-nums text-[var(--muted-foreground)]"
+                            aria-hidden
+                          >
+                            {noteCount}
+                          </span>
+                        </span>
+                      ) : null}
+                    </button>
+                  }
+                />
+
+                <LedgerAiChat
+                  open={aiOpen}
+                  onOpenChange={handleAiOpenChange}
+                  onMoodChange={setPiggyMood}
+                  trigger={
+                    <button
+                      type="button"
+                      aria-expanded={aiOpen}
+                      aria-haspopup="dialog"
+                      aria-label="Piggy"
+                      className={segmentBtn(aiOpen)}
+                    >
+                      <PiggyMascot
+                        mood={aiOpen ? piggyMood : "still"}
+                        iconClassName="size-5 shrink-0"
+                      />
+                      {aiOpen ? (
+                        <span className="flex min-w-0 select-none items-center pr-0.5 text-[11px] font-medium tracking-tight whitespace-nowrap">
+                          Piggy
+                        </span>
+                      ) : null}
+                    </button>
+                  }
+                />
+              </>
+            )}
+          </div>
+          {!isExpanded && showBadge ? (
+            <span
+              className={cn(
+                FAB_PILL_BADGE_CLASS,
+                badgeLabel.length > 1 ? "min-w-6 px-1" : "aspect-square px-0",
+              )}
+              aria-hidden
+            >
+              {badgeLabel}
+            </span>
+          ) : null}
         </div>
       </TooltipProvider>
     </div>

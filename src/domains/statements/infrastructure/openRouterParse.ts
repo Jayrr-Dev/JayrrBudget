@@ -72,7 +72,7 @@ const DEDUP_AND_META_RULES = [
   "openingBalance = Previous balance. closingBalance = Total balance / New balance.",
   "totalDebits = purchases/charges total when shown. totalCredits = payments/credits total when shown.",
   "Strip OCR dingbats (arrows, stars, warning marks) from description and merchantName.",
-  "Keep FX notes like 'USD 12.00 @ 1.42' in description only.",
+  "Keep FX notes like 'USD 12.00 @ 1.42' in description, and ALSO fill foreignAmount, foreignCurrency, and exchangeRate when present.",
   MERCHANT_CLEAN_AI_RULES,
 ].join("\n");
 
@@ -120,6 +120,7 @@ const PAPER_FACTS_RULES = [
   MASK_RULES,
   "Do NOT invent categories, subcategories, paymentChannel, merchantName, or transactionCode.",
   "Fill date, authorizedDate, description, amount, pending, and locationCity/Region/Country when present.",
+  "When a line shows FX (e.g. `12,280.00 PHP @ 0.024` or `USD 12.00 @ 1.42`), fill foreignAmount, foreignCurrency (ISO 4217), and exchangeRate. Leave all three null for domestic CAD lines.",
   "Keep description as the full original statement line (minus OCR dingbats).",
 ].join("\n");
 
@@ -155,7 +156,7 @@ export async function parseStatementWithOpenRouter(
         ...hintBlock,
         BALANCE_AND_DEDUP_RULES,
         "Keep description as full original text (minus dingbats).",
-        "Fill categories, paymentChannel, transactionCode, city/region, foreign amounts when present.",
+        "Fill categories, paymentChannel, transactionCode, city/region, foreignAmount/foreignCurrency/exchangeRate when present.",
         ...categoryBlock,
         ocrMarkdown.slice(0, 120_000),
       ].join("\n"),
@@ -195,7 +196,7 @@ export async function parseStatementWithOpenRouter(
         ...hintBlock,
         BALANCE_AND_DEDUP_RULES,
         "Keep description as full original text (minus dingbats).",
-        "Fill category, paymentChannel, transactionCode, city/region, foreign amounts when present.",
+        "Fill category, paymentChannel, transactionCode, city/region, foreignAmount/foreignCurrency/exchangeRate when present.",
         `This is page ${index + 1} of ${pages.length}.`,
         ...categoryBlock,
         pageText.slice(0, 40_000),

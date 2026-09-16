@@ -1,15 +1,15 @@
 "use client";
 
-import { createColumnHelper } from "@tanstack/react-table";
-import { useMutation, useQuery } from "convex/react";
-import { useEffect } from "react";
-import { api } from "@convex/_generated/api";
 import { Badge } from "@/components/ui/badge";
 import { DataTable } from "@/components/ui/data-table";
 import type { DataTableFeatures } from "@/components/ui/data-table-features";
 import { Switch } from "@/components/ui/switch";
 import type { AppModuleRecord } from "@/domains/modules/domain/types";
 import { resolveModuleIcon } from "@/domains/modules/ui/moduleIcons";
+import { api } from "@convex/_generated/api";
+import { createColumnHelper } from "@tanstack/react-table";
+import { useMutation, useQuery } from "convex/react";
+import { useEffect } from "react";
 
 const columnHelper = createColumnHelper<DataTableFeatures, AppModuleRecord>();
 
@@ -29,40 +29,42 @@ function ModuleEnabledSwitch({ module }: { module: AppModuleRecord }) {
 }
 
 const columns = columnHelper.columns([
-  columnHelper.display({
-    id: "icon",
-    header: "",
-    cell: ({ row }) => {
-      const Icon = resolveModuleIcon(row.original.icon);
-      return <Icon className="size-5 text-[var(--muted-foreground)]" />;
-    },
-    meta: { label: "Icon", width: "2.5rem", nowrap: true },
-  }),
   columnHelper.accessor("name", {
     header: "Module",
-    cell: ({ row }) => (
-      <span
-        className="block truncate font-medium"
-        title={`${row.original.name} — ${row.original.description}`}
-      >
-        {row.original.name}
-      </span>
-    ),
-    filterFn: "includesString",
-    meta: { width: "14rem", nowrap: true, grow: true },
-  }),
-  columnHelper.accessor("description", {
-    header: "Description",
-    cell: ({ getValue }) => (
-      <span
-        className="block truncate text-sm text-[var(--muted-foreground)]"
-        title={String(getValue())}
-      >
-        {String(getValue())}
-      </span>
-    ),
-    filterFn: "includesString",
-    meta: { width: "22rem", nowrap: true, grow: true },
+    cell: ({ row }) => {
+      const Icon = resolveModuleIcon(row.original.icon);
+      const description = row.original.description ?? "";
+      return (
+        <div
+          className="flex min-w-0 items-start gap-3"
+          title={
+            description
+              ? `${row.original.name} — ${description}`
+              : row.original.name
+          }
+        >
+          <Icon className="mt-0.5 size-5 shrink-0 text-[var(--muted-foreground)]" />
+          <span className="min-w-0">
+            <span className="block font-medium">{row.original.name}</span>
+            {description ? (
+              <span className="mt-0.5 block text-sm text-[var(--muted-foreground)]">
+                {description}
+              </span>
+            ) : null}
+          </span>
+        </div>
+      );
+    },
+    filterFn: (row, _columnId, value) => {
+      const query = String(value ?? "")
+        .trim()
+        .toLowerCase();
+      if (!query) return true;
+      const name = row.original.name.toLowerCase();
+      const description = (row.original.description ?? "").toLowerCase();
+      return name.includes(query) || description.includes(query);
+    },
+    meta: { width: "22rem", wrap: true, grow: true },
   }),
   columnHelper.accessor("category", {
     header: "Category",
@@ -74,7 +76,10 @@ const columns = columnHelper.columns([
   columnHelper.accessor("href", {
     header: "Route",
     cell: ({ getValue }) => (
-      <span className="block truncate font-mono text-xs" title={String(getValue())}>
+      <span
+        className="block truncate font-mono text-xs"
+        title={String(getValue())}
+      >
         {String(getValue())}
       </span>
     ),
@@ -108,6 +113,7 @@ export function ModuleManager() {
       data={modules}
       searchKey="name"
       searchPlaceholder="Filter modules…"
+      pageSize={50}
     />
   );
 }
