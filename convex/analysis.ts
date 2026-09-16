@@ -7,8 +7,10 @@ import type {
   AnalysisRange,
   AnalysisSourceRow,
 } from "./lib/analysisTypes";
+import type { ActionCtx } from "./_generated/server";
 import { requireUser } from "./lib/auth";
 import { computeAnalysis, rangeStartDate } from "./lib/computeAnalysis";
+import { addDays, isoDay } from "./lib/periods";
 import { rewriteTaxonomyLabel } from "./lib/seedCategoryPaths";
 
 const rangeValidator = v.union(
@@ -27,32 +29,110 @@ const periodValidator = v.union(
   v.literal("daily"),
 );
 
-const PAGE_SIZE = 250;
+const PAGE_SIZE = 500;
+const SHARD_MIN_DAYS = 60;
+const SHARD_COUNT = 4;
+
+type SlimTxn = {
+  description: string | null;
+  account: string | null;
+  accountId: string;
+  amount: number;
+  currency: string | null;
+  posted: string;
+  authorized: string | null;
+  txnCode: string | null;
+  channel: string | null;
+  city: string | null;
+  region: string | null;
+  country: string | null;
+  merchantClean: string | null;
+  section: string | null;
+  category: string | null;
+  subcategory: string | null;
+  spread: string | null;
+  company: string | null;
+  brand: string | null;
+  tags: string | null;
+  kind: null;
+};
+
+type LoadPageResult = {
+  page: SlimTxn[];
+  isDone: boolean;
+  continueCursor: string;
+};
+
+function analysisShards(
+  startDate: string | null,
+  latestDate: string,
+  earliestDate: string | null,
+): Array<{ startDate: string | null; endExclusive: string | null }> {
+  const from = startDate ?? earliestDate;
+  if (!from) return [{ startDate, endExclusive: null }];
+
+  const fromDay = isoDay(from);
+  const toDay = isoDay(latestDate);
+  const fromMs = Date.parse(`${fromDay}T00:00:00Z`);
+  const toMs = Date.parse(`${toDay}T00:00:00Z`);
+  if (!Number.isFinite(fromMs) || !Number.isFinite(toMs) || toMs < fromMs) {
+    return [{ startDate: fromDay, endExclusive: addDays(toDay, 1) }];
+  }
+
+  const spanDays = Math.round((toMs - fromMs) / 86_400_000) + 1;
+  const shardCount = spanDays >= SHARD_MIN_DAYS ? SHARD_COUNT : 1;
+  const shardLen = Math.ceil(spanDays / shardCount);
+  const shards: Array<{
+    startDate: string | null;
+    endExclusive: string | null;
+  }> = [];
+
+  for (let i = 0; i < shardCount; i += 1) {
+    const start = addDays(fromDay, i * shardLen);
+    if (start > toDay) break;
+    const endExclusive =
+      i === shardCount - 1
+        ? addDays(toDay, 1)
+        : addDays(fromDay, (i + 1) * shardLen);
+    shards.push({ startDate: start, endExclusive });
+  }
+
+  return shards.length > 0
+    ? shards
+    : [{ startDate: fromDay, endExclusive: addDays(toDay, 1) }];
+}
+
+async function loadShard(
+  ctx: ActionCtx,
+  startDate: string | null,
+  endExclusive: string | null,
+  accountById: Map<string, { name: string; type: string }>,
+): Promise<AnalysisSourceRow[]> {
+  const rows: AnalysisSourceRow[] = [];
+  let cursor: string | null = null;
+  let isDone = false;
+
+  while (!isDone) {
+    const page = (await ctx.runQuery(internal.analysis.loadPage, {
+      startDate,
+      endExclusive,
+      paginationOpts: {
+        numItems: PAGE_SIZE,
+        cursor,
+      },
+    })) as LoadPageResult;
+    for (const txn of page.page) {
+      rows.push(toSourceRow(txn, accountById));
+    }
+    isDone = page.isDone;
+    cursor = page.continueCursor;
+  }
+
+  return rows;
+}
 
 function toSourceRow(
-  txn: {
-    description?: string | null;
-    account?: string | null;
-    accountId: string;
-    amount: number;
-    currency?: string | null;
-    posted: string;
-    authorized?: string | null;
-    txnCode?: string | null;
-    channel?: string | null;
-    city?: string | null;
-    region?: string | null;
-    country?: string | null;
-    merchantClean?: string | null;
-    section?: string | null;
-    category?: string | null;
-    subcategory?: string | null;
-    spread?: string | null;
-    company?: string | null;
-    brand?: string | null;
-    tags?: string | null;
-    kind?: string | null;
-  },
+  txn: SlimTxn,
   accountById: Map<string, { name: string; type: string }>,
 ): AnalysisSourceRow {
   const account = accountById.get(txn.accountId);
@@ -120,16 +200,23 @@ export const loadMeta = internalQuery({
 export const loadPage = internalQuery({
   args: {
     startDate: v.union(v.string(), v.null()),
+    endExclusive: v.optional(v.union(v.string(), v.null())),
     paginationOpts: paginationOptsValidator,
   },
-  handler: async (ctx, args): Promise<any> => {
+  handler: async (ctx, args): Promise<LoadPageResult> => {
     const user = await requireUser(ctx);
+    const endExclusive = args.endExclusive ?? null;
 
     const page = await ctx.db
       .query("transactions")
       .withIndex("by_userId_posted", (q) => {
         const byUser = q.eq("userId", user._id);
-        return args.startDate ? byUser.gte("posted", args.startDate) : byUser;
+        if (args.startDate && endExclusive) {
+          return byUser.gte("posted", args.startDate).lt("posted", endExclusive);
+        }
+        if (args.startDate) return byUser.gte("posted", args.startDate);
+        if (endExclusive) return byUser.lt("posted", endExclusive);
+        return byUser;
       })
       .order("desc")
       .paginate(args.paginationOpts);
@@ -207,24 +294,14 @@ export const get = action({
       ),
     );
 
-    const rows: AnalysisSourceRow[] = [];
-    let cursor: string | null = null;
-    let isDone = false;
-
-    while (!isDone) {
-      const page: any = await ctx.runQuery(internal.analysis.loadPage, {
-        startDate,
-        paginationOpts: {
-          numItems: PAGE_SIZE,
-          cursor,
-        },
-      });
-      for (const txn of page.page) {
-        rows.push(toSourceRow(txn, accountById));
-      }
-      isDone = page.isDone;
-      cursor = page.continueCursor;
-    }
+    const shards = analysisShards(startDate, latestDate, earliestDate);
+    const shardRows = await Promise.all(
+      shards.map((shard) =>
+        loadShard(ctx, shard.startDate, shard.endExclusive, accountById),
+      ),
+    );
+    // Newest shard first so computeAnalysis peeks keep recent txns.
+    const rows = shardRows.toReversed().flat();
 
     return {
       ok: true as const,

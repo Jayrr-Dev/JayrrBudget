@@ -18,6 +18,7 @@ import {
 import { Spinner } from "@/components/ui/spinner";
 import { clearPendingPasscode } from "@/crypto/pendingPasscode";
 import { lockVault } from "@/crypto/session";
+import { usePrefetchAnalysis } from "@/domains/analysis/queries/useAnalysisQuery";
 import { WarmSaasQueries } from "@/domains/dashboard/ui/WarmSaasQueries";
 import { clearLedgerQuerySnapshots } from "@/domains/dashboard/ui/ledgerQuerySnapshot";
 import type { AppModuleRecord } from "@/domains/modules/domain/types";
@@ -88,6 +89,7 @@ function ModuleNav({ modules }: { modules: AppModuleRecord[] }) {
   const pathname = usePathname();
   const { open, animate } = useSidebar();
   const showLabel = !animate || open;
+  const prefetchAnalysis = usePrefetchAnalysis();
 
   return (
     <nav
@@ -102,6 +104,10 @@ function ModuleNav({ modules }: { modules: AppModuleRecord[] }) {
           <SidebarLink
             key={mod.slug}
             active={isActivePath(pathname, mod.href)}
+            onMouseEnter={
+              mod.href === "/analysis" ? prefetchAnalysis : undefined
+            }
+            onFocus={mod.href === "/analysis" ? prefetchAnalysis : undefined}
             link={{
               label: mod.name,
               href: mod.href,

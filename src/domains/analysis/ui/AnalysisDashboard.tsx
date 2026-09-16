@@ -56,9 +56,8 @@ import type {
   AnalysisTxnPeek,
   AnalysisTypeBreakdown,
 } from "@/domains/analysis/domain/types";
-import { analysisQueryKeys } from "@/domains/analysis/queries/query-keys";
+import { useAnalysis } from "@/domains/analysis/queries/useAnalysisQuery";
 import {
-  DEFAULT_ANALYSIS_UI_PREFS,
   readAnalysisUiPrefs,
   writeAnalysisUiPrefs,
   type AnalysisTab,
@@ -79,18 +78,13 @@ import {
   DescriptionActionsButton,
   EditDescriptionDialog,
 } from "@/domains/transactions/ui/EditDescriptionDialog";
-import { analysisFromPrivateLedger } from "@/domains/vault/application/analysisFromPrivateLedger";
-import { usePrivateLedger } from "@/domains/vault/ui/usePrivateLedger";
 import { cn } from "@/lib/utils";
 import { downloadCsv, toCsv } from "@/shared/lib/csv";
 import {
   formatDisplayDate,
   formatShortDisplayDate,
 } from "@/shared/lib/format-date";
-import { api } from "@convex/_generated/api";
 import { IconInfoCircle } from "@tabler/icons-react";
-import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { useAction } from "convex/react";
 import { ChevronDownIcon, PlusIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
@@ -195,57 +189,6 @@ const CHART_TOOLTIP_OFFSET = 28;
 
 /** Keep the card inside the chart; Recharts flips left/up when it would overflow. */
 const CHART_TOOLTIP_ESCAPE = { x: false, y: false } as const;
-
-function useAnalysis(range: AnalysisRange, period: AnalysisPeriod) {
-  const getAnalysis = useAction(api.analysis.get);
-  const privateLedger = usePrivateLedger();
-  const query = useQuery({
-    queryKey: [
-      ...analysisQueryKeys.range(range, period),
-      privateLedger.encryptedLedger,
-      privateLedger.unlocked,
-      privateLedger.ledger.transactions.length,
-      privateLedger.version,
-    ],
-    placeholderData: keepPreviousData,
-    staleTime: privateLedger.encryptedLedger ? 0 : 5 * 60_000,
-    gcTime: 30 * 60_000,
-    enabled:
-      !privateLedger.encryptedLedger ||
-      (privateLedger.unlocked && !privateLedger.loading),
-    queryFn: async () => {
-      if (privateLedger.encryptedLedger) {
-        return analysisFromPrivateLedger(privateLedger.ledger, range, period);
-      }
-      const res = await getAnalysis({ range, period });
-      if (!res || !("ok" in res) || res.ok !== true) {
-        const message =
-          res && "error" in res ? String(res.error) : "Analysis failed";
-        throw new Error(message);
-      }
-      return res.data as AnalysisData;
-    },
-  });
-  return {
-    data: query.data,
-    isPending:
-      query.isPending ||
-      (privateLedger.encryptedLedger &&
-        (privateLedger.loading || !privateLedger.unlocked)),
-    isError:
-      query.isError ||
-      Boolean(privateLedger.encryptedLedger && privateLedger.error),
-    isFetching: query.isFetching,
-    error:
-      query.error instanceof Error
-        ? query.error
-        : privateLedger.error
-          ? new Error(privateLedger.error)
-          : null,
-    encryptedLedger: privateLedger.encryptedLedger,
-    locked: privateLedger.encryptedLedger && !privateLedger.unlocked,
-  };
-}
 
 function moneyTick(value: number, currency: string) {
   const parts = formatMoneyParts(value, currency, true);
@@ -5935,45 +5878,21 @@ function PatternsTab({ data }: { data: AnalysisData }) {
 }
 
 export function AnalysisDashboard() {
-  const [range, setRange] = useState<AnalysisRange>(
-    DEFAULT_ANALYSIS_UI_PREFS.range,
-  );
-  const [period, setPeriod] = useState<AnalysisPeriod>(
-    DEFAULT_ANALYSIS_UI_PREFS.period,
-  );
-  const [tab, setTab] = useState<AnalysisTab>(DEFAULT_ANALYSIS_UI_PREFS.tab);
-  const [pane, setPane] = useState<FacetPane>(DEFAULT_ANALYSIS_UI_PREFS.pane);
-  const [category, setCategory] = useState(DEFAULT_ANALYSIS_UI_PREFS.category);
-  const [subcategory, setSubcategory] = useState(
-    DEFAULT_ANALYSIS_UI_PREFS.subcategory,
-  );
-  const [tag, setTag] = useState(DEFAULT_ANALYSIS_UI_PREFS.tag);
-  const [type, setType] = useState(DEFAULT_ANALYSIS_UI_PREFS.type);
-  const [merchant, setMerchant] = useState(DEFAULT_ANALYSIS_UI_PREFS.merchant);
-  const [incomeSource, setIncomeSource] = useState(
-    DEFAULT_ANALYSIS_UI_PREFS.incomeSource,
-  );
-  const [prefsReady, setPrefsReady] = useState(false);
+  const [prefs] = useState(readAnalysisUiPrefs);
+  const [range, setRange] = useState<AnalysisRange>(prefs.range);
+  const [period, setPeriod] = useState<AnalysisPeriod>(prefs.period);
+  const [tab, setTab] = useState<AnalysisTab>(prefs.tab);
+  const [pane, setPane] = useState<FacetPane>(prefs.pane);
+  const [category, setCategory] = useState(prefs.category);
+  const [subcategory, setSubcategory] = useState(prefs.subcategory);
+  const [tag, setTag] = useState(prefs.tag);
+  const [type, setType] = useState(prefs.type);
+  const [merchant, setMerchant] = useState(prefs.merchant);
+  const [incomeSource, setIncomeSource] = useState(prefs.incomeSource);
   const query = useAnalysis(range, period);
   const data = query.data;
 
   useEffect(() => {
-    const prefs = readAnalysisUiPrefs();
-    setRange(prefs.range);
-    setPeriod(prefs.period);
-    setTab(prefs.tab);
-    setPane(prefs.pane);
-    setCategory(prefs.category);
-    setSubcategory(prefs.subcategory);
-    setTag(prefs.tag);
-    setType(prefs.type);
-    setMerchant(prefs.merchant);
-    setIncomeSource(prefs.incomeSource);
-    setPrefsReady(true);
-  }, []);
-
-  useEffect(() => {
-    if (!prefsReady) return;
     writeAnalysisUiPrefs({
       range,
       period,
@@ -5987,7 +5906,6 @@ export function AnalysisDashboard() {
       incomeSource,
     });
   }, [
-    prefsReady,
     range,
     period,
     tab,
