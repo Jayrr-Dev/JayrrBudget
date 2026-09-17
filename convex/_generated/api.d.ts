@@ -66,6 +66,7 @@ import type * as modules from "../modules.js";
 import type * as piggyCrew from "../piggyCrew.js";
 import type * as piggyMemory from "../piggyMemory.js";
 import type * as piggyPings from "../piggyPings.js";
+import type * as polar from "../polar.js";
 import type * as revenue from "../revenue.js";
 import type * as scratchNotes from "../scratchNotes.js";
 import type * as service from "../service.js";
@@ -141,6 +142,7 @@ declare const fullApi: ApiFromModules<{
   piggyCrew: typeof piggyCrew;
   piggyMemory: typeof piggyMemory;
   piggyPings: typeof piggyPings;
+  polar: typeof polar;
   revenue: typeof revenue;
   scratchNotes: typeof scratchNotes;
   service: typeof service;
@@ -178,4 +180,6 @@ export declare const internal: FilterApi<
   FunctionReference<any, "internal">
 >;
 
-export declare const components: {};
+export declare const components: {
+  polar: import("@convex-dev/polar/_generated/component.js").ComponentApi<"polar">;
+};

@@ -39,31 +39,26 @@ export default function SignInPage() {
           <ProductShowcaseCard />
         </div>
         <div className="order-1 w-full max-w-sm justify-self-center space-y-6 lg:order-2 lg:max-w-none lg:justify-self-stretch">
-          <div className="flex flex-col items-center space-y-4 text-center">
-            <div className="flex flex-col items-center gap-2">
+          <div className="flex flex-col items-center gap-2 text-center">
+            <div className="flex flex-col items-center gap-3 lg:flex-row lg:items-center lg:gap-2">
               <img
                 src="/icon.svg"
                 alt=""
                 width={72}
                 height={72}
-                className="size-[72px]"
+                className="size-[72px] lg:size-10"
               />
-              <p className="type-lead max-w-xs">
-                Harness your finances and save money.
-              </p>
+              <h1 className="type-page">Jayrr&apos;s Budget!</h1>
             </div>
-            <div className="space-y-2">
-              <h1 className="type-page">Jayrr&apos;s Budget</h1>
-              <p className="type-lead">
-                {flow === "signIn"
-                  ? "Sign in to your ledger"
-                  : flow === "signUp"
-                    ? "This password protects your ledger"
-                    : flow === "reset"
-                      ? "Request a password reset"
-                      : "Choose a new password"}
-              </p>
-            </div>
+            <p className="type-lead">
+              {flow === "signIn"
+                ? "Sign in and save money"
+                : flow === "signUp"
+                  ? "Harness your finances and save money."
+                  : flow === "reset"
+                    ? "Request a password reset"
+                    : "Choose a new password"}
+            </p>
           </div>
 
           {flow === "signIn" || flow === "signUp" ? (
@@ -189,7 +184,6 @@ export default function SignInPage() {
                   <input
                     name="firstName"
                     type="text"
-                    required
                     autoComplete="given-name"
                     className="w-full rounded-md border border-control-border bg-surface-elevated px-3 py-2 text-[var(--foreground)] outline-none focus:border-primary"
                   />
@@ -201,7 +195,6 @@ export default function SignInPage() {
                   <input
                     name="lastName"
                     type="text"
-                    required
                     autoComplete="family-name"
                     className="w-full rounded-md border border-control-border bg-surface-elevated px-3 py-2 text-[var(--foreground)] outline-none focus:border-primary"
                   />

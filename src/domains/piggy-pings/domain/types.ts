@@ -17,6 +17,8 @@ export type CycleMode = (typeof CYCLE_MODES)[number];
 export type CycleWeekday = (typeof CYCLE_WEEKDAYS)[number];
 export type CyclePreset = (typeof CYCLE_PRESETS)[number];
 
+const CYCLE_DATE_PATTERN = /^(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?$/;
+
 function cycleTokens(cycle: string): string[] {
   return cycle
     .split(",")
@@ -49,7 +51,7 @@ export function cycleDateToIso(cycle: string): string {
   if (!token) {
     return "";
   }
-  const match = token.match(/^(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?$/);
+  const match = token.match(CYCLE_DATE_PATTERN);
   if (!match) {
     return "";
   }

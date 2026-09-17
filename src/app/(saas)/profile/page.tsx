@@ -14,6 +14,7 @@ import {
 import { PageSpinner } from "@/components/ui/spinner";
 import { ProfileAiByokCard } from "@/domains/ai-keys/ui/ProfileAiByokCard";
 import { ProfileAiUsageCard } from "@/domains/ai-keys/ui/ProfileAiUsageCard";
+import { ProfileBillingCard } from "@/domains/billing/ui/ProfileBillingCard";
 import { ProfileAvatarCard } from "@/domains/ledger-ai/ui/ProfileAvatarCard";
 import { resolveOcrMode } from "@/domains/statements/domain/ocrMode";
 import { ProfileOcrModeCard } from "@/domains/statements/ui/ProfileOcrModeCard";
@@ -102,7 +103,10 @@ export default function ProfilePage() {
         </p>
       </header>
 
-      <ButtonGroup className="w-full max-w-full flex-wrap" aria-label="Profile sections">
+      <ButtonGroup
+        className="w-full max-w-full flex-wrap"
+        aria-label="Profile sections"
+      >
         {PROFILE_TABS.map((item) => (
           <Button
             key={item.id}
@@ -141,7 +145,9 @@ export default function ProfilePage() {
           >
             <div className="grid grid-cols-2 gap-4">
               <label className="block space-y-2 text-sm">
-                <span className="text-[var(--muted-foreground)]">First name</span>
+                <span className="text-[var(--muted-foreground)]">
+                  First name
+                </span>
                 <input
                   value={firstName}
                   onChange={(event) => setFirstName(event.target.value)}
@@ -151,7 +157,9 @@ export default function ProfilePage() {
                 />
               </label>
               <label className="block space-y-2 text-sm">
-                <span className="text-[var(--muted-foreground)]">Last name</span>
+                <span className="text-[var(--muted-foreground)]">
+                  Last name
+                </span>
                 <input
                   value={lastName}
                   onChange={(event) => setLastName(event.target.value)}
@@ -202,6 +210,7 @@ export default function ProfilePage() {
           </form>
 
           <ProfileAvatarCard avatarIcon={resolveUserIcon(me.avatarIcon)} />
+          <ProfileBillingCard />
         </div>
       ) : null}
 

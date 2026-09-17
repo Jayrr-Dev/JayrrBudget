@@ -32,9 +32,8 @@ export const DEFAULT_SERVICE_PLANS: readonly ServicePlanSeed[] = [
   {
     role: "premium",
     name: "Premium",
-    // $12 sits above the article's $10 "danger" ARPU with heavy usage,
-    // below a $20 comfort band. $4 cap = 33% of ARPU worst-case AI COGS.
-    priceUsd: 12,
+    // Polar Premium is $16/month. $4 cap is 25% of ARPU worst-case AI COGS.
+    priceUsd: 16,
     monthlyCapUsd: 4,
     rateMax: 30,
     rateWindowMs: 60_000,

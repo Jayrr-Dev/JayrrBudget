@@ -29,6 +29,23 @@ export const me = query({
   },
 });
 
+/** Polar checkout identity. Throws when unsigned or missing email. */
+export const polarIdentity = query({
+  args: {},
+  returns: v.object({
+    userId: v.id("users"),
+    email: v.string(),
+  }),
+  handler: async (ctx) => {
+    const user = await requireUser(ctx);
+    const email = user.email?.trim().toLowerCase();
+    if (!email) {
+      throw new Error("Email is required for billing");
+    }
+    return { userId: user._id, email };
+  },
+});
+
 /** Chat avatar for the signed-in user. */
 export const updateAvatarIcon = mutation({
   args: { avatarIcon: userIconValidator },

@@ -8,7 +8,9 @@ export function authErrorMessage(
 ): string {
   const raw = extractRawMessage(error);
 
-  if (matches(raw, "InvalidSecret", "Invalid credentials", "Invalid password")) {
+  if (
+    matches(raw, "InvalidSecret", "Invalid credentials", "Invalid password")
+  ) {
     return flow === "signIn"
       ? "Wrong email or password. Check both and try again."
       : "That password doesn’t meet the requirements (at least 8 characters).";
@@ -42,10 +44,6 @@ export function authErrorMessage(
 
   if (matches(raw, "Email is required")) {
     return "Enter your email address.";
-  }
-
-  if (matches(raw, "First and last name are required")) {
-    return "Enter your first and last name.";
   }
 
   // Strip Convex request-id noise if we somehow got a plain message

@@ -1,11 +1,11 @@
-import { Password } from "@convex-dev/auth/providers/Password";
 import { Email } from "@convex-dev/auth/providers/Email";
+import { Password } from "@convex-dev/auth/providers/Password";
 import { convexAuth } from "@convex-dev/auth/server";
 import { ConvexError } from "convex/values";
 import { internal } from "./_generated/api";
 import { ensureModulesForUser } from "./lib/ensureModules";
-import { seedStarterTaxonomyForUser } from "./lib/seedStarterTaxonomy";
 import { DEFAULT_USER_ROLE, isUserRole } from "./lib/roles";
+import { seedStarterTaxonomyForUser } from "./lib/seedStarterTaxonomy";
 
 const passwordResetEmail = Email({
   maxAge: 10 * 60,
@@ -35,11 +35,9 @@ export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
 
         const firstName = String(params.firstName ?? "").trim();
         const lastName = String(params.lastName ?? "").trim();
-        if (!firstName || !lastName) {
-          throw new ConvexError("First and last name are required");
-        }
+        const name = [firstName, lastName].filter(Boolean).join(" ");
 
-        return { email, name: `${firstName} ${lastName}` };
+        return { email, name: name || null };
       },
       reset: passwordResetEmail,
     }),
@@ -59,9 +57,7 @@ export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
           await ctx.db.patch(args.existingUserId, {
             ...(email ? { email } : {}),
             ...(name ? { name } : {}),
-            ...(isUserRole(existing.role)
-              ? {}
-              : { role: DEFAULT_USER_ROLE }),
+            ...(isUserRole(existing.role) ? {} : { role: DEFAULT_USER_ROLE }),
           });
           const user = await ctx.db.get(args.existingUserId);
           if (user) {
