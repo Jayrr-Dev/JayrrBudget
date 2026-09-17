@@ -41,6 +41,7 @@ import {
   convertToModelMessages,
   stepCountIs,
   streamText,
+  type LanguageModelUsage,
   type UIMessage,
 } from "ai";
 
@@ -287,10 +288,10 @@ export async function POST(request: Request) {
       stopWhen: stepCountIs(18),
       prepareStep: prepareCompactChatStep,
       temperature: 0.55,
-      onError: ({ error }) => {
+      onError: ({ error }: { error: unknown }) => {
         console.warn(`[ledger-ai] stream error: ${errorMessage(error)}`);
       },
-      onFinish: async ({ usage }) => {
+      onFinish: async ({ usage }: { usage: LanguageModelUsage }) => {
         await Promise.all([
           persistAiUsage(convex, loaded.billedTo, {
             source: "ledger-chat",

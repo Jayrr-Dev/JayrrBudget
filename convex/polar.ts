@@ -1,5 +1,6 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { Polar } from "@convex-dev/polar";
+import type { FunctionReference } from "convex/server";
 import { v } from "convex/values";
 import { api, components, internal } from "./_generated/api";
 import type { DataModel, Id } from "./_generated/dataModel";
@@ -23,15 +24,20 @@ const POLAR_PRODUCTS: Record<string, string> = {
   premiumMonthly: PREMIUM_MONTHLY_PRODUCT_ID,
 };
 
+type PolarUserInfo = { userId: string; email: string };
+
+const polarIdentityQuery: FunctionReference<
+  "query",
+  "public",
+  Record<string, never>,
+  PolarUserInfo
+> = api.users.polarIdentity;
+
 export const polar = new Polar<DataModel, Record<string, string>>(
   components.polar,
   {
-    getUserInfo: async (ctx) => {
-      const identity = await ctx.runQuery(api.users.polarIdentity, {});
-      return {
-        userId: identity.userId,
-        email: identity.email,
-      };
+    getUserInfo: async (ctx): Promise<PolarUserInfo> => {
+      return await ctx.runQuery(polarIdentityQuery, {});
     },
     products: POLAR_PRODUCTS,
   },
@@ -218,7 +224,7 @@ export const syncProducts = action({
 });
 
 export async function applyPolarSubscriptionEvent(
-  ctx: ActionCtx,
+  ctx: { runMutation: ActionCtx["runMutation"] },
   event: {
     data: {
       status: string;

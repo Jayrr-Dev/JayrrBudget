@@ -44,6 +44,7 @@ import {
   convertToModelMessages,
   stepCountIs,
   streamText,
+  type LanguageModelUsage,
   type UIMessage,
 } from "ai";
 
@@ -214,10 +215,10 @@ export async function POST(request: Request) {
       stopWhen: stepCountIs(MAX_STEPS),
       prepareStep: prepareCompactChatStep,
       temperature: 0.2,
-      onError: ({ error }) => {
+      onError: ({ error }: { error: unknown }) => {
         console.warn(`[canvas] stream error: ${errorMessage(error)}`);
       },
-      onFinish: async ({ usage }) => {
+      onFinish: async ({ usage }: { usage: LanguageModelUsage }) => {
         await Promise.all([
           persistAiUsage(convex, loaded.billedTo, {
             source: "canvas-chat",

@@ -70,10 +70,12 @@ async function runHelper(options: {
     includeLedgerReads: options.includeLedgerReads,
     storeSheetSnapshot: options.storeSheetSnapshot,
   });
-  const readTools = { ...packed };
-  delete readTools[ASK_USER_TOOL_NAME];
-  delete readTools[EXPORT_FILE_TOOL_NAME];
-  delete readTools[SHOW_SKETCH_TOOL_NAME];
+  const {
+    [ASK_USER_TOOL_NAME]: _askUser,
+    [EXPORT_FILE_TOOL_NAME]: _exportFile,
+    [SHOW_SKETCH_TOOL_NAME]: _showSketch,
+    ...readTools
+  } = packed;
   const helperTools = {
     ...readTools,
     reply_to_lead: tool({

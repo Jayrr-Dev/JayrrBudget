@@ -116,8 +116,14 @@ export function paintSketchCommands(
       continue;
     }
 
-    const fill = command.fill ?? theme.fills[shape % theme.fills.length] ?? theme.fills[0]!;
-    const stroke = command.stroke ?? theme.strokes[shape % theme.strokes.length] ?? theme.ink;
+    const fill =
+      ("fill" in command ? command.fill : undefined) ??
+      theme.fills[shape % theme.fills.length] ??
+      theme.fills[0]!;
+    const stroke =
+      ("stroke" in command ? command.stroke : undefined) ??
+      theme.strokes[shape % theme.strokes.length] ??
+      theme.ink;
     shape += 1;
 
     if (command.op === "rect") {

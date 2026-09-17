@@ -159,7 +159,7 @@ export const hire = mutation({
       };
     }
     const used = new Set(helpers.map((row) => row.slot));
-    const slot = used.has("1") ? "2" : "1";
+    const slot: "1" | "2" = used.has("1") ? "2" : "1";
     const createdAt = Date.now();
     await ctx.db.insert("piggyCrew", {
       userId: user._id,
