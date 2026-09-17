@@ -1,5 +1,20 @@
 "use client";
 
+import {
+  Alert,
+  AlertAction,
+  AlertDescription,
+  AlertTitle,
+} from "@/components/ui/alert";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
@@ -24,6 +39,7 @@ import {
   PopoverTitle,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { RowActionsMenu } from "@/components/ui/row-actions-menu";
 import { PageSpinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
@@ -39,10 +55,13 @@ import {
 } from "@/domains/piggy-pings/domain/types";
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
+import { Icon } from "@iconify/react";
 import { createColumnHelper } from "@tanstack/react-table";
+import { cn } from "cn";
 import { useMutation, useQuery } from "convex/react";
-import { Info } from "lucide-react";
-import { useState, type FormEvent } from "react";
+import { Info, X } from "lucide-react";
+import { useEffect, useState, type FormEvent, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { toast } from "sonner";
 
 type PingRow = {
@@ -67,6 +86,14 @@ const columnHelper = createColumnHelper<DataTableFeatures, PingRow>();
 function dateLabel(value: string | null) {
   if (!value) return "Indefinite";
   return value;
+}
+
+function copyName(name: string) {
+  const suffix = " (copy)";
+  if (name.endsWith(suffix)) {
+    return name.slice(0, 80);
+  }
+  return `${name}${suffix}`.slice(0, 80);
 }
 
 function CycleInfo() {
@@ -256,6 +283,52 @@ function ActiveToggle({ ping }: { ping: PingRow }) {
 
 function PingActions({ ping }: { ping: PingRow }) {
   const remove = useMutation(api.piggyPings.remove);
+  const createPing = useMutation(api.piggyPings.create);
+  const [editOpen, setEditOpen] = useState(false);
+  const [popupOpen, setPopupOpen] = useState(false);
+  const [bannerOpen, setBannerOpen] = useState(false);
+
+  function handleTest() {
+    if (ping.pingType === "Popup") {
+      setPopupOpen(true);
+      return;
+    }
+    if (ping.pingType === "Banner") {
+      setBannerOpen(true);
+      return;
+    }
+    if (ping.pingType === "Email") {
+      toast.info(ping.title, {
+        description: `${ping.message}\n\nEmail send is not wired yet. This is the preview.`,
+        duration: 8000,
+      });
+      return;
+    }
+    toast.message(ping.title, {
+      description: ping.message,
+      duration: 8000,
+    });
+  }
+
+  async function handleDuplicate() {
+    try {
+      await createPing({
+        name: copyName(ping.name),
+        title: ping.title,
+        message: ping.message,
+        pingType: ping.pingType,
+        cycle: ping.cycle,
+        trigger: ping.trigger,
+        startDate: ping.startDate,
+        endDate: ping.endDate,
+        notes: ping.notes,
+        isActive: ping.isActive,
+      });
+      toast.success("Ping duplicated");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Duplicate failed");
+    }
+  }
 
   async function handleDelete() {
     try {
@@ -267,36 +340,84 @@ function PingActions({ ping }: { ping: PingRow }) {
   }
 
   return (
-    <Button
-      type="button"
-      size="xs"
-      variant="destructive"
-      onClick={() => void handleDelete()}
-    >
-      Delete
-    </Button>
+    <>
+      <RowActionsMenu
+        label={ping.name}
+        size="sm"
+        actions={[
+          { label: "Test", onSelect: handleTest },
+          { label: "Edit", onSelect: () => setEditOpen(true) },
+          { label: "Duplicate", onSelect: () => void handleDuplicate() },
+          {
+            label: "Delete",
+            onSelect: () => void handleDelete(),
+            variant: "destructive",
+          },
+        ]}
+      />
+      <PingFormDialog open={editOpen} onOpenChange={setEditOpen} ping={ping} />
+      <AlertDialog open={popupOpen} onOpenChange={setPopupOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{ping.title}</AlertDialogTitle>
+            <AlertDialogDescription>{ping.message}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogAction>Dismiss</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      {bannerOpen && typeof document !== "undefined"
+        ? createPortal(
+            <div className="pointer-events-none fixed inset-x-0 top-0 z-50 flex justify-center p-3">
+              <Alert className="pointer-events-auto w-full max-w-xl shadow-lg">
+                <AlertTitle>{ping.title}</AlertTitle>
+                <AlertDescription>{ping.message}</AlertDescription>
+                <AlertAction>
+                  <Button
+                    type="button"
+                    size="icon-xs"
+                    variant="ghost"
+                    aria-label="Dismiss banner"
+                    onClick={() => setBannerOpen(false)}
+                  >
+                    <X className="size-3.5" />
+                  </Button>
+                </AlertAction>
+              </Alert>
+            </div>,
+            document.body,
+          )
+        : null}
+    </>
+  );
+}
+
+function actionsHeader() {
+  return (
+    <span className="flex items-center justify-center">
+      <Icon
+        icon="mynaui:mouse-pointer-click-solid"
+        className="size-4 text-[var(--muted-foreground)]"
+        aria-hidden
+      />
+      <span className="sr-only">Actions</span>
+    </span>
   );
 }
 
 const columns = columnHelper.columns([
-  columnHelper.accessor("id", {
-    header: "Id",
-    cell: ({ getValue }) => (
-      <span
-        className="block max-w-[7rem] truncate font-mono text-xs"
-        title={String(getValue())}
-      >
-        {String(getValue())}
-      </span>
+  columnHelper.display({
+    id: "actions",
+    header: actionsHeader,
+    cell: ({ row }) => (
+      <div className="flex items-center justify-center">
+        <PingActions ping={row.original} />
+      </div>
     ),
-    meta: { width: "8rem", nowrap: true },
-  }),
-  columnHelper.accessor("ownerLabel", {
-    header: "Person",
-    cell: ({ getValue }) => (
-      <span className="block truncate text-sm">{String(getValue())}</span>
-    ),
-    meta: { width: "8rem", nowrap: true },
+    enableSorting: false,
+    enableHiding: true,
+    meta: { label: "Actions", width: "2rem" },
   }),
   columnHelper.accessor("name", {
     header: "Name",
@@ -403,19 +524,35 @@ const columns = columnHelper.columns([
     ),
     meta: { width: "8rem", nowrap: true },
   }),
-  columnHelper.display({
-    id: "actions",
-    header: "",
-    cell: ({ row }) => <PingActions ping={row.original} />,
-    meta: { label: "Actions", width: "5.5rem", nowrap: true },
-  }),
 ]);
 
 const SELECT_CLASS =
   "h-9 w-full min-w-0 rounded-lg border border-control-border bg-surface-elevated px-3 py-2 text-sm text-foreground outline-none focus-visible:border-primary focus-visible:ring-3 focus-visible:ring-ring/50";
 
-function CreatePingForm() {
+const PING_FORM_STEPS = [
+  { id: 1, title: "What to send" },
+  { id: 2, title: "When it fires" },
+  { id: 3, title: "Options" },
+] as const;
+
+type PingFormStep = (typeof PING_FORM_STEPS)[number]["id"];
+
+function PingFormDialog({
+  open,
+  onOpenChange,
+  ping,
+  trigger,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  ping?: PingRow;
+  trigger?: ReactNode;
+}) {
   const createPing = useMutation(api.piggyPings.create);
+  const updatePing = useMutation(api.piggyPings.update);
+  const isEdit = Boolean(ping);
+  const formId = ping ? `edit-ping-form-${ping.id}` : "create-ping-form";
+  const [step, setStep] = useState<PingFormStep>(1);
   const [name, setName] = useState("");
   const [title, setTitle] = useState("");
   const [message, setMessage] = useState("");
@@ -426,29 +563,109 @@ function CreatePingForm() {
   const [notes, setNotes] = useState("");
   const [isActive, setIsActive] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const stepMeta = PING_FORM_STEPS[step - 1];
+
+  function resetForm() {
+    setStep(1);
+    setName("");
+    setTitle("");
+    setMessage("");
+    setPingType("Toast");
+    setCycle("Weekly");
+    setStartDate("");
+    setEndDate("");
+    setNotes("");
+    setIsActive(true);
+  }
+
+  function hydrate(row: PingRow) {
+    setStep(1);
+    setName(row.name);
+    setTitle(row.title);
+    setMessage(row.message);
+    setPingType(row.pingType);
+    setCycle(row.cycle);
+    setStartDate(row.startDate ?? "");
+    setEndDate(row.endDate ?? "");
+    setNotes(row.notes ?? "");
+    setIsActive(row.isActive);
+  }
+
+  useEffect(() => {
+    if (!open) return;
+    if (ping) {
+      hydrate(ping);
+      return;
+    }
+    resetForm();
+    // Seed once when the dialog opens so live list updates do not wipe edits.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  function handleOpenChange(next: boolean) {
+    if (!next && !submitting) {
+      resetForm();
+    }
+    onOpenChange(next);
+  }
+
+  function stepError(current: PingFormStep) {
+    if (current === 1) {
+      if (!name.trim() || !title.trim() || !message.trim()) {
+        return "Name, title, and message are required";
+      }
+      return null;
+    }
+    if (current === 2 && !cycle.trim()) {
+      return "Cycle is required";
+    }
+    return null;
+  }
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
+    const error = stepError(step);
+    if (error) {
+      toast.error(error);
+      return;
+    }
+    if (step < 3) {
+      setStep((step + 1) as PingFormStep);
+      return;
+    }
+
     setSubmitting(true);
     try {
-      await createPing({
-        name,
-        title,
-        message,
-        pingType,
-        cycle,
-        startDate: startDate || null,
-        endDate: endDate || null,
-        notes: notes.trim() || null,
-        trigger: null,
-        isActive,
-      });
-      setName("");
-      setTitle("");
-      setMessage("");
-      setNotes("");
-      setIsActive(true);
-      toast.success("Ping saved");
+      if (ping) {
+        await updatePing({
+          pingId: ping.id,
+          name,
+          title,
+          message,
+          pingType,
+          cycle,
+          startDate: startDate || null,
+          endDate: endDate || null,
+          notes: notes.trim() || null,
+          isActive,
+        });
+      } else {
+        await createPing({
+          name,
+          title,
+          message,
+          pingType,
+          cycle,
+          startDate: startDate || null,
+          endDate: endDate || null,
+          notes: notes.trim() || null,
+          trigger: null,
+          isActive,
+        });
+      }
+      resetForm();
+      onOpenChange(false);
+      toast.success(ping ? "Ping updated" : "Ping saved");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not save ping");
     } finally {
@@ -456,194 +673,305 @@ function CreatePingForm() {
     }
   }
 
+  const nextDisabled =
+    submitting ||
+    (step === 1 && (!name.trim() || !title.trim() || !message.trim())) ||
+    (step === 2 && !cycle.trim());
+
   return (
-    <form
-      onSubmit={(e) => void onSubmit(e)}
-      className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4"
-    >
-      <h2 className="font-heading text-base font-semibold tracking-tight">
-        New ping
-      </h2>
-      <div className="mt-4 grid gap-3">
-        <div className="grid gap-1.5">
-          <Label htmlFor="ping-name">Name</Label>
-          <Input
-            id="ping-name"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="Rent reminder"
-            maxLength={80}
-            required
-            disabled={submitting}
-          />
-        </div>
-        <div className="grid gap-1.5">
-          <Label htmlFor="ping-title">Title</Label>
-          <Input
-            id="ping-title"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="Pay rent"
-            maxLength={160}
-            required
-            disabled={submitting}
-          />
-        </div>
-        <div className="grid gap-1.5">
-          <Label htmlFor="ping-message">Message</Label>
-          <Textarea
-            id="ping-message"
-            value={message}
-            onChange={(e) => setMessage(e.target.value)}
-            placeholder="Rent is due tomorrow."
-            maxLength={2000}
-            rows={3}
-            required
-            disabled={submitting}
-          />
-        </div>
-        <div className="grid gap-1.5">
-          <Label htmlFor="ping-type">Ping type</Label>
-          <select
-            id="ping-type"
-            className={SELECT_CLASS}
-            value={pingType}
-            onChange={(e) => setPingType(e.target.value as PingType)}
-            disabled={submitting}
-          >
-            {PING_TYPES.map((type) => (
-              <option key={type} value={type}>
-                {type}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="grid gap-1.5">
-          <div className="flex items-center gap-1.5">
-            <Label htmlFor="ping-cycle">Cycle</Label>
-            <CycleInfo />
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      {trigger ? <DialogTrigger asChild>{trigger}</DialogTrigger> : null}
+      <DialogContent className="flex max-h-[90vh] flex-col overflow-hidden sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            {isEdit ? "Edit ping" : "New ping"}
+            <Popover>
+              <PopoverTrigger asChild>
+                <button
+                  type="button"
+                  className="inline-flex size-6 shrink-0 items-center justify-center rounded-full text-accent hover:bg-accent-subtle hover:text-accent"
+                  aria-label={isEdit ? "About edit ping" : "About new ping"}
+                >
+                  <Info className="size-3.5" />
+                </button>
+              </PopoverTrigger>
+              <PopoverContent
+                align="start"
+                side="bottom"
+                sideOffset={8}
+                className="w-80 gap-0 p-3.5"
+              >
+                <PopoverHeader className="gap-1.5">
+                  <PopoverTitle>
+                    {isEdit ? "Edit ping" : "New ping"}
+                  </PopoverTitle>
+                  <PopoverDescription>
+                    {isEdit
+                      ? "Change this reminder, then save."
+                      : "Save a reminder for you, or one Piggy can also create in chat."}
+                  </PopoverDescription>
+                  <ul className="mt-1.5 list-disc space-y-1 pl-4 text-muted-foreground">
+                    <li>Toast, email, popup, or banner</li>
+                    <li>Cycle from the start date</li>
+                    <li>Blank start or end means that side never closes</li>
+                  </ul>
+                </PopoverHeader>
+              </PopoverContent>
+            </Popover>
+          </DialogTitle>
+          <DialogDescription className="sr-only">
+            {isEdit
+              ? "Edit this reminder name, title, message, type, and cycle."
+              : "Save a reminder with a name, title, message, type, and cycle."}
+          </DialogDescription>
+        </DialogHeader>
+        <div className="grid gap-2">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-sm font-medium">{stepMeta?.title}</p>
+            <p className="text-xs text-muted-foreground tabular-nums">
+              Step {step} of {PING_FORM_STEPS.length}
+            </p>
           </div>
-          <Input
-            id="ping-cycle"
-            value={cycle}
-            onChange={(e) => setCycle(e.target.value)}
-            placeholder="Weekly, Mon,Tue, 9/16, EOM"
-            maxLength={80}
-            required
-            disabled={submitting}
-          />
-          <div className="flex flex-wrap gap-1">
-            {CYCLE_PRESETS.map((preset) => (
-              <CycleChip
-                key={preset}
-                label={preset}
-                pressed={isCyclePresetOn(cycle, preset)}
-                disabled={submitting}
-                onToggle={() => setCycle(toggleCyclePreset(cycle, preset))}
+          <div className="flex gap-1" aria-hidden="true">
+            {PING_FORM_STEPS.map((item) => (
+              <span
+                key={item.id}
+                className={cn(
+                  "h-1 flex-1 rounded-full",
+                  item.id <= step ? "bg-primary" : "bg-muted",
+                )}
               />
             ))}
-            <CycleDateChip
-              cycle={cycle}
-              disabled={submitting}
-              onPick={setCycle}
-            />
           </div>
         </div>
-        <div className="grid grid-cols-2 gap-3">
-          <div className="grid gap-1.5">
-            <Label htmlFor="ping-start">Start date</Label>
-            <Input
-              id="ping-start"
-              type="date"
-              value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
-              disabled={submitting}
-            />
-          </div>
-          <div className="grid gap-1.5">
-            <Label htmlFor="ping-end">End date</Label>
-            <Input
-              id="ping-end"
-              type="date"
-              value={endDate}
-              onChange={(e) => setEndDate(e.target.value)}
-              disabled={submitting}
-            />
-          </div>
-        </div>
-        <div className="flex items-center justify-between gap-3">
-          <Label htmlFor="ping-active">Active</Label>
-          <Switch
-            id="ping-active"
-            checked={isActive}
-            onCheckedChange={(checked) => setIsActive(Boolean(checked))}
-            disabled={submitting}
-          />
-        </div>
-        <div className="grid gap-1.5">
-          <Label htmlFor="ping-notes">Notes</Label>
-          <Textarea
-            id="ping-notes"
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            placeholder="Optional"
-            maxLength={2000}
-            rows={2}
-            disabled={submitting}
-          />
-        </div>
-        <Button
-          type="submit"
-          disabled={
-            submitting ||
-            !name.trim() ||
-            !title.trim() ||
-            !message.trim() ||
-            !cycle.trim()
-          }
+        <form
+          id={formId}
+          onSubmit={(e) => void onSubmit(e)}
+          className="grid min-h-0 flex-1 gap-3 overflow-y-auto pr-1"
         >
-          {submitting ? "Saving…" : "Save ping"}
-        </Button>
-      </div>
-    </form>
+          {step === 1 ? (
+            <>
+              <div className="grid gap-1.5">
+                <Label htmlFor={`${formId}-name`}>Name</Label>
+                <Input
+                  id={`${formId}-name`}
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="Rent reminder"
+                  maxLength={80}
+                  required
+                  disabled={submitting}
+                />
+              </div>
+              <div className="grid gap-1.5">
+                <Label htmlFor={`${formId}-title`}>Title</Label>
+                <Input
+                  id={`${formId}-title`}
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  placeholder="Pay rent"
+                  maxLength={160}
+                  required
+                  disabled={submitting}
+                />
+              </div>
+              <div className="grid gap-1.5">
+                <Label htmlFor={`${formId}-message`}>Message</Label>
+                <Textarea
+                  id={`${formId}-message`}
+                  value={message}
+                  onChange={(e) => setMessage(e.target.value)}
+                  placeholder="Rent is due tomorrow."
+                  maxLength={2000}
+                  rows={3}
+                  required
+                  disabled={submitting}
+                />
+              </div>
+              <div className="grid gap-1.5">
+                <Label htmlFor={`${formId}-type`}>Ping type</Label>
+                <select
+                  id={`${formId}-type`}
+                  className={SELECT_CLASS}
+                  value={pingType}
+                  onChange={(e) => setPingType(e.target.value as PingType)}
+                  disabled={submitting}
+                >
+                  {PING_TYPES.map((type) => (
+                    <option key={type} value={type}>
+                      {type}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </>
+          ) : null}
+          {step === 2 ? (
+            <>
+              <div className="grid gap-1.5">
+                <div className="flex items-center gap-1.5">
+                  <Label htmlFor={`${formId}-cycle`}>Cycle</Label>
+                  <CycleInfo />
+                </div>
+                <Input
+                  id={`${formId}-cycle`}
+                  value={cycle}
+                  onChange={(e) => setCycle(e.target.value)}
+                  placeholder="Weekly, Mon,Tue, 9/16, EOM"
+                  maxLength={80}
+                  required
+                  disabled={submitting}
+                />
+                <div className="flex flex-wrap gap-1">
+                  {CYCLE_PRESETS.map((preset) => (
+                    <CycleChip
+                      key={preset}
+                      label={preset}
+                      pressed={isCyclePresetOn(cycle, preset)}
+                      disabled={submitting}
+                      onToggle={() =>
+                        setCycle(toggleCyclePreset(cycle, preset))
+                      }
+                    />
+                  ))}
+                  <CycleDateChip
+                    cycle={cycle}
+                    disabled={submitting}
+                    onPick={setCycle}
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="grid gap-1.5">
+                  <Label htmlFor={`${formId}-start`}>Start date</Label>
+                  <Input
+                    id={`${formId}-start`}
+                    type="date"
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                    disabled={submitting}
+                  />
+                </div>
+                <div className="grid gap-1.5">
+                  <Label htmlFor={`${formId}-end`}>End date</Label>
+                  <Input
+                    id={`${formId}-end`}
+                    type="date"
+                    value={endDate}
+                    onChange={(e) => setEndDate(e.target.value)}
+                    disabled={submitting}
+                  />
+                </div>
+              </div>
+            </>
+          ) : null}
+          {step === 3 ? (
+            <>
+              <div className="flex items-center justify-between gap-3">
+                <Label htmlFor={`${formId}-active`}>Active</Label>
+                <Switch
+                  id={`${formId}-active`}
+                  checked={isActive}
+                  onCheckedChange={(checked) => setIsActive(Boolean(checked))}
+                  disabled={submitting}
+                />
+              </div>
+              <div className="grid gap-1.5">
+                <Label htmlFor={`${formId}-notes`}>Notes</Label>
+                <Textarea
+                  id={`${formId}-notes`}
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  placeholder="Optional"
+                  maxLength={2000}
+                  rows={2}
+                  disabled={submitting}
+                />
+              </div>
+            </>
+          ) : null}
+        </form>
+        <DialogFooter>
+          {step === 1 ? (
+            <Button
+              type="button"
+              variant="outline"
+              disabled={submitting}
+              onClick={() => handleOpenChange(false)}
+            >
+              Cancel
+            </Button>
+          ) : (
+            <Button
+              type="button"
+              variant="outline"
+              disabled={submitting}
+              onClick={() => setStep((step - 1) as PingFormStep)}
+            >
+              Back
+            </Button>
+          )}
+          <Button type="submit" form={formId} disabled={nextDisabled}>
+            {step < 3 ? "Next" : submitting ? "Saving…" : "Save ping"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
-export function PiggyPingsManager() {
+export function CreatePingDialog({
+  open,
+  onOpenChange,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  return (
+    <PingFormDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      trigger={
+        <Button type="button" className="shrink-0">
+          Create ping
+        </Button>
+      }
+    />
+  );
+}
+
+export function PiggyPingsManager({
+  onCreatePing,
+}: {
+  onCreatePing: () => void;
+}) {
   const pings = useQuery(api.piggyPings.list, {});
 
+  if (pings === undefined) {
+    return <PageSpinner className="min-h-40 py-8" />;
+  }
+
+  if (pings.length === 0) {
+    return (
+      <EmptyPrompt
+        className="bg-[var(--surface)] py-10"
+        title="No pings yet"
+        description="Add a reminder here, or ask Piggy to create one."
+        action={
+          <Button type="button" size="sm" onClick={onCreatePing}>
+            Create ping
+          </Button>
+        }
+      />
+    );
+  }
+
   return (
-    <div className="grid gap-4 lg:grid-cols-3">
-      <div className="lg:col-span-1">
-        <CreatePingForm />
-      </div>
-      <div className="min-w-0 lg:col-span-2">
-        {pings === undefined ? (
-          <PageSpinner className="min-h-40 py-8" />
-        ) : pings.length === 0 ? (
-          <EmptyPrompt
-            className="bg-[var(--surface)] py-10"
-            title="No pings yet"
-            description="Add a reminder here, or ask Piggy to create one."
-            action={
-              <Button
-                type="button"
-                size="sm"
-                onClick={() => document.getElementById("ping-name")?.focus()}
-              >
-                New ping
-              </Button>
-            }
-          />
-        ) : (
-          <DataTable
-            columns={columns}
-            data={pings as PingRow[]}
-            searchKey="name"
-            searchPlaceholder="Filter pings…"
-          />
-        )}
-      </div>
-    </div>
+    <DataTable
+      columns={columns}
+      data={pings as PingRow[]}
+      searchKey="name"
+      searchPlaceholder="Filter pings…"
+    />
   );
 }

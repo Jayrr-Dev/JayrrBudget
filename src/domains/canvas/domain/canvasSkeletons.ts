@@ -72,10 +72,7 @@ export function buildCanvasSkeleton(args: CanvasSkeletonArgs): {
   const title = args.title?.trim() || DEFAULT_TITLES[args.kind];
   const r = (name: string) => refKey(prefix, name);
 
-  const builders: Record<
-    CanvasSkeletonKind,
-    () => CreateElementInput[]
-  > = {
+  const builders: Record<CanvasSkeletonKind, () => CreateElementInput[]> = {
     bar_chart: () => barChart(originX, originY, slots, title, r),
     cash_flow: () => cashFlow(originX, originY, slots, title, r),
     steps: () => steps(originX, originY, slots, title, r),
@@ -249,8 +246,8 @@ function cashFlow(
     y: incomeY,
     w: incomeW,
     h: incomeH,
-      text: "Total",
-      fontSize: 22,
+    text: "Total",
+    fontSize: 22,
     font: "hand",
     textAlign: "center",
     verticalAlign: "middle",
@@ -291,7 +288,9 @@ function steps(
   const boxW = 400;
   const boxH = 144;
   const gap = 56;
-  const firstY = originY + 56;
+  // Leave room under the title for the frame's own name label, which
+  // Excalidraw draws just above the frame edge.
+  const firstY = originY + 112;
   const children: string[] = [];
   const elements: CreateElementInput[] = [
     {
@@ -1022,7 +1021,13 @@ function waterfall(
             ? "green-light"
             : "red-light";
     const label =
-      i === 0 ? "Start" : i === slots - 1 ? "End" : i % 2 === 1 ? "+ In" : "- Out";
+      i === 0
+        ? "Start"
+        : i === slots - 1
+          ? "End"
+          : i % 2 === 1
+            ? "+ In"
+            : "- Out";
     const group = r(`col_${n}`);
     elements.push(
       {
@@ -1109,7 +1114,12 @@ function accounts(
   const cardW = 220;
   const cardH = 140;
   const gap = 28;
-  const fills = ["blue-light", "green-light", "violet-light", "orange-light"] as const;
+  const fills = [
+    "blue-light",
+    "green-light",
+    "violet-light",
+    "orange-light",
+  ] as const;
   const names = ["Checking", "Savings", "Credit", "Loan", "Cash", "Other"];
   const elements: CreateElementInput[] = [
     titleText(originX, originY, title, r("title")),

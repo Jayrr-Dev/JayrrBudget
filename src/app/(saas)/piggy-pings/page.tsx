@@ -8,8 +8,12 @@ import {
   PopoverTitle,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { PiggyPingsManager } from "@/domains/piggy-pings/ui/PiggyPingsManager";
+import {
+  CreatePingDialog,
+  PiggyPingsManager,
+} from "@/domains/piggy-pings/ui/PiggyPingsManager";
 import { Info } from "lucide-react";
+import { useState } from "react";
 
 function PiggyPingsTitleInfo() {
   return (
@@ -36,7 +40,10 @@ function PiggyPingsTitleInfo() {
           </PopoverDescription>
           <ul className="mt-1.5 list-disc space-y-1 pl-4 text-muted-foreground">
             <li>Toast, email, popup, or banner</li>
-            <li>Cycle from the start date: weekly, weekdays, a date, monthly, EOM, or SOM</li>
+            <li>
+              Cycle from the start date: weekly, weekdays, a date, monthly, EOM,
+              or SOM
+            </li>
             <li>Blank start or end means that side never closes</li>
             <li>Trigger stays empty until the send engine lands</li>
           </ul>
@@ -47,19 +54,24 @@ function PiggyPingsTitleInfo() {
 }
 
 export default function PiggyPingsPage() {
+  const [createOpen, setCreateOpen] = useState(false);
+
   return (
     <div className="space-y-8">
-      <header className="border-b border-[var(--border)] pb-6">
-        <h1 className="type-page flex items-center gap-2">
-          Piggy Pings
-          <PiggyPingsTitleInfo />
-        </h1>
-        <p className="sr-only">
-          Reminders for you, or ones Piggy creates in chat. Toast, email,
-          popup, or banner. Blank start or end means that side never closes.
-        </p>
+      <header className="flex items-center justify-between gap-4 border-b border-border pb-6">
+        <div>
+          <h1 className="type-page flex items-center gap-2">
+            Piggy Pings
+            <PiggyPingsTitleInfo />
+          </h1>
+          <p className="sr-only">
+            Reminders for you, or ones Piggy creates in chat. Toast, email,
+            popup, or banner. Blank start or end means that side never closes.
+          </p>
+        </div>
+        <CreatePingDialog open={createOpen} onOpenChange={setCreateOpen} />
       </header>
-      <PiggyPingsManager />
+      <PiggyPingsManager onCreatePing={() => setCreateOpen(true)} />
     </div>
   );
 }

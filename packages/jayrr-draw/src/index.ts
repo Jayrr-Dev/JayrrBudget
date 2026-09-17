@@ -12,6 +12,7 @@ export type { ExcalidrawElementSkeleton } from "@excalidraw/excalidraw/data/tran
 export type {
   Arrowhead,
   ExcalidrawElement,
+  ExcalidrawTextElement,
   FontFamilyValues,
 } from "@excalidraw/excalidraw/element/types";
 export type {

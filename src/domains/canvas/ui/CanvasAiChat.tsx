@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/popover";
 import {
   applyCanvasTool,
+  ensureCanvasFontsLoaded,
   isCanvasToolName,
 } from "@/domains/canvas/application/applyCanvasTools";
 import { focusCanvasLabel } from "@/domains/canvas/application/focusCanvasLabel";
@@ -36,6 +37,11 @@ import { PiggyGreeting } from "@/domains/canvas/ui/PiggyGreeting";
 import { useCanvasApi } from "@/domains/canvas/ui/canvasApiContext";
 import { useFeatureFlag } from "@/domains/feature-flags/ui/useFeatureFlag";
 import {
+  emptyPiggyHistory,
+  restorePiggyHistory,
+  type PiggyHistory,
+} from "@/domains/ledger-ai/domain/piggyHistory";
+import {
   PiggyMascot,
   piggyMoodFromChat,
   piggyMoodFromMessage,
@@ -48,6 +54,7 @@ import {
   PiggyUserMessage,
 } from "@/domains/ledger-ai/ui/PiggyTranscript";
 import { useCappedTextReveal } from "@/domains/ledger-ai/ui/useCappedTextReveal";
+import { usePiggyHistory } from "@/domains/ledger-ai/ui/usePiggyHistory";
 import { dashboardFromPrivateLedger } from "@/domains/vault/application/dashboardFromPrivateLedger";
 import { usePrivateLedger } from "@/domains/vault/ui/usePrivateLedger";
 import { cn } from "@/lib/utils";
@@ -64,11 +71,15 @@ import {
   type UIMessage,
 } from "ai";
 import { ArrowUp, Eraser, Info, Square } from "lucide-react";
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent,
+} from "react";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
-import { emptyPiggyHistory, restorePiggyHistory, type PiggyHistory } from "@/domains/ledger-ai/domain/piggyHistory";
-import { usePiggyHistory } from "@/domains/ledger-ai/ui/usePiggyHistory";
 
 /** How long Piggy's say_bubble line stays before idle greetings resume. */
 const BUBBLE_HOLD_MS = 12000;
@@ -132,16 +143,33 @@ function CanvasPiggyInfo() {
           </PopoverDescription>
           <ul className="mt-1.5 list-disc space-y-1 pl-4 text-muted-foreground">
             <li>Chat can see the budget numbers you send</li>
-            <li>Can look up one account, a statement, or an older month when you ask</li>
-            <li>Can search the web for general facts (rates, fees, definitions) and lists its sources</li>
-            <li>Can hire up to two helper piggies; they talk through your private crew mail</li>
+            <li>
+              Can look up one account, a statement, or an older month when you
+              ask
+            </li>
+            <li>
+              Can search the web for general facts (rates, fees, definitions)
+              and lists its sources
+            </li>
+            <li>
+              Can hire up to two helper piggies; they talk through your private
+              crew mail
+            </li>
             <li>Piggy stamps a chart skeleton, then fills your numbers</li>
-            <li>Thoughts and stamp notes show while Piggy works, then tuck away</li>
+            <li>
+              Thoughts and stamp notes show while Piggy works, then tuck away
+            </li>
             <li>Ask for edits — Piggy moves or erases what’s there</li>
-            <li>When a drawing is done, Piggy drops a short line in the speech bubble by the button</li>
+            <li>
+              When a drawing is done, Piggy drops a short line in the speech
+              bubble by the button
+            </li>
             <li>Enter sends, Shift+Enter adds a line</li>
             <li>Chat and draft are saved on this browser for your account</li>
-            <li>Eraser in the header, or scroll past the last reply, clears this chat — not the board</li>
+            <li>
+              Eraser in the header, or scroll past the last reply, clears this
+              chat — not the board
+            </li>
           </ul>
         </PopoverHeader>
       </PopoverContent>
@@ -163,7 +191,7 @@ function CanvasCappedMarkdown({
       <BubbleContent>
         <AssistantMarkdown
           text={shown}
-          onLocalRef={(label) => (api ? focusCanvasLabel(api, label) : false)}
+          onLocalRef={api ? (label) => focusCanvasLabel(api, label) : undefined}
         />
       </BubbleContent>
     </Bubble>
@@ -225,10 +253,7 @@ function AssistantTurn({
       rows.push(block);
       continue;
     }
-    if (
-      isToolUIPart(block.part) &&
-      boardErrors.get(block.part.toolCallId)
-    ) {
+    if (isToolUIPart(block.part) && boardErrors.get(block.part.toolCallId)) {
       rows.push({ kind: "error", part: block.part, key: block.key });
       continue;
     }
@@ -250,16 +275,14 @@ function AssistantTurn({
   if (rows.length === 0 && sources.length === 0) return null;
 
   return (
-    <PiggyAssistantMessage mood={mood ?? piggyMoodFromMessage(message, boardErrors)}>
+    <PiggyAssistantMessage
+      mood={mood ?? piggyMoodFromMessage(message, boardErrors)}
+    >
       <div className="flex min-w-0 flex-col">
         {rows.map((row) => {
           if (row.kind === "text") {
             return (
-              <CanvasCappedMarkdown
-                key={row.key}
-                text={row.text}
-                live={pace}
-              />
+              <CanvasCappedMarkdown key={row.key} text={row.text} live={pace} />
             );
           }
           if (row.kind === "error" && isToolUIPart(row.part)) {
@@ -289,7 +312,9 @@ function AssistantTurn({
         {!live ? (
           <SourceList
             parts={sources}
-            onLocalRef={(label) => (api ? focusCanvasLabel(api, label) : false)}
+            onLocalRef={
+              api ? (label) => focusCanvasLabel(api, label) : undefined
+            }
           />
         ) : null}
       </div>
@@ -312,10 +337,21 @@ export function CanvasAiChat() {
       </Button>
     );
   }
-  return <CanvasAiChatSession key={history.owner} initialHistory={history.initial!} saveHistory={history.save} historyError={history.error} />;
+  return (
+    <CanvasAiChatSession
+      key={history.owner}
+      initialHistory={history.initial!}
+      saveHistory={history.save}
+      historyError={history.error}
+    />
+  );
 }
 
-function CanvasAiChatSession({ initialHistory, saveHistory, historyError }: {
+function CanvasAiChatSession({
+  initialHistory,
+  saveHistory,
+  historyError,
+}: {
   initialHistory: PiggyHistory;
   saveHistory: (history: PiggyHistory) => void;
   historyError?: string;
@@ -368,7 +404,10 @@ function CanvasAiChatSession({ initialHistory, saveHistory, historyError }: {
   const speak = (text: string) => {
     window.clearTimeout(bubbleTimer.current);
     setBubble(text.trim().slice(0, PIGGY_BUBBLE_MAX_CHARS));
-    bubbleTimer.current = window.setTimeout(() => setBubble(null), BUBBLE_HOLD_MS);
+    bubbleTimer.current = window.setTimeout(
+      () => setBubble(null),
+      BUBBLE_HOLD_MS,
+    );
   };
   useEffect(() => () => window.clearTimeout(bubbleTimer.current), []);
   const wasBusy = useRef(false);
@@ -378,6 +417,11 @@ function CanvasAiChatSession({ initialHistory, saveHistory, historyError }: {
   useEffect(() => {
     setDockReady(true);
   }, []);
+  // Warm Piggy's fonts once the board exists so the first label is measured
+  // with the real face, not a fallback that leaves it clipped.
+  useEffect(() => {
+    if (api) void ensureCanvasFontsLoaded();
+  }, [api]);
 
   const { messages, sendMessage, setMessages, status, error, stop } = useChat({
     messages: initialHistory.messages,
@@ -418,7 +462,7 @@ function CanvasAiChatSession({ initialHistory, saveHistory, historyError }: {
         return;
       }
       try {
-        applyCanvasTool(
+        await applyCanvasTool(
           api,
           toolCall.toolName,
           toolCall.input,
@@ -436,8 +480,12 @@ function CanvasAiChatSession({ initialHistory, saveHistory, historyError }: {
   const last = messages.at(-1);
   const showThinking = busy && !hasVisibleParts(last);
   const mood = piggyMoodFromChat({
-    status, listening: inputFocused || input.trim().length > 0,
-    message: last, error, blocked, boardErrors,
+    status,
+    listening: inputFocused || input.trim().length > 0,
+    message: last,
+    error,
+    blocked,
+    boardErrors,
   });
 
   useEffect(() => {
@@ -450,17 +498,25 @@ function CanvasAiChatSession({ initialHistory, saveHistory, historyError }: {
     if (!wasBusy.current) return;
     wasBusy.current = false;
     setDoneLine(true);
-    doneTimer.current = window.setTimeout(() => setDoneLine(false), DONE_HOLD_MS);
+    doneTimer.current = window.setTimeout(
+      () => setDoneLine(false),
+      DONE_HOLD_MS,
+    );
   }, [busy]);
 
   const greetingMessage = busy
     ? "Thinking..."
     : doneLine
       ? "I'm done!"
-      : bubble ?? (open ? "Chatting..." : null);
+      : (bubble ?? (open ? "Chatting..." : null));
 
   useEffect(() => {
-    saveHistory({ messages, draft: input, aliases: [...refAliases.current], boardErrors: [...boardErrors] });
+    saveHistory({
+      messages,
+      draft: input,
+      aliases: [...refAliases.current],
+      boardErrors: [...boardErrors],
+    });
   }, [messages, input, boardErrors, saveHistory]);
 
   const submit = (text: string) => {
@@ -492,167 +548,168 @@ function CanvasAiChatSession({ initialHistory, saveHistory, historyError }: {
 
   const chatDock = (
     <div className="pointer-events-auto fixed top-16 right-3 z-2000 flex w-[min(24rem,calc(100vw-1.5rem))] flex-col gap-0 overflow-hidden rounded-xl border border-border bg-background p-0 shadow-lg ring-1 ring-foreground/10">
-        <PopoverHeader className="flex-row items-center gap-1.5 border-b border-accent/15 bg-linear-to-r from-accent-subtle/80 to-transparent px-3 py-2.5">
-          <PopoverTitle className="flex min-w-0 flex-1 items-center gap-1.5">
-            Canvas Piggy
-            <CanvasPiggyInfo />
-          </PopoverTitle>
-          <PopoverDescription className="sr-only">
-            Chat can see the budget numbers you send. Piggy draws on the board.
-          </PopoverDescription>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            className="size-8 shrink-0 text-muted-foreground hover:text-foreground"
-            disabled={messages.length === 0 && !error}
-            aria-label="Clear chat"
-            title="Clear chat"
-            onClick={clearChat}
-          >
-            <Eraser className="size-3.5" />
-          </Button>
-        </PopoverHeader>
-
-        {blocked ? (
-          <p className="border-b border-border bg-warning-subtle px-3 py-2 text-xs text-warning">
-            Turn on Cloud Processing in Modules before sending budget data to
-            Piggy.
-          </p>
-        ) : null}
-
-        {historyError && <p role="status" className="px-3 py-2 text-xs text-warning">{historyError}</p>}
-
-        <PiggyTranscript
-          ariaLabel="Canvas Piggy conversation"
-          className="h-80"
-          onClearChat={clearChat}
-          canClearChat={messages.length > 0 || !!error}
+      <PopoverHeader className="flex-row items-center gap-1.5 border-b border-accent/15 bg-linear-to-r from-accent-subtle/80 to-transparent px-3 py-2.5">
+        <PopoverTitle className="flex min-w-0 flex-1 items-center gap-1.5">
+          Canvas Piggy
+          <CanvasPiggyInfo />
+        </PopoverTitle>
+        <PopoverDescription className="sr-only">
+          Chat can see the budget numbers you send. Piggy draws on the board.
+        </PopoverDescription>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          className="size-8 shrink-0 text-muted-foreground hover:text-foreground"
+          disabled={messages.length === 0 && !error}
+          aria-label="Clear chat"
+          title="Clear chat"
+          onClick={clearChat}
         >
-          {messages.length === 0 ? (
-            <PiggyTranscriptItem messageId="piggy-empty">
-              <div className="flex h-full flex-col items-center justify-center gap-3 py-6 text-center">
-                <span className="flex size-12 items-center justify-center rounded-full bg-accent-subtle ring-4 ring-accent-subtle/50">
-                  <PiggyMascot mood="happy" iconClassName="size-12" />
-                </span>
-                <div className="space-y-1">
-                  <p className="text-sm font-medium">
-                    Ask Piggy to sketch your money
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    Charts, flows, and notes land on the board.
-                  </p>
-                </div>
-                <div className="flex flex-wrap justify-center gap-1.5">
-                  {SUGGESTIONS.map((suggestion) => (
-                    <button
-                      key={suggestion}
-                      type="button"
-                      disabled={busy || blocked}
-                      onClick={() => submit(suggestion)}
-                      className="rounded-full border border-accent/20 bg-accent-subtle/40 px-2.5 py-1 text-xs text-accent transition-colors hover:bg-accent-subtle disabled:opacity-50"
-                    >
-                      {suggestion}
-                    </button>
-                  ))}
-                </div>
+          <Eraser className="size-3.5" />
+        </Button>
+      </PopoverHeader>
+
+      {blocked ? (
+        <p className="border-b border-border bg-warning-subtle px-3 py-2 text-xs text-warning">
+          Turn on Cloud Processing in Modules before sending budget data to
+          Piggy.
+        </p>
+      ) : null}
+
+      {historyError && (
+        <p role="status" className="px-3 py-2 text-xs text-warning">
+          {historyError}
+        </p>
+      )}
+
+      <PiggyTranscript
+        ariaLabel="Canvas Piggy conversation"
+        className="h-80"
+        onClearChat={clearChat}
+        canClearChat={messages.length > 0 || !!error}
+      >
+        {messages.length === 0 ? (
+          <PiggyTranscriptItem messageId="piggy-empty">
+            <div className="flex h-full flex-col items-center justify-center gap-3 py-6 text-center">
+              <span className="flex size-12 items-center justify-center rounded-full bg-accent-subtle ring-4 ring-accent-subtle/50">
+                <PiggyMascot mood="happy" iconClassName="size-12" />
+              </span>
+              <div className="space-y-1">
+                <p className="text-sm font-medium">
+                  Ask Piggy to sketch your money
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Charts, flows, and notes land on the board.
+                </p>
               </div>
-            </PiggyTranscriptItem>
-          ) : (
-            messages.map((message) => {
-              if (message.role === "user") {
-                const text = messageText(message);
-                if (!text) return null;
-                return (
-                  <PiggyTranscriptItem
-                    key={message.id}
-                    messageId={message.id}
-                    scrollAnchor
+              <div className="flex flex-wrap justify-center gap-1.5">
+                {SUGGESTIONS.map((suggestion) => (
+                  <button
+                    key={suggestion}
+                    type="button"
+                    disabled={busy || blocked}
+                    onClick={() => submit(suggestion)}
+                    className="rounded-full border border-accent/20 bg-accent-subtle/40 px-2.5 py-1 text-xs text-accent transition-colors hover:bg-accent-subtle disabled:opacity-50"
                   >
-                    <PiggyUserMessage text={text} />
-                  </PiggyTranscriptItem>
-                );
-              }
+                    {suggestion}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </PiggyTranscriptItem>
+        ) : (
+          messages.map((message) => {
+            if (message.role === "user") {
+              const text = messageText(message);
+              if (!text) return null;
               return (
                 <PiggyTranscriptItem
                   key={message.id}
                   messageId={message.id}
+                  scrollAnchor
                 >
-                  <AssistantTurn
-                    message={message}
-                    boardErrors={boardErrors}
-                    live={busy && message.id === last?.id}
-                    pace={!bornMessageIds.current.has(message.id)}
-                    mood={busy && message.id === last?.id ? mood : undefined}
-                  />
+                  <PiggyUserMessage text={text} />
                 </PiggyTranscriptItem>
               );
-            })
-          )}
-          {showThinking ? (
-            <PiggyTranscriptItem messageId="piggy-thinking">
-              <PiggyAssistantMessage mood="thinking">
-                <PiggyThinking label={thinkingLabel(status, last)} />
-              </PiggyAssistantMessage>
-            </PiggyTranscriptItem>
-          ) : null}
-          {error ? (
-            <PiggyTranscriptItem messageId="piggy-error">
-              <PiggyAssistantMessage mood="sad">
-                <p className="rounded-lg border border-danger/20 bg-danger-subtle px-3 py-2 text-xs text-danger">
-                  {error.message}
-                </p>
-              </PiggyAssistantMessage>
-            </PiggyTranscriptItem>
-          ) : null}
-        </PiggyTranscript>
+            }
+            return (
+              <PiggyTranscriptItem key={message.id} messageId={message.id}>
+                <AssistantTurn
+                  message={message}
+                  boardErrors={boardErrors}
+                  live={busy && message.id === last?.id}
+                  pace={!bornMessageIds.current.has(message.id)}
+                  mood={busy && message.id === last?.id ? mood : undefined}
+                />
+              </PiggyTranscriptItem>
+            );
+          })
+        )}
+        {showThinking ? (
+          <PiggyTranscriptItem messageId="piggy-thinking">
+            <PiggyAssistantMessage mood="thinking">
+              <PiggyThinking label={thinkingLabel(status, last)} />
+            </PiggyAssistantMessage>
+          </PiggyTranscriptItem>
+        ) : null}
+        {error ? (
+          <PiggyTranscriptItem messageId="piggy-error">
+            <PiggyAssistantMessage mood="sad">
+              <p className="rounded-lg border border-danger/20 bg-danger-subtle px-3 py-2 text-xs text-danger">
+                {error.message}
+              </p>
+            </PiggyAssistantMessage>
+          </PiggyTranscriptItem>
+        ) : null}
+      </PiggyTranscript>
 
-        <form
-          className="border-t border-border bg-surface p-2"
-          onSubmit={(event) => {
-            event.preventDefault();
-            submit(input);
-          }}
-        >
-          <InputGroup className="items-center border-accent/25 has-[[data-slot=input-group-control]:focus-visible]:border-accent has-[[data-slot=input-group-control]:focus-visible]:ring-accent/30">
-            <InputGroupTextarea
-              value={input}
-              rows={1}
-              onChange={(event) => setInput(event.target.value)}
-              onFocus={() => setInputFocused(true)}
-              onBlur={() => setInputFocused(false)}
-              onKeyDown={onKeyDown}
-              placeholder={busy ? "Piggy is busy…" : "Ask or draw…"}
-              disabled={blocked}
-              aria-label="Message Canvas Piggy"
-              className="max-h-28 min-h-8 px-3 py-1.5 text-sm leading-5"
-            />
-            <InputGroupAddon align="inline-end" className="self-center">
-              {busy ? (
-                <InputGroupButton
-                  size="icon-sm"
-                  variant="ghost"
-                  onClick={() => void stop()}
-                  aria-label="Stop"
-                  className="size-8 rounded-lg"
-                >
-                  <Square className="size-3.5 fill-current" />
-                </InputGroupButton>
-              ) : (
-                <InputGroupButton
-                  type="submit"
-                  size="icon-sm"
-                  variant="ghost"
-                  disabled={blocked || !input.trim()}
-                  aria-label="Send"
-                  className="size-8 rounded-lg disabled:opacity-40"
-                >
-                  <ArrowUp className="size-3.5" strokeWidth={2.25} />
-                </InputGroupButton>
-              )}
-            </InputGroupAddon>
-          </InputGroup>
-        </form>
+      <form
+        className="border-t border-border bg-surface p-2"
+        onSubmit={(event) => {
+          event.preventDefault();
+          submit(input);
+        }}
+      >
+        <InputGroup className="items-center border-accent/25 has-[[data-slot=input-group-control]:focus-visible]:border-accent has-[[data-slot=input-group-control]:focus-visible]:ring-accent/30">
+          <InputGroupTextarea
+            value={input}
+            rows={1}
+            onChange={(event) => setInput(event.target.value)}
+            onFocus={() => setInputFocused(true)}
+            onBlur={() => setInputFocused(false)}
+            onKeyDown={onKeyDown}
+            placeholder={busy ? "Piggy is busy…" : "Ask or draw…"}
+            disabled={blocked}
+            aria-label="Message Canvas Piggy"
+            className="max-h-28 min-h-8 px-3 py-1.5 text-sm leading-5"
+          />
+          <InputGroupAddon align="inline-end" className="self-center">
+            {busy ? (
+              <InputGroupButton
+                size="icon-sm"
+                variant="ghost"
+                onClick={() => void stop()}
+                aria-label="Stop"
+                className="size-8 rounded-lg"
+              >
+                <Square className="size-3.5 fill-current" />
+              </InputGroupButton>
+            ) : (
+              <InputGroupButton
+                type="submit"
+                size="icon-sm"
+                variant="ghost"
+                disabled={blocked || !input.trim()}
+                aria-label="Send"
+                className="size-8 rounded-lg disabled:opacity-40"
+              >
+                <ArrowUp className="size-3.5" strokeWidth={2.25} />
+              </InputGroupButton>
+            )}
+          </InputGroupAddon>
+        </InputGroup>
+      </form>
     </div>
   );
 
@@ -673,9 +730,7 @@ function CanvasAiChatSession({ initialHistory, saveHistory, historyError }: {
         <PiggyMascot mood={mood} iconClassName="size-8" />
         <PiggyGreeting paused={open} message={greetingMessage} />
       </Button>
-      {open ? (
-        dockReady ? createPortal(chatDock, document.body) : null
-      ) : null}
+      {open ? (dockReady ? createPortal(chatDock, document.body) : null) : null}
     </>
   );
 }

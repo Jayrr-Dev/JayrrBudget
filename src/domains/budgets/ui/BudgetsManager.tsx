@@ -1,19 +1,20 @@
 "use client";
 
-import { createColumnHelper } from "@tanstack/react-table";
-import { useMutation, useQuery } from "convex/react";
-import { useMemo, useState, type FormEvent } from "react";
-import { api } from "@convex/_generated/api";
-import type { Id } from "@convex/_generated/dataModel";
-import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import type { DataTableFeatures } from "@/components/ui/data-table-features";
 import { EmptyPrompt } from "@/components/ui/empty-prompt";
-import { PageSpinner } from "@/components/ui/spinner";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { PageSpinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
+import { ClassLookupCombobox } from "@/domains/budgets/ui/ClassLookupCombobox";
+import { api } from "@convex/_generated/api";
+import type { Id } from "@convex/_generated/dataModel";
+import { createColumnHelper } from "@tanstack/react-table";
+import { useMutation, useQuery } from "convex/react";
+import { useState, type FormEvent } from "react";
+import { toast } from "sonner";
 
 type BudgetRow = {
   id: Id<"budgets">;
@@ -35,9 +36,6 @@ const money = new Intl.NumberFormat(undefined, {
   currency: "CAD",
   maximumFractionDigits: 2,
 });
-
-const SELECT_CLASS =
-  "h-9 w-full min-w-0 rounded-lg border border-control-border bg-surface-elevated px-3 py-2 text-sm text-foreground outline-none focus-visible:border-primary focus-visible:ring-3 focus-visible:ring-ring/50";
 
 function ActiveToggle({ budget }: { budget: BudgetRow }) {
   const updateBudget = useMutation(api.budgets.update);
@@ -88,7 +86,10 @@ const columns = columnHelper.columns([
   columnHelper.accessor("id", {
     header: "Id",
     cell: ({ getValue }) => (
-      <span className="block max-w-[7rem] truncate font-mono text-xs" title={String(getValue())}>
+      <span
+        className="block max-w-[7rem] truncate font-mono text-xs"
+        title={String(getValue())}
+      >
         {String(getValue())}
       </span>
     ),
@@ -104,7 +105,9 @@ const columns = columnHelper.columns([
   columnHelper.accessor("classLookup", {
     header: "Class",
     cell: ({ getValue }) => (
-      <span className="block truncate text-sm">{getValue() ? String(getValue()) : "—"}</span>
+      <span className="block truncate text-sm">
+        {getValue() ? String(getValue()) : "—"}
+      </span>
     ),
     meta: { width: "9rem", nowrap: true },
   }),
@@ -123,7 +126,9 @@ const columns = columnHelper.columns([
   columnHelper.accessor("amount", {
     header: "Amount",
     cell: ({ getValue }) => (
-      <span className="text-sm tabular-nums">{money.format(Number(getValue()))}</span>
+      <span className="text-sm tabular-nums">
+        {money.format(Number(getValue()))}
+      </span>
     ),
     meta: { width: "7rem", nowrap: true },
   }),
@@ -192,15 +197,6 @@ function CreateBudgetForm() {
   const [isActive, setIsActive] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
-  const classOptions = useMemo(() => {
-    if (!catalog) return [];
-    const names = new Set<string>();
-    for (const row of catalog.sections) names.add(row.name);
-    for (const row of catalog.categories) names.add(row.name);
-    for (const row of catalog.subcategories) names.add(row.name);
-    return [...names].sort((a, b) => a.localeCompare(b));
-  }, [catalog]);
-
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     const parsedAmount = Number(amount);
@@ -259,20 +255,13 @@ function CreateBudgetForm() {
         </div>
         <div className="grid gap-1.5">
           <Label htmlFor="budget-class">Class lookup</Label>
-          <select
+          <ClassLookupCombobox
             id="budget-class"
-            className={SELECT_CLASS}
+            catalog={catalog}
             value={classLookup}
-            onChange={(e) => setClassLookup(e.target.value)}
             disabled={submitting}
-          >
-            <option value="">None</option>
-            {classOptions.map((option) => (
-              <option key={option} value={option}>
-                {option}
-              </option>
-            ))}
-          </select>
+            onChange={setClassLookup}
+          />
         </div>
         <div className="grid gap-1.5">
           <Label htmlFor="budget-description">Description lookup</Label>
@@ -334,7 +323,10 @@ function CreateBudgetForm() {
             disabled={submitting}
           />
         </div>
-        <Button type="submit" disabled={submitting || !name.trim() || !amount.trim()}>
+        <Button
+          type="submit"
+          disabled={submitting || !name.trim() || !amount.trim()}
+        >
           {submitting ? "Saving…" : "Save budget"}
         </Button>
       </div>

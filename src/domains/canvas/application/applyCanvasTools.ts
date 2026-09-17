@@ -22,6 +22,7 @@ import {
   type ExcalidrawElement,
   type ExcalidrawElementSkeleton,
   type ExcalidrawImperativeAPI,
+  type ExcalidrawTextElement,
   type FontFamilyValues,
 } from "jayrr-draw";
 
@@ -33,7 +34,6 @@ const DEFAULT_FRAME_PADDING = 24;
 const ARROW_GAP = 4;
 const LINE_HEIGHT = 1.25;
 const CHAR_WIDTH_RATIO = 1.2;
-const LABEL_PAD = 28;
 
 const FONT_FAMILY: Record<CanvasFontName, FontFamilyValues> = {
   hand: 5, // Excalifont
@@ -41,6 +41,55 @@ const FONT_FAMILY: Record<CanvasFontName, FontFamilyValues> = {
   heading: 7, // Lilita One
   code: 8, // Comic Shanns
 };
+
+/** CSS family names Excalidraw registers for the fonts Piggy can pick. */
+const FONT_CSS_FAMILY: Record<CanvasFontName, string> = {
+  hand: "Excalifont",
+  clean: "Nunito",
+  heading: '"Lilita One"',
+  code: '"Comic Shanns"',
+};
+
+/**
+ * Excalidraw measures labels with canvas `measureText` and downloads fonts
+ * lazily, so measuring before a font has arrived uses a fallback face: the
+ * stored width/wrapping is wrong and the rendered text gets clipped until the
+ * user edits it. Wait for every Piggy font before touching the scene.
+ */
+export async function ensureCanvasFontsLoaded(sampleText = "") {
+  if (typeof document === "undefined" || !document.fonts) return;
+  const text = sampleText || "Piggy";
+  await Promise.all(
+    Object.values(FONT_CSS_FAMILY).map((family) =>
+      document.fonts
+        .load(`${DEFAULT_FONT_SIZE}px ${family}`, text)
+        .catch(() => undefined),
+    ),
+  );
+}
+
+/** Collect every string the model wants drawn so font subsets cover it. */
+function collectSceneText(value: unknown, out: string[] = []): string[] {
+  if (typeof value === "string") {
+    out.push(value);
+  } else if (Array.isArray(value)) {
+    for (const item of value) collectSceneText(item, out);
+  } else if (value && typeof value === "object") {
+    for (const [key, item] of Object.entries(value)) {
+      if (
+        key === "text" ||
+        key === "label" ||
+        key === "name" ||
+        key === "title"
+      ) {
+        collectSceneText(item, out);
+      } else if (typeof item === "object") {
+        collectSceneText(item, out);
+      }
+    }
+  }
+  return out;
+}
 
 type Box = { x: number; y: number; w: number; h: number };
 
@@ -135,6 +184,213 @@ function estimateTextBox(input: CanvasTextInput): Box {
 
 function elementBox(element: ExcalidrawElement): Box {
   return { x: element.x, y: element.y, w: element.width, h: element.height };
+}
+
+/** Scene-space bounds; linear elements can have points left/above their origin. */
+function sceneBounds(element: ExcalidrawElement): Box {
+  if (element.type !== "arrow" && element.type !== "line") {
+    return elementBox(element);
+  }
+  const xs = element.points.map((p) => p[0]);
+  const ys = element.points.map((p) => p[1]);
+  const minX = Math.min(...xs);
+  const minY = Math.min(...ys);
+  return {
+    x: element.x + minX,
+    y: element.y + minY,
+    w: Math.max(...xs) - minX,
+    h: Math.max(...ys) - minY,
+  };
+}
+
+/**
+ * Excalidraw frames do not follow their children. After children move or
+ * grow, widen any frame that would otherwise clip them. Frames only grow.
+ */
+function growFramesAround(
+  nextById: Map<string, ExcalidrawElement>,
+  changedIds: Iterable<string>,
+) {
+  const frameIds = new Set<string>();
+  for (const id of changedIds) {
+    const frameId = nextById.get(id)?.frameId;
+    if (frameId) frameIds.add(frameId);
+  }
+  for (const frameId of frameIds) {
+    const frame = nextById.get(frameId);
+    if (!frame || frame.type !== "frame" || frame.isDeleted) continue;
+    let minX = frame.x;
+    let minY = frame.y;
+    let maxX = frame.x + frame.width;
+    let maxY = frame.y + frame.height;
+    for (const element of nextById.values()) {
+      if (element.isDeleted || element.frameId !== frameId) continue;
+      const box = sceneBounds(element);
+      minX = Math.min(minX, box.x - DEFAULT_FRAME_PADDING);
+      minY = Math.min(minY, box.y - DEFAULT_FRAME_PADDING);
+      maxX = Math.max(maxX, box.x + box.w + DEFAULT_FRAME_PADDING);
+      maxY = Math.max(maxY, box.y + box.h + DEFAULT_FRAME_PADDING);
+    }
+    nextById.set(
+      frameId,
+      newElementWith(frame, {
+        x: minX,
+        y: minY,
+        width: maxX - minX,
+        height: maxY - minY,
+      }),
+    );
+  }
+}
+
+function inferRoute(arrow: {
+  points: readonly unknown[];
+  roundness: ExcalidrawElement["roundness"];
+}) {
+  if (arrow.points.length === 2) return "straight" as const;
+  return arrow.roundness ? ("curved" as const) : ("elbow" as const);
+}
+
+/**
+ * Arrows keep their old geometry when a bound shape is resized through
+ * updateScene, so a grown box leaves the arrow off-centre. Re-route arrows
+ * whose ends are bound to changed shapes, and re-seat their labels.
+ */
+function rerouteBoundArrows(
+  nextById: Map<string, ExcalidrawElement>,
+  changedIds: ReadonlySet<string>,
+) {
+  for (const element of [...nextById.values()]) {
+    if (element.type !== "arrow" || element.isDeleted) continue;
+    if (!("elbowed" in element)) continue;
+    const fromId = element.startBinding?.elementId;
+    const toId = element.endBinding?.elementId;
+    if (!fromId || !toId) continue;
+    if (!changedIds.has(fromId) && !changedIds.has(toId)) continue;
+    const from = liveElement(nextById, fromId);
+    const to = liveElement(nextById, toId);
+    if (!from || !to) continue;
+
+    const routed = routeArrow(
+      elementBox(from),
+      elementBox(to),
+      inferRoute(element),
+    );
+    const xs = routed.points.map((p) => p[0]);
+    const ys = routed.points.map((p) => p[1]);
+    const nextArrow = newElementWith(element, {
+      x: routed.x,
+      y: routed.y,
+      points: routed.points as unknown as typeof element.points,
+      width: Math.max(...xs) - Math.min(...xs),
+      height: Math.max(...ys) - Math.min(...ys),
+    });
+    nextById.set(element.id, nextArrow);
+
+    const label = [...nextById.values()].find(
+      (candidate) =>
+        candidate.type === "text" &&
+        candidate.containerId === element.id &&
+        !candidate.isDeleted,
+    );
+    if (label?.type !== "text") continue;
+    const fitted = fitBoundLabel(
+      nextArrow,
+      elementBox(nextArrow),
+      label.originalText || label.text,
+      {
+        fontSize: label.fontSize,
+        fontFamily: label.fontFamily,
+        textAlign: label.textAlign,
+        verticalAlign: label.verticalAlign,
+        strokeColor: label.strokeColor,
+      },
+    );
+    if (!fitted) continue;
+    nextById.set(
+      label.id,
+      newElementWith(label, {
+        x: fitted.label.x,
+        y: fitted.label.y,
+        width: fitted.label.width,
+        height: fitted.label.height,
+      }),
+    );
+  }
+}
+
+/**
+ * Measure a standalone text element with Excalidraw's own font metrics, the
+ * same path `convertToExcalidrawElements` takes on creation.
+ */
+function measureStandaloneText(
+  existing: ExcalidrawTextElement,
+  text: string,
+  fontSize: number,
+) {
+  const [measured] = convertToExcalidrawElements([
+    {
+      type: "text",
+      x: existing.x,
+      y: existing.y,
+      text,
+      fontSize,
+      fontFamily: existing.fontFamily,
+      textAlign: existing.textAlign,
+    },
+  ]);
+  return measured?.type === "text" ? measured : undefined;
+}
+
+type BoundLabelStyle = Pick<
+  ExcalidrawTextElement,
+  "fontSize" | "fontFamily" | "textAlign" | "verticalAlign" | "strokeColor"
+>;
+
+/**
+ * Run a shape plus its label through Excalidraw's converter so the label is
+ * measured, wrapped, and placed exactly as on creation. The returned shape may
+ * be taller/wider than `geometry` when the text does not fit.
+ */
+function fitBoundLabel(
+  container: ExcalidrawElement,
+  geometry: Box,
+  text: string,
+  style: BoundLabelStyle,
+) {
+  const base = {
+    id: container.id,
+    x: geometry.x,
+    y: geometry.y,
+    width: geometry.w,
+    height: geometry.h,
+    roundness: container.roundness,
+    label: { text, ...style },
+  };
+  let skeleton: Skeleton;
+  if (container.type === "arrow") {
+    skeleton = {
+      ...base,
+      type: "arrow",
+      points: container.points.map((p) => [p[0], p[1]] as [number, number]),
+    };
+  } else if (
+    container.type === "rectangle" ||
+    container.type === "ellipse" ||
+    container.type === "diamond"
+  ) {
+    skeleton = { ...base, type: container.type };
+  } else {
+    return undefined;
+  }
+
+  const converted = convertToExcalidrawElements([skeleton], {
+    regenerateIds: false,
+  });
+  const shape = converted.find((element) => element.id === container.id);
+  const label = converted.find((element) => element.type === "text");
+  if (!shape || label?.type !== "text") return undefined;
+  return { shape, label };
 }
 
 function center(box: Box) {
@@ -731,64 +987,87 @@ export function applyUpdateShapes(
     if (existing.type === "text") {
       const nextText = input.text ?? (existing.originalText || existing.text);
       const fontSize = input.fontSize ?? existing.fontSize;
-      const measured = estimateTextBox({
-        type: "text",
-        x: patch.x ?? existing.x,
-        y: patch.y ?? existing.y,
-        text: nextText,
-        fontSize,
-      });
+      const measured = measureStandaloneText(existing, nextText, fontSize);
       nextById.set(
         input.id,
         newElementWith(existing, {
           ...patch,
-          width: input.w ?? measured.w,
-          height: input.h ?? measured.h,
-          text: nextText,
+          width: input.w ?? measured?.width ?? existing.width,
+          height: input.h ?? measured?.height ?? existing.height,
+          text: measured?.text ?? nextText,
           originalText: nextText,
           fontSize,
         }),
       );
     } else {
-      if (input.text != null && input.w == null) {
-        const fontSize = input.fontSize ?? DEFAULT_FONT_SIZE;
-        const measured = estimateTextBox({
-          type: "text",
-          x: existing.x,
-          y: existing.y,
-          text: input.text,
-          fontSize,
-        });
-        patch.width = Math.max(existing.width, measured.w + LABEL_PAD);
-        if (input.h == null) {
-          patch.height = Math.max(existing.height, measured.h + LABEL_PAD);
-        }
+      const boundCandidate = [...nextById.values()].find(
+        (element) =>
+          element.type === "text" &&
+          element.containerId === input.id &&
+          !element.isDeleted,
+      );
+      const bound =
+        boundCandidate?.type === "text" ? boundCandidate : undefined;
+      // Any geometry or text change moves the label, so refit it every time.
+      const fitted = bound
+        ? fitBoundLabel(
+            existing,
+            {
+              x: patch.x ?? existing.x,
+              y: patch.y ?? existing.y,
+              w: patch.width ?? existing.width,
+              h: patch.height ?? existing.height,
+            },
+            input.text ?? (bound.originalText || bound.text),
+            {
+              fontSize: input.fontSize ?? bound.fontSize,
+              fontFamily: bound.fontFamily,
+              textAlign: bound.textAlign,
+              verticalAlign: bound.verticalAlign,
+              strokeColor: bound.strokeColor,
+            },
+          )
+        : undefined;
+
+      if (fitted) {
+        patch.width = fitted.shape.width;
+        patch.height = fitted.shape.height;
       }
       nextById.set(input.id, newElementWith(existing, patch));
-      if (input.text != null || input.fontSize != null) {
-        const bound = [...nextById.values()].find(
-          (element) =>
-            element.type === "text" &&
-            element.containerId === input.id &&
-            !element.isDeleted,
+
+      if (bound && fitted) {
+        nextById.set(
+          bound.id,
+          newElementWith(bound, {
+            x: fitted.label.x,
+            y: fitted.label.y,
+            width: fitted.label.width,
+            height: fitted.label.height,
+            text: fitted.label.text,
+            originalText: fitted.label.originalText,
+            fontSize: fitted.label.fontSize,
+            lineHeight: fitted.label.lineHeight,
+          }),
         );
-        if (bound?.type === "text") {
-          const nextText = input.text ?? (bound.originalText || bound.text);
-          const fontSize = input.fontSize ?? bound.fontSize;
-          nextById.set(
-            bound.id,
-            newElementWith(bound, {
-              text: nextText,
-              originalText: nextText,
-              fontSize,
-            }),
-          );
-        }
+      } else if (bound && (input.text != null || input.fontSize != null)) {
+        const nextText = input.text ?? (bound.originalText || bound.text);
+        nextById.set(
+          bound.id,
+          newElementWith(bound, {
+            text: nextText,
+            originalText: nextText,
+            fontSize: input.fontSize ?? bound.fontSize,
+          }),
+        );
       }
     }
 
     updated.push(input.id);
   }
+
+  const changed = new Set(updated);
+  rerouteBoundArrows(nextById, changed);
+  growFramesAround(nextById, changed);
 
   api.updateScene({
     elements: [...nextById.values()],
@@ -873,8 +1152,12 @@ export function isCanvasToolName(name: string): name is CanvasToolName {
   return name in canvasToolHandlers;
 }
 
-/** Run a canvas tool on the board by name. Unknown tools return an error object. */
-export function applyCanvasTool(
+/**
+ * Run a canvas tool on the board by name. Unknown tools return an error
+ * object. Waits for Piggy's fonts first so labels are measured with the real
+ * face instead of a fallback (see ensureCanvasFontsLoaded).
+ */
+export async function applyCanvasTool(
   api: ExcalidrawImperativeAPI,
   toolName: string,
   input: unknown,
@@ -883,5 +1166,6 @@ export function applyCanvasTool(
   if (!isCanvasToolName(toolName)) {
     return { ok: false as const, error: `Unknown tool ${toolName}` };
   }
+  await ensureCanvasFontsLoaded(collectSceneText(input).join(""));
   return canvasToolHandlers[toolName](api, input, aliases);
 }
