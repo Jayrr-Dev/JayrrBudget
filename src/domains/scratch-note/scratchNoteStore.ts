@@ -10,7 +10,7 @@ import {
   usePrivateLedger,
 } from "@/domains/vault/ui/usePrivateLedger";
 import { api } from "@convex/_generated/api";
-import { useConvex, useMutation, useQuery } from "convex/react";
+import { useConvex, useConvexAuth, useMutation, useQuery } from "convex/react";
 import { useEffect, useRef, useState } from "react";
 
 export type ScratchNoteRow = {
@@ -204,10 +204,11 @@ function applyAddRow(
 
 /** Live note pad from Convex, or encrypted rows when the ledger flag is on. */
 export function useScratchNote(): ScratchNoteState {
+  const { isAuthenticated } = useConvexAuth();
   const privateLedger = usePrivateLedger();
   const data = useQuery(
     api.scratchNotes.get,
-    privateLedger.encryptedLedger ? "skip" : {},
+    !isAuthenticated || privateLedger.encryptedLedger ? "skip" : {},
   );
   const [, setTick] = useState(0);
   useEffect(() => {

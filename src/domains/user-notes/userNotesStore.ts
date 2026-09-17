@@ -2,7 +2,7 @@
 
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
-import { useMutation, useQuery } from "convex/react";
+import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import { useEffect, useRef } from "react";
 
 export type UserNoteRecord = {
@@ -15,7 +15,8 @@ export type UserNoteRecord = {
 };
 
 export function useUserNotes(): UserNoteRecord[] {
-  const data = useQuery(api.userNotes.list);
+  const { isAuthenticated } = useConvexAuth();
+  const data = useQuery(api.userNotes.list, isAuthenticated ? {} : "skip");
   return data ?? [];
 }
 
