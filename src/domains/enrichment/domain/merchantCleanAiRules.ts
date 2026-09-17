@@ -15,5 +15,6 @@ export const MERCHANT_CLEAN_AI_RULES = [
   "- SALON DE ROSE CEN BLOC CEBU 6,500.00 PHP @ 0.024 → Salon de Rose",
   "- L CAMINADE TAN MKTG CEBU CITY 5,270.00 PHP @ 0.024 → L Caminade Tan Mktg",
   "- UBER CANADA/UBEREATS → Uber Eats",
+  "- POS DEBIT - STARBUCKS → Starbucks",
   "Never truncate with ellipsis. Never leave PHP, @, or a city in the merchant field.",
 ].join("\n");

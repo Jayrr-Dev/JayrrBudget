@@ -45,7 +45,7 @@ export async function applyVaultMerchantMerges(input: {
     const members = merchants.filter((merchant) =>
       merge.merchantIds.includes(merchant.recordId),
     );
-    if (members.length < 2) continue;
+    if (members.length === 0) continue;
 
     const canonicalName = merge.canonicalName.trim();
     if (!canonicalName) continue;

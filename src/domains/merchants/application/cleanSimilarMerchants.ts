@@ -1,5 +1,6 @@
 import { MERCHANT_CLEAN_AI_RULES } from "@/domains/enrichment/domain/merchantCleanAiRules";
 import { clusterSimilarMerchants } from "@/domains/merchants/domain/clusterSimilarMerchants";
+import { planDescriptorCleanMerges } from "@/domains/merchants/domain/planDescriptorCleanMerges";
 import { generateObjectWithFallback } from "@/shared/ai/openRouter";
 import { invalidateConvexUserCache } from "@/shared/convex/cachedRead";
 import { api } from "@/shared/convex/httpClient";
@@ -152,9 +153,17 @@ export async function planSimilarMerchantMerges(
     transactionCount: number;
   }>,
 ): Promise<PlanSimilarMerchantsResult> {
-  const clusters = clusterSimilarMerchants(listed);
+  const descriptorMerges = planDescriptorCleanMerges(listed);
+  const claimed = new Set(
+    descriptorMerges.flatMap((merge) => merge.merchantIds),
+  );
+  const remaining = listed.filter((merchant) => !claimed.has(merchant.id));
+  const clusters = clusterSimilarMerchants(remaining);
   if (clusters.length === 0) {
-    return { clustersFound: 0, merges: [] };
+    return {
+      clustersFound: descriptorMerges.length,
+      merges: descriptorMerges,
+    };
   }
 
   const payload = clusters.map((cluster, clusterId) => ({
@@ -197,7 +206,10 @@ export async function planSimilarMerchantMerges(
     }
   }
 
-  return { clustersFound: clusters.length, merges: aiMerges };
+  return {
+    clustersFound: clusters.length + descriptorMerges.length,
+    merges: [...descriptorMerges, ...aiMerges],
+  };
 }
 
 export async function cleanSimilarMerchants(
@@ -231,9 +243,16 @@ export async function cleanSimilarMerchants(
     const members = merge.merchantIds
       .map((id) => byId.get(id as Id<"merchants">))
       .filter((row): row is ListedMerchant => row != null);
-    if (members.length < 2) continue;
+    if (members.length === 0) continue;
+    const canonicalName = merge.canonicalName.trim();
+    if (
+      members.length === 1 &&
+      members[0]!.name.trim().toLowerCase() === canonicalName.toLowerCase()
+    ) {
+      continue;
+    }
 
-    const keeper = pickKeeper(members, merge.canonicalName);
+    const keeper = pickKeeper(members, canonicalName);
     const sourceIds = members
       .filter((member) => member.id !== keeper.id)
       .map((member) => member.id);
@@ -242,7 +261,7 @@ export async function cleanSimilarMerchants(
       client,
       keeper.id,
       sourceIds,
-      merge.canonicalName,
+      canonicalName,
     );
 
     for (const member of members) {

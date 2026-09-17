@@ -165,21 +165,24 @@ export function CleanMerchantsButton() {
                   <PopoverHeader className="gap-1.5">
                     <PopoverTitle>Clean similar merchants</PopoverTitle>
                     <PopoverDescription>
-                      Groups near-duplicate payee names, then asks AI which ones
-                      are the same store.
+                      Cleans card-rail prefixes and merges near-duplicate payee
+                      names.
                     </PopoverDescription>
                     <ul className="mt-1.5 list-disc space-y-1 pl-4 text-muted-foreground">
+                      <li>
+                        Strips POS Debit, PAD, Interac, and Visa Debit prefixes
+                      </li>
                       <li>Fuzzy match finds close names (typos, locations)</li>
                       <li>AI keeps distinct services separate</li>
-                      <li>Merged payees keep every linked transaction</li>
                     </ul>
                   </PopoverHeader>
                 </PopoverContent>
               </Popover>
             </DialogTitle>
             <DialogDescription className="sr-only">
-              Groups near-duplicate payee names, then asks AI which ones are the
-              same store. Merged payees keep every linked transaction.
+              Strips POS Debit and other card-rail prefixes, then merges
+              near-duplicate payee names. Merged payees keep every linked
+              transaction.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

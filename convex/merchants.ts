@@ -290,6 +290,7 @@ export const mergeCluster = mutation({
   handler: async (ctx, args) => {
     const user = await requireUser(ctx);
     let keeperId = args.keeperId;
+    let renamedUpdated = 0;
     const nextName = args.name?.trim();
     if (nextName) {
       const current = await ctx.db.get(args.keeperId);
@@ -307,6 +308,7 @@ export const mergeCluster = mutation({
           { name: nextName },
         );
         keeperId = renamed.merchant._id;
+        renamedUpdated = renamed.transactionsUpdated;
       }
     }
     const drained = await drainMergeSources(
@@ -319,7 +321,7 @@ export const mergeCluster = mutation({
     return {
       keeperId: drained.keeper._id,
       keeperName: drained.keeper.name,
-      transactionsUpdated: drained.transactionsUpdated,
+      transactionsUpdated: drained.transactionsUpdated + renamedUpdated,
       sourcesDeleted: drained.sourcesDeleted,
       sourcesRemaining: drained.sourcesRemaining,
       isDone: drained.isDone,
