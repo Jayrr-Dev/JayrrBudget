@@ -1,5 +1,6 @@
 "use client";
 
+import { installConvexOfflineWriteGuard } from "@/shared/offline/offlineWriteGuard";
 import { ConvexAuthNextjsProvider } from "@convex-dev/auth/nextjs";
 import { ConvexReactClient } from "convex/react";
 import { type ReactNode, useMemo } from "react";
@@ -10,7 +11,9 @@ export function ConvexClientProvider({ children }: { children: ReactNode }) {
     if (!url) {
       throw new Error("Missing NEXT_PUBLIC_CONVEX_URL in environment");
     }
-    return new ConvexReactClient(url);
+    const next = new ConvexReactClient(url);
+    installConvexOfflineWriteGuard(next);
+    return next;
   }, []);
 
   return (

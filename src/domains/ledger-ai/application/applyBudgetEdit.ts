@@ -7,8 +7,6 @@ import {
   patchEncryptedTransaction,
   type VaultWriteContext,
 } from "@/domains/vault/application/saveEncryptedLedger";
-import { api } from "@convex/_generated/api";
-import type { ConvexReactClient } from "convex/react";
 
 const AMOUNT_TOLERANCE = 0.005;
 const DATE_WINDOW_DAYS = 3;
@@ -137,119 +135,45 @@ function vaultPatch(input: ApplyBudgetEditInput) {
 
 export async function applyBudgetEdit(options: {
   input: ApplyBudgetEditInput;
-  encrypted: boolean;
   transactions: PrivateTransaction[];
   vaultWrite: VaultWriteContext | null;
-  convex: ConvexReactClient;
   onVaultSaved?: () => void;
 }): Promise<ApplyBudgetEditOutput> {
   const { input } = options;
-  if (options.encrypted) {
-    if (!options.vaultWrite) {
-      return { ok: false, error: "Unlock the vault so Piggy can save this edit." };
-    }
-    const found = pickVaultMatch(options.transactions, input);
-    if ("error" in found) {
-      return { ok: false, error: found.error, candidates: found.candidates };
-    }
-    const patch = vaultPatch(input);
-    if (input.addTags || input.removeTags) {
-      const tags = new Set(found.tx.tagNames ?? []);
-      for (const tag of input.removeTags ?? []) tags.delete(tag);
-      for (const tag of input.addTags ?? []) {
-        const name = tag.trim();
-        if (name) tags.add(name);
-      }
-      patch.tagNames = [...tags];
-    }
-    if (Object.keys(patch).length === 0) {
-      return { ok: false, error: "Nothing to change. Pass category, subcategory, or another field." };
-    }
-    const next = await patchEncryptedTransaction(
-      options.vaultWrite,
-      found.tx,
-      patch,
-    );
-    options.onVaultSaved?.();
-    return {
-      ok: true,
-      transactionId: next.recordId,
-      date: next.date,
-      description: next.description,
-      amount: next.amount,
-      section: next.sectionName ?? null,
-      category: next.categoryName ?? null,
-      subcategory: next.subcategoryName ?? null,
-    };
+  if (!options.vaultWrite) {
+    return { ok: false, error: "Unlock your private ledger to edit." };
   }
-
-  const convexPatch: {
-    posted?: string;
-    description?: string;
-    section?: string | null;
-    category?: string | null;
-    subcategory?: string | null;
-    spread?: string | null;
-    merchant?: string | null;
-    addTags?: string[];
-    removeTags?: string[];
-  } = {};
-  if (input.description !== undefined) convexPatch.description = input.description;
-  if (input.section !== undefined) convexPatch.section = input.section;
-  if (input.category !== undefined) convexPatch.category = input.category;
-  if (input.subcategory !== undefined) convexPatch.subcategory = input.subcategory;
-  if (input.spread !== undefined) convexPatch.spread = input.spread;
-  if (input.merchant !== undefined) convexPatch.merchant = input.merchant;
-  if (input.addTags) convexPatch.addTags = input.addTags;
-  if (input.removeTags) convexPatch.removeTags = input.removeTags;
-  if (Object.keys(convexPatch).length === 0) {
+  const found = pickVaultMatch(options.transactions, input);
+  if ("error" in found) {
+    return { ok: false, error: found.error, candidates: found.candidates };
+  }
+  const patch = vaultPatch(input);
+  if (input.addTags || input.removeTags) {
+    const tags = new Set(found.tx.tagNames ?? []);
+    for (const tag of input.removeTags ?? []) tags.delete(tag);
+    for (const tag of input.addTags ?? []) {
+      const name = tag.trim();
+      if (name) tags.add(name);
+    }
+    patch.tagNames = [...tags];
+  }
+  if (Object.keys(patch).length === 0) {
     return { ok: false, error: "Nothing to change. Pass category, subcategory, or another field." };
   }
-
-  let transactionId = input.transactionId?.trim();
-  if (!transactionId) {
-    const date = input.date?.trim();
-    const found = await options.convex.query(api.transactions.searchForAi, {
-      query: input.query,
-      startDate: date,
-      endDate: date,
-      account: input.account,
-      limit: 25,
-    });
-    let matches = found.matches;
-    if (input.amount !== undefined) {
-      matches = matches.filter((row) => sameAmount(row.amount, input.amount!));
-    }
-    if (matches.length === 1) {
-      transactionId = matches[0]!.transactionId;
-    } else if (matches.length === 0) {
-      return { ok: false, error: "No transaction matched that date, amount, and text." };
-    } else {
-      return {
-        ok: false,
-        error: `${matches.length} transactions matched. Ask the user which one.`,
-        candidates: matches.slice(0, 10).map((row) => ({
-          date: row.date,
-          description: row.description,
-          amount: row.amount,
-        })),
-      };
-    }
-  }
-
-  const result = await options.convex.mutation(api.transactions.updateForAi, {
-    transactionId,
-    patch: convexPatch,
-  });
-  const row = result.transaction;
+  const next = await patchEncryptedTransaction(
+    options.vaultWrite,
+    found.tx,
+    patch,
+  );
+  options.onVaultSaved?.();
   return {
     ok: true,
-    transactionId: row.transactionId,
-    date: row.date,
-    description: row.description,
-    amount: row.amount,
-    section: row.section,
-    category: row.category,
-    subcategory: row.subcategory,
+    transactionId: next.recordId,
+    date: next.date,
+    description: next.description,
+    amount: next.amount,
+    section: next.sectionName ?? null,
+    category: next.categoryName ?? null,
+    subcategory: next.subcategoryName ?? null,
   };
 }

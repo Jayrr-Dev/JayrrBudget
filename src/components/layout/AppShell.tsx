@@ -21,11 +21,28 @@ import {
   SidebarLink,
   useSidebar,
 } from "@/components/ui/sidebar";
-import { clearPendingPasscode } from "@/crypto/pendingPasscode";
-import { lockVault } from "@/crypto/session";
 import { usePrefetchAnalysis } from "@/domains/analysis/queries/useAnalysisQuery";
 import { WarmSaasQueries } from "@/domains/dashboard/ui/WarmSaasQueries";
-import { clearLedgerQuerySnapshots } from "@/domains/dashboard/ui/ledgerQuerySnapshot";
+import {
+  clearLastView,
+  peekEncryptedLedgerLocal,
+  readLastUserId,
+  readLastView,
+  rememberEncryptedLedgerLocal,
+  upsertLastView,
+  writeLastUserId,
+} from "@/domains/dashboard/ui/lastViewCache";
+import {
+  getLedgerSnapshotVersion,
+  markLastViewHydrateDone,
+  peekLastViewSavedAt,
+  peekModules,
+  rememberDashboard,
+  rememberLastViewSavedAt,
+  rememberModules,
+  subscribeLedgerSnapshots,
+} from "@/domains/dashboard/ui/ledgerQuerySnapshot";
+import { useFeatureFlags } from "@/domains/feature-flags/ui/useFeatureFlag";
 import { PiggyMascot } from "@/domains/ledger-ai/ui/PiggyMascot";
 import type { AppModuleRecord } from "@/domains/modules/domain/types";
 import { resolveModuleIcon } from "@/domains/modules/ui/moduleIcons";
@@ -37,15 +54,16 @@ import {
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
 import { budgetBrandLabel } from "@/shared/lib/budget-brand";
-import { useAuthActions } from "@convex-dev/auth/react";
+import { useSignOut } from "@/shared/convex/EnsureUserBootstrap";
+import { useConnectionState } from "@/shared/offline/useConnectionState";
 import { api } from "@convex/_generated/api";
 import { useQueryClient } from "@tanstack/react-query";
 import { useConvexAuth, useQuery } from "convex/react";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, Info } from "lucide-react";
 import { motion } from "motion/react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useLayoutEffect, useState, useSyncExternalStore } from "react";
 
 const ADMIN_MODULE_SLUGS = new Set([
   "database",
@@ -282,7 +300,7 @@ function SidebarFooterLink() {
 }
 
 function SignOutButton() {
-  const { signOut } = useAuthActions();
+  const signOut = useSignOut();
   const queryClient = useQueryClient();
   const { open, animate } = useSidebar();
   const showLabel = !animate || open;
@@ -345,15 +363,15 @@ function SignOutButton() {
             disabled={pending}
             onClick={() => {
               setPending(true);
-              clearPendingPasscode();
-              lockVault();
               void signOut()
                 .then(() => {
                   queryClient.clear();
-                  clearLedgerQuerySnapshots();
                   window.location.assign("/sign-in");
                 })
-                .catch(() => setPending(false));
+                .catch(() => {
+                  queryClient.clear();
+                  window.location.assign("/sign-in");
+                });
             }}
             className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary-hover disabled:opacity-60"
           >
@@ -362,6 +380,66 @@ function SignOutButton() {
         </div>
       </PopoverContent>
     </Popover>
+  );
+}
+
+function formatLastViewSavedAt(savedAt: number) {
+  return new Date(savedAt).toLocaleString(undefined, {
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
+}
+
+function OfflineLastViewBanner({ savedAt }: { savedAt: number | undefined }) {
+  const when = savedAt ? formatLastViewSavedAt(savedAt) : null;
+  return (
+    <div
+      role="status"
+      className="flex items-start gap-2 border-b border-[var(--border)] bg-surface-elevated px-4 py-2 text-sm text-foreground"
+    >
+      <p className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1">
+        <span className="inline-flex items-center gap-1 font-medium">
+          Offline
+          <Popover>
+            <PopoverTrigger asChild>
+              <button
+                type="button"
+                className="inline-flex size-6 shrink-0 items-center justify-center rounded-full text-accent hover:bg-accent-subtle hover:text-accent"
+                aria-label="About offline view"
+              >
+                <Info className="size-3.5" />
+              </button>
+            </PopoverTrigger>
+            <PopoverContent
+              align="start"
+              side="bottom"
+              sideOffset={8}
+              className="w-80 gap-0 p-3.5"
+            >
+              <PopoverHeader className="gap-1.5">
+                <PopoverTitle>Last loaded view</PopoverTitle>
+                <PopoverDescription>
+                  This is the dashboard and sidebar from the last time the app
+                  loaded while you were online.
+                </PopoverDescription>
+                <ul className="mt-1.5 list-disc space-y-1 pl-4 text-muted-foreground">
+                  <li>You can still browse Overview, Accounts, and Transactions</li>
+                  <li>Uploads and edits wait until you are connected</li>
+                </ul>
+              </PopoverHeader>
+            </PopoverContent>
+          </Popover>
+        </span>
+        <span className="text-muted-foreground">
+          {when
+            ? `Showing data from ${when}. Changes need a connection.`
+            : "Changes need a connection."}
+        </span>
+      </p>
+      <span className="sr-only">
+        Showing saved data. You cannot make changes until you reconnect.
+      </span>
+    </div>
   );
 }
 
@@ -378,13 +456,74 @@ export function AppShell({
   const [open, setOpen] = useState(false);
   const brandLabel = useBrandLabel();
   const { isAuthenticated } = useConvexAuth();
+  const { isOffline } = useConnectionState();
+  const flags = useFeatureFlags();
+  const me = useQuery(api.users.me, isAuthenticated ? {} : "skip");
+  useSyncExternalStore(
+    subscribeLedgerSnapshots,
+    getLedgerSnapshotVersion,
+    getLedgerSnapshotVersion,
+  );
   const modulesList = useQuery(
     api.modules.list,
     isAuthenticated ? { enabledOnly: true } : "skip",
   );
+
+  useLayoutEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      if (peekEncryptedLedgerLocal()) {
+        if (!cancelled) markLastViewHydrateDone();
+        return;
+      }
+      const userId = readLastUserId();
+      if (!userId) {
+        if (!cancelled) markLastViewHydrateDone();
+        return;
+      }
+      const record = await readLastView(userId);
+      if (cancelled) return;
+      if (record) {
+        if (record.dashboard) rememberDashboard(250, record.dashboard);
+        if (record.modules) rememberModules(record.modules);
+        rememberLastViewSavedAt(record.savedAt);
+      }
+      markLastViewHydrateDone();
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isAuthenticated || !me?.userId) return;
+    writeLastUserId(me.userId);
+    if (flags.loading) return;
+    rememberEncryptedLedgerLocal(flags.encryptedLedger);
+    if (flags.encryptedLedger) {
+      void clearLastView(me.userId);
+      return;
+    }
+    if (!modulesList) return;
+    rememberModules(modulesList);
+    void upsertLastView({ userId: me.userId, modules: modulesList });
+  }, [
+    flags.encryptedLedger,
+    flags.loading,
+    isAuthenticated,
+    me?.userId,
+    modulesList,
+  ]);
+
+  const cachedModules = peekModules();
   const modulesQuery = {
-    data: modulesList ? { modules: modulesList } : undefined,
-    isPending: modulesList === undefined,
+    data:
+      modulesList !== undefined
+        ? { modules: modulesList }
+        : cachedModules
+          ? { modules: cachedModules }
+          : undefined,
+    isPending: modulesList === undefined && cachedModules === undefined,
   };
   const modules = modulesQuery.data?.modules ?? [];
   const navModules = modules;
@@ -396,11 +535,12 @@ export function AppShell({
   const fullBleedDatabase =
     !vaultLocked &&
     (pathname === "/database" || pathname.startsWith("/database/"));
+  const lastViewSavedAt = peekLastViewSavedAt();
 
   return (
     <div
       className={cn(
-        "flex min-h-screen w-full flex-1 flex-col bg-[var(--background)] md:flex-row",
+        "flex min-h-screen w-full flex-1 flex-col bg-[var(--background)] pt-[env(safe-area-inset-top)] pr-[env(safe-area-inset-right)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] md:flex-row",
         fullBleedDatabase && "h-dvh max-h-dvh min-h-0 overflow-hidden",
         className,
       )}
@@ -425,6 +565,7 @@ export function AppShell({
         </SidebarBody>
       </Sidebar>
       <main className="flex max-h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background text-foreground">
+        {isOffline ? <OfflineLastViewBanner savedAt={lastViewSavedAt} /> : null}
         <div
           className={cn(
             "mx-auto w-full max-w-[90rem] min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-4 py-6 sm:px-8 sm:py-8 [-webkit-overflow-scrolling:touch]",

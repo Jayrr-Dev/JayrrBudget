@@ -27,52 +27,44 @@ export function TransactionRowActions({
 
   const rerun = useMutation({
     mutationFn: async () => {
+      if (!privateLedger.encryptedLedger || !privateLedger.unlocked) {
+        throw new Error("Unlock your private ledger to edit.");
+      }
       const payload = {
         transactionId: transaction.transactionId,
         description: transaction.name,
         amount: Number(transaction.amount),
       };
-      if (privateLedger.encryptedLedger) {
-        const response = await fetch("/api/statements/categorize-vault", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            skipCache: true,
-            transactions: [payload],
-          }),
-        });
-        const result = await response.json();
-        if (!response.ok)
-          throw new Error(result.error ?? "Recategorize failed");
-        const masterKey = getVaultMasterKey();
-        if (
-          !privateLedger.userId ||
-          !privateLedger.vaultId ||
-          !privateLedger.keyId ||
-          !masterKey
-        ) {
-          throw new Error("Sign in again, then re-run.");
-        }
-        await applyVaultCategorization({
-          client: client as unknown as MutationClient,
-          userId: privateLedger.userId,
-          vaultId: privateLedger.vaultId,
-          keyId: privateLedger.keyId,
-          masterKey,
-          ledger: privateLedger.ledger,
-          labeled: result.labeled,
-        });
-        privateLedger.reload();
-        return result.summary as import("@/domains/statements/domain/importResult").CategorizationSummary;
-      }
-      const response = await fetch("/api/transactions/recategorize", {
+      const response = await fetch("/api/statements/categorize-vault", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({
+          skipCache: true,
+          transactions: [payload],
+        }),
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error ?? "Recategorize failed");
-      return result as import("@/domains/statements/domain/importResult").CategorizationSummary;
+      const masterKey = getVaultMasterKey();
+      if (
+        !privateLedger.userId ||
+        !privateLedger.vaultId ||
+        !privateLedger.keyId ||
+        !masterKey
+      ) {
+        throw new Error("Sign in again, then re-run.");
+      }
+      await applyVaultCategorization({
+        client: client as unknown as MutationClient,
+        userId: privateLedger.userId,
+        vaultId: privateLedger.vaultId,
+        keyId: privateLedger.keyId,
+        masterKey,
+        ledger: privateLedger.ledger,
+        labeled: result.labeled,
+      });
+      privateLedger.reload();
+      return result.summary as import("@/domains/statements/domain/importResult").CategorizationSummary;
     },
     onSuccess: async (result) => {
       const description = `${result.cached} reused, ${result.ai} categorized, ${result.pending} pending.`;

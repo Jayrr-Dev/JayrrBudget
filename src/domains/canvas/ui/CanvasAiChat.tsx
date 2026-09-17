@@ -80,6 +80,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
+import { toastIfOffline } from "@/shared/offline/offlineWriteGuard";
 
 /** How long Piggy's say_bubble line stays before idle greetings resume. */
 const BUBBLE_HOLD_MS = 12000;
@@ -522,6 +523,7 @@ function CanvasAiChatSession({
   const submit = (text: string) => {
     const value = text.trim();
     if (!value || busy || blocked) return;
+    if (toastIfOffline()) return;
     void sendMessage({ text: value });
     setInput("");
   };

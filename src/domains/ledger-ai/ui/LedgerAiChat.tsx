@@ -63,6 +63,7 @@ import {
   isVaultLedgerWritePart,
   vaultLedgerWriteToolName,
   type PiggyUIMessage,
+  type VaultLedgerWriteToolName,
 } from "@/domains/ledger-ai/domain/piggyUiMessage";
 import { PiggyApplyBudgetEdit } from "@/domains/ledger-ai/ui/PiggyApplyBudgetEdit";
 import { PiggyAttachment } from "@/domains/ledger-ai/ui/PiggyAttachment";
@@ -367,10 +368,15 @@ function PiggyChatPaneSession({
       output,
     });
   const reportVaultWrite = (
-    tool: string,
+    tool: VaultLedgerWriteToolName,
     toolCallId: string,
     output: unknown,
-  ) => void addToolResult({ tool, toolCallId, output });
+  ) =>
+    void addToolResult({
+      tool,
+      toolCallId,
+      output,
+    } as never);
   const bornMessageIds = useRef(new Set(messages.map((message) => message.id)));
   const mood = piggyMoodFromChat({
     status,

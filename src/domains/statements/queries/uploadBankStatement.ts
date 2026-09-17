@@ -6,6 +6,7 @@ import {
 import type { ImportBankStatementSuccess } from "@/domains/statements/domain/importResult";
 import type { OcrMode } from "@/domains/statements/domain/ocrMode";
 import { ocrDocumentLocally } from "@/domains/statements/infrastructure/localOcr";
+import { assertOnlineForWrite } from "@/shared/offline/offlineWriteGuard";
 
 type StreamEvent =
   | { type: "progress"; progress: StatementImportProgress }
@@ -30,6 +31,7 @@ export async function uploadBankStatement(
   file: File,
   options?: UploadBankStatementOptions,
 ) {
+  assertOnlineForWrite();
   const form = new FormData();
   form.append("file", file);
   if (options?.persistMode === "vault") form.append("persistMode", "vault");

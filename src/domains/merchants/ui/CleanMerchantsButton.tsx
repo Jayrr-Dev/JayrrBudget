@@ -69,12 +69,23 @@ export function CleanMerchantsButton() {
   async function runClean() {
     setBusy(true);
     try {
+      if (!encrypted) {
+        throw new Error("Unlock your private ledger to edit.");
+      }
+      const ctx = vaultWriteReady({
+        encryptedLedger: true,
+        userId: privateLedger.userId,
+        vaultId: privateLedger.vaultId,
+        keyId: privateLedger.keyId,
+        client,
+      });
+      if (!ctx) {
+        throw new Error("Unlock your private ledger to edit.");
+      }
       const response = await fetch("/api/merchants/clean", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(
-          encrypted ? { planOnly: true, merchants: vaultProbes } : {},
-        ),
+        body: JSON.stringify({ planOnly: true, merchants: vaultProbes }),
       });
       const body = (await response.json().catch(() => ({}))) as CleanResult & {
         error?: string;
@@ -82,32 +93,22 @@ export function CleanMerchantsButton() {
       if (!response.ok) {
         throw new Error(body.error ?? "Merchant clean failed");
       }
-
-      let result: CleanResult = body;
-      if (encrypted && body.planOnly) {
-        const ctx = vaultWriteReady({
-          encryptedLedger: true,
-          userId: privateLedger.userId,
-          vaultId: privateLedger.vaultId,
-          keyId: privateLedger.keyId,
-          client,
-        });
-        if (!ctx) {
-          throw new Error("Unlock the private ledger to merge merchants.");
-        }
-        const applied = await applyVaultMerchantMerges({
-          ctx,
-          ledger: privateLedger.ledger,
-          merges: body.merges ?? [],
-        });
-        privateLedger.reload();
-        result = {
-          clustersFound: body.clustersFound,
-          mergesApplied: applied.mergesApplied,
-          merchantsDeleted: applied.merchantsDeleted,
-          transactionsUpdated: applied.transactionsUpdated,
-        };
+      if (!body.planOnly) {
+        throw new Error("Merchant clean failed");
       }
+
+      const applied = await applyVaultMerchantMerges({
+        ctx,
+        ledger: privateLedger.ledger,
+        merges: body.merges ?? [],
+      });
+      privateLedger.reload();
+      const result: CleanResult = {
+        clustersFound: body.clustersFound,
+        mergesApplied: applied.mergesApplied,
+        merchantsDeleted: applied.merchantsDeleted,
+        transactionsUpdated: applied.transactionsUpdated,
+      };
 
       setOpen(false);
       if (result.mergesApplied === 0) {

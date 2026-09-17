@@ -185,17 +185,8 @@ export const upsert = mutation({
     logoUrl: v.optional(v.union(v.string(), v.null())),
   },
   returns: merchantDoc,
-  handler: async (ctx, args) => {
-    const user = await requireUser(ctx);
-    const row = await ensureMerchant(ctx, user._id, {
-      name: args.name,
-      rawName: args.rawName,
-      company: args.company,
-      brand: args.brand,
-      website: args.website,
-      logoUrl: args.logoUrl,
-    });
-    return await toMerchantDoc(ctx, row);
+  handler: async () => {
+    throw new Error("upsert is retired. Use the private ledger (vault).");
   },
 });
 
@@ -287,45 +278,8 @@ export const mergeCluster = mutation({
     sourcesRemaining: v.number(),
     isDone: v.boolean(),
   }),
-  handler: async (ctx, args) => {
-    const user = await requireUser(ctx);
-    let keeperId = args.keeperId;
-    let renamedUpdated = 0;
-    const nextName = args.name?.trim();
-    if (nextName) {
-      const current = await ctx.db.get(args.keeperId);
-      if (!current || current.userId !== user._id) {
-        throw new Error("Merchant not found");
-      }
-      if (
-        current.name !== nextName ||
-        merchantSlug(nextName) !== current.slug
-      ) {
-        const renamed = await updateMerchantOrMerge(
-          ctx,
-          user._id,
-          args.keeperId,
-          { name: nextName },
-        );
-        keeperId = renamed.merchant._id;
-        renamedUpdated = renamed.transactionsUpdated;
-      }
-    }
-    const drained = await drainMergeSources(
-      ctx,
-      user._id,
-      keeperId,
-      args.sourceIds,
-      args.txnLimit,
-    );
-    return {
-      keeperId: drained.keeper._id,
-      keeperName: drained.keeper.name,
-      transactionsUpdated: drained.transactionsUpdated + renamedUpdated,
-      sourcesDeleted: drained.sourcesDeleted,
-      sourcesRemaining: drained.sourcesRemaining,
-      isDone: drained.isDone,
-    };
+  handler: async () => {
+    throw new Error("mergeCluster is retired. Use the private ledger (vault).");
   },
 });
 
@@ -353,19 +307,8 @@ export const update = mutation({
     mergedFromName: v.union(v.string(), v.null()),
     transactionsUpdated: v.number(),
   }),
-  handler: async (ctx, args) => {
-    const user = await requireUser(ctx);
-    const result = await updateMerchantOrMerge(ctx, user._id, args.merchantId, {
-      name: args.name,
-      logoUrl: args.logoUrl,
-      logoStorageId: args.logoStorageId,
-    });
-    return {
-      merchant: await toMerchantDoc(ctx, result.merchant),
-      merged: result.merged,
-      mergedFromName: result.mergedFromName,
-      transactionsUpdated: result.transactionsUpdated,
-    };
+  handler: async () => {
+    throw new Error("update is retired. Use the private ledger (vault).");
   },
 });
 
@@ -376,27 +319,8 @@ export const linkTransactionsToMerchant = mutation({
     transactionIds: v.array(v.string()),
   },
   returns: v.object({ linked: v.number() }),
-  handler: async (ctx, args) => {
-    const user = await requireUser(ctx);
-    if (args.transactionIds.length === 0) {
-      return { linked: 0 };
-    }
-    if (args.transactionIds.length > 500) {
-      throw new Error("Can link at most 500 transactions at once");
-    }
-
-    const merchant = await ctx.db.get(args.merchantId);
-    if (!merchant || merchant.userId !== user._id) {
-      throw new Error("Merchant not found");
-    }
-
-    const linked = await linkTxnsToMerchant(
-      ctx,
-      user._id,
-      merchant,
-      args.transactionIds,
-    );
-    return { linked };
+  handler: async () => {
+    throw new Error("linkTransactionsToMerchant is retired. Use the private ledger (vault).");
   },
 });
 
@@ -411,23 +335,8 @@ export const upsertAndLink = mutation({
     merchant: merchantDoc,
     linked: v.number(),
   }),
-  handler: async (ctx, args) => {
-    const user = await requireUser(ctx);
-    if (args.transactionIds.length > 500) {
-      throw new Error("Can link at most 500 transactions at once");
-    }
-
-    const merchant = await ensureMerchant(ctx, user._id, {
-      name: args.name,
-      rawName: args.rawName ?? null,
-    });
-    const linked = await linkTxnsToMerchant(
-      ctx,
-      user._id,
-      merchant,
-      args.transactionIds,
-    );
-    return { merchant: await toMerchantDoc(ctx, merchant), linked };
+  handler: async () => {
+    throw new Error("upsertAndLink is retired. Use the private ledger (vault).");
   },
 });
 
@@ -450,65 +359,8 @@ export const backfillFromTransactions = mutation({
     isDone: v.boolean(),
     continueCursor: v.union(v.string(), v.null()),
   }),
-  handler: async (ctx, args) => {
-    const user = await requireUser(ctx);
-    const limit = Math.min(Math.max(args.limit ?? 500, 1), 2000);
-    const cursor = args.cursor ?? null;
-
-    const page = await ctx.db
-      .query("transactions")
-      .withIndex("by_userId", (q) => q.eq("userId", user._id))
-      .order("desc")
-      .paginate({ numItems: limit, cursor });
-
-    let skippedNoLabel = 0;
-    let merchantsUpserted = 0;
-    let transactionsLinked = 0;
-    const upsertedSlugs = new Set<string>();
-
-    for (const txn of page.page) {
-      const label = merchantLabelFromTxn(txn);
-      if (!label) {
-        skippedNoLabel += 1;
-        continue;
-      }
-      if (txn.merchantId != null) continue;
-
-      const merchant = await ensureMerchant(ctx, user._id, {
-        name: label,
-        rawName: null,
-        company: txn.company,
-        brand: txn.brand,
-        website: txn.website,
-        logoUrl: txn.logoUrl,
-      });
-
-      if (!upsertedSlugs.has(merchant.slug)) {
-        upsertedSlugs.add(merchant.slug);
-        merchantsUpserted += 1;
-      }
-
-      await ctx.db.patch(txn._id, {
-        merchantId: merchant._id,
-        merchantClean: merchant.name,
-        company: merchant.company ?? txn.company,
-        brand: merchant.brand ?? txn.brand,
-        website: merchant.website ?? txn.website,
-        logoUrl: merchant.logoUrl ?? txn.logoUrl,
-      });
-      await retargetTxnMerchant(ctx, txn.merchantId, merchant._id);
-      transactionsLinked += 1;
-    }
-
-    return {
-      scanned: page.page.length,
-      merchantsUpserted,
-      transactionsLinked,
-      skippedNoLabel,
-      remaining: page.isDone ? 0 : 1,
-      isDone: page.isDone,
-      continueCursor: page.isDone ? null : page.continueCursor,
-    };
+  handler: async () => {
+    throw new Error("backfillFromTransactions is retired. Use the private ledger (vault).");
   },
 });
 
@@ -527,29 +379,8 @@ export const syncTransactionCounts = mutation({
     isDone: v.boolean(),
     continueCursor: v.union(v.string(), v.null()),
   }),
-  handler: async (ctx, args) => {
-    const user = await requireUser(ctx);
-    const limit = Math.min(Math.max(args.limit ?? 40, 1), 100);
-    const page = await ctx.db
-      .query("merchants")
-      .withIndex("by_userId", (q) => q.eq("userId", user._id))
-      .paginate({ numItems: limit, cursor: args.cursor ?? null });
-
-    let updated = 0;
-    for (const merchant of page.page) {
-      const count = await countTxnsForMerchant(ctx, user._id, merchant._id);
-      if (merchant.transactionCount !== count) {
-        await ctx.db.patch(merchant._id, { transactionCount: count });
-        updated += 1;
-      }
-    }
-
-    return {
-      scanned: page.page.length,
-      updated,
-      isDone: page.isDone,
-      continueCursor: page.isDone ? null : page.continueCursor,
-    };
+  handler: async () => {
+    throw new Error("syncTransactionCounts is retired. Use the private ledger (vault).");
   },
 });
 

@@ -14,7 +14,6 @@ import { OPENROUTER_NOT_CONFIGURED } from "@/shared/ai/openRouter";
 import { runMeteredOpenRouter } from "@/shared/ai/aiMeter.server";
 import { checkAiCall } from "@/shared/ai/enforceAiCall.server";
 import { resolveOpenRouterApiKey } from "@/shared/ai/resolveOpenRouter.server";
-import { api } from "@/shared/convex/httpClient";
 import { errorMessage } from "@/shared/lib/error-message";
 import type { ConvexHttpClient } from "convex/browser";
 
@@ -116,17 +115,14 @@ async function parseLoanDocumentWithKey(
   try {
     emitProgress(params.onProgress, "receive");
     const fileHash = statementFileHash(params.bytes);
-    const persistMode = params.persistMode ?? "convex";
-
-    if (persistMode === "convex") {
-      const existing = await params.client.query(
-        api.loanDocuments.findCompletedByFileHash,
-        { fileHash },
-      );
-      if (existing) {
-        emitProgress(params.onProgress, "done");
-        return existing;
-      }
+    const persistMode = params.persistMode ?? "vault";
+    if (persistMode !== "vault") {
+      return {
+        ok: false,
+        status: 410,
+        error:
+          "Plaintext loan document save is retired. Unlock the private ledger.",
+      };
     }
 
     emitProgress(params.onProgress, "ocr");
@@ -154,27 +150,6 @@ async function parseLoanDocumentWithKey(
       sourceHint: params.filename,
     });
 
-    if (persistMode === "vault") {
-      emitProgress(params.onProgress, "done");
-      return {
-        ok: true,
-        filename: params.filename,
-        fileHash,
-        pageCount: ocr.pageCount,
-        fields,
-        ocrMarkdown: ocr.markdown,
-        uploadId: 0,
-      };
-    }
-
-    const saved = await params.client.mutation(api.loanDocuments.saveParsed, {
-      filename: params.filename,
-      fileHash,
-      pageCount: ocr.pageCount,
-      ocrMarkdown: ocr.markdown,
-      fields,
-    });
-
     emitProgress(params.onProgress, "done");
     return {
       ok: true,
@@ -183,7 +158,7 @@ async function parseLoanDocumentWithKey(
       pageCount: ocr.pageCount,
       fields,
       ocrMarkdown: ocr.markdown,
-      uploadId: saved.uploadId,
+      uploadId: 0,
     };
   } catch (error) {
     return {

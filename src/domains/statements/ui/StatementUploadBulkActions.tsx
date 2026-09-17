@@ -38,7 +38,6 @@ import {
   skipNextPrivateLedgerReload,
   usePrivateLedger,
 } from "@/domains/vault/ui/usePrivateLedger";
-import { api } from "@convex/_generated/api";
 import { Icon } from "@iconify/react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useConvex } from "convex/react";
@@ -213,6 +212,11 @@ export function StatementUploadBulkActions({
       const convexUploads = visible.filter(
         (upload) => upload.source !== "vault",
       );
+      if (convexUploads.length > 0) {
+        throw new Error(
+          "Plaintext statement delete is retired. Unlock the private ledger.",
+        );
+      }
       let deletedTransactions = 0;
       const filenames: string[] = [];
 
@@ -242,15 +246,6 @@ export function StatementUploadBulkActions({
         privateLedger.applyLedger(vaultResult.nextLedger);
         deletedTransactions += vaultResult.deletedTransactions;
         filenames.push(...vaultResult.filenames);
-      }
-
-      for (const upload of convexUploads) {
-        const result = await client.mutation(api.statements.remove, {
-          uploadId: upload.id,
-        });
-        if (!result.ok) throw new Error(result.error);
-        deletedTransactions += result.deletedTransactions;
-        filenames.push(result.filename);
       }
 
       return { count: filenames.length, deletedTransactions };

@@ -158,55 +158,10 @@ export const saveParsed = mutation({
     fields: loanFieldsValidator,
   },
   returns: v.object({ uploadId: v.number() }),
-  handler: async (ctx, args) => {
-    const user = await requireUser(ctx);
-    const now = Date.now();
-
-    const prior = await ctx.db
-      .query("loanDocumentUploads")
-      .withIndex("by_userId_fileHash", (q) =>
-        q.eq("userId", user._id).eq("fileHash", args.fileHash),
-      )
-      .collect();
-    const completed = prior.find((row) => row.status === "completed");
-    if (completed) {
-      return { uploadId: completed.uploadId };
-    }
-
-    const existingIds = await ctx.db
-      .query("loanDocumentUploads")
-      .withIndex("by_userId", (q) => q.eq("userId", user._id))
-      .collect();
-    const nextUploadId =
-      existingIds.reduce((max, row) => Math.max(max, row.uploadId), 0) + 1;
-
-    await ctx.db.insert("loanDocumentUploads", {
-      userId: user._id,
-      uploadId: nextUploadId,
-      filename: args.filename,
-      fileHash: args.fileHash,
-      status: "completed",
-      pageCount: args.pageCount,
-      accountId: null,
-      ocrMarkdown: args.ocrMarkdown.trim() ? args.ocrMarkdown : null,
-      name: args.fields.name,
-      loanType: args.fields.loanType,
-      rateType: args.fields.rateType,
-      vehicleLabel: args.fields.vehicleLabel,
-      principalStart: args.fields.principalStart,
-      annualRatePct: args.fields.annualRatePct,
-      paymentAmount: args.fields.paymentAmount,
-      paymentFrequency: args.fields.paymentFrequency,
-      paymentCount: args.fields.paymentCount,
-      firstPaymentDate: args.fields.firstPaymentDate,
-      matchMerchantClean: args.fields.matchMerchantClean,
-      institutionName: args.fields.institutionName,
-      error: null,
-      createdAt: now,
-      completedAt: now,
-    });
-
-    return { uploadId: nextUploadId };
+  handler: async () => {
+    throw new Error(
+      "saveParsed is retired. Register lending accounts in the private ledger (vault).",
+    );
   },
 });
 
@@ -216,17 +171,9 @@ export const linkToAccount = mutation({
     accountId: v.string(),
   },
   returns: v.object({ ok: v.boolean() }),
-  handler: async (ctx, args) => {
-    const user = await requireUser(ctx);
-    const prior = await ctx.db
-      .query("loanDocumentUploads")
-      .withIndex("by_userId_fileHash", (q) =>
-        q.eq("userId", user._id).eq("fileHash", args.fileHash),
-      )
-      .collect();
-    const completed = prior.find((row) => row.status === "completed");
-    if (!completed) return { ok: false };
-    await ctx.db.patch(completed._id, { accountId: args.accountId });
-    return { ok: true };
+  handler: async () => {
+    throw new Error(
+      "linkToAccount is retired. Register lending accounts in the private ledger (vault).",
+    );
   },
 });

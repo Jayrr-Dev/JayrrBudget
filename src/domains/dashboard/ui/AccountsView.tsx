@@ -11,6 +11,7 @@ import {
 import { BankAccountsDashboard } from "@/domains/dashboard/ui/BankAccountsDashboard";
 import { useDashboard } from "@/domains/dashboard/ui/DashboardPanels";
 import { Info } from "lucide-react";
+import { useSearchParams } from "next/navigation";
 
 function AccountsTitleInfo() {
   return (
@@ -41,11 +42,9 @@ function AccountsTitleInfo() {
   );
 }
 
-export function AccountsView({
-  selectedAccountId,
-}: {
-  selectedAccountId: string | null;
-}) {
+export function AccountsView() {
+  const searchParams = useSearchParams();
+  const selectedAccountId = searchParams.get("account");
   const dashboard = useDashboard();
   const data = dashboard.data;
 

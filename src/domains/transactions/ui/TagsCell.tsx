@@ -18,23 +18,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useConvex } from "convex/react";
 import { PlusIcon } from "lucide-react";
 import { useState } from "react";
-
-type AddTagResponse =
-  | { ok: true; tags: string[]; added: boolean; tag: string }
-  | { ok?: false; error: string };
-
-async function postAddTag(input: { transactionId: string; tag: string }) {
-  const response = await fetch("/api/transactions/add-tag", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(input),
-  });
-  const data = (await response.json()) as AddTagResponse;
-  if (!response.ok || !("tags" in data)) {
-    throw new Error("error" in data ? data.error : "Failed to add tag");
-  }
-  return data;
-}
+import { assertOnlineForWrite } from "@/shared/offline/offlineWriteGuard";
 
 type TagsCellProps = {
   transactionId: string;
@@ -52,6 +36,7 @@ export function TagsCell({ transactionId, tags }: TagsCellProps) {
 
   const mutation = useMutation({
     mutationFn: async (input: { transactionId: string; tag: string }) => {
+      assertOnlineForWrite();
       const write = vaultWriteReady({
         encryptedLedger: privateLedger.encryptedLedger,
         userId: privateLedger.userId,
@@ -59,26 +44,26 @@ export function TagsCell({ transactionId, tags }: TagsCellProps) {
         keyId: privateLedger.keyId,
         client,
       });
-      if (write) {
-        const tx = privateLedger.ledger.transactions.find(
-          (row) => row.recordId === input.transactionId,
-        );
-        if (!tx) throw new Error("Encrypted transaction not found.");
-        const nextTags = [
-          ...new Set(
-            [...(tx.tagNames ?? []), input.tag.trim()].filter(Boolean),
-          ),
-        ];
-        await patchEncryptedTransaction(write, tx, { tagNames: nextTags });
-        privateLedger.reload();
-        return {
-          ok: true as const,
-          tags: nextTags,
-          added: true,
-          tag: input.tag.trim(),
-        };
+      if (!write) {
+        throw new Error("Unlock your private ledger to edit.");
       }
-      return postAddTag(input);
+      const tx = privateLedger.ledger.transactions.find(
+        (row) => row.recordId === input.transactionId,
+      );
+      if (!tx) throw new Error("Encrypted transaction not found.");
+      const nextTags = [
+        ...new Set(
+          [...(tx.tagNames ?? []), input.tag.trim()].filter(Boolean),
+        ),
+      ];
+      await patchEncryptedTransaction(write, tx, { tagNames: nextTags });
+      privateLedger.reload();
+      return {
+        ok: true as const,
+        tags: nextTags,
+        added: true,
+        tag: input.tag.trim(),
+      };
     },
     onSuccess: (result) => {
       setTag("");

@@ -128,31 +128,8 @@ export const addTag = mutation({
     transactionId: v.string(),
     tag: v.string(),
   },
-  handler: async (ctx, args) => {
-    const user = await requireUser(ctx);
-    const transactionId = args.transactionId.trim();
-    const tag = args.tag.trim();
-    if (!transactionId) throw new Error("transactionId is required");
-    if (!tag) throw new Error("Tag name is required");
-
-    const row = await ctx.db
-      .query("transactions")
-      .withIndex("by_userId_transactionId", (q) =>
-        q.eq("userId", user._id).eq("transactionId", transactionId),
-      )
-      .unique();
-    if (!row) throw new Error("Transaction not found");
-
-    const tags = splitTags(row.tags);
-    if (hasTag(tags, tag)) {
-      return { transactionId, tag, tags, added: false };
-    }
-    tags.push(tag);
-    await ctx.db.patch(row._id, {
-      tags: joinTags(tags),
-      updatedAt: Date.now(),
-    });
-    return { transactionId, tag, tags, added: true };
+  handler: async () => {
+    throw new Error("addTag is retired. Use the private ledger (vault).");
   },
 });
 
@@ -163,61 +140,8 @@ export const tagByDateRange = mutation({
     endDate: v.string(),
     excludeTransactionIds: v.optional(v.array(v.string())),
   },
-  handler: async (ctx, args) => {
-    const user = await requireUser(ctx);
-    const tag = args.tag.trim();
-    const startDate = args.startDate.trim();
-    const endDate = args.endDate.trim();
-    if (!tag) throw new Error("Tag name is required");
-    if (
-      !/^\d{4}-\d{2}-\d{2}$/.test(startDate) ||
-      !/^\d{4}-\d{2}-\d{2}$/.test(endDate)
-    ) {
-      throw new Error("Dates must be YYYY-MM-DD");
-    }
-    if (startDate > endDate) {
-      throw new Error("Start date must be on or before end date");
-    }
-
-    const exclude = new Set(
-      (args.excludeTransactionIds ?? []).map((id) => id.trim()).filter(Boolean),
-    );
-
-    const matchedRows = await ctx.db
-      .query("transactions")
-      .withIndex("by_userId_posted", (q) =>
-        q
-          .eq("userId", user._id)
-          .gte("posted", startDate)
-          .lte("posted", endDate),
-      )
-      .collect();
-
-    const candidates = matchedRows.filter(
-      (row) => !exclude.has(row.transactionId),
-    );
-
-    let updated = 0;
-    const now = Date.now();
-    for (const row of candidates) {
-      const tags = splitTags(row.tags);
-      if (hasTag(tags, tag)) continue;
-      tags.push(tag);
-      await ctx.db.patch(row._id, {
-        tags: joinTags(tags),
-        updatedAt: now,
-      });
-      updated += 1;
-    }
-
-    return {
-      matched: candidates.length,
-      updated,
-      excluded: exclude.size,
-      tag,
-      startDate,
-      endDate,
-    };
+  handler: async () => {
+    throw new Error("tagByDateRange is retired. Use the private ledger (vault).");
   },
 });
 
@@ -232,31 +156,8 @@ export const updateTaxonomy = mutation({
     ),
     value: v.union(v.string(), v.null()),
   },
-  handler: async (ctx, args) => {
-    const user = await ensureUser(ctx);
-    const transactionId = args.transactionId.trim();
-    if (!transactionId) throw new Error("transactionId is required");
-
-    const row = await ownedTransaction(ctx, user._id, transactionId);
-    if (!row) throw new Error("Transaction not found");
-
-    const store = new TaxonomyStore(ctx, user._id);
-    const path = await applyTaxonomyPatch(store, row, {
-      [args.field]: args.value,
-    });
-
-    await ctx.db.patch(row._id, { ...path, updatedAt: Date.now() });
-
-    const updated = await ctx.db.get(row._id);
-    if (updated) await rememberCategorization(ctx, updated);
-
-    return {
-      transactionId,
-      section: path.section,
-      category: path.category,
-      subcategory: path.subcategory,
-      spread: path.spread,
-    };
+  handler: async () => {
+    throw new Error("updateTaxonomy is retired. Use the private ledger (vault).");
   },
 });
 
@@ -273,40 +174,10 @@ export const renameDescriptions = mutation({
     ),
   },
   returns: v.object({ updated: v.number() }),
-  handler: async (ctx, args) => {
-    const user = await requireUser(ctx);
-    const from = args.from;
-    const to = args.to.trim();
-    if (!from) throw new Error("Current description is required");
-    if (!to) throw new Error("Description is required");
-    if (from === to && args.taxonomy === undefined) return { updated: 0 };
-
-    const tax = args.taxonomy
-      ? await resolveTaxonomyPath(
-          new TaxonomyStore(ctx, user._id),
-          args.taxonomy,
-        )
-      : null;
-
-    const rows = await ctx.db
-      .query("transactions")
-      .withIndex("by_userId", (q) => q.eq("userId", user._id))
-      .collect();
-
-    let updated = 0;
-    const now = Date.now();
-    for (const row of rows) {
-      if (row.description !== from) continue;
-      await ctx.db.patch(row._id, {
-        description: to,
-        updatedAt: now,
-        ...(tax ?? {}),
-      });
-      const updatedRow = await ctx.db.get(row._id);
-      if (updatedRow) await rememberCategorization(ctx, updatedRow);
-      updated += 1;
-    }
-    return { updated };
+  handler: async () => {
+    throw new Error(
+      "renameDescriptions is retired. Use the private ledger (vault).",
+    );
   },
 });
 
@@ -343,46 +214,10 @@ export const recategorizeByMerchant = mutation({
     taxonomy: taxonomyPatchValidator,
   },
   returns: v.object({ updated: v.number() }),
-  handler: async (ctx, args) => {
-    const user = await requireUser(ctx);
-    const merchant = args.merchant.trim();
-    if (!merchant) throw new Error("Merchant is required");
-
-    const tax = await resolveTaxonomyPath(
-      new TaxonomyStore(ctx, user._id),
-      args.taxonomy,
+  handler: async () => {
+    throw new Error(
+      "recategorizeByMerchant is retired. Use the private ledger (vault).",
     );
-    const patch = { ...tax, updatedAt: Date.now() };
-
-    const merchantId = args.merchantId;
-    let rows;
-    if (merchantId) {
-      const owned = await ctx.db.get(merchantId);
-      if (!owned || owned.userId !== user._id) {
-        throw new Error("Merchant not found");
-      }
-      rows = await ctx.db
-        .query("transactions")
-        .withIndex("by_userId_merchantId", (q) =>
-          q.eq("userId", user._id).eq("merchantId", merchantId),
-        )
-        .collect();
-    } else {
-      const all = await ctx.db
-        .query("transactions")
-        .withIndex("by_userId", (q) => q.eq("userId", user._id))
-        .collect();
-      rows = all.filter((row) => rowMatchesMerchantName(row, merchant));
-    }
-
-    let updated = 0;
-    for (const row of rows) {
-      await ctx.db.patch(row._id, patch);
-      const updatedRow = await ctx.db.get(row._id);
-      if (updatedRow) await rememberCategorization(ctx, updatedRow);
-      updated += 1;
-    }
-    return { updated };
   },
 });
 
@@ -853,20 +688,8 @@ export const updateForAi = mutation({
     transaction: aiTxnRow,
     changed: v.array(v.string()),
   }),
-  handler: async (ctx, args) => {
-    const user = await requireUser(ctx);
-    assertAiPatch(args.patch);
-
-    const row = await ownedTransaction(ctx, user._id, args.transactionId);
-    if (!row) throw new Error("Transaction not found");
-
-    const merchant = await resolveAiMerchant(ctx, user._id, args.patch.merchant);
-    const store = new TaxonomyStore(ctx, user._id);
-    const changed = await applyAiPatch(ctx, user._id, store, row, args.patch, merchant);
-
-    const updated = await ctx.db.get(row._id);
-    if (!updated) throw new Error("Transaction update failed");
-    return { transaction: toAiTxn(updated), changed };
+  handler: async () => {
+    throw new Error("updateForAi is retired. Use the private ledger (vault).");
   },
 });
 
@@ -881,35 +704,10 @@ export const bulkUpdateForAi = mutation({
     missing: v.array(v.string()),
     changed: v.array(v.string()),
   }),
-  handler: async (ctx, args) => {
-    const user = await requireUser(ctx);
-    assertAiPatch(args.patch);
-
-    const ids = [...new Set(args.transactionIds.map((id) => id.trim()).filter(Boolean))];
-    if (ids.length === 0) throw new Error("transactionIds is required");
-    if (ids.length > AI_BULK_LIMIT) {
-      throw new Error(`Can edit at most ${AI_BULK_LIMIT} transactions at once`);
-    }
-
-    const merchant = await resolveAiMerchant(ctx, user._id, args.patch.merchant);
-    const store = new TaxonomyStore(ctx, user._id);
-    const changed = new Set<string>();
-    const missing: string[] = [];
-    let updated = 0;
-
-    for (const id of ids) {
-      const row = await ownedTransaction(ctx, user._id, id);
-      if (!row) {
-        missing.push(id);
-        continue;
-      }
-      for (const field of await applyAiPatch(ctx, user._id, store, row, args.patch, merchant)) {
-        changed.add(field);
-      }
-      updated += 1;
-    }
-
-    return { updated, missing, changed: [...changed] };
+  handler: async () => {
+    throw new Error(
+      "bulkUpdateForAi is retired. Use the private ledger (vault).",
+    );
   },
 });
 
@@ -920,27 +718,8 @@ export const deleteForAi = mutation({
     deleted: v.number(),
     missing: v.array(v.string()),
   }),
-  handler: async (ctx, args) => {
-    const user = await requireUser(ctx);
-    const ids = [...new Set(args.transactionIds.map((id) => id.trim()).filter(Boolean))];
-    if (ids.length === 0) throw new Error("transactionIds is required");
-    if (ids.length > AI_DELETE_LIMIT) {
-      throw new Error(`Can delete at most ${AI_DELETE_LIMIT} transactions at once`);
-    }
-
-    const missing: string[] = [];
-    let deleted = 0;
-    for (const id of ids) {
-      const row = await ownedTransaction(ctx, user._id, id);
-      if (!row) {
-        missing.push(id);
-        continue;
-      }
-      await bumpMerchantTxnCount(ctx, row.merchantId, -1);
-      await ctx.db.delete(row._id);
-      deleted += 1;
-    }
-    return { deleted, missing };
+  handler: async () => {
+    throw new Error("deleteForAi is retired. Use the private ledger (vault).");
   },
 });
 
@@ -997,85 +776,7 @@ export const createForAi = mutation({
     tags: v.optional(v.array(v.string())),
   },
   returns: aiTxnRow,
-  handler: async (ctx, args) => {
-    const user = await requireUser(ctx);
-    const description = args.description.trim();
-    const posted = args.posted.trim();
-    const accountKey = args.account.trim();
-    if (!description) throw new Error("Description is required");
-    if (!DATE_RE.test(posted)) throw new Error("posted must be YYYY-MM-DD");
-    if (!Number.isFinite(args.amount)) throw new Error("amount must be a finite number");
-    if (!accountKey) throw new Error("account is required");
-
-    const accounts = await ctx.db
-      .query("accounts")
-      .withIndex("by_userId", (q) => q.eq("userId", user._id))
-      .collect();
-    const account =
-      accounts.find((row) => row.accountId === accountKey) ??
-      accounts.find((row) => norm(row.name) === norm(accountKey)) ??
-      accounts.find((row) => norm(row.officialName) === norm(accountKey));
-    if (!account) {
-      throw new Error(
-        `Account not found: ${accountKey}. Known accounts: ${accounts.map((row) => row.name).join(", ") || "none"}`,
-      );
-    }
-
-    const store = new TaxonomyStore(ctx, user._id);
-    const path = await resolveTaxonomyPath(store, {
-      section: args.section ?? null,
-      category: args.category ?? null,
-      subcategory: args.subcategory ?? null,
-    });
-
-    const now = Date.now();
-    const transactionId = `piggy-${now.toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
-    const id = await ctx.db.insert("transactions", {
-      userId: user._id,
-      transactionId,
-      posted,
-      authorized: null,
-      account: account.name,
-      accountId: account.accountId,
-      description,
-      originalDescription: null,
-      merchantId: null,
-      merchantClean: null,
-      merchantName: null,
-      company: null,
-      brand: null,
-      ...path,
-      transactionType: null,
-      kind: null,
-      transactionTypeLegacyId: null,
-      kindLegacyId: null,
-      tags: joinTags(args.tags ?? []),
-      channel: null,
-      txnCode: null,
-      bankDirection: null,
-      crossCheck: null,
-      enrichment: null,
-      source: "piggy",
-      statementUploadId: null,
-      pending: false,
-      city: null,
-      region: null,
-      country: null,
-      website: null,
-      logoUrl: null,
-      currency: args.currency?.trim() || account.isoCurrencyCode || "CAD",
-      amount: args.amount,
-      ...splitDebitCredit(args.amount),
-      updatedAt: now,
-    });
-
-    if (args.merchant?.trim()) {
-      const merchant = await ensureMerchant(ctx, user._id, { name: args.merchant });
-      await linkTxnsToMerchant(ctx, user._id, merchant, [transactionId]);
-    }
-
-    const created = await ctx.db.get(id);
-    if (!created) throw new Error("Transaction insert failed");
-    return toAiTxn(created);
+  handler: async () => {
+    throw new Error("createForAi is retired. Use the private ledger (vault).");
   },
 });

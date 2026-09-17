@@ -40,7 +40,6 @@ export function PiggyImportStatement({
 }) {
   const privateLedger = usePrivateLedger();
   const convex = useConvex();
-  const encryptedLedger = useFeatureFlag("encryptedLedger");
   const cloudProcessing = useFeatureFlag("cloudProcessing");
   const reported = useRef(!pending);
   const onDoneRef = useRef(onDone);
@@ -60,9 +59,7 @@ export function PiggyImportStatement({
 
   useEffect(() => {
     if (!pending || reported.current) return;
-    if (encryptedLedger) {
-      if (loading || !unlocked) return;
-    }
+    if (loading || !unlocked) return;
 
     const file = fileForDocumentIndex(messagesRef.current, input.documentIndex);
     if (!file) {
@@ -78,7 +75,7 @@ export function PiggyImportStatement({
     reported.current = true;
     void importStatementFromChat({
       file,
-      persistMode: encryptedLedger ? "vault" : "convex",
+      persistMode: "vault",
       cloudProcessing,
       convex,
       userId,
@@ -87,9 +84,7 @@ export function PiggyImportStatement({
       ledger: ledgerRef.current,
     })
       .then((output) => {
-        if (output.ok) {
-          if (encryptedLedger) reload();
-        }
+        if (output.ok) reload();
         onDoneRef.current(output);
       })
       .catch((error: unknown) => {
@@ -101,7 +96,6 @@ export function PiggyImportStatement({
   }, [
     cloudProcessing,
     convex,
-    encryptedLedger,
     input.documentIndex,
     keyId,
     loading,

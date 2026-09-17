@@ -6,6 +6,7 @@ import {
 import type { ParseLoanDocumentSuccess } from "@/domains/loans/domain/loanDocumentResult";
 import type { OcrMode } from "@/domains/statements/domain/ocrMode";
 import { ocrDocumentLocally } from "@/domains/statements/infrastructure/localOcr";
+import { assertOnlineForWrite } from "@/shared/offline/offlineWriteGuard";
 
 type StreamEvent =
   | { type: "progress"; progress: LoanDocumentProgress }
@@ -30,6 +31,7 @@ export async function uploadLoanDocument(
   file: File,
   options?: UploadLoanDocumentOptions,
 ) {
+  assertOnlineForWrite();
   const form = new FormData();
   form.append("file", file);
   if (options?.persistMode === "vault") form.append("persistMode", "vault");

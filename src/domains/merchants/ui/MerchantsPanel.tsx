@@ -27,10 +27,8 @@ import { usePrivateLedger } from "@/domains/vault/ui/usePrivateLedger";
 import { api } from "@convex/_generated/api";
 import { Icon } from "@iconify/react";
 import { createColumnHelper } from "@tanstack/react-table";
-import { useMutation, useQuery } from "convex/react";
-import { useEffect, useMemo, useState } from "react";
-
-const MERCHANT_TXN_COUNT_KEY = "jayrr-budget.merchant-txn-counts-v1";
+import { useQuery } from "convex/react";
+import { useMemo, useState } from "react";
 
 type MerchantRow = {
   id: string;
@@ -232,55 +230,10 @@ function MerchantsTable({
 
 export function MerchantsPanel() {
   const privateLedger = usePrivateLedger();
-  const syncMerchantTxnCounts = useMutation(
-    api.merchants.syncTransactionCounts,
-  );
   const merchants = useQuery(
     api.merchants.list,
     privateLedger.encryptedLedger ? "skip" : {},
   );
-
-  useEffect(() => {
-    if (privateLedger.encryptedLedger) return;
-    let cancelled = false;
-    void (async () => {
-      let alreadyCounted = false;
-      let cursor: string | null = null;
-      try {
-        const stored = localStorage.getItem(MERCHANT_TXN_COUNT_KEY);
-        alreadyCounted = stored === "done";
-        if (!alreadyCounted && stored) cursor = stored;
-      } catch {
-        // ignore
-      }
-      if (alreadyCounted) return;
-      try {
-        for (let i = 0; i < 40; i += 1) {
-          if (cancelled) return;
-          const result = await syncMerchantTxnCounts({
-            limit: 40,
-            cursor,
-          });
-          cursor = result.continueCursor;
-          try {
-            localStorage.setItem(
-              MERCHANT_TXN_COUNT_KEY,
-              result.isDone ? "done" : (result.continueCursor ?? ""),
-            );
-          } catch {
-            // ignore
-          }
-          if (result.isDone) break;
-        }
-      } catch (error) {
-        console.warn("[merchants] txn count sync failed", error);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [privateLedger.encryptedLedger, syncMerchantTxnCounts]);
-
   const encryptedRows = useMemo(() => {
     if (!privateLedger.encryptedLedger || !privateLedger.unlocked)
       return [] as MerchantRow[];

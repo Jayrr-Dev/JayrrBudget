@@ -68,6 +68,8 @@ import {
 import { usePrivateLedger } from "@/domains/vault/ui/usePrivateLedger";
 import { logMistralOcrUsage } from "@/shared/debug/aiUsageDebug";
 import { errorMessage } from "@/shared/lib/error-message";
+import { toastIfOffline } from "@/shared/offline/offlineWriteGuard";
+import { useConnectionState } from "@/shared/offline/useConnectionState";
 import { cn } from "cn";
 import { useConvex } from "convex/react";
 import { Info, UploadIcon } from "lucide-react";
@@ -110,6 +112,7 @@ export function AddLoanDialog({ open, onOpenChange }: AddLoanDialogProps) {
   const privateLedger = usePrivateLedger();
   const flags = useFeatureFlags();
   const ocrMode = useOcrMode();
+  const { isOffline } = useConnectionState();
   const [form, setForm] = useState(emptyForm);
   const [step, setStep] = useState<LoanFormStep>(1);
   const [saving, setSaving] = useState(false);
@@ -118,8 +121,6 @@ export function AddLoanDialog({ open, onOpenChange }: AddLoanDialogProps) {
   const stepMeta = LOAN_FORM_STEPS[step - 1];
   const typeMeta = loanTypeMeta(form.loanType);
   const busy = saving || uploading;
-  const vaultPersist = flags.encryptedLedger;
-
   function setField(key: keyof typeof emptyForm, value: string) {
     setForm((prev) => ({ ...prev, [key]: value }));
   }
@@ -180,6 +181,7 @@ export function AddLoanDialog({ open, onOpenChange }: AddLoanDialogProps) {
   }
 
   async function onUploadDocument(file: File) {
+    if (toastIfOffline()) return;
     if (!isOcrDocumentFile(file)) {
       toast.error("Use a PDF or photo (PNG, JPG, WEBP, AVIF, HEIC).");
       return;
@@ -190,7 +192,7 @@ export function AddLoanDialog({ open, onOpenChange }: AddLoanDialogProps) {
 
     try {
       const result = await uploadLoanDocument(file, {
-        persistMode: vaultPersist ? "vault" : "convex",
+        persistMode: "vault",
         ocrMode,
         onProgress: (progress) => {
           toast.loading(formatLoanDocumentProgress(progress), {
@@ -200,43 +202,41 @@ export function AddLoanDialog({ open, onOpenChange }: AddLoanDialogProps) {
         },
       });
 
-      if (vaultPersist) {
-        if (!flags.cloudProcessing) {
-          throw new Error(
-            "Turn on Cloud Processing in Modules before uploading a document.",
-          );
-        }
-        const opened = await hydrateVaultSession(
-          client as unknown as VaultClient,
+      if (!flags.cloudProcessing) {
+        throw new Error(
+          "Turn on Cloud Processing in Modules before uploading a document.",
         );
-        const masterKey = getVaultMasterKey();
-        const vaultId = privateLedger.vaultId ?? opened?.vaultId ?? null;
-        const keyId = privateLedger.keyId ?? opened?.keyId ?? null;
-        if (!privateLedger.userId || !vaultId || !keyId || !masterKey) {
-          throw new Error("Sign in again, then retry the upload.");
-        }
-        const ledger = await loadPrivateLedger(
-          client as unknown as VaultListClient,
-          {
-            userId: privateLedger.userId,
-            vaultId,
-          },
-        );
-        await encryptLoanDocumentToVault({
-          client: client as unknown as MutationClient,
+      }
+      const opened = await hydrateVaultSession(
+        client as unknown as VaultClient,
+      );
+      const masterKey = getVaultMasterKey();
+      const vaultId = privateLedger.vaultId ?? opened?.vaultId ?? null;
+      const keyId = privateLedger.keyId ?? opened?.keyId ?? null;
+      if (!privateLedger.userId || !vaultId || !keyId || !masterKey) {
+        throw new Error("Sign in again, then retry the upload.");
+      }
+      const ledger = await loadPrivateLedger(
+        client as unknown as VaultListClient,
+        {
           userId: privateLedger.userId,
           vaultId,
-          keyId,
-          masterKey,
-          filename: result.filename,
-          fileHash: result.fileHash,
-          pageCount: result.pageCount,
-          fields: result.fields,
-          ocrMarkdown: result.ocrMarkdown,
-          ledger,
-        });
-        privateLedger.reload();
-      }
+        },
+      );
+      await encryptLoanDocumentToVault({
+        client: client as unknown as MutationClient,
+        userId: privateLedger.userId,
+        vaultId,
+        keyId,
+        masterKey,
+        filename: result.filename,
+        fileHash: result.fileHash,
+        pageCount: result.pageCount,
+        fields: result.fields,
+        ocrMarkdown: result.ocrMarkdown,
+        ledger,
+      });
+      privateLedger.reload();
 
       if (ocrMode !== "local" && result.pageCount > 0) {
         logMistralOcrUsage({
@@ -287,6 +287,7 @@ export function AddLoanDialog({ open, onOpenChange }: AddLoanDialogProps) {
       setStep((step + 1) as LoanFormStep);
       return;
     }
+    if (toastIfOffline()) return;
 
     const principalStart = Number(form.principalStart);
     const annualRatePct = Number(form.annualRatePct);
@@ -464,7 +465,7 @@ export function AddLoanDialog({ open, onOpenChange }: AddLoanDialogProps) {
                 }}
                 action={
                   <OcrDocumentPickerButton
-                    disabled={busy}
+                    disabled={busy || isOffline}
                     onFiles={onPickerFiles}
                   >
                     {uploading ? (

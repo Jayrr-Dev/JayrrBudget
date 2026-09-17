@@ -31,15 +31,11 @@ import { OPENROUTER_NOT_CONFIGURED } from "@/shared/ai/openRouter";
 import { runMeteredOpenRouter } from "@/shared/ai/aiMeter.server";
 import { checkAiCall } from "@/shared/ai/enforceAiCall.server";
 import { resolveOpenRouterApiKey } from "@/shared/ai/resolveOpenRouter.server";
-import { invalidateConvexUserCache } from "@/shared/convex/cachedRead";
 import { api } from "@/shared/convex/httpClient";
 import { normalizeCurrencyCode } from "@/shared/lib/currency";
 import { errorMessage } from "@/shared/lib/error-message";
 import type { ConvexHttpClient } from "convex/browser";
-import {
-  categorizeStatement,
-  labelDescriptionGroups,
-} from "./categorizeStatement";
+import { labelDescriptionGroups } from "./categorizeStatement";
 
 export type {
   ImportBankStatementResult,
@@ -143,19 +139,14 @@ async function importBankStatementWithKey(
     const fileHash = statementFileHash(params.bytes);
 
     // Same file bytes already imported → skip Mistral OCR + OpenRouter parse.
-    const persistMode = params.persistMode ?? "convex";
-    const existing =
-      persistMode === "vault"
-        ? null
-        : await params.client.query(api.statements.findCompletedByFileHash, {
-            fileHash,
-          });
-    if (existing) {
-      emitProgress(params.onProgress, "done");
-      console.info(
-        `[statements] duplicate fileHash=${fileHash.slice(0, 12)}… skip OCR`,
-      );
-      return existing as ImportBankStatementSuccess;
+    const persistMode = params.persistMode ?? "vault";
+    if (persistMode !== "vault") {
+      return {
+        ok: false,
+        status: 410,
+        error:
+          "Plaintext statement import is retired. Unlock the private ledger and import into the vault.",
+      };
     }
 
     emitProgress(params.onProgress, "ocr");
@@ -246,130 +237,80 @@ async function importBankStatementWithKey(
     });
 
     emitProgress(params.onProgress, "save");
-    if (persistMode === "vault") {
-      emitProgress(params.onProgress, "categorize");
-      let categorization;
-      let labeledTxns = transactions;
-      try {
-        const labeled = await labelDescriptionGroups(
-          params.client,
-          transactions,
-        );
-        categorization = labeled.summary;
-        const byId = new Map(
-          labeled.labeled.map((row) => [row.transactionId, row]),
-        );
-        labeledTxns = transactions.map((txn) => {
-          const hit = byId.get(txn.transactionId);
-          if (!hit) return txn;
-          return {
-            ...txn,
-            merchantClean: hit.profile.merchant,
-            sectionName: hit.section,
-            categoryName: hit.category,
-            subcategoryName: hit.subcategory,
-            spreadName: hit.profile.spread,
-            transactionTypeName: hit.profile.transactionType,
-            txnCode: hit.profile.txnCode,
-            channel: hit.profile.channel,
-            tagNames: hit.profile.tags ?? [],
-          };
-        });
-      } catch (error) {
-        categorization = {
-          ok: false,
-          cached: 0,
-          ai: 0,
-          pending: transactions.length,
-          error: errorMessage(error, "Categorization failed"),
-        };
-      }
-      emitProgress(params.onProgress, "done");
-      return {
-        ok: true,
-        uploadId: 0,
-        filename: params.filename,
-        fileHash,
-        transactionCount: transactions.length,
-        insertedCount: transactions.length,
-        updatedCount: 0,
-        skippedCount: 0,
-        removedTwinCount: 0,
-        duplicateFile: false,
-        institutionName: parsed.institutionName,
-        accountName: parsed.accountName,
-        pageCount: ocr.pageCount,
-        statementPeriodStart: parsed.statementPeriodStart,
-        statementPeriodEnd: parsed.statementPeriodEnd,
-        openingBalance: balance.openingBalance,
-        closingBalance: balance.closingBalance,
-        transactionSum: balance.transactionSum,
-        computedClosing: balance.computedClosing,
-        balanceDelta: balance.delta,
-        balanceOk: balance.balanced,
-        categorization,
-        vaultPayload: {
-          accountId,
-          accountName: parsed.accountName,
-          accountType: ledgerFields.type,
-          accountSubtype: ledgerFields.subtype,
-          accountMask: parsed.accountMask,
-          currency,
-          openingBalance: balance.openingBalance,
-          closingBalance: balance.closingBalance,
-          ocrMarkdown: ocr.markdown,
-          transactions: labeledTxns,
-        },
-      };
-    }
-
-    const result = await params.client.mutation(
-      api.statements.importPaperFacts,
-      {
-        filename: params.filename,
-        fileHash,
-        pageCount: ocr.pageCount,
-        institutionName: parsed.institutionName,
-        accountName: parsed.accountName,
-        accountMask: parsed.accountMask,
-        currency,
-        accountId,
-        accountType: ledgerFields.type,
-        accountSubtype: ledgerFields.subtype,
-        statementPeriodStart: parsed.statementPeriodStart,
-        statementPeriodEnd: parsed.statementPeriodEnd,
-        openingBalance: balance.openingBalance,
-        closingBalance: balance.closingBalance,
-        totalDebits: parsed.totalDebits,
-        totalCredits: parsed.totalCredits,
-        transactionSum: balance.transactionSum,
-        computedClosing: balance.computedClosing,
-        balanceDelta: balance.delta,
-        balanceOk: balance.balanced,
-        ocrMarkdown: ocr.markdown,
-        transactions,
-      },
-    );
-    await invalidateConvexUserCache();
-
     emitProgress(params.onProgress, "categorize");
     let categorization;
+    let labeledTxns = transactions;
     try {
-      categorization = await categorizeStatement(
+      const labeled = await labelDescriptionGroups(
         params.client,
-        result.uploadId,
+        transactions,
       );
+      categorization = labeled.summary;
+      const byId = new Map(
+        labeled.labeled.map((row) => [row.transactionId, row]),
+      );
+      labeledTxns = transactions.map((txn) => {
+        const hit = byId.get(txn.transactionId);
+        if (!hit) return txn;
+        return {
+          ...txn,
+          merchantClean: hit.profile.merchant,
+          sectionName: hit.section,
+          categoryName: hit.category,
+          subcategoryName: hit.subcategory,
+          spreadName: hit.profile.spread,
+          transactionTypeName: hit.profile.transactionType,
+          txnCode: hit.profile.txnCode,
+          channel: hit.profile.channel,
+          tagNames: hit.profile.tags ?? [],
+        };
+      });
     } catch (error) {
       categorization = {
         ok: false,
         cached: 0,
         ai: 0,
-        pending: result.transactionCount,
+        pending: transactions.length,
         error: errorMessage(error, "Categorization failed"),
       };
     }
     emitProgress(params.onProgress, "done");
-    return { ...result, categorization } as ImportBankStatementSuccess;
+    return {
+      ok: true,
+      uploadId: 0,
+      filename: params.filename,
+      fileHash,
+      transactionCount: transactions.length,
+      insertedCount: transactions.length,
+      updatedCount: 0,
+      skippedCount: 0,
+      removedTwinCount: 0,
+      duplicateFile: false,
+      institutionName: parsed.institutionName,
+      accountName: parsed.accountName,
+      pageCount: ocr.pageCount,
+      statementPeriodStart: parsed.statementPeriodStart,
+      statementPeriodEnd: parsed.statementPeriodEnd,
+      openingBalance: balance.openingBalance,
+      closingBalance: balance.closingBalance,
+      transactionSum: balance.transactionSum,
+      computedClosing: balance.computedClosing,
+      balanceDelta: balance.delta,
+      balanceOk: balance.balanced,
+      categorization,
+      vaultPayload: {
+        accountId,
+        accountName: parsed.accountName,
+        accountType: ledgerFields.type,
+        accountSubtype: ledgerFields.subtype,
+        accountMask: parsed.accountMask,
+        currency,
+        openingBalance: balance.openingBalance,
+        closingBalance: balance.closingBalance,
+        ocrMarkdown: ocr.markdown,
+        transactions: labeledTxns,
+      },
+    };
   } catch (error) {
     return {
       ok: false,

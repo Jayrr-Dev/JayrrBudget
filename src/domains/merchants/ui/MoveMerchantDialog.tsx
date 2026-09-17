@@ -36,10 +36,8 @@ import {
   vaultWriteReady,
 } from "@/domains/vault/application/saveEncryptedLedger";
 import { usePrivateLedger } from "@/domains/vault/ui/usePrivateLedger";
-import { api } from "@convex/_generated/api";
-import type { Id } from "@convex/_generated/dataModel";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useConvex, useMutation as useConvexMutation } from "convex/react";
+import { useConvex } from "convex/react";
 import { Info } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -163,7 +161,6 @@ export function MoveMerchantDialog({
   open,
   onOpenChange,
   merchantName,
-  merchantId,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -172,9 +169,6 @@ export function MoveMerchantDialog({
 }) {
   const queryClient = useQueryClient();
   const client = useConvex();
-  const recategorize = useConvexMutation(
-    api.transactions.recategorizeByMerchant,
-  );
   const privateLedger = usePrivateLedger();
   const taxonomy = useQuery({
     queryKey: queryKeys.transactionTaxonomy,
@@ -280,26 +274,21 @@ export function MoveMerchantDialog({
         keyId: privateLedger.keyId,
         client,
       });
-      if (write) {
-        const updated = await recategorizeEncryptedByMerchant(
-          write,
-          privateLedger.ledger.transactions,
-          merchantName,
-          {
-            sectionName: taxonomyPatch.section,
-            categoryName: taxonomyPatch.category,
-            subcategoryName: taxonomyPatch.subcategory,
-          },
-        );
-        privateLedger.reload();
-        return updated;
+      if (!write) {
+        throw new Error("Unlock your private ledger to edit.");
       }
-      const result = await recategorize({
-        merchant: merchantName,
-        merchantId: merchantId ? (merchantId as Id<"merchants">) : undefined,
-        taxonomy: taxonomyPatch,
-      });
-      return result.updated;
+      const updated = await recategorizeEncryptedByMerchant(
+        write,
+        privateLedger.ledger.transactions,
+        merchantName,
+        {
+          sectionName: taxonomyPatch.section,
+          categoryName: taxonomyPatch.category,
+          subcategoryName: taxonomyPatch.subcategory,
+        },
+      );
+      privateLedger.reload();
+      return updated;
     },
     onSuccess: async (updated) => {
       onOpenChange(false);

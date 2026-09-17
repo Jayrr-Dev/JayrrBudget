@@ -138,9 +138,7 @@ export async function POST(request: Request) {
 
     const tools = {
       ...createDocumentTools({
-        client,
         documents,
-        allowLedgerWrites: !useClientBudget,
       }),
       ...createPiggyMemoryTools(client),
       ...createPiggyCrewTools({
@@ -171,7 +169,7 @@ export async function POST(request: Request) {
         helperContext: useClientBudget ? JSON.stringify(context) : undefined,
       }),
       ...createLedgerAiTools(client, {
-        allowLedgerWrites: !useClientBudget,
+        allowLedgerWrites: false,
         allowStoreSheetWrites: !useClientBudget,
         storeSheetSnapshot: useClientBudget
           ? (body.storeSheet as {
@@ -270,7 +268,7 @@ export async function POST(request: Request) {
       "Cloud Processing notice: this chat receives readable budget, store sheet, and note context. It is not end-to-end encrypted.",
       useClientBudget
         ? "Encrypted vault is on. Answer from the budget snapshot. Budget edits: apply_budget_edit or update_transaction / update_transactions / create_transaction / delete_transactions / rename_descriptions / recategorize_matching — the browser writes encrypted rows. Import statements with import_statement_document and loans with register_loan_from_document (browser encrypts). Store sheet: add_store_sheet_row / remove_store_sheet_row (browser writes the encrypted pad)."
-        : "Write tools are available for this user's plaintext budget, store sheet, and notes. Prefer apply_budget_edit or update_transaction over instructions.",
+        : "Money writes always go through the private ledger in the browser. Prefer apply_budget_edit or update_transaction. Import statements and loans with import_statement_document / register_loan_from_document.",
       "",
       ...piggyUser.systemLines,
       "",

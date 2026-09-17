@@ -101,38 +101,19 @@ async function askAiMerges(
 }
 
 async function drainCluster(
-  client: ConvexHttpClient,
-  keeperId: Id<"merchants">,
-  sourceIds: Id<"merchants">[],
-  name: string,
-) {
-  let transactionsUpdated = 0;
-  let merchantsDeleted = 0;
-  let keeperName = name;
-  let nextKeeper = keeperId;
-  let nameToApply: string | undefined = name;
-
-  for (let step = 0; step < 80; step += 1) {
-    const result = await client.mutation(api.merchants.mergeCluster, {
-      keeperId: nextKeeper,
-      sourceIds,
-      name: nameToApply,
-      txnLimit: MERGE_TXN_LIMIT,
-    });
-    nameToApply = undefined;
-    nextKeeper = result.keeperId;
-    keeperName = result.keeperName;
-    transactionsUpdated += result.transactionsUpdated;
-    merchantsDeleted += result.sourcesDeleted;
-    if (result.isDone) break;
-  }
-
-  return {
-    keeperId: nextKeeper,
-    keeperName,
-    transactionsUpdated,
-    merchantsDeleted,
-  };
+  _client: ConvexHttpClient,
+  _keeperId: Id<"merchants">,
+  _sourceIds: Id<"merchants">[],
+  _name: string,
+): Promise<{
+  keeperId: Id<"merchants">;
+  keeperName: string;
+  transactionsUpdated: number;
+  merchantsDeleted: number;
+}> {
+  throw new Error(
+    "mergeCluster is retired. Use the private ledger (vault) merchant clean.",
+  );
 }
 
 export type PlannedMerchantMerge = {

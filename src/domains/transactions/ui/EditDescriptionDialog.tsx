@@ -57,25 +57,6 @@ async function fetchTaxonomy() {
   return data.data;
 }
 
-async function postRename(
-  from: string,
-  to: string,
-  taxonomy?: RenameDescriptionTaxonomy,
-) {
-  const response = await fetch("/api/transactions/rename-descriptions", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ from, to, taxonomy }),
-  });
-  const data = (await response.json()) as
-    | { ok: true; updated: number }
-    | { ok?: false; error: string };
-  if (!response.ok || !("updated" in data)) {
-    throw new Error("error" in data ? data.error : "Failed to rename");
-  }
-  return data.updated;
-}
-
 function normName(value: string | null | undefined) {
   const trimmed = value?.trim();
   return trimmed ? trimmed : null;
@@ -308,28 +289,24 @@ export function EditDescriptionDialog({
         keyId: privateLedger.keyId,
         client,
       });
-      if (write) {
-        const updated = await renameEncryptedDescriptions(
-          write,
-          privateLedger.ledger.transactions,
-          currentDescription,
-          to,
-          taxonomyChanged
-            ? {
-                sectionName: taxonomyPatch.section,
-                categoryName: taxonomyPatch.category,
-                subcategoryName: taxonomyPatch.subcategory,
-              }
-            : undefined,
-        );
-        privateLedger.reload();
-        return updated;
+      if (!write) {
+        throw new Error("Unlock your private ledger to edit.");
       }
-      return postRename(
+      const updated = await renameEncryptedDescriptions(
+        write,
+        privateLedger.ledger.transactions,
         currentDescription,
         to,
-        taxonomyChanged ? taxonomyPatch : undefined,
+        taxonomyChanged
+          ? {
+              sectionName: taxonomyPatch.section,
+              categoryName: taxonomyPatch.category,
+              subcategoryName: taxonomyPatch.subcategory,
+            }
+          : undefined,
       );
+      privateLedger.reload();
+      return updated;
     },
     onSuccess: async (updated) => {
       onOpenChange(false);

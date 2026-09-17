@@ -28,8 +28,14 @@ export type StatementAccountType = (typeof STATEMENT_ACCOUNT_TYPES)[number];
 
 export function normalizeStatementAccountType(
   value: string | null | undefined,
-): Exclude<StatementAccountType, "checking" | "credit_card" | "line_of_credit"> {
-  const raw = (value ?? "other").toLowerCase().trim().replace(/[\s-]+/g, "_");
+): Exclude<
+  StatementAccountType,
+  "checking" | "credit_card" | "line_of_credit"
+> {
+  const raw = (value ?? "other")
+    .toLowerCase()
+    .trim()
+    .replace(/[\s-]+/g, "_");
 
   if (raw === "checking" || raw === "chequing" || raw === "current") {
     return "chequing";
@@ -84,9 +90,12 @@ function includesAny(haystack: string, needles: string[]) {
 }
 
 /** Infer dashboard category from stored type/subtype/name (existing + new rows). */
-export function resolveAccountCategory(
-  account: Pick<DashboardAccount, "name" | "officialName" | "type" | "subtype">,
-): AccountCategory {
+export function resolveAccountCategory(account: {
+  name: string;
+  officialName?: string | null;
+  type?: string | null;
+  subtype?: string | null;
+}): AccountCategory {
   const type = (account.type ?? "").toLowerCase();
   const subtype = (account.subtype ?? "").toLowerCase();
   const label = `${account.name} ${account.officialName ?? ""}`.toLowerCase();
@@ -116,7 +125,13 @@ export function resolveAccountCategory(
   if (
     type === "credit" ||
     subtype.includes("credit") ||
-    includesAny(label, ["visa", "mastercard", "master card", "amex", "american express"])
+    includesAny(label, [
+      "visa",
+      "mastercard",
+      "master card",
+      "amex",
+      "american express",
+    ])
   ) {
     return "credit_card";
   }
@@ -141,7 +156,9 @@ export function resolveAccountCategory(
   return "other";
 }
 
-export function sectionForCategory(category: AccountCategory): AccountSectionId {
+export function sectionForCategory(
+  category: AccountCategory,
+): AccountSectionId {
   if (category === "credit_card") return "credit";
   if (category === "lending") return "lending";
   return "deposit";

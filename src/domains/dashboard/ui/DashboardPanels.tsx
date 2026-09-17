@@ -13,9 +13,14 @@ import type {
   DashboardTransaction,
 } from "@/domains/dashboard/domain/types";
 import {
+  getLedgerSnapshotVersion,
+  isLastViewHydrateDone,
   peekDashboard,
   rememberDashboard,
+  rememberLastViewSavedAt,
+  subscribeLedgerSnapshots,
 } from "@/domains/dashboard/ui/ledgerQuerySnapshot";
+import { peekEncryptedLedgerLocal, readLastUserId, upsertLastView } from "@/domains/dashboard/ui/lastViewCache";
 import { useFeatureFlags } from "@/domains/feature-flags/ui/useFeatureFlag";
 import { MerchantLabel } from "@/domains/merchants/ui/MerchantLabel";
 import { StatementUpload } from "@/domains/statements/ui/StatementUpload";
@@ -24,12 +29,17 @@ import { usePrivateLedger } from "@/domains/vault/ui/usePrivateLedger";
 import { formatDisplayDate } from "@/shared/lib/format-date";
 import { api } from "@convex/_generated/api";
 import { useConvexAuth, useQuery } from "convex/react";
-import { useMemo } from "react";
+import { useMemo, useSyncExternalStore } from "react";
 
 export function useDashboard(transactionLimit: number | null = 250) {
   const { isAuthenticated, isLoading: authLoading } = useConvexAuth();
   const flags = useFeatureFlags();
   const privateLedger = usePrivateLedger();
+  useSyncExternalStore(
+    subscribeLedgerSnapshots,
+    getLedgerSnapshotVersion,
+    getLedgerSnapshotVersion,
+  );
   const result = useQuery(
     api.dashboard.get,
     isAuthenticated && !flags.loading && !privateLedger.encryptedLedger
@@ -86,15 +96,35 @@ export function useDashboard(transactionLimit: number | null = 250) {
   }
 
   const live = result?.ok ? result.data : undefined;
-  if (live) rememberDashboard(transactionLimit, live);
+  if (live) {
+    const changed = rememberDashboard(transactionLimit, live);
+    if (
+      changed &&
+      transactionLimit === 250 &&
+      !privateLedger.encryptedLedger &&
+      !peekEncryptedLedgerLocal()
+    ) {
+      const userId = readLastUserId();
+      if (userId) {
+        rememberLastViewSavedAt(Date.now());
+        void upsertLastView({ userId, dashboard: live });
+      }
+    }
+  }
   const cached =
     live ??
     (result === undefined ? peekDashboard(transactionLimit) : undefined);
+  const hydratePending =
+    !isAuthenticated &&
+    cached === undefined &&
+    !isLastViewHydrateDone();
 
   return {
     data: cached,
     error: result && !result.ok ? new Error(result.error) : null,
-    isPending: isAuthenticated && result === undefined && cached === undefined,
+    isPending:
+      (isAuthenticated && result === undefined && cached === undefined) ||
+      hydratePending,
     isError: Boolean(result && !result.ok),
     isSuccess: Boolean(live ?? cached),
     encryptedLedger: false as const,

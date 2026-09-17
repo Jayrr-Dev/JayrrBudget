@@ -1,26 +1,15 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
-import { buildScheduledDates } from "./lib/amortize";
-import { ensureUser, requireUser } from "./lib/auth";
+import { requireUser } from "./lib/auth";
 import {
   collectPadCandidates,
   computeLoanAmortization,
   summaryFromAmortize,
   type LoanTermsRow,
 } from "./lib/loanCompute";
-import {
-  loanTypeMeta,
-  normalizeLoanType,
-  normalizeRateType,
-  officialLoanName,
-  type LoanType,
-  type RateType,
-} from "./lib/loanTypes";
-import { normalizePaymentFrequency } from "./lib/paymentFrequency";
+import { normalizeLoanType, normalizeRateType } from "./lib/loanTypes";
 import { rewriteTaxonomyLabel } from "./lib/seedCategoryPaths";
 import { splitTags } from "./lib/tags";
-
-const MANUAL_INSTITUTION_ID = "manual";
 
 const paymentFrequencyValidator = v.union(
   v.literal("weekly"),
@@ -76,16 +65,6 @@ function mapLoanTerms(row: {
     rateType: normalizeRateType(row.rateType),
     vehicleLabel: row.vehicleLabel,
   };
-}
-
-function slugifyAccountId(name: string): string {
-  const base = name
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 48);
-  return base || "loan";
 }
 
 function txnPadRows(

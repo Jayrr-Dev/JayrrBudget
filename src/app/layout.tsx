@@ -1,8 +1,11 @@
+import { SerwistAppProvider } from "@/components/pwa/SerwistAppProvider";
 import { Providers } from "@/shared/query/Providers";
 import { ConvexAuthNextjsServerProvider } from "@convex-dev/auth/nextjs/server";
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Azeret_Mono, Outfit, Plus_Jakarta_Sans } from "next/font/google";
 import "./globals.css";
+
+const THEME_COCOA = "#60353d";
 
 const plusJakarta = Plus_Jakarta_Sans({
   variable: "--font-sans-body",
@@ -21,8 +24,14 @@ const azeretMono = Azeret_Mono({
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://www.jayrrbudgets.com"),
+  applicationName: "JayrrBudget",
   title: "JayrrBudget",
   description: "Personal budgeting with private statement imports",
+  appleWebApp: {
+    capable: true,
+    title: "JayrrBudget",
+    statusBarStyle: "default",
+  },
   robots: {
     index: false,
     follow: false,
@@ -42,6 +51,11 @@ export const metadata: Metadata = {
   },
 };
 
+export const viewport: Viewport = {
+  themeColor: THEME_COCOA,
+  viewportFit: "cover",
+};
+
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
@@ -49,9 +63,11 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       className={`${plusJakarta.variable} ${outfit.variable} ${azeretMono.variable} h-full antialiased`}
     >
       <body className="flex min-h-full flex-col">
-        <ConvexAuthNextjsServerProvider>
-          <Providers>{children}</Providers>
-        </ConvexAuthNextjsServerProvider>
+        <SerwistAppProvider>
+          <ConvexAuthNextjsServerProvider>
+            <Providers>{children}</Providers>
+          </ConvexAuthNextjsServerProvider>
+        </SerwistAppProvider>
       </body>
     </html>
   );

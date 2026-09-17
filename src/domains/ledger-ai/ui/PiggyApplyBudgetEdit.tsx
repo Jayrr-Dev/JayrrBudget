@@ -27,7 +27,6 @@ export function PiggyApplyBudgetEdit({
   const onDoneRef = useRef(onDone);
   onDoneRef.current = onDone;
   const reload = privateLedger.reload;
-  const encrypted = privateLedger.encryptedLedger;
   const loading = privateLedger.loading;
   const unlocked = privateLedger.unlocked;
   const userId = privateLedger.userId;
@@ -37,10 +36,10 @@ export function PiggyApplyBudgetEdit({
 
   useEffect(() => {
     if (!pending || reported.current) return;
-    if (encrypted && (loading || !unlocked)) return;
+    if (loading || !unlocked) return;
     let cancelled = false;
     const write = vaultWriteReady({
-      encryptedLedger: encrypted,
+      encryptedLedger: privateLedger.encryptedLedger,
       userId,
       vaultId,
       keyId,
@@ -48,10 +47,8 @@ export function PiggyApplyBudgetEdit({
     });
     void applyBudgetEdit({
       input,
-      encrypted,
       transactions,
       vaultWrite: write,
-      convex,
       onVaultSaved: () => reload(),
     })
       .then((output) => {
@@ -72,11 +69,11 @@ export function PiggyApplyBudgetEdit({
     };
   }, [
     convex,
-    encrypted,
     input,
     keyId,
     loading,
     pending,
+    privateLedger.encryptedLedger,
     reload,
     transactions,
     unlocked,

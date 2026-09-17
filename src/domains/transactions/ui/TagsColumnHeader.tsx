@@ -30,6 +30,7 @@ import { formatMoney } from "@/domains/dashboard/domain/money";
 import type { DashboardTransaction } from "@/domains/dashboard/domain/types";
 import { queryKeys } from "@/domains/dashboard/queries/query-keys";
 import { formatShortDisplayDate } from "@/shared/lib/format-date";
+import { assertOnlineForWrite } from "@/shared/offline/offlineWriteGuard";
 
 type TagByDateRangeResponse =
   | {
@@ -60,6 +61,7 @@ async function postTagByDateRange(input: {
   endDate: string;
   excludeTransactionIds: string[];
 }) {
+  assertOnlineForWrite();
   const response = await fetch("/api/transactions/tag-by-date-range", {
     method: "POST",
     headers: { "Content-Type": "application/json" },

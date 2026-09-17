@@ -75,8 +75,9 @@ import { cn } from "@/lib/utils";
 import { logMistralOcrUsage } from "@/shared/debug/aiUsageDebug";
 import { errorMessage } from "@/shared/lib/error-message";
 import { mapPool } from "@/shared/lib/map-pool";
-import { api } from "@convex/_generated/api";
-import { useConvex, useMutation, useQuery } from "convex/react";
+import { toastIfOffline } from "@/shared/offline/offlineWriteGuard";
+import { useConnectionState } from "@/shared/offline/useConnectionState";
+import { useConvex } from "convex/react";
 import {
   CameraIcon,
   CheckIcon,
@@ -94,7 +95,6 @@ import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 const UPLOAD_TOAST = "statement-upload";
-const MERCHANT_BACKFILL_KEY = "jayrr-budget.merchant-backfill-v1";
 const MAX_FILES = 24;
 const MAX_BYTES = 20 * 1024 * 1024;
 /** Files parsed at once. OCR + AI parse dominate, so 3 keeps wall-clock ~3x shorter. */
@@ -210,22 +210,16 @@ export function StatementUpload({ onImported }: Props) {
   const flags = useFeatureFlags();
   const ocrMode = useOcrMode();
   const privateLedger = usePrivateLedger();
-  const vaultPersist = flags.encryptedLedger;
-
+  const { isOffline } = useConnectionState();
   busyRef.current = busy;
   itemsRef.current = items;
 
   const ocrPicker = useOcrDocumentInputs({
     multiple: true,
-    disabled: busy,
+    disabled: busy || isOffline,
     onFiles: (files) => addFiles(files),
   });
 
-  const fingerprints = useQuery(
-    api.statements.listCompletedFingerprints,
-    dialogOpen && !vaultPersist ? {} : "skip",
-  );
-  const backfillMerchants = useMutation(api.merchants.backfillFromTransactions);
   const vaultFingerprints: Fingerprint[] = privateLedger.ledger.statementLogs
     .filter((log) => log.fileHash)
     .map((log) => ({
@@ -235,7 +229,7 @@ export function StatementUpload({ onImported }: Props) {
       statementPeriodStart: log.statementPeriodStart,
       statementPeriodEnd: log.statementPeriodEnd,
     }));
-  fingerprintsRef.current = vaultPersist ? vaultFingerprints : fingerprints;
+  fingerprintsRef.current = vaultFingerprints;
 
   useEffect(() => {
     if (dialogOpen) return;
@@ -314,15 +308,15 @@ export function StatementUpload({ onImported }: Props) {
     }
   }
 
-  // Fingerprints arrive after files may already sit in the queue.
+  // Rescan when vault statement logs change after files sit in the queue.
   useEffect(() => {
-    if (!dialogOpen || fingerprints === undefined) return;
+    if (!dialogOpen) return;
     const pending = itemsRef.current.filter(
       (item) => item.dupCheck === "pending" && item.state === "idle",
     );
     if (pending.length === 0) return;
     void scanDuplicates(pending);
-  }, [dialogOpen, fingerprints]);
+  }, [dialogOpen, vaultFingerprints]);
 
   function setBusySafe(next: boolean) {
     busyRef.current = next;
@@ -422,6 +416,7 @@ export function StatementUpload({ onImported }: Props) {
   }
 
   async function startUpload() {
+    if (toastIfOffline()) return;
     const pending = items.filter(
       (item) =>
         (item.state === "idle" || item.state === "error") &&
@@ -480,7 +475,7 @@ export function StatementUpload({ onImported }: Props) {
       try {
         const result = await uploadBankStatement(item.file, {
           signal: controller.signal,
-          persistMode: vaultPersist ? "vault" : "convex",
+          persistMode: "vault",
           ocrMode,
           onProgress: (progress) => {
             const state: ItemState =
@@ -498,41 +493,39 @@ export function StatementUpload({ onImported }: Props) {
           },
         });
 
-        if (vaultPersist) {
-          if (!flags.cloudProcessing) {
-            throw new Error(
-              "Turn on Cloud Processing in Modules before uploading a document.",
-            );
+        if (!flags.cloudProcessing) {
+          throw new Error(
+            "Turn on Cloud Processing in Modules before uploading a document.",
+          );
+        }
+        await vaultWrite(async () => {
+          const opened = await hydrateVaultSession(
+            client as unknown as VaultClient,
+          );
+          const masterKey = getVaultMasterKey();
+          const vaultId = privateLedger.vaultId ?? opened?.vaultId ?? null;
+          const keyId = privateLedger.keyId ?? opened?.keyId ?? null;
+          if (!privateLedger.userId || !vaultId || !keyId || !masterKey) {
+            throw new Error("Sign in again, then retry the upload.");
           }
-          await vaultWrite(async () => {
-            const opened = await hydrateVaultSession(
-              client as unknown as VaultClient,
-            );
-            const masterKey = getVaultMasterKey();
-            const vaultId = privateLedger.vaultId ?? opened?.vaultId ?? null;
-            const keyId = privateLedger.keyId ?? opened?.keyId ?? null;
-            if (!privateLedger.userId || !vaultId || !keyId || !masterKey) {
-              throw new Error("Sign in again, then retry the upload.");
-            }
-            const ledger = await loadPrivateLedger(
-              client as unknown as VaultListClient,
-              {
-                userId: privateLedger.userId,
-                vaultId,
-              },
-            );
-            await encryptStatementImportToVault({
-              client: client as unknown as MutationClient,
+          const ledger = await loadPrivateLedger(
+            client as unknown as VaultListClient,
+            {
               userId: privateLedger.userId,
               vaultId,
-              keyId,
-              masterKey,
-              result,
-              ledger,
-            });
-            privateLedger.reload();
+            },
+          );
+          await encryptStatementImportToVault({
+            client: client as unknown as MutationClient,
+            userId: privateLedger.userId,
+            vaultId,
+            keyId,
+            masterKey,
+            result,
+            ledger,
           });
-        }
+          privateLedger.reload();
+        });
 
         const copy = describeImportResult(result);
         if (ocrMode !== "local" && result.pageCount > 0) {
@@ -580,32 +573,6 @@ export function StatementUpload({ onImported }: Props) {
 
     abortRef.current = null;
     setBusySafe(false);
-
-    if (okCount > 0 && !vaultPersist) {
-      try {
-        localStorage.removeItem(MERCHANT_BACKFILL_KEY);
-        let cursor: string | null = null;
-        for (let i = 0; i < 20; i += 1) {
-          const backfillResult: {
-            continueCursor: string | null;
-            isDone: boolean;
-          } = await backfillMerchants({
-            limit: 500,
-            cursor,
-          });
-          cursor = backfillResult.continueCursor;
-          localStorage.setItem(
-            MERCHANT_BACKFILL_KEY,
-            backfillResult.isDone
-              ? "done"
-              : (backfillResult.continueCursor ?? ""),
-          );
-          if (backfillResult.isDone) break;
-        }
-      } catch {
-        // ledger import already succeeded
-      }
-    }
 
     await onImported?.();
 
@@ -821,17 +788,13 @@ export function StatementUpload({ onImported }: Props) {
                       Drag PDFs or photos here or choose files. Up to{" "}
                       {MAX_FILES} · 20MB each. Already-imported files are marked
                       before scan.
-                      {vaultPersist
-                        ? " The scan is encrypted. Only you can read it."
-                        : ""}
+                      {" The scan is encrypted. Only you can read it."}
                     </PopoverDescription>
                     <ul className="mt-1 list-disc space-y-1 pl-4 text-sm leading-relaxed text-muted-foreground">
                       <li>On your phone, tap to take a photo or pick a file</li>
                       <li>Up to {MAX_FILES} · 20MB each.</li>
                       <li>Already-imported files are marked before scan.</li>
-                      {vaultPersist ? (
-                        <li>The scan is encrypted. Only you can read it.</li>
-                      ) : null}
+                      <li>The scan is encrypted. Only you can read it.</li>
                     </ul>
                   </PopoverHeader>
                 </PopoverContent>
@@ -839,10 +802,8 @@ export function StatementUpload({ onImported }: Props) {
             </DialogTitle>
             <DialogDescription className="sr-only">
               Drag PDFs or photos here or choose files. Up to {MAX_FILES} · 20MB
-              each. Already-imported files are marked before scan.
-              {vaultPersist
-                ? " The scan is encrypted. Only you can read it."
-                : ""}
+              each. Already-imported files are marked before scan. The scan is
+              encrypted. Only you can read it.
             </DialogDescription>
           </DialogHeader>
 
@@ -1086,7 +1047,9 @@ export function StatementUpload({ onImported }: Props) {
             </Button>
             <Button
               type="button"
-              disabled={pendingCount === 0 || busy || checkingCount > 0}
+              disabled={
+                pendingCount === 0 || busy || checkingCount > 0 || isOffline
+              }
               onClick={() => void startUpload()}
             >
               {busy

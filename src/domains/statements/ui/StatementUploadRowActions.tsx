@@ -46,7 +46,6 @@ import {
   skipNextPrivateLedgerReload,
   usePrivateLedger,
 } from "@/domains/vault/ui/usePrivateLedger";
-import { api } from "@convex/_generated/api";
 import { Icon } from "@iconify/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useConvex } from "convex/react";
@@ -190,11 +189,9 @@ export function StatementUploadRowActions({
         privateLedger.applyLedger(result.nextLedger);
         return result;
       }
-      const result = await client.mutation(api.statements.remove, {
-        uploadId: upload.id,
-      });
-      if (!result.ok) throw new Error(result.error);
-      return result;
+      throw new Error(
+        "Plaintext statement delete is retired. Unlock the private ledger.",
+      );
     },
     onSuccess: async (result) => {
       setConfirmDeleteOpen(false);

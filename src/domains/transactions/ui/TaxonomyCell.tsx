@@ -21,21 +21,20 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useConvex } from "convex/react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
+import { assertOnlineForWrite } from "@/shared/offline/offlineWriteGuard";
 
 type TaxonomyResponse =
   | { ok: true; data: TransactionTaxonomy }
   | { ok?: false; error: string };
 
-type UpdateResponse =
-  | {
-      ok: true;
-      transactionId: string;
-      section: string | null;
-      category: string | null;
-      subcategory: string | null;
-      spread: string | null;
-    }
-  | { ok?: false; error: string };
+type UpdateResponse = {
+  ok: true;
+  transactionId: string;
+  section: string | null;
+  category: string | null;
+  subcategory: string | null;
+  spread: string | null;
+};
 
 async function fetchTaxonomy() {
   const response = await fetch("/api/transactions/taxonomy");
@@ -46,27 +45,10 @@ async function fetchTaxonomy() {
   return data.data;
 }
 
-async function postUpdateTaxonomy(input: {
-  transactionId: string;
-  field: TaxonomyField;
-  value: string | null;
-}) {
-  const response = await fetch("/api/transactions/update-taxonomy", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(input),
-  });
-  const data = (await response.json()) as UpdateResponse;
-  if (!response.ok || !("transactionId" in data)) {
-    throw new Error("error" in data ? data.error : "Failed to update");
-  }
-  return data;
-}
-
 /** Patch every dashboard query (overview + /transactions all-rows). */
 function patchDashboardCaches(
   queryClient: ReturnType<typeof useQueryClient>,
-  result: Extract<UpdateResponse, { ok: true }>,
+  result: UpdateResponse,
 ) {
   queryClient.setQueriesData<DashboardData>(
     { queryKey: queryKeys.dashboard },
@@ -214,6 +196,7 @@ export function TaxonomyCell({
       field: TaxonomyField;
       value: string | null;
     }) => {
+      assertOnlineForWrite();
       const write = vaultWriteReady({
         encryptedLedger: privateLedger.encryptedLedger,
         userId: privateLedger.userId,
@@ -221,36 +204,36 @@ export function TaxonomyCell({
         keyId: privateLedger.keyId,
         client,
       });
-      if (write) {
-        const tx = privateLedger.ledger.transactions.find(
-          (row) => row.recordId === input.transactionId,
-        );
-        if (!tx) throw new Error("Encrypted transaction not found.");
-        const patch: Record<string, string | null> = {};
-        if (input.field === "section") {
-          patch.sectionName = input.value;
-          patch.categoryName = null;
-          patch.subcategoryName = null;
-        } else if (input.field === "category") {
-          patch.categoryName = input.value;
-          patch.subcategoryName = null;
-        } else if (input.field === "subcategory") {
-          patch.subcategoryName = input.value;
-        } else if (input.field === "spread") {
-          patch.spreadName = input.value;
-        }
-        const next = await patchEncryptedTransaction(write, tx, patch);
-        privateLedger.reload();
-        return {
-          ok: true as const,
-          transactionId: input.transactionId,
-          section: next.sectionName ?? null,
-          category: next.categoryName ?? null,
-          subcategory: next.subcategoryName ?? null,
-          spread: next.spreadName ?? null,
-        };
+      if (!write) {
+        throw new Error("Unlock your private ledger to edit.");
       }
-      return postUpdateTaxonomy(input);
+      const tx = privateLedger.ledger.transactions.find(
+        (row) => row.recordId === input.transactionId,
+      );
+      if (!tx) throw new Error("Encrypted transaction not found.");
+      const patch: Record<string, string | null> = {};
+      if (input.field === "section") {
+        patch.sectionName = input.value;
+        patch.categoryName = null;
+        patch.subcategoryName = null;
+      } else if (input.field === "category") {
+        patch.categoryName = input.value;
+        patch.subcategoryName = null;
+      } else if (input.field === "subcategory") {
+        patch.subcategoryName = input.value;
+      } else if (input.field === "spread") {
+        patch.spreadName = input.value;
+      }
+      const next = await patchEncryptedTransaction(write, tx, patch);
+      privateLedger.reload();
+      return {
+        ok: true as const,
+        transactionId: input.transactionId,
+        section: next.sectionName ?? null,
+        category: next.categoryName ?? null,
+        subcategory: next.subcategoryName ?? null,
+        spread: next.spreadName ?? null,
+      };
     },
     onSuccess: (result) => {
       // Mutation body is source of truth - patch caches, do not refetch.

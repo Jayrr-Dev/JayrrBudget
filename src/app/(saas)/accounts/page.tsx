@@ -1,12 +1,11 @@
+import { PageSpinner } from "@/components/ui/spinner";
 import { AccountsView } from "@/domains/dashboard/ui/AccountsView";
+import { Suspense } from "react";
 
-export default async function AccountsPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ account?: string | string[] }>;
-}) {
-  const params = await searchParams;
-  const raw = params.account;
-  const selectedAccountId = Array.isArray(raw) ? (raw[0] ?? null) : (raw ?? null);
-  return <AccountsView selectedAccountId={selectedAccountId} />;
+export default function AccountsPage() {
+  return (
+    <Suspense fallback={<PageSpinner />}>
+      <AccountsView />
+    </Suspense>
+  );
 }

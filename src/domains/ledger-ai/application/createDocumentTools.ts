@@ -1,20 +1,16 @@
 ﻿import {
-  IMPORT_STATEMENT_DOCUMENT_DESCRIPTION,
   importStatementDocumentClientTool,
   importStatementDocumentInputSchema,
 } from "@/domains/ledger-ai/domain/importStatementDocumentTool";
 import { registerLoanFromDocumentClientTool } from "@/domains/ledger-ai/domain/registerLoanFromDocumentTool";
 import { formatDocumentBytes } from "@/domains/ledger-ai/domain/piggyDocuments";
-import { importBankStatement } from "@/domains/statements/application/importBankStatement";
 import { isOcrDocumentFilename } from "@/domains/statements/domain/ocrDocumentTypes";
 import {
   isMistralConfigured,
   ocrDocument,
 } from "@/domains/statements/infrastructure/mistralOcr";
-import { invalidateConvexUserCache } from "@/shared/convex/cachedRead";
 import { errorMessage } from "@/shared/lib/error-message";
 import { tool } from "ai";
-import type { ConvexHttpClient } from "convex/browser";
 import { z } from "zod";
 import type { PiggyDocument } from "./extractPiggyDocuments";
 
@@ -30,18 +26,12 @@ const documentIndexSchema =
 
 /**
  * Tools that let Piggy read and file the documents attached to this request.
- * Reads work everywhere; statement import uses Convex execute only when
- * plaintext writes are on, otherwise the browser encrypts. Loan registration
- * always runs in the browser (private ledger).
+ * Statement import and loan registration always run in the browser (vault).
  */
 export function createDocumentTools({
-  client,
   documents,
-  allowLedgerWrites,
 }: {
-  client: ConvexHttpClient;
   documents: PiggyDocument[];
-  allowLedgerWrites: boolean;
 }) {
   if (documents.length === 0) return {};
 
@@ -128,43 +118,9 @@ export function createDocumentTools({
     }),
   };
 
-  const importStatement = allowLedgerWrites
-    ? tool({
-        description: IMPORT_STATEMENT_DOCUMENT_DESCRIPTION,
-        inputSchema: z.object({ documentIndex: documentIndexSchema }),
-        execute: async ({ documentIndex }) => {
-          const doc = pick(documentIndex);
-          const result = await importBankStatement({
-            filename: doc.filename,
-            bytes: doc.bytes,
-            mimeType: doc.mediaType,
-            client,
-            persistMode: "convex",
-          });
-          if (!result.ok) return { ok: false as const, error: result.error };
-          await invalidateConvexUserCache();
-          return {
-            ok: true as const,
-            filename: result.filename,
-            duplicateFile: result.duplicateFile,
-            institutionName: result.institutionName,
-            accountName: result.accountName,
-            statementPeriodStart: result.statementPeriodStart,
-            statementPeriodEnd: result.statementPeriodEnd,
-            transactionCount: result.transactionCount,
-            insertedCount: result.insertedCount,
-            updatedCount: result.updatedCount,
-            skippedCount: result.skippedCount,
-            balanceOk: result.balanceOk,
-            categorization: result.categorization ?? null,
-          };
-        },
-      })
-    : importStatementDocumentClientTool;
-
   return {
     ...readTools,
-    import_statement_document: importStatement,
+    import_statement_document: importStatementDocumentClientTool,
     register_loan_from_document: registerLoanFromDocumentClientTool,
   };
 }

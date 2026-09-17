@@ -32,9 +32,7 @@ import {
   blobToDataUrl,
   optimizeImageToWebpAvatar,
 } from "@/shared/lib/optimizeImageToWebp";
-import { api } from "@convex/_generated/api";
-import type { Id } from "@convex/_generated/dataModel";
-import { useConvex, useMutation, useQuery } from "convex/react";
+import { useConvex } from "convex/react";
 import { Info } from "lucide-react";
 import {
   useCallback,
@@ -80,34 +78,19 @@ function impactCopy(
 }
 
 export function EditMerchantDialog({ merchant, open, onOpenChange }: Props) {
-  const update = useMutation(api.merchants.update);
-  const generateLogoUploadUrl = useMutation(
-    api.merchants.generateLogoUploadUrl,
-  );
   const client = useConvex();
   const privateLedger = usePrivateLedger();
   const fileRef = useRef<HTMLInputElement>(null);
   const [name, setName] = useState("");
   const [logoUrl, setLogoUrl] = useState("");
   const [previewSrc, setPreviewSrc] = useState<string | null>(null);
-  const [pendingStorageId, setPendingStorageId] =
-    useState<Id<"_storage"> | null>(null);
   const [pendingLogoDataUrl, setPendingLogoDataUrl] = useState<string | null>(
     null,
   );
   const [busy, setBusy] = useState(false);
 
-  const convexImpactArgs =
-    open && merchant != null && !privateLedger.encryptedLedger
-      ? {
-          merchantId: merchant.id as Id<"merchants">,
-          name,
-        }
-      : "skip";
-  const convexImpact = useQuery(api.merchants.editImpact, convexImpactArgs);
-
   const encryptedAffectedCount = useMemo(() => {
-    if (!privateLedger.encryptedLedger || !merchant) return 0;
+    if (!merchant) return 0;
     const label = merchant.name;
     let count = 0;
     for (const tx of privateLedger.ledger.transactions) {
@@ -115,23 +98,10 @@ export function EditMerchantDialog({ merchant, open, onOpenChange }: Props) {
       if (txLabel === label) count += 1;
     }
     return count;
-  }, [
-    merchant,
-    privateLedger.encryptedLedger,
-    privateLedger.ledger.transactions,
-  ]);
+  }, [merchant, privateLedger.ledger.transactions]);
 
-  const impactLabel = (() => {
-    if (!open || !merchant) return null;
-    if (privateLedger.encryptedLedger) {
-      return impactCopy(encryptedAffectedCount, null);
-    }
-    if (convexImpact === undefined) return "Checking linked transactions…";
-    return impactCopy(
-      convexImpact.affectedCount,
-      convexImpact.merge ? convexImpact.mergeIntoName : null,
-    );
-  })();
+  const impactLabel =
+    open && merchant ? impactCopy(encryptedAffectedCount, null) : null;
 
   const replacePreview = useCallback((next: string | null) => {
     setPreviewSrc((prev) => {
@@ -145,7 +115,6 @@ export function EditMerchantDialog({ merchant, open, onOpenChange }: Props) {
     setName(merchant.name);
     setLogoUrl(merchant.logoUrl ?? "");
     replacePreview(merchant.logoSrc ?? merchant.logoUrl ?? null);
-    setPendingStorageId(null);
     setPendingLogoDataUrl(null);
   }, [open, merchant, replacePreview]);
 
@@ -161,29 +130,13 @@ export function EditMerchantDialog({ merchant, open, onOpenChange }: Props) {
     }
     setBusy(true);
     try {
+      if (!privateLedger.encryptedLedger) {
+        throw new Error("Unlock your private ledger to edit.");
+      }
       const optimized = await optimizeImageToWebpAvatar(file);
-      if (privateLedger.encryptedLedger) {
-        const dataUrl = await blobToDataUrl(optimized);
-        replacePreview(dataUrl);
-        setPendingLogoDataUrl(dataUrl);
-        return;
-      }
-      const localUrl = URL.createObjectURL(optimized);
-      replacePreview(localUrl);
-      const uploadUrl = await generateLogoUploadUrl();
-      const response = await fetch(uploadUrl, {
-        method: "POST",
-        headers: { "Content-Type": optimized.type },
-        body: optimized,
-      });
-      if (!response.ok) {
-        throw new Error("Upload failed");
-      }
-      const payload = (await response.json()) as { storageId?: string };
-      if (!payload.storageId) {
-        throw new Error("Upload failed");
-      }
-      setPendingStorageId(payload.storageId as Id<"_storage">);
+      const dataUrl = await blobToDataUrl(optimized);
+      replacePreview(dataUrl);
+      setPendingLogoDataUrl(dataUrl);
     } catch (error) {
       replacePreview(merchant?.logoSrc ?? merchant?.logoUrl ?? null);
       toast.error(errorMessage(error, "Could not upload logo"));
@@ -202,107 +155,81 @@ export function EditMerchantDialog({ merchant, open, onOpenChange }: Props) {
     }
     setBusy(true);
     try {
-      if (privateLedger.encryptedLedger) {
-        const write = vaultWriteReady({
-          encryptedLedger: true,
-          userId: privateLedger.userId,
-          vaultId: privateLedger.vaultId,
-          keyId: privateLedger.keyId,
-          client,
-        });
-        if (!write) {
-          throw new Error("Unlock the private ledger to save this merchant.");
-        }
-        const existing = privateLedger.ledger.merchants.find(
-          (row) => row.recordId === merchant.id || row.name === merchant.name,
-        );
-        const merchantId =
-          existing?.merchantId ?? merchant.slug ?? toSlug(trimmed) ?? trimmed;
-        const nextLogo =
-          pendingLogoDataUrl ?? (logoUrl.trim() || existing?.logoUrl || null);
-        await saveEncryptedMerchant(write, {
-          merchantId,
-          name: trimmed,
-          rawName: existing?.rawName ?? trimmed,
-          company: existing?.company ?? null,
-          brand: existing?.brand ?? null,
-          website: existing?.website ?? null,
-          logoUrl: nextLogo,
-          expectedRevision: existing?.revision ?? null,
-        });
-        const previous = merchant.name.trim();
-        if (previous && previous !== trimmed) {
-          const matches = privateLedger.ledger.transactions.filter((tx) => {
-            const label = (tx.merchantClean ?? tx.merchantName ?? "").trim();
-            return label === previous;
-          });
-          for (let i = 0; i < matches.length; i += TX_CHUNK) {
-            const chunk = matches.slice(i, i + TX_CHUNK);
-            await saveEncryptedRecords(
-              write,
-              chunk.map((tx) => {
-                const next = { ...tx, merchantClean: trimmed };
-                const { recordId, revision, ...value } = next;
-                return {
-                  recordId,
-                  kind: "tx" as const,
-                  value: {
-                    date: value.date,
-                    authorizedDate: value.authorizedDate ?? null,
-                    description: value.description,
-                    amount: value.amount,
-                    currency: value.currency,
-                    accountId: value.accountId ?? null,
-                    pending: Boolean(value.pending),
-                    city: value.city ?? null,
-                    region: value.region ?? null,
-                    country: value.country ?? null,
-                    merchantName: value.merchantName ?? null,
-                    merchantClean: trimmed,
-                    sectionName: value.sectionName ?? null,
-                    categoryName: value.categoryName ?? null,
-                    subcategoryName: value.subcategoryName ?? null,
-                    spreadName: value.spreadName ?? null,
-                    transactionTypeName: value.transactionTypeName ?? null,
-                    txnCode: value.txnCode ?? null,
-                    channel: value.channel ?? null,
-                    statementRecordId: value.statementRecordId ?? null,
-                    source: value.source ?? "statement",
-                    tagNames: value.tagNames ?? [],
-                  },
-                  expectedRevision: revision,
-                };
-              }),
-            );
-          }
-        }
-        privateLedger.reload();
-        toast.success(`Saved ${trimmed}`);
-        onOpenChange(false);
-        return;
-      }
-      const result = await update({
-        merchantId: merchant.id as Id<"merchants">,
-        name: trimmed,
-        logoUrl: logoUrl.trim() || null,
-        logoStorageId: pendingStorageId ?? undefined,
+      const write = vaultWriteReady({
+        encryptedLedger: privateLedger.encryptedLedger,
+        userId: privateLedger.userId,
+        vaultId: privateLedger.vaultId,
+        keyId: privateLedger.keyId,
+        client,
       });
-      if (result.merged) {
-        toast.success(`Merged into ${result.merchant.name}`, {
-          description: `${result.transactionsUpdated} ledger row${
-            result.transactionsUpdated === 1 ? "" : "s"
-          } moved.`,
-        });
-      } else {
-        toast.success(`Saved ${result.merchant.name}`, {
-          description:
-            result.transactionsUpdated > 0
-              ? `${result.transactionsUpdated} linked ledger row${
-                  result.transactionsUpdated === 1 ? "" : "s"
-                } updated.`
-              : undefined,
-        });
+      if (!write) {
+        throw new Error("Unlock your private ledger to edit.");
       }
+      const existing = privateLedger.ledger.merchants.find(
+        (row) => row.recordId === merchant.id || row.name === merchant.name,
+      );
+      const merchantId =
+        existing?.merchantId ?? merchant.slug ?? toSlug(trimmed) ?? trimmed;
+      const nextLogo =
+        pendingLogoDataUrl ?? (logoUrl.trim() || existing?.logoUrl || null);
+      await saveEncryptedMerchant(write, {
+        merchantId,
+        name: trimmed,
+        rawName: existing?.rawName ?? trimmed,
+        company: existing?.company ?? null,
+        brand: existing?.brand ?? null,
+        website: existing?.website ?? null,
+        logoUrl: nextLogo,
+        expectedRevision: existing?.revision ?? null,
+      });
+      const previous = merchant.name.trim();
+      if (previous && previous !== trimmed) {
+        const matches = privateLedger.ledger.transactions.filter((tx) => {
+          const label = (tx.merchantClean ?? tx.merchantName ?? "").trim();
+          return label === previous;
+        });
+        for (let i = 0; i < matches.length; i += TX_CHUNK) {
+          const chunk = matches.slice(i, i + TX_CHUNK);
+          await saveEncryptedRecords(
+            write,
+            chunk.map((tx) => {
+              const next = { ...tx, merchantClean: trimmed };
+              const { recordId, revision, ...value } = next;
+              return {
+                recordId,
+                kind: "tx" as const,
+                value: {
+                  date: value.date,
+                  authorizedDate: value.authorizedDate ?? null,
+                  description: value.description,
+                  amount: value.amount,
+                  currency: value.currency,
+                  accountId: value.accountId ?? null,
+                  pending: Boolean(value.pending),
+                  city: value.city ?? null,
+                  region: value.region ?? null,
+                  country: value.country ?? null,
+                  merchantName: value.merchantName ?? null,
+                  merchantClean: trimmed,
+                  sectionName: value.sectionName ?? null,
+                  categoryName: value.categoryName ?? null,
+                  subcategoryName: value.subcategoryName ?? null,
+                  spreadName: value.spreadName ?? null,
+                  transactionTypeName: value.transactionTypeName ?? null,
+                  txnCode: value.txnCode ?? null,
+                  channel: value.channel ?? null,
+                  statementRecordId: value.statementRecordId ?? null,
+                  source: value.source ?? "statement",
+                  tagNames: value.tagNames ?? [],
+                },
+                expectedRevision: revision,
+              };
+            }),
+          );
+        }
+      }
+      privateLedger.reload();
+      toast.success(`Saved ${trimmed}`);
       onOpenChange(false);
     } catch (error) {
       toast.error(errorMessage(error, "Could not save merchant"));
@@ -403,7 +330,7 @@ export function EditMerchantDialog({ merchant, open, onOpenChange }: Props) {
                 onChange={(event) => {
                   const next = event.target.value;
                   setLogoUrl(next);
-                  if (!pendingStorageId && !pendingLogoDataUrl) {
+                  if (!pendingLogoDataUrl) {
                     replacePreview(next.trim() || null);
                   }
                 }}

@@ -35,6 +35,7 @@ import { Icon } from "@iconify/react";
 import { createColumnHelper } from "@tanstack/react-table";
 import { useMutation, useQuery } from "convex/react";
 import { Info } from "lucide-react";
+import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 
@@ -210,13 +211,22 @@ function emptyForm(tab: Tab): FormState {
   };
 }
 
-export function ClassificationsPanel({
-  initialTab,
-  openCreate = false,
-}: {
-  initialTab?: Tab;
-  openCreate?: boolean;
-} = {}) {
+function parseTab(value: string | null): Tab | undefined {
+  if (
+    value === "sections" ||
+    value === "categories" ||
+    value === "subcategories" ||
+    value === "tags"
+  ) {
+    return value;
+  }
+  return undefined;
+}
+
+export function ClassificationsPanel() {
+  const searchParams = useSearchParams();
+  const initialTab = parseTab(searchParams.get("tab"));
+  const openCreate = searchParams.get("create") === "1";
   const catalog = useQuery(api.classifications.catalog, {});
   const repairHierarchy = useMutation(api.classifications.repairHierarchy);
   const createSection = useMutation(api.classifications.createSection);

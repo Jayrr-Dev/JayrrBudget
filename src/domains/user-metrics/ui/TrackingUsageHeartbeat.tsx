@@ -22,6 +22,9 @@ export function TrackingUsageHeartbeat() {
     }
 
     const flush = () => {
+      if (typeof navigator !== "undefined" && navigator.onLine === false) {
+        return;
+      }
       const now = Date.now();
       const prev = lastAt.current;
       if (prev != null) {
