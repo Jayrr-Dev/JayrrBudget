@@ -12,7 +12,7 @@ export default function OverviewPage() {
 
   return (
     <div className="space-y-8">
-      <header className="flex items-start justify-between gap-6 border-b border-[var(--border)] pb-6">
+      <header className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:gap-6 border-b border-[var(--border)] pb-6">
         <div className="space-y-2">
           <p className="type-kicker">Accounts</p>
           <h1 className="type-page">Dashboard</h1>
@@ -20,7 +20,7 @@ export default function OverviewPage() {
             See balances across chequing, credit, and loan accounts.
           </p>
         </div>
-        <div className="shrink-0 text-right">
+        <div className="shrink-0 sm:text-right">
           <p className="type-kicker">Latest statement</p>
           <p className="type-section mt-1 min-h-7">
             {isInitialLoading

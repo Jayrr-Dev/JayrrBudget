@@ -279,7 +279,7 @@ export function TaxonomyCell({
     >
       <ComboboxInput
         placeholder={placeholder}
-        className="h-8 w-full min-w-0 border-transparent bg-transparent shadow-none hover:border-[var(--border)] hover:bg-[var(--muted)]/40"
+        className="h-8 max-md:h-11 w-full min-w-0 border-transparent bg-transparent shadow-none hover:border-[var(--border)] hover:bg-[var(--muted)]/40"
         showClear={Boolean(selected)}
       />
       <ComboboxContent className="w-56">

@@ -16,7 +16,7 @@ const BudgetCanvas = dynamic(
 export default function CanvasPage() {
   return (
     <AppShell
-      className="h-screen min-h-0 overflow-hidden"
+      className="h-full min-h-0 overflow-hidden"
       contentClassName="flex max-w-none min-h-0 flex-col overflow-hidden p-4 sm:p-4"
     >
       <BudgetCanvas />

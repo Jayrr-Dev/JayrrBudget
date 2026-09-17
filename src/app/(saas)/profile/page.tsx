@@ -72,7 +72,7 @@ export default function ProfilePage() {
             <PopoverTrigger asChild>
               <button
                 type="button"
-                className="inline-flex size-6 shrink-0 items-center justify-center rounded-full text-accent hover:bg-accent-subtle hover:text-accent"
+                className="inline-flex size-11 sm:size-6 shrink-0 items-center justify-center rounded-full text-accent hover:bg-accent-subtle hover:text-accent"
                 aria-label="About profile"
               >
                 <Info className="size-3.5" />
@@ -82,7 +82,7 @@ export default function ProfilePage() {
               align="start"
               side="bottom"
               sideOffset={8}
-              className="w-80 gap-0 p-3.5"
+              className="w-80 max-w-[calc(100vw-2rem)] gap-0 p-3.5"
             >
               <PopoverHeader className="gap-1.5">
                 <PopoverTitle>Profile</PopoverTitle>
@@ -113,7 +113,7 @@ export default function ProfilePage() {
             type="button"
             size="sm"
             variant={tab === item.id ? "default" : "outline"}
-            className="flex-1"
+            className="min-h-11 flex-1 sm:min-h-0"
             onClick={() => setTab(item.id)}
             aria-pressed={tab === item.id}
           >
@@ -125,7 +125,7 @@ export default function ProfilePage() {
       {tab === "personalize" ? (
         <div className="space-y-8">
           <form
-            className="space-y-4 rounded-xl border border-border bg-surface-elevated p-6"
+            className="space-y-4 rounded-xl border border-border bg-surface-elevated p-4 sm:p-6"
             onSubmit={(event) => {
               event.preventDefault();
               setError(null);
@@ -143,7 +143,7 @@ export default function ProfilePage() {
                 .finally(() => setPending(false));
             }}
           >
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid gap-4 sm:grid-cols-2">
               <label className="block space-y-2 text-sm">
                 <span className="text-[var(--muted-foreground)]">
                   First name
@@ -153,7 +153,7 @@ export default function ProfilePage() {
                   onChange={(event) => setFirstName(event.target.value)}
                   required
                   autoComplete="given-name"
-                  className="w-full rounded-md border border-control-border bg-surface-elevated px-3 py-2 text-foreground outline-none focus:border-primary focus:outline-2 focus:outline-offset-1 focus:outline-ring"
+                  className="min-h-11 w-full min-w-0 text-base sm:text-sm rounded-md border border-control-border bg-surface-elevated px-3 py-2 text-foreground outline-none focus:border-primary focus:outline-2 focus:outline-offset-1 focus:outline-ring"
                 />
               </label>
               <label className="block space-y-2 text-sm">
@@ -165,7 +165,7 @@ export default function ProfilePage() {
                   onChange={(event) => setLastName(event.target.value)}
                   required
                   autoComplete="family-name"
-                  className="w-full rounded-md border border-control-border bg-surface-elevated px-3 py-2 text-foreground outline-none focus:border-primary focus:outline-2 focus:outline-offset-1 focus:outline-ring"
+                  className="min-h-11 w-full min-w-0 text-base sm:text-sm rounded-md border border-control-border bg-surface-elevated px-3 py-2 text-foreground outline-none focus:border-primary focus:outline-2 focus:outline-offset-1 focus:outline-ring"
                 />
               </label>
             </div>
@@ -175,7 +175,7 @@ export default function ProfilePage() {
               <input
                 value={me.email ?? ""}
                 readOnly
-                className="w-full rounded-md border border-control-border bg-surface-subtle px-3 py-2 text-[var(--muted-foreground)] outline-none"
+                className="min-h-11 w-full min-w-0 text-base sm:text-sm rounded-md border border-control-border bg-surface-subtle px-3 py-2 text-[var(--muted-foreground)] outline-none"
               />
             </label>
 
@@ -184,7 +184,7 @@ export default function ProfilePage() {
               <input
                 value={me.role}
                 readOnly
-                className="w-full rounded-md border border-control-border bg-surface-subtle px-3 py-2 capitalize text-[var(--muted-foreground)] outline-none"
+                className="min-h-11 w-full min-w-0 text-base sm:text-sm rounded-md border border-control-border bg-surface-subtle px-3 py-2 capitalize text-[var(--muted-foreground)] outline-none"
               />
             </label>
 
@@ -203,7 +203,7 @@ export default function ProfilePage() {
             <button
               type="submit"
               disabled={pending}
-              className="rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary-hover disabled:opacity-60"
+              className="min-h-11 w-full sm:w-auto rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary-hover disabled:opacity-60"
             >
               {pending ? "Saving…" : "Save changes"}
             </button>

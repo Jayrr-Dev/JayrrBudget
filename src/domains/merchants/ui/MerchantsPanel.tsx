@@ -119,7 +119,7 @@ function MerchantsTable({
             <div className="flex items-center justify-center">
               <DropdownMenu>
                 <DropdownMenuTrigger
-                  className="inline-flex size-6 cursor-pointer items-center justify-center rounded-[min(var(--radius-md),12px)] text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]"
+                  className="inline-flex size-6 cursor-pointer max-md:size-11 items-center justify-center rounded-[min(var(--radius-md),12px)] text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]"
                   aria-label={`Actions for ${row.original.name}`}
                 >
                   <Icon icon="basil:menu-outline" className="size-4" />

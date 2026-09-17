@@ -229,7 +229,7 @@ export function StatementUploadRowActions({
     <>
       <DropdownMenu>
         <DropdownMenuTrigger
-          className="inline-flex size-6 cursor-pointer items-center justify-center rounded-[min(var(--radius-md),12px)] text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]"
+          className="inline-flex size-6 cursor-pointer max-md:size-11 items-center justify-center rounded-[min(var(--radius-md),12px)] text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]"
           aria-label={`Actions for ${upload.filename}`}
         >
           <Icon icon="basil:menu-outline" className="size-4" />
@@ -273,7 +273,7 @@ export function StatementUploadRowActions({
                 <PopoverTrigger asChild>
                   <button
                     type="button"
-                    className="inline-flex size-6 shrink-0 items-center justify-center rounded-full text-accent hover:bg-accent-subtle hover:text-accent"
+                    className="inline-flex size-6 shrink-0 items-center justify-center rounded-full max-md:size-11 text-accent hover:bg-accent-subtle hover:text-accent"
                     aria-label="About OCR"
                   >
                     <Info className="size-3.5" />
@@ -365,7 +365,7 @@ export function StatementUploadRowActions({
                 <PopoverTrigger asChild>
                   <button
                     type="button"
-                    className="inline-flex size-6 shrink-0 items-center justify-center rounded-full text-accent hover:bg-accent-subtle hover:text-accent"
+                    className="inline-flex size-6 shrink-0 items-center justify-center rounded-full max-md:size-11 text-accent hover:bg-accent-subtle hover:text-accent"
                     aria-label="About deleting this statement"
                   >
                     <Info className="size-3.5" />

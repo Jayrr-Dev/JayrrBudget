@@ -629,7 +629,7 @@ export function StatementUpload({ onImported }: Props) {
         <span
           role="button"
           tabIndex={0}
-          className="inline-flex size-5 shrink-0 items-center justify-center rounded-full text-accent hover:bg-accent-subtle hover:text-accent"
+          className="inline-flex size-5 shrink-0 items-center justify-center rounded-full max-md:size-11 text-accent hover:bg-accent-subtle hover:text-accent"
           aria-label="How statement upload works"
           onClick={(event) => {
             event.stopPropagation();
@@ -770,7 +770,7 @@ export function StatementUpload({ onImported }: Props) {
                 <PopoverTrigger asChild>
                   <button
                     type="button"
-                    className="inline-flex size-6 shrink-0 items-center justify-center rounded-full text-accent hover:bg-accent-subtle hover:text-accent"
+                    className="inline-flex size-6 shrink-0 items-center justify-center rounded-full max-md:size-11 text-accent hover:bg-accent-subtle hover:text-accent"
                     aria-label="About statement upload"
                   >
                     <Info className="size-3.5" />

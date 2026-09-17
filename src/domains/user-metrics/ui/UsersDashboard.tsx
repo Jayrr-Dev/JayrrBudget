@@ -116,7 +116,7 @@ export function UsersDashboard() {
       </section>
 
       <div className="grid gap-6 lg:grid-cols-5">
-        <section className="space-y-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4 lg:col-span-3">
+        <section className="min-w-0 space-y-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4 lg:col-span-3">
           <TitleInfo
             heading="h2"
             title="Growth"
@@ -124,7 +124,7 @@ export function UsersDashboard() {
           />
           <ChartContainer
             config={SIGNUP_CONFIG}
-            className="aspect-[8/3] w-full"
+            className="aspect-auto h-60 w-full sm:aspect-[8/3] sm:h-auto"
             initialDimension={{ width: 640, height: 220 }}
           >
             <AreaChart data={data.signupWeeks} margin={{ left: 4, right: 8, top: 8, bottom: 0 }}>
@@ -171,7 +171,7 @@ export function UsersDashboard() {
         </section>
       </div>
 
-      <section className="space-y-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
+      <section className="min-w-0 space-y-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
         <TitleInfo
           heading="h2"
           title="Time in app"
@@ -179,7 +179,7 @@ export function UsersDashboard() {
         />
         <ChartContainer
           config={USAGE_CONFIG}
-          className="aspect-[3/1] w-full"
+          className="aspect-auto h-60 w-full sm:aspect-[3/1] sm:h-auto"
           initialDimension={{ width: 720, height: 220 }}
         >
           <BarChart data={data.usageDays} margin={{ left: 4, right: 8, top: 8, bottom: 0 }}>

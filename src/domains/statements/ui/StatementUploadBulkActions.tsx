@@ -285,7 +285,7 @@ export function StatementUploadBulkActions({
       <span className="flex items-center justify-center">
         <DropdownMenu>
           <DropdownMenuTrigger
-            className="inline-flex size-6 cursor-pointer items-center justify-center rounded-[min(var(--radius-md),12px)] text-muted-foreground hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+            className="inline-flex size-6 cursor-pointer max-md:size-11 items-center justify-center rounded-[min(var(--radius-md),12px)] text-muted-foreground hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
             aria-label="Actions for visible statements"
             title="Actions for visible statements"
             disabled={uploads.length === 0 || busy}
@@ -334,7 +334,7 @@ export function StatementUploadBulkActions({
                 <PopoverTrigger asChild>
                   <button
                     type="button"
-                    className="inline-flex size-6 shrink-0 items-center justify-center rounded-full text-accent hover:bg-accent-subtle hover:text-accent"
+                    className="inline-flex size-6 shrink-0 items-center justify-center rounded-full max-md:size-11 text-accent hover:bg-accent-subtle hover:text-accent"
                     aria-label="About categorizing visible statements"
                   >
                     <Info className="size-3.5" />
@@ -412,7 +412,7 @@ export function StatementUploadBulkActions({
                 <PopoverTrigger asChild>
                   <button
                     type="button"
-                    className="inline-flex size-6 shrink-0 items-center justify-center rounded-full text-accent hover:bg-accent-subtle hover:text-accent"
+                    className="inline-flex size-6 shrink-0 items-center justify-center rounded-full max-md:size-11 text-accent hover:bg-accent-subtle hover:text-accent"
                     aria-label="About deleting visible statements"
                   >
                     <Info className="size-3.5" />

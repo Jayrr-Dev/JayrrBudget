@@ -145,7 +145,7 @@ export function RevenueDashboard() {
       </section>
 
       <div className="grid gap-6 lg:grid-cols-5">
-        <section className="space-y-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4 lg:col-span-3">
+        <section className="min-w-0 space-y-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4 lg:col-span-3">
           <TitleInfo
             heading="h2"
             title="Cost trend"
@@ -153,7 +153,7 @@ export function RevenueDashboard() {
           />
           <ChartContainer
             config={TREND_CONFIG}
-            className="aspect-[8/3] w-full"
+            className="aspect-auto h-60 w-full sm:aspect-[8/3] sm:h-auto"
             initialDimension={{ width: 640, height: 220 }}
           >
             <AreaChart
@@ -214,7 +214,7 @@ export function RevenueDashboard() {
           </ChartContainer>
         </section>
 
-        <section className="space-y-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4 lg:col-span-2">
+        <section className="min-w-0 space-y-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4 lg:col-span-2">
           <TitleInfo
             heading="h2"
             title="This month"

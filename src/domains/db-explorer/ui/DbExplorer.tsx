@@ -83,9 +83,9 @@ function TableBrowser({ table }: { table: string }) {
         </div>
       ) : null}
 
-      <div className="min-h-0 flex-1 overflow-auto rounded-xl border border-[var(--border)] [transform:rotateX(180deg)]">
-        <table className="min-w-full border-collapse text-left text-xs [transform:rotateX(180deg)]">
-          <thead className="sticky bottom-0 bg-[var(--muted)]">
+      <div className="min-h-0 flex-1 overflow-auto rounded-xl border border-[var(--border)]">
+        <table className="min-w-full border-collapse text-left text-xs">
+          <thead className="sticky top-0 bg-[var(--muted)]">
             <tr>
               {(data?.columns ?? []).map((col) => (
                 <th
@@ -204,7 +204,7 @@ export function DbExplorer() {
         type="button"
         onClick={() => selectTable(table.name)}
         className={cn(
-          "flex w-full items-start justify-between gap-2 rounded-lg px-3 py-2 text-left text-sm transition-colors",
+          "flex min-h-11 w-full items-start justify-between gap-2 rounded-lg px-3 py-2 text-left text-sm transition-colors",
           activeTable === table.name
             ? "bg-[var(--foreground)] text-[var(--background)]"
             : "hover:bg-[var(--muted)]",
@@ -249,7 +249,7 @@ export function DbExplorer() {
       </header>
 
       <div className="grid min-h-0 flex-1 gap-4 overflow-hidden lg:grid-cols-[280px_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)]">
-        <aside className="min-h-0 space-y-4 overflow-x-hidden overflow-y-auto lg:pr-1">
+        <aside className="max-h-56 min-h-0 space-y-4 overflow-x-hidden lg:max-h-none overflow-y-auto lg:pr-1">
           <div className="space-y-1">
             <p className="mb-2 text-xs font-medium tracking-wide text-[var(--muted-foreground)] uppercase">
               Ledger
@@ -314,9 +314,9 @@ export function DbExplorer() {
                       {tableHelp(activeMeta.name)}
                     </p>
                   ) : null}
-                  <div className="min-h-0 flex-1 overflow-auto rounded-xl border border-[var(--border)] [transform:rotateX(180deg)]">
-                    <table className="min-w-full text-left text-sm [transform:rotateX(180deg)]">
-                      <thead className="sticky bottom-0 bg-[var(--muted)]">
+                  <div className="min-h-0 flex-1 overflow-auto rounded-xl border border-[var(--border)]">
+                    <table className="min-w-full text-left text-sm">
+                      <thead className="sticky top-0 bg-[var(--muted)]">
                         <tr>
                           <th className="px-3 py-2 font-medium">Column</th>
                           <th className="px-3 py-2 font-medium">

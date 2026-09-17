@@ -44,6 +44,7 @@ import {
 } from "@/components/ui/tooltip";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { downloadCsv, toCsv } from "@/shared/lib/csv";
+import { cn } from "cn";
 import {
   useTable,
   type ColumnDef,
@@ -295,6 +296,53 @@ function menuColumnLabel(column: {
   };
 }): string {
   return csvColumnLabel(column) ?? column.id;
+}
+
+function TwoPanelMenu({
+  panels,
+}: {
+  panels: Array<{ id: string; label: string; content: ReactNode }>;
+}) {
+  const [activeId, setActiveId] = useState(panels[0]?.id);
+  const active = panels.find((panel) => panel.id === activeId) ?? panels[0];
+
+  if (!active) {
+    return null;
+  }
+
+  return (
+    <div className="flex h-[min(22rem,var(--available-height))] w-[min(20rem,calc(100vw-2rem))]">
+      <div
+        role="tablist"
+        aria-label="Menu sections"
+        className="flex w-[7.5rem] shrink-0 flex-col gap-0.5 overflow-y-auto border-r border-border p-1"
+      >
+        {panels.map((panel) => {
+          const selected = panel.id === active.id;
+          return (
+            <button
+              key={panel.id}
+              type="button"
+              role="tab"
+              aria-selected={selected}
+              className={cn(
+                "rounded-md px-1.5 py-1 text-left text-sm outline-hidden",
+                selected
+                  ? "bg-primary-subtle text-primary-subtle-foreground"
+                  : "text-foreground hover:bg-muted",
+              )}
+              onClick={() => setActiveId(panel.id)}
+            >
+              {panel.label}
+            </button>
+          );
+        })}
+      </div>
+      <div role="tabpanel" className="min-w-0 flex-1 overflow-y-auto p-1">
+        {active.content}
+      </div>
+    </div>
+  );
 }
 
 function parseYmd(ymd: string): Date {
@@ -619,6 +667,29 @@ export function DataTable<TData extends RowData>({
 
     return sections;
   }, [hideableColumns]);
+
+  const columnSectionLabel = (
+    section: (typeof columnMenuSections)[number],
+  ) => {
+    if (section.label) return section.label;
+    const first = section.columns[0];
+    return first ? menuColumnLabel(first) : section.id;
+  };
+
+  const columnSectionCheckboxes = (
+    section: (typeof columnMenuSections)[number],
+  ) =>
+    section.columns.map((column) => (
+      <DropdownMenuCheckboxItem
+        key={column.id}
+        checked={column.getIsVisible()}
+        onCheckedChange={(checked) =>
+          handleColumnVisibilityToggle(column.id, Boolean(checked))
+        }
+      >
+        {menuColumnLabel(column)}
+      </DropdownMenuCheckboxItem>
+    ));
 
   const firstLeafColumnId = table.getVisibleLeafColumns()[0]?.id;
 

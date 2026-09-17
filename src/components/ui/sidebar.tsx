@@ -4,7 +4,8 @@ import { PiggyIcon } from "@/components/ui/piggy-icon";
 import { Separator } from "@/components/ui/separator";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
-import { AnimatePresence, motion } from "motion/react";
+import { motion } from "motion/react";
+import { Dialog as DialogPrimitive } from "radix-ui";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import React, {
@@ -14,7 +15,6 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { createPortal } from "react-dom";
 
 export interface SidebarLinkItem {
   label: string;
@@ -149,7 +149,7 @@ export const DesktopSidebar = ({
     <motion.aside
       ref={rootRef}
       className={cn(
-        "sticky top-0 z-30 hidden h-screen max-w-[280px] shrink-0 overflow-hidden border-r border-[var(--sidebar-border)] bg-[var(--surface)] py-3 md:flex md:flex-col",
+        "z-30 hidden h-full min-h-0 max-w-[280px] shrink-0 overflow-hidden border-r border-[var(--sidebar-border)] bg-[var(--surface)] py-3 md:flex md:flex-col",
         className,
         expanded ? "w-[280px] px-3" : "w-16 items-center px-0",
       )}
@@ -186,12 +186,7 @@ export const MobileSidebar = ({
 }) => {
   const { open, setOpen } = useSidebar();
   const pathname = usePathname();
-  const [mounted, setMounted] = useState(false);
   const isMobile = useIsMobile();
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
 
   useEffect(() => {
     if (window.matchMedia("(max-width: 767px)").matches) {
@@ -200,53 +195,36 @@ export const MobileSidebar = ({
   }, [pathname, setOpen]);
 
   const drawer = (
-    <AnimatePresence>
-      {open ? (
-        <motion.button
-          key="sidebar-backdrop"
-          type="button"
-          aria-label="Close menu backdrop"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          className="fixed inset-0 z-[90] bg-black/30 md:hidden"
-          onClick={() => setOpen(false)}
+    <DialogPrimitive.Portal>
+        <DialogPrimitive.Overlay
+          className="fixed inset-0 z-[90] bg-black/30 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 motion-reduce:animate-none md:hidden"
         />
-      ) : null}
-      {open ? (
-        <motion.div
-          key="sidebar-drawer"
-          initial={{ x: "-100%" }}
-          animate={{
-            x: 0,
-            transition: { duration: 0.3, ease: "easeOut" },
-          }}
-          exit={{
-            x: "-100%",
-            transition: { duration: 0.45, ease: [0.32, 0.72, 0, 1] },
-          }}
+        <DialogPrimitive.Content
+          aria-describedby={undefined}
           className={cn(
-            "fixed inset-y-0 left-0 z-[100] flex h-dvh w-[min(100%,20rem)] flex-col justify-between overflow-y-auto border-r border-[var(--sidebar-border)] bg-[var(--surface)] p-6 shadow-xl md:hidden",
+            "fixed inset-y-0 left-0 z-[100] flex w-[min(100%,20rem)] flex-col justify-between overflow-y-auto overscroll-contain border-r border-[var(--sidebar-border)] bg-[var(--surface)] p-6 pt-[max(1.5rem,env(safe-area-inset-top))] pb-[max(1.5rem,env(safe-area-inset-bottom))] pl-[max(1.5rem,env(safe-area-inset-left))] shadow-xl outline-none duration-300 data-[state=open]:animate-in data-[state=open]:slide-in-from-left data-[state=closed]:animate-out data-[state=closed]:slide-out-to-left motion-reduce:animate-none md:hidden",
             className,
           )}
         >
+          <DialogPrimitive.Title className="sr-only">Navigation menu</DialogPrimitive.Title>
+          <DialogPrimitive.Close asChild>
           <button
             type="button"
             aria-label="Close menu"
-            className="absolute top-3 right-3 flex size-11 items-center justify-center rounded-lg text-[var(--foreground)] hover:bg-[var(--sidebar-accent)]"
-            onClick={() => setOpen(false)}
+            className="absolute top-[max(0.75rem,env(safe-area-inset-top))] right-3 flex size-11 items-center justify-center rounded-lg text-[var(--foreground)] hover:bg-[var(--sidebar-accent)]"
           >
             <PiggyIcon name="close" />
           </button>
+          </DialogPrimitive.Close>
           {children}
-        </motion.div>
-      ) : null}
-    </AnimatePresence>
+        </DialogPrimitive.Content>
+    </DialogPrimitive.Portal>
   );
 
   return (
+    <DialogPrimitive.Root open={isMobile && open} onOpenChange={setOpen}>
     <div
-      className="relative z-40 flex w-full items-center justify-between border-b border-[var(--sidebar-border)] bg-[var(--surface)] px-4 py-2 md:hidden"
+      className="relative z-40 flex w-full shrink-0 items-center justify-between border-b border-[var(--sidebar-border)] bg-[var(--surface)] px-4 py-2 md:hidden"
       {...props}
     >
       <div className="flex min-w-0 items-center gap-2">
@@ -269,18 +247,19 @@ export const MobileSidebar = ({
             className="mx-1.5 h-5 self-center bg-[var(--sidebar-border)]"
           />
         ) : null}
+        <DialogPrimitive.Trigger asChild>
         <button
           type="button"
           aria-label={open ? "Close menu" : "Open menu"}
-          aria-expanded={open}
           className="flex size-11 items-center justify-center rounded-lg text-[var(--sidebar-foreground)] hover:bg-[var(--sidebar-accent)]"
-          onClick={() => setOpen(!open)}
         >
           <PiggyIcon name="menu" />
         </button>
+        </DialogPrimitive.Trigger>
       </div>
-      {mounted && isMobile ? createPortal(drawer, document.body) : null}
+      {isMobile ? drawer : null}
     </div>
+    </DialogPrimitive.Root>
   );
 };
 

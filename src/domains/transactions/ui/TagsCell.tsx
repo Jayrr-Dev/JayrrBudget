@@ -122,7 +122,7 @@ export function TagsCell({ transactionId, tags }: TagsCellProps) {
         <PopoverTrigger asChild>
           <button
             type="button"
-            className="inline-flex size-5 shrink-0 cursor-pointer items-center justify-center rounded-md text-accent opacity-70 transition-colors hover:bg-accent-subtle hover:opacity-100"
+            className="inline-flex size-5 shrink-0 cursor-pointer max-md:size-11 items-center justify-center rounded-md text-accent opacity-70 transition-colors hover:bg-accent-subtle hover:opacity-100"
             aria-label="Add tag"
           >
             <PlusIcon className="size-3" />

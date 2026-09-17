@@ -118,7 +118,7 @@ function CycleInfo() {
       <PopoverTrigger asChild>
         <button
           type="button"
-          className="inline-flex size-5 shrink-0 items-center justify-center rounded-full text-accent hover:bg-accent-subtle hover:text-accent"
+          className="inline-flex size-11 sm:size-5 shrink-0 items-center justify-center rounded-full text-accent hover:bg-accent-subtle hover:text-accent"
           aria-label="About cycle"
           onClick={(event) => event.stopPropagation()}
         >
@@ -129,7 +129,7 @@ function CycleInfo() {
         align="start"
         side="bottom"
         sideOffset={8}
-        className="w-80 gap-0 p-3.5"
+        className="w-80 max-w-[calc(100vw-2rem)] gap-0 p-3.5"
       >
         <PopoverHeader className="gap-1.5">
           <PopoverTitle>Cycle</PopoverTitle>
@@ -226,7 +226,7 @@ function CycleDateChip({
               <PopoverTrigger asChild>
                 <button
                   type="button"
-                  className="inline-flex size-6 shrink-0 items-center justify-center rounded-full text-accent hover:bg-accent-subtle hover:text-accent"
+                  className="inline-flex size-11 sm:size-6 shrink-0 items-center justify-center rounded-full text-accent hover:bg-accent-subtle hover:text-accent"
                   aria-label="Cycle date info"
                 >
                   <Info className="size-3.5" />
@@ -638,7 +638,7 @@ function PingFormDialog({
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       {trigger ? <DialogTrigger asChild>{trigger}</DialogTrigger> : null}
-      <DialogContent className="flex max-h-[90vh] flex-col overflow-hidden sm:max-w-md">
+      <DialogContent className="flex max-h-[90dvh] flex-col overflow-hidden sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             {isEdit ? "Edit ping" : "New ping"}
@@ -646,7 +646,7 @@ function PingFormDialog({
               <PopoverTrigger asChild>
                 <button
                   type="button"
-                  className="inline-flex size-6 shrink-0 items-center justify-center rounded-full text-accent hover:bg-accent-subtle hover:text-accent"
+                  className="inline-flex size-11 sm:size-6 shrink-0 items-center justify-center rounded-full text-accent hover:bg-accent-subtle hover:text-accent"
                   aria-label={isEdit ? "About edit ping" : "About new ping"}
                 >
                   <Info className="size-3.5" />
@@ -656,7 +656,7 @@ function PingFormDialog({
                 align="start"
                 side="bottom"
                 sideOffset={8}
-                className="w-80 gap-0 p-3.5"
+                className="w-80 max-w-[calc(100vw-2rem)] gap-0 p-3.5"
               >
                 <PopoverHeader className="gap-1.5">
                   <PopoverTitle>

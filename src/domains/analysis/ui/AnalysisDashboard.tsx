@@ -16,6 +16,7 @@ import {
 import {
   Popover,
   PopoverContent,
+  PopoverDescription,
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { RowActionsMenu } from "@/components/ui/row-actions-menu";
@@ -70,6 +71,7 @@ import {
 } from "@/domains/dashboard/domain/money";
 import { MoneyText } from "@/domains/dashboard/ui/MoneyText";
 import { MerchantLabel } from "@/domains/merchants/ui/MerchantLabel";
+import { keepTxnPeekPopoverOpen } from "@/domains/merchants/ui/MerchantTxnsPopover";
 import { MoveMerchantDialog } from "@/domains/merchants/ui/MoveMerchantDialog";
 import { useScratchNoteActions } from "@/domains/scratch-note/scratchNoteStore";
 import {
@@ -77,6 +79,7 @@ import {
   EditDescriptionDialog,
 } from "@/domains/transactions/ui/EditDescriptionDialog";
 import { DecryptingPage } from "@/domains/vault/ui/DecryptingStatus";
+import { useHoverPointer } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
 import { downloadCsv, toCsv } from "@/shared/lib/csv";
 import {
@@ -197,25 +200,46 @@ function moneyTick(value: number, currency: string) {
 }
 
 function InfoTip({ label, children }: { label: string; children: string }) {
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <button
-          type="button"
-          className="inline-flex size-5 shrink-0 items-center justify-center rounded-md text-accent hover:bg-accent-subtle hover:text-accent sm:size-6"
-          aria-label={label}
+  const hover = useHoverPointer();
+  const trigger = (
+    <button
+      type="button"
+      className="inline-flex size-11 shrink-0 items-center justify-center rounded-md text-accent hover:bg-accent-subtle hover:text-accent sm:size-6"
+      aria-label={label}
+    >
+      <IconInfoCircle className="size-3.5 sm:size-4" />
+    </button>
+  );
+
+  if (hover) {
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>{trigger}</TooltipTrigger>
+        <TooltipContent
+          side="top"
+          sideOffset={6}
+          className="max-w-xs text-left leading-snug"
         >
-          <IconInfoCircle className="size-3.5 sm:size-4" />
-        </button>
-      </TooltipTrigger>
-      <TooltipContent
-        side="top"
-        sideOffset={6}
-        className="max-w-xs text-left leading-snug"
+          {children}
+        </TooltipContent>
+      </Tooltip>
+    );
+  }
+
+  return (
+    <Popover modal>
+      <PopoverTrigger asChild>{trigger}</PopoverTrigger>
+      <PopoverContent
+        align="start"
+        side="bottom"
+        sideOffset={8}
+        className="w-80 max-w-[calc(100vw-2rem)] gap-0 p-3.5"
       >
-        {children}
-      </TooltipContent>
-    </Tooltip>
+        <PopoverDescription className="leading-snug">
+          {children}
+        </PopoverDescription>
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -769,7 +793,7 @@ function TrendChart({
   );
 
   return (
-    <section className="space-y-3 rounded-xl border border-border bg-surface-elevated p-3 sm:space-y-4 sm:p-6">
+    <section className="min-w-0 space-y-3 rounded-xl border border-border bg-surface-elevated p-3 sm:space-y-4 sm:p-6">
       <ChartTitle
         title="Spending vs income"
         info="Lifestyle outflows and real income. Card payoffs count once, on the paying account. Visa 'payment thank you' credits are the other side of the same move. Relative stacks visible series to 100% for each period."
@@ -1166,7 +1190,7 @@ function SeriesLegend({
           aria-label={`Toggle ${item.label}`}
           className={cn(
             badgeVariants({ variant: "outline" }),
-            "min-w-0 rounded-sm px-2 font-normal shadow-none hover:bg-muted data-[state=off]:opacity-40 data-[state=on]:bg-transparent data-[state=on]:text-foreground",
+            "min-h-11 min-w-11 max-w-full rounded-sm px-3 font-normal shadow-none sm:min-h-0 sm:min-w-0 sm:px-2 hover:bg-muted data-[state=off]:opacity-40 data-[state=on]:bg-transparent data-[state=on]:text-foreground",
           )}
         >
           <span
@@ -1175,9 +1199,7 @@ function SeriesLegend({
               backgroundColor: colors[index % colors.length],
             }}
           />
-          <span className="whitespace-nowrap text-foreground">
-            {item.label}
-          </span>
+          <span className="truncate text-foreground">{item.label}</span>
         </ToggleGroupItem>
       ))}
     </ToggleGroup>
@@ -1511,7 +1533,7 @@ function StackedMixChart({
   );
 
   return (
-    <section className="space-y-3 rounded-xl border border-border bg-surface-elevated p-3 sm:space-y-4 sm:p-6">
+    <section className="min-w-0 space-y-3 rounded-xl border border-border bg-surface-elevated p-3 sm:space-y-4 sm:p-6">
       <ChartTitle
         title={title}
         info={info}
@@ -1816,7 +1838,7 @@ function StackedRankedBarChart({
   if (rows.length === 0 || series.length === 0) return null;
 
   return (
-    <section className="space-y-3 rounded-xl border border-border bg-surface-elevated p-3 sm:space-y-4 sm:p-6">
+    <section className="min-w-0 space-y-3 rounded-xl border border-border bg-surface-elevated p-3 sm:space-y-4 sm:p-6">
       <ChartTitle
         title={title}
         info={info}
@@ -2102,7 +2124,7 @@ function TaxonomyBreakdownTable({
   if (rows.length === 0) return null;
 
   return (
-    <section className="space-y-3 rounded-xl border border-border bg-surface-elevated p-3 sm:space-y-4 sm:p-6">
+    <section className="min-w-0 space-y-3 rounded-xl border border-border bg-surface-elevated p-3 sm:space-y-4 sm:p-6">
       <ChartTitle
         title={title}
         info={info}
@@ -2236,7 +2258,7 @@ function RankedBarChart({
   const nameMaxChars = labelWidth >= 140 ? 22 : 16;
 
   return (
-    <section className="space-y-3 rounded-xl border border-border bg-surface-elevated p-3 sm:space-y-4 sm:p-6">
+    <section className="min-w-0 space-y-3 rounded-xl border border-border bg-surface-elevated p-3 sm:space-y-4 sm:p-6">
       <ChartTitle
         title={title}
         info={info}
@@ -2363,7 +2385,7 @@ function WeekdayChart({ data }: { data: AnalysisData }) {
   if (data.weekdays.length === 0) return null;
 
   return (
-    <section className="space-y-3 rounded-xl border border-border bg-surface-elevated p-3 sm:space-y-4 sm:p-6">
+    <section className="min-w-0 space-y-3 rounded-xl border border-border bg-surface-elevated p-3 sm:space-y-4 sm:p-6">
       <ChartTitle
         title="Spend by weekday"
         info="Day you spent, from the authorized date when we have it. Posted date is the fallback. Weekend swipes no longer pile onto Monday."
@@ -2430,7 +2452,7 @@ function DayOfMonthChart({ data }: { data: AnalysisData }) {
   if (rows.every((row) => row.spend === 0)) return null;
 
   return (
-    <section className="space-y-3 rounded-xl border border-border bg-surface-elevated p-3 sm:space-y-4 sm:p-6">
+    <section className="min-w-0 space-y-3 rounded-xl border border-border bg-surface-elevated p-3 sm:space-y-4 sm:p-6">
       <ChartTitle
         title="Spend by day of month"
         info="Calendar day (1-31) of the authorized date when present. Spikes often line up with rent, loans, or payday shopping."
@@ -2527,7 +2549,7 @@ function FrequencyBarChart({
   const nameMaxChars = labelWidth >= 140 ? 22 : 16;
 
   return (
-    <section className="space-y-3 rounded-xl border border-border bg-surface-elevated p-3 sm:space-y-4 sm:p-6">
+    <section className="min-w-0 space-y-3 rounded-xl border border-border bg-surface-elevated p-3 sm:space-y-4 sm:p-6">
       <ChartTitle
         title={title}
         info={info}
@@ -2660,7 +2682,7 @@ function NetLineChart({
   } satisfies ChartConfig;
 
   return (
-    <section className="space-y-3 rounded-xl border border-border bg-surface-elevated p-3 sm:space-y-4 sm:p-6">
+    <section className="min-w-0 space-y-3 rounded-xl border border-border bg-surface-elevated p-3 sm:space-y-4 sm:p-6">
       <ChartTitle
         title="Net cash flow"
         info="Income minus lifestyle spend. Internal transfers excluded so paying a credit card does not look like extra income or extra spend."
@@ -2824,7 +2846,7 @@ function SegmentedControl<T extends string>({
     <div
       role="group"
       aria-label={ariaLabel}
-      className="inline-flex max-w-full flex-wrap gap-px rounded-md border border-[var(--border)] p-0.5 sm:gap-0.5 sm:rounded-lg"
+      className="inline-flex max-w-full overflow-x-auto overscroll-x-contain gap-1 rounded-md border border-[var(--border)] p-0.5 sm:flex-wrap sm:gap-0.5 sm:rounded-lg"
     >
       {options.map((option) => (
         <Button
@@ -2833,9 +2855,10 @@ function SegmentedControl<T extends string>({
           size="xs"
           variant={value === option.value ? "default" : "ghost"}
           className={cn(
-            "h-6 px-1.5 text-[0.7rem] font-normal sm:h-6 sm:px-2 sm:text-xs",
+            "h-11 min-w-11 shrink-0 px-3 text-sm font-normal sm:h-6 sm:min-w-0 sm:px-2 sm:text-xs",
             value === option.value && "pointer-events-none",
           )}
+          aria-pressed={value === option.value}
           onClick={() => onChange(option.value)}
         >
           {option.label}
@@ -3010,7 +3033,7 @@ function RowTxnsPopover({
             aria-label={`Transactions for ${label}`}
             onClick={(event) => event.stopPropagation()}
             onPointerDown={(event) => event.stopPropagation()}
-            className="inline-flex size-5 shrink-0 items-center justify-center rounded-md text-accent hover:bg-accent-subtle hover:text-accent"
+            className="inline-flex size-11 shrink-0 items-center justify-center rounded-md text-accent hover:bg-accent-subtle hover:text-accent"
           >
             <IconInfoCircle className="size-3.5" />
           </button>
@@ -3020,27 +3043,13 @@ function RowTxnsPopover({
           side="left"
           className="w-[min(34rem,calc(100vw-2rem))] gap-0 overflow-hidden p-0"
           onPointerDownOutside={(event) => {
-            const target = event.target;
-            if (!(target instanceof Element)) return;
-            if (
-              target.closest("[data-slot=dropdown-menu-content]") ||
-              target.closest("[data-slot=dialog-content]") ||
-              target.closest("[data-slot=dropdown-menu]") ||
-              target.closest("[data-slot=combobox-content]")
-            ) {
-              event.preventDefault();
-            }
+            keepTxnPeekPopoverOpen(event);
           }}
           onFocusOutside={(event) => {
-            const target = event.target;
-            if (!(target instanceof Element)) return;
-            if (
-              target.closest("[data-slot=dropdown-menu-content]") ||
-              target.closest("[data-slot=dialog-content]") ||
-              target.closest("[data-slot=combobox-content]")
-            ) {
-              event.preventDefault();
-            }
+            keepTxnPeekPopoverOpen(event);
+          }}
+          onInteractOutside={(event) => {
+            keepTxnPeekPopoverOpen(event);
           }}
         >
           <div className="flex items-center justify-between gap-2 border-b border-[var(--border)] px-3 py-2">
@@ -3189,11 +3198,11 @@ function LeaderboardTable({
     : showTxns
       ? "grid-cols-[1.75rem_minmax(0,1fr)_9rem_4rem_3.75rem_1.25rem]"
       : "grid-cols-[1.75rem_minmax(0,1fr)_9rem_4rem_3.75rem]";
-  const grid = `grid w-full items-center gap-x-3 px-3 ${gridCols}`;
+  const grid = `grid min-w-[36rem] w-full items-center gap-x-3 px-3 ${gridCols}`;
   const rankCol = "flex h-5 w-full items-center justify-center";
 
   return (
-    <section className="space-y-3 rounded-xl border border-border bg-surface-elevated p-3 sm:space-y-4 sm:p-6">
+    <section className="min-w-0 space-y-3 rounded-xl border border-border bg-surface-elevated p-3 sm:space-y-4 sm:p-6">
       <ChartTitle
         title={title}
         info={info}
@@ -3214,7 +3223,7 @@ function LeaderboardTable({
           Nothing in this range.
         </p>
       ) : (
-        <div className="overflow-hidden rounded-lg border border-[var(--border)]">
+        <div className="overflow-x-auto overscroll-x-contain rounded-lg border border-[var(--border)]">
           <div
             className={`${grid} border-b border-[var(--border)] py-2 text-xs text-[var(--muted-foreground)]`}
           >
@@ -3504,7 +3513,7 @@ function RangeLeaderboardTable({
     : "grid w-fit max-w-full grid-cols-[1.5rem_minmax(7rem,14rem)_7.25rem_7.25rem_7.25rem] items-center gap-x-4 px-3";
 
   return (
-    <section className="space-y-3 rounded-xl border border-border bg-surface-elevated p-3 sm:space-y-4 sm:p-6">
+    <section className="min-w-0 space-y-3 rounded-xl border border-border bg-surface-elevated p-3 sm:space-y-4 sm:p-6">
       <ChartTitle
         title={title}
         info={info}
@@ -3617,11 +3626,11 @@ function AverageLeaderboardTable({
     : showTxns
       ? "grid-cols-[1.15rem_minmax(0,1fr)_6.5rem_4rem_1.25rem]"
       : "grid-cols-[1.15rem_minmax(0,1fr)_6.5rem_4rem]";
-  const grid = `grid w-full items-center gap-x-2 px-2 sm:gap-x-3 sm:px-3 ${gridCols}`;
+  const grid = `grid min-w-[30rem] w-full items-center gap-x-2 px-2 sm:gap-x-3 sm:px-3 ${gridCols}`;
   const rankCol = "flex h-5 w-full items-center justify-center text-xs";
 
   return (
-    <section className="space-y-3 rounded-xl border border-border bg-surface-elevated p-3 sm:space-y-4 sm:p-6">
+    <section className="min-w-0 space-y-3 rounded-xl border border-border bg-surface-elevated p-3 sm:space-y-4 sm:p-6">
       <ChartTitle
         title={title}
         info={info}
@@ -3639,7 +3648,7 @@ function AverageLeaderboardTable({
           Nothing in this range.
         </p>
       ) : (
-        <div className="overflow-hidden rounded-lg border border-[var(--border)]">
+        <div className="overflow-x-auto overscroll-x-contain rounded-lg border border-[var(--border)]">
           <div
             className={`${grid} border-b border-[var(--border)] py-2 text-xs text-[var(--muted-foreground)]`}
           >
@@ -5999,8 +6008,8 @@ export function AnalysisDashboard() {
               Charts and breakdowns of spending over time.
             </p>
           </div>
-          <div className="flex shrink-0 flex-wrap items-end justify-end gap-x-3 gap-y-1">
-            <div className="flex flex-col items-center gap-0.5">
+          <div className="flex min-w-0 flex-wrap items-end justify-start gap-x-3 gap-y-2 sm:justify-end">
+            <div className="flex max-w-full flex-col items-start gap-1 sm:items-center sm:gap-0.5">
               <span className="type-caption">Range</span>
               <SegmentedControl
                 ariaLabel="Range"
@@ -6009,7 +6018,7 @@ export function AnalysisDashboard() {
                 onChange={setRange}
               />
             </div>
-            <div className="flex flex-col items-center gap-0.5">
+            <div className="flex max-w-full flex-col items-start gap-1 sm:items-center sm:gap-0.5">
               <label htmlFor="analysis-period" className="type-caption">
                 Period
               </label>
@@ -6020,7 +6029,7 @@ export function AnalysisDashboard() {
                 onChange={(event) =>
                   setPeriod(parseAnalysisPeriod(event.target.value))
                 }
-                className="[&_select]:h-6 [&_select]:rounded-md [&_select]:py-0 [&_select]:pr-7 [&_select]:pl-2 [&_select]:text-xs [&_[data-slot=native-select-icon]]:right-2 [&_[data-slot=native-select-icon]]:size-3.5"
+                className="[&_select]:h-11 sm:[&_select]:h-6 [&_select]:rounded-md [&_select]:py-0 [&_select]:pr-7 [&_select]:pl-2 [&_select]:text-base sm:[&_select]:text-xs [&_[data-slot=native-select-icon]]:right-2 [&_[data-slot=native-select-icon]]:size-3.5"
               >
                 {ANALYSIS_PERIOD_OPTIONS.map((option) => (
                   <NativeSelectOption key={option.value} value={option.value}>

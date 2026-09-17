@@ -2,9 +2,6 @@
 
 import { Button } from "@/components/ui/button";
 import { EmptyPrompt } from "@/components/ui/empty-prompt";
-import { DecryptingStatus } from "@/domains/vault/ui/DecryptingStatus";
-import { PiggyPageStatus } from "@/domains/ledger-ai/ui/PiggyPageStatus";
-import { usePrivateLedger } from "@/domains/vault/ui/usePrivateLedger";
 import {
   ACCOUNT_SECTION_LABELS,
   detectCardNetwork,
@@ -25,13 +22,16 @@ import type {
 import { AccountPastTransactions } from "@/domains/dashboard/ui/AccountPastTransactions";
 import { AddLoanDialog } from "@/domains/dashboard/ui/AddLoanDialog";
 import { MoneyText } from "@/domains/dashboard/ui/MoneyText";
+import { PiggyPageStatus } from "@/domains/ledger-ai/ui/PiggyPageStatus";
 import {
   LOAN_TYPES,
   formatLoanRate,
   normalizeRateType,
 } from "@/domains/loans/domain/loanTypes";
-import { LoanDocumentOcrButton } from "@/domains/loans/ui/LoanDocumentOcrButton";
+import { LoanAccountActions } from "@/domains/loans/ui/LoanAccountActions";
 import { StatementUpload } from "@/domains/statements/ui/StatementUpload";
+import { DecryptingStatus } from "@/domains/vault/ui/DecryptingStatus";
+import { usePrivateLedger } from "@/domains/vault/ui/usePrivateLedger";
 import { formatDisplayDate } from "@/shared/lib/format-date";
 import { PlusIcon } from "lucide-react";
 import Link from "next/link";
@@ -92,7 +92,7 @@ function AccountRow({
   return (
     <Link
       href={href}
-      className="flex items-center justify-between gap-4 px-4 py-3.5 transition-colors hover:bg-[var(--muted)]/70 focus-visible:bg-[var(--muted)]/70 focus-visible:outline-none"
+      className="flex flex-col items-stretch justify-between gap-2 px-4 py-3.5 transition-colors sm:flex-row sm:items-center sm:gap-4 hover:bg-[var(--muted)]/70 focus-visible:bg-[var(--muted)]/70 focus-visible:outline-none"
       aria-label={`Open ${account.name} details`}
     >
       <div className="min-w-0">
@@ -111,7 +111,7 @@ function AccountRow({
           </p>
         ) : null}
       </div>
-      <div className="flex shrink-0 items-center gap-2">
+      <div className="flex shrink-0 items-center justify-between gap-2 sm:justify-end">
         <p className="text-right text-base font-semibold tabular-nums tracking-tight text-[var(--foreground)]">
           {formatMoney(amount, account.isoCurrencyCode ?? "CAD")}
         </p>
@@ -123,9 +123,11 @@ function AccountRow({
 
 function DetailRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex items-baseline justify-between gap-4 py-2 text-sm">
-      <span className="text-[var(--muted-foreground)]">{label}</span>
-      <span className="text-right font-medium text-[var(--foreground)]">
+    <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)] items-baseline gap-4 py-2 text-sm">
+      <span className="wrap-break-word text-[var(--muted-foreground)]">
+        {label}
+      </span>
+      <span className="min-w-0 wrap-anywhere text-right font-medium text-[var(--foreground)]">
         {value}
       </span>
     </div>
@@ -248,12 +250,17 @@ function AccountDetailView({
         </Button>
         <header className="space-y-2">
           <div className="flex flex-wrap items-center gap-4">
-            <h1 className="type-page">{account.name}</h1>
+            <h1 className="type-page min-w-0 wrap-anywhere">{account.name}</h1>
             {loan ? (
-              <LoanDocumentOcrButton accountId={account.accountId} />
+              <LoanAccountActions
+                accountId={account.accountId}
+                accountName={account.name}
+              />
             ) : null}
           </div>
-          <p className="type-muted">{accountSecondaryLine(account)}</p>
+          <p className="type-muted wrap-anywhere">
+            {accountSecondaryLine(account)}
+          </p>
         </header>
       </div>
 
@@ -263,7 +270,9 @@ function AccountDetailView({
             <p className="type-muted">
               {loan ? "Principal remaining" : "Balance"}
             </p>
-            <p className="type-stat mt-1">{formatMoney(balance, currency)}</p>
+            <p className="type-stat mt-1 wrap-anywhere">
+              {formatMoney(balance, currency)}
+            </p>
             <div className="mt-4 divide-y divide-[var(--border)]">
               {loan ? (
                 <>
@@ -495,7 +504,7 @@ export function BankAccountsDashboard({
                   type="button"
                   variant="ghost"
                   size="icon-sm"
-                  className="size-4 shrink-0 rounded-full border border-border text-accent hover:bg-accent-subtle hover:text-accent"
+                  className="size-4 max-md:size-11 shrink-0 rounded-full border border-border text-accent hover:bg-accent-subtle hover:text-accent"
                   aria-label="Register Lending Account"
                   onClick={() => setAddLoanOpen(true)}
                 >
@@ -543,7 +552,7 @@ export function BankAccountsDashboard({
                 type="button"
                 variant="ghost"
                 size="icon-sm"
-                className="size-4 shrink-0 rounded-full border border-border text-accent hover:bg-accent-subtle hover:text-accent"
+                className="size-4 max-md:size-11 shrink-0 rounded-full border border-border text-accent hover:bg-accent-subtle hover:text-accent"
                 aria-label="Register Lending Account"
                 onClick={() => setAddLoanOpen(true)}
               >

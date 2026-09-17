@@ -60,9 +60,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="en"
-      className={`${plusJakarta.variable} ${outfit.variable} ${azeretMono.variable} h-full antialiased`}
+      className={`${plusJakarta.variable} ${outfit.variable} ${azeretMono.variable} h-dvh max-h-dvh overflow-hidden antialiased`}
     >
-      <body className="flex min-h-full flex-col">
+      <body className="flex h-full min-h-0 flex-col overflow-hidden">
         <SerwistAppProvider>
           <ConvexAuthNextjsServerProvider>
             <Providers>{children}</Providers>

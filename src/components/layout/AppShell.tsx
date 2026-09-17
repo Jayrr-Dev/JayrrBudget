@@ -540,8 +540,7 @@ export function AppShell({
   return (
     <div
       className={cn(
-        "flex min-h-screen w-full flex-1 flex-col bg-[var(--background)] pt-[env(safe-area-inset-top)] pr-[env(safe-area-inset-right)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] md:flex-row",
-        fullBleedDatabase && "h-dvh max-h-dvh min-h-0 overflow-hidden",
+        "fixed inset-0 flex min-h-0 w-full min-w-0 flex-col overflow-hidden bg-[var(--background)] pt-[env(safe-area-inset-top)] pr-[env(safe-area-inset-right)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] md:flex-row",
         className,
       )}
     >
@@ -564,14 +563,23 @@ export function AppShell({
           <SidebarFooterLink />
         </SidebarBody>
       </Sidebar>
-      <main className="flex max-h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background text-foreground">
+      <main
+        className={cn(
+          "flex min-h-0 min-w-0 w-full flex-1 flex-col bg-background text-foreground",
+          fullBleedDatabase || contentClassName
+            ? "overflow-hidden"
+            : "overflow-x-hidden overflow-y-auto overscroll-y-contain [-webkit-overflow-scrolling:touch]",
+        )}
+      >
         {isOffline ? <OfflineLastViewBanner savedAt={lastViewSavedAt} /> : null}
         <div
           className={cn(
-            "mx-auto w-full max-w-[90rem] min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-4 py-6 sm:px-8 sm:py-8 [-webkit-overflow-scrolling:touch]",
-            fullBleedDatabase &&
-              "flex h-full max-h-full max-w-none flex-col overflow-hidden p-2 sm:p-3",
-            vaultLocked && "flex flex-col",
+            "w-full min-w-0",
+            fullBleedDatabase || contentClassName
+              ? "flex h-full min-h-0 max-w-none flex-1 flex-col"
+              : "max-w-none px-4 py-6 sm:px-8 sm:py-8",
+            fullBleedDatabase && "overflow-hidden p-2 sm:p-3",
+            vaultLocked && "flex min-h-full flex-1 flex-col",
             contentClassName,
           )}
         >

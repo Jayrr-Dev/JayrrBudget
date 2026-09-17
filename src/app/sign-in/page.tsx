@@ -42,7 +42,7 @@ export default function SignInPage() {
           : "Choose a new password";
 
   return (
-    <main className="flex min-h-full flex-1 items-start justify-center bg-[var(--background)] px-4 py-6 sm:items-center sm:py-10">
+    <main className="flex h-full min-h-0 flex-1 items-start justify-center overflow-y-auto overscroll-y-contain bg-[var(--background)] px-4 py-6 sm:items-center sm:py-10">
       <div className="flex w-full max-w-6xl flex-col gap-8">
         <header className="flex items-center justify-center gap-4">
           <img

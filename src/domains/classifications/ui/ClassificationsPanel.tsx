@@ -151,7 +151,7 @@ function TitleInfo({ isAdmin }: { isAdmin: boolean }) {
       <PopoverTrigger asChild>
         <button
           type="button"
-          className="inline-flex size-6 shrink-0 items-center justify-center rounded-full text-accent hover:bg-accent-subtle hover:text-accent"
+          className="inline-flex size-6 shrink-0 items-center justify-center rounded-full max-md:size-11 text-accent hover:bg-accent-subtle hover:text-accent"
           aria-label="About classifications"
         >
           <Info className="size-3.5" />
@@ -1164,7 +1164,7 @@ export function ClassificationsPanel() {
         <PageSpinner className="min-h-40 py-8" />
       ) : (
         <div className="space-y-4">
-          <ButtonGroup>
+          <ButtonGroup className="max-w-full [&>button]:min-w-0 [&>button]:whitespace-normal">
             <Button
               type="button"
               size="sm"
@@ -1191,7 +1191,7 @@ export function ClassificationsPanel() {
             className="gap-4"
           >
             <div className="flex flex-wrap items-center justify-between gap-4">
-              <TabsList>
+              <TabsList className="w-full justify-start sm:w-fit">
                 <TabsTrigger value="sections">Sections</TabsTrigger>
                 <TabsTrigger value="categories">Categories</TabsTrigger>
                 <TabsTrigger value="subcategories">Subcategories</TabsTrigger>
@@ -1368,7 +1368,7 @@ export function ClassificationsPanel() {
       >
         {form ? (
           <DialogContent
-            className="flex flex-col gap-4 overflow-visible sm:max-w-lg"
+            className="flex flex-col gap-4 sm:max-w-lg"
             showCloseButton
           >
             <form

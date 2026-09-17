@@ -16,8 +16,8 @@ export type RowActionsMenuItem = {
 };
 
 const TRIGGER_SIZE_CLASS = {
-  sm: "size-6",
-  md: "size-7",
+  sm: "size-6 max-md:size-11",
+  md: "size-7 max-md:size-11",
 } as const;
 
 export function RowActionsMenu({
@@ -30,7 +30,7 @@ export function RowActionsMenu({
   size?: keyof typeof TRIGGER_SIZE_CLASS;
 }) {
   return (
-    <DropdownMenu>
+    <DropdownMenu modal={false}>
       <DropdownMenuTrigger
         className={`inline-flex ${TRIGGER_SIZE_CLASS[size]} cursor-pointer items-center justify-center rounded-[min(var(--radius-md),12px)] text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]`}
         aria-label={`Actions for ${label}`}
@@ -43,7 +43,7 @@ export function RowActionsMenu({
         {actions.map((action) => (
           <DropdownMenuItem
             key={action.label}
-            className="cursor-pointer"
+            className="cursor-pointer max-md:min-h-11"
             disabled={action.disabled}
             variant={action.variant}
             onClick={() => {

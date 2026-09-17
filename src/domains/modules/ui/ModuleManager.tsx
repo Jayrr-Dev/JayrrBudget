@@ -20,6 +20,7 @@ function ModuleEnabledSwitch({ module }: { module: AppModuleRecord }) {
   return (
     <Switch
       size="lg"
+      aria-label={`Enable ${module.name}`}
       checked={module.enabled}
       disabled={module.isCore}
       onCheckedChange={(checked) =>

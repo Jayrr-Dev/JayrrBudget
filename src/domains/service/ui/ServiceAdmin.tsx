@@ -54,7 +54,7 @@ function PlanCard({
         <input
           value={draft.name}
           onChange={(event) => onChange({ ...draft, name: event.target.value })}
-          className="w-full rounded-md border border-control-border bg-surface-elevated px-3 py-2 outline-none focus:border-primary"
+          className="min-h-11 min-w-0 text-base sm:text-sm w-full rounded-md border border-control-border bg-surface-elevated px-3 py-2 outline-none focus:border-primary"
         />
       </label>
       <div className="grid grid-cols-2 gap-3">
@@ -68,7 +68,7 @@ function PlanCard({
             onChange={(event) =>
               onChange({ ...draft, priceUsd: event.target.value })
             }
-            className="w-full rounded-md border border-control-border bg-surface-elevated px-3 py-2 outline-none focus:border-primary"
+            className="min-h-11 min-w-0 text-base sm:text-sm w-full rounded-md border border-control-border bg-surface-elevated px-3 py-2 outline-none focus:border-primary"
           />
         </label>
         <label className="block space-y-1 text-sm">
@@ -82,7 +82,7 @@ function PlanCard({
             onChange={(event) =>
               onChange({ ...draft, monthlyCapUsd: event.target.value })
             }
-            className="w-full rounded-md border border-control-border bg-surface-elevated px-3 py-2 outline-none focus:border-primary"
+            className="min-h-11 min-w-0 text-base sm:text-sm w-full rounded-md border border-control-border bg-surface-elevated px-3 py-2 outline-none focus:border-primary"
           />
         </label>
       </div>
@@ -98,7 +98,7 @@ function PlanCard({
           onChange={(event) =>
             onChange({ ...draft, rateMax: event.target.value })
           }
-          className="w-full rounded-md border border-control-border bg-surface-elevated px-3 py-2 outline-none focus:border-primary"
+          className="min-h-11 min-w-0 text-base sm:text-sm w-full rounded-md border border-control-border bg-surface-elevated px-3 py-2 outline-none focus:border-primary"
         />
       </label>
       <label className="flex items-center gap-2 text-sm">
@@ -240,14 +240,14 @@ export function ServiceAdmin() {
             "Until you save, the server still uses OPENROUTER_MODEL",
           ]}
         />
-        <div className="min-w-[16rem] space-y-1 text-sm">
+        <div className="min-w-0 space-y-1 text-sm">
           <span className="text-muted-foreground">Primary</span>
           <div className="flex flex-wrap items-stretch gap-3">
             <select
               value={modelDraft}
               onChange={(event) => setModelDraft(event.target.value)}
               disabled={!aiModels}
-              className="h-10 min-w-0 flex-1 rounded-md border border-control-border bg-surface-elevated px-3 outline-none focus:border-primary"
+              className="h-11 text-base sm:text-sm min-w-0 flex-1 rounded-md border border-control-border bg-surface-elevated px-3 outline-none focus:border-primary"
             >
               {(aiModels?.catalog ?? []).map((row) => {
                 const cost = modelCostLabel(row.id);

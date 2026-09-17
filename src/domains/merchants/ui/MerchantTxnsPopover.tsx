@@ -5,6 +5,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { RowActionsMenu } from "@/components/ui/row-actions-menu";
 import { Spinner } from "@/components/ui/spinner";
 import {
   Tooltip,
@@ -12,7 +13,6 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { RowActionsMenu } from "@/components/ui/row-actions-menu";
 import { MoneyText } from "@/domains/dashboard/ui/MoneyText";
 import { MoveMerchantDialog } from "@/domains/merchants/ui/MoveMerchantDialog";
 import {
@@ -27,6 +27,23 @@ import { Info } from "lucide-react";
 import { useState } from "react";
 
 export const MERCHANT_TXN_PEEK_LIMIT = 48;
+
+export function keepTxnPeekPopoverOpen(event: {
+  preventDefault: () => void;
+  target: EventTarget | null;
+}) {
+  const target = event.target;
+  if (!(target instanceof Element)) return;
+  if (
+    target.closest("[data-slot=dropdown-menu-content]") ||
+    target.closest("[data-slot=dropdown-menu-trigger]") ||
+    target.closest("[data-slot=dialog-content]") ||
+    target.closest("[data-slot=dropdown-menu]") ||
+    target.closest("[data-slot=combobox-content]")
+  ) {
+    event.preventDefault();
+  }
+}
 
 export type MerchantTxnPeek = {
   date: string;
@@ -61,7 +78,7 @@ export function MerchantTxnsPopover({
           <button
             type="button"
             aria-label={`Transactions for ${merchantName}`}
-            className="inline-flex size-6 shrink-0 items-center justify-center rounded-full text-accent hover:bg-accent-subtle hover:text-accent"
+            className="inline-flex size-6 shrink-0 items-center justify-center rounded-full max-md:size-11 text-accent hover:bg-accent-subtle hover:text-accent"
           >
             <Info className="size-3.5" />
           </button>
@@ -72,27 +89,13 @@ export function MerchantTxnsPopover({
           sideOffset={8}
           className="w-[min(34rem,calc(100vw-2rem))] gap-0 overflow-hidden p-0"
           onPointerDownOutside={(event) => {
-            const target = event.target;
-            if (!(target instanceof Element)) return;
-            if (
-              target.closest("[data-slot=dropdown-menu-content]") ||
-              target.closest("[data-slot=dialog-content]") ||
-              target.closest("[data-slot=dropdown-menu]") ||
-              target.closest("[data-slot=combobox-content]")
-            ) {
-              event.preventDefault();
-            }
+            keepTxnPeekPopoverOpen(event);
           }}
           onFocusOutside={(event) => {
-            const target = event.target;
-            if (!(target instanceof Element)) return;
-            if (
-              target.closest("[data-slot=dropdown-menu-content]") ||
-              target.closest("[data-slot=dialog-content]") ||
-              target.closest("[data-slot=combobox-content]")
-            ) {
-              event.preventDefault();
-            }
+            keepTxnPeekPopoverOpen(event);
+          }}
+          onInteractOutside={(event) => {
+            keepTxnPeekPopoverOpen(event);
           }}
         >
           <div className="flex items-center justify-between gap-2 border-b border-[var(--border)] px-3 py-2">
@@ -113,7 +116,6 @@ export function MerchantTxnsPopover({
                 {
                   label: "Move",
                   onSelect: () => {
-                    setOpen(false);
                     setMoveOpen(true);
                   },
                 },

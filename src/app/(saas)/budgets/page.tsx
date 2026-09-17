@@ -17,7 +17,7 @@ function BudgetsTitleInfo() {
       <PopoverTrigger asChild>
         <button
           type="button"
-          className="inline-flex size-6 shrink-0 items-center justify-center rounded-full text-accent hover:bg-accent-subtle hover:text-accent"
+          className="inline-flex size-11 sm:size-6 shrink-0 items-center justify-center rounded-full text-accent hover:bg-accent-subtle hover:text-accent"
           aria-label="About Budgets"
         >
           <Info className="size-3.5" />
@@ -27,7 +27,7 @@ function BudgetsTitleInfo() {
         align="start"
         side="bottom"
         sideOffset={8}
-        className="w-80 gap-0 p-3.5"
+        className="w-80 max-w-[calc(100vw-2rem)] gap-0 p-3.5"
       >
         <PopoverHeader className="gap-1.5">
           <PopoverTitle>Budgets</PopoverTitle>
