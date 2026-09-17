@@ -11,11 +11,23 @@ import {
 } from "@/domains/db-explorer/queries/dbExplorer";
 import { dbExplorerQueryKeys } from "@/domains/db-explorer/queries/query-keys";
 import { SchemaDiagram } from "@/domains/db-explorer/ui/SchemaDiagram";
+import { useFeatureFlag } from "@/domains/feature-flags/ui/useFeatureFlag";
 import { cn } from "@/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 
 const PAGE_SIZE = 50;
+
+/** Plaintext money tables — empty / unused when private ledger is on. */
+const PLAINTEXT_LEDGER_TABLES = new Set([
+  "institutions",
+  "accounts",
+  "loan_terms",
+  "loan_payment_links",
+  "statement_uploads",
+  "transactions",
+  "merchants",
+]);
 
 function formatCell(value: unknown): string {
   if (value == null) return "-";
@@ -120,6 +132,7 @@ function TableBrowser({ table }: { table: string }) {
 }
 
 export function DbExplorer() {
+  const encryptedLedger = useFeatureFlag("encryptedLedger");
   const schemaQuery = useQuery({
     queryKey: dbExplorerQueryKeys.schema,
     queryFn: fetchDbSchema,
@@ -129,19 +142,38 @@ export function DbExplorer() {
   const [selected, setSelected] = useState<string | null>(null);
   const [tab, setTab] = useState("schema");
 
-  const activeTable = selected ?? tables[0]?.name ?? null;
-  const activeMeta = useMemo(
-    () => tables.find((t) => t.name === activeTable) ?? null,
-    [tables, activeTable],
+  const visibleTables = useMemo(
+    () =>
+      encryptedLedger
+        ? tables.filter((t) => !PLAINTEXT_LEDGER_TABLES.has(t.name))
+        : tables,
+    [encryptedLedger, tables],
   );
 
+  const activeTable = selected ?? visibleTables[0]?.name ?? null;
+  const activeMeta = useMemo(
+    () => visibleTables.find((t) => t.name === activeTable) ?? null,
+    [visibleTables, activeTable],
+  );
+
+  const visibleForeignKeys = useMemo(
+    () =>
+      encryptedLedger
+        ? foreignKeys.filter(
+            (fk) =>
+              !PLAINTEXT_LEDGER_TABLES.has(fk.fromTable) &&
+              !PLAINTEXT_LEDGER_TABLES.has(fk.toTable),
+          )
+        : foreignKeys,
+    [encryptedLedger, foreignKeys],
+  );
   const ledgerTables = useMemo(
-    () => tables.filter((t) => t.scope !== "auth"),
-    [tables],
+    () => visibleTables.filter((t) => t.scope !== "auth"),
+    [visibleTables],
   );
   const authTables = useMemo(
-    () => tables.filter((t) => t.scope === "auth"),
-    [tables],
+    () => visibleTables.filter((t) => t.scope === "auth"),
+    [visibleTables],
   );
 
   function selectTable(name: string) {
@@ -197,7 +229,9 @@ export function DbExplorer() {
         <div className="space-y-0.5">
           <h1 className="type-page">Database</h1>
           <p className="type-lead">
-            Browse tables and their rows. Click a table name to open it.
+            {encryptedLedger
+              ? "Private ledger is on — money rows live in encrypted vault records, not these plaintext tables."
+              : "Browse tables and their rows. Click a table name to open it."}
           </p>
         </div>
         {activeMeta ? (
@@ -253,8 +287,8 @@ export function DbExplorer() {
               className="mt-3 flex min-h-0 flex-1 flex-col overflow-hidden data-[state=inactive]:hidden"
             >
               <SchemaDiagram
-                tables={tables}
-                foreignKeys={foreignKeys}
+                tables={visibleTables}
+                foreignKeys={visibleForeignKeys}
                 selected={activeTable}
                 onSelect={openTable}
               />

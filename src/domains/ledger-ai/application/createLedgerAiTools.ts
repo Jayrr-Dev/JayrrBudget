@@ -15,6 +15,10 @@ import {
   SHOW_SKETCH_TOOL_NAME,
   showSketchTool,
 } from "@/domains/ledger-ai/domain/sketchBoard";
+import {
+  vaultClientLedgerWriteTools,
+  vaultClientStoreSheetWriteTools,
+} from "@/domains/ledger-ai/domain/vaultLedgerWriteTools";
 import { createPiggyPingTools } from "@/domains/piggy-pings/application/createPiggyPingTools";
 import { invalidateConvexUserCache } from "@/shared/convex/cachedRead";
 import { api } from "@/shared/convex/httpClient";
@@ -213,6 +217,78 @@ function createWorkspaceTools(
   client: ConvexHttpClient,
   options: LedgerAiToolOptions,
 ) {
+  const storeSheetWrites =
+    options.allowStoreSheetWrites === false
+      ? vaultClientStoreSheetWriteTools()
+      : {
+          add_store_sheet_row: tool({
+            description:
+              "Add or replace a vendor line on the store sheet. Uses the receive tab unless tabName is set. Same name+parent+currency overwrites spend and count.",
+            inputSchema: z.object({
+              name: z.string(),
+              spend: z.number(),
+              count: z.number().optional(),
+              currency: z.string().optional(),
+              parent: z.string().optional(),
+              tabName: z.string().optional(),
+            }),
+            execute: async (input) => {
+              const sheet = await loadStoreSheet(client, null);
+              const tabName = input.tabName?.trim();
+              if (tabName) {
+                const tab = sheet.tabs.find(
+                  (item) =>
+                    sameName(item.name, tabName) || sameName(item.id, tabName),
+                );
+                if (!tab) return { error: `Store sheet tab not found: ${tabName}` };
+                await client.mutation(api.scratchNotes.setReceiveTab, {
+                  tabId: tab.id,
+                });
+              }
+              return afterWrite(
+                await client.mutation(api.scratchNotes.addRow, {
+                  name: input.name,
+                  spend: input.spend,
+                  count: input.count ?? 1,
+                  currency: input.currency?.trim() || "CAD",
+                  parent: input.parent,
+                }),
+              );
+            },
+          }),
+
+          remove_store_sheet_row: tool({
+            description:
+              "Remove a store sheet line by row id, or by vendor name on the active tab.",
+            inputSchema: z.object({
+              rowId: z.string().optional(),
+              name: z.string().optional(),
+              tabName: z.string().optional(),
+            }),
+            execute: async (input) => {
+              const sheet = await loadStoreSheet(client, null);
+              const tabName = input.tabName?.trim();
+              const tab = tabName
+                ? sheet.tabs.find(
+                    (item) =>
+                      sameName(item.name, tabName) || sameName(item.id, tabName),
+                  )
+                : (sheet.tabs.find((item) => item.id === sheet.activeId) ??
+                  sheet.tabs[0]);
+              if (!tab) return { error: "Store sheet tab not found." };
+              const target = input.rowId
+                ? tab.rows.find((item) => item.id === input.rowId)
+                : tab.rows.find((item) => sameName(item.name, input.name ?? ""));
+              if (!target) return { error: "Store sheet row not found." };
+              return afterWrite(
+                await client.mutation(api.scratchNotes.removeRow, {
+                  rowId: target.id,
+                }),
+              );
+            },
+          }),
+        };
+
   return {
     // Answered in the browser (no execute); see PiggyQuestionnaire / PiggyAttachment.
     [ASK_USER_TOOL_NAME]: askUserTool,
@@ -231,87 +307,7 @@ function createWorkspaceTools(
       },
     }),
 
-    add_store_sheet_row: tool({
-      description:
-        "Add or replace a vendor line on the store sheet. Uses the receive tab unless tabName is set. Same name+parent+currency overwrites spend and count.",
-      inputSchema: z.object({
-        name: z.string(),
-        spend: z.number(),
-        count: z.number().optional(),
-        currency: z.string().optional(),
-        parent: z.string().optional(),
-        tabName: z.string().optional(),
-      }),
-      execute: async (input) => {
-        if (!options.allowStoreSheetWrites) {
-          return {
-            error:
-              "Encrypted vault: store sheet edits from this chat are off. Notes still work.",
-          };
-        }
-        const sheet = await loadStoreSheet(client, null);
-        const tabName = input.tabName?.trim();
-        if (tabName) {
-          const tab = sheet.tabs.find(
-            (item) =>
-              sameName(item.name, tabName) || sameName(item.id, tabName),
-          );
-          if (!tab) return { error: `Store sheet tab not found: ${tabName}` };
-          await client.mutation(api.scratchNotes.setReceiveTab, {
-            tabId: tab.id,
-          });
-        }
-        return afterWrite(
-          await client.mutation(api.scratchNotes.addRow, {
-            name: input.name,
-            spend: input.spend,
-            count: input.count ?? 1,
-            currency: input.currency?.trim() || "CAD",
-            parent: input.parent,
-          }),
-        );
-      },
-    }),
-
-    remove_store_sheet_row: tool({
-      description:
-        "Remove a store sheet line by row id, or by vendor name on the active tab.",
-      inputSchema: z.object({
-        rowId: z.string().optional(),
-        name: z.string().optional(),
-        tabName: z.string().optional(),
-      }),
-      execute: async (input) => {
-        if (!options.allowStoreSheetWrites) {
-          return {
-            error:
-              "Encrypted vault: store sheet edits from this chat are off. Notes still work.",
-          };
-        }
-        const sheet = await loadStoreSheet(client, null);
-        const tabName = input.tabName?.trim();
-        const tab = tabName
-          ? sheet.tabs.find(
-              (item) =>
-                sameName(item.name, tabName) || sameName(item.id, tabName),
-            )
-          : (sheet.tabs.find((item) => item.id === sheet.activeId) ??
-            sheet.tabs[0]);
-        if (!tab) return { error: "Store sheet tab not found." };
-        if (tab.id !== sheet.activeId) {
-          await client.mutation(api.scratchNotes.selectTab, { tabId: tab.id });
-        }
-        const rowId =
-          input.rowId?.trim() ||
-          tab.rows.find((row) => sameName(row.name, input.name ?? ""))?.id;
-        if (!rowId) {
-          return { error: "Pass rowId or a matching vendor name." };
-        }
-        return afterWrite(
-          await client.mutation(api.scratchNotes.removeRow, { rowId }),
-        );
-      },
-    }),
+    ...storeSheetWrites,
 
     list_notes: tool({
       description:
@@ -525,10 +521,11 @@ export function createLedgerAiTools(
   });
   const reads = createLedgerReadTools(client);
   if (options.allowLedgerWrites === false) {
-    if (options.includeLedgerReads) {
-      return { ...reads, ...workspace };
-    }
-    return workspace;
+    return {
+      ...workspace,
+      ...vaultClientLedgerWriteTools(),
+      ...(options.includeLedgerReads ? reads : {}),
+    };
   }
   return {
     ...reads,

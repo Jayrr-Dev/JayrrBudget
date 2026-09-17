@@ -9,7 +9,29 @@ import {
   IMPORT_STATEMENT_DOCUMENT_TOOL_NAME,
   type ImportStatementDocumentUITool,
 } from "./importStatementDocumentTool";
+import {
+  REGISTER_LOAN_FROM_DOCUMENT_TOOL_NAME,
+  type RegisterLoanFromDocumentUITool,
+} from "./registerLoanFromDocumentTool";
 import { SHOW_SKETCH_TOOL_NAME, type ShowSketchUITool } from "./sketchBoard";
+import {
+  ADD_STORE_SHEET_ROW_TOOL_NAME,
+  CREATE_TRANSACTION_TOOL_NAME,
+  DELETE_TRANSACTIONS_TOOL_NAME,
+  RECATEGORIZE_MATCHING_TOOL_NAME,
+  REMOVE_STORE_SHEET_ROW_TOOL_NAME,
+  RENAME_DESCRIPTIONS_TOOL_NAME,
+  UPDATE_TRANSACTION_TOOL_NAME,
+  UPDATE_TRANSACTIONS_TOOL_NAME,
+  type AddStoreSheetRowUITool,
+  type CreateTransactionUITool,
+  type DeleteTransactionsUITool,
+  type RecategorizeMatchingUITool,
+  type RemoveStoreSheetRowUITool,
+  type RenameDescriptionsUITool,
+  type UpdateTransactionUITool,
+  type UpdateTransactionsUITool,
+} from "./vaultLedgerWriteTools";
 
 /** UIMessage shape for Piggy chats: text plus the browser-answered tools. */
 export type PiggyUIMessage = UIMessage<
@@ -21,6 +43,15 @@ export type PiggyUIMessage = UIMessage<
     [SHOW_SKETCH_TOOL_NAME]: ShowSketchUITool;
     [APPLY_BUDGET_EDIT_TOOL_NAME]: ApplyBudgetEditUITool;
     [IMPORT_STATEMENT_DOCUMENT_TOOL_NAME]: ImportStatementDocumentUITool;
+    [REGISTER_LOAN_FROM_DOCUMENT_TOOL_NAME]: RegisterLoanFromDocumentUITool;
+    [CREATE_TRANSACTION_TOOL_NAME]: CreateTransactionUITool;
+    [UPDATE_TRANSACTION_TOOL_NAME]: UpdateTransactionUITool;
+    [UPDATE_TRANSACTIONS_TOOL_NAME]: UpdateTransactionsUITool;
+    [DELETE_TRANSACTIONS_TOOL_NAME]: DeleteTransactionsUITool;
+    [RENAME_DESCRIPTIONS_TOOL_NAME]: RenameDescriptionsUITool;
+    [RECATEGORIZE_MATCHING_TOOL_NAME]: RecategorizeMatchingUITool;
+    [ADD_STORE_SHEET_ROW_TOOL_NAME]: AddStoreSheetRowUITool;
+    [REMOVE_STORE_SHEET_ROW_TOOL_NAME]: RemoveStoreSheetRowUITool;
   }
 >;
 
@@ -75,7 +106,50 @@ export function isImportStatementDocumentPart(
   return part.type === `tool-${IMPORT_STATEMENT_DOCUMENT_TOOL_NAME}`;
 }
 
-/** Parts the transcript renders as cards (question, file, or sketch). */
+export type RegisterLoanFromDocumentPart = Extract<
+  PiggyUIPart,
+  { type: `tool-${typeof REGISTER_LOAN_FROM_DOCUMENT_TOOL_NAME}` }
+>;
+
+export function isRegisterLoanFromDocumentPart(
+  part: PiggyUIPart,
+): part is RegisterLoanFromDocumentPart {
+  return part.type === `tool-${REGISTER_LOAN_FROM_DOCUMENT_TOOL_NAME}`;
+}
+
+const VAULT_WRITE_TOOL_NAMES = [
+  CREATE_TRANSACTION_TOOL_NAME,
+  UPDATE_TRANSACTION_TOOL_NAME,
+  UPDATE_TRANSACTIONS_TOOL_NAME,
+  DELETE_TRANSACTIONS_TOOL_NAME,
+  RENAME_DESCRIPTIONS_TOOL_NAME,
+  RECATEGORIZE_MATCHING_TOOL_NAME,
+  ADD_STORE_SHEET_ROW_TOOL_NAME,
+  REMOVE_STORE_SHEET_ROW_TOOL_NAME,
+] as const;
+
+export type VaultLedgerWriteToolName = (typeof VAULT_WRITE_TOOL_NAMES)[number];
+
+export type VaultLedgerWritePart = Extract<
+  PiggyUIPart,
+  { type: `tool-${VaultLedgerWriteToolName}` }
+>;
+
+export function isVaultLedgerWritePart(
+  part: PiggyUIPart,
+): part is VaultLedgerWritePart {
+  return VAULT_WRITE_TOOL_NAMES.some(
+    (name) => part.type === `tool-${name}`,
+  );
+}
+
+export function vaultLedgerWriteToolName(
+  part: VaultLedgerWritePart,
+): VaultLedgerWriteToolName {
+  return part.type.slice("tool-".length) as VaultLedgerWriteToolName;
+}
+
+/** Parts the transcript renders as cards (question, file, sketch, or vault write). */
 export function isPiggyCardPart(
   part: PiggyUIPart,
 ): part is
@@ -83,12 +157,16 @@ export function isPiggyCardPart(
   | ExportFilePart
   | ShowSketchPart
   | ApplyBudgetEditPart
-  | ImportStatementDocumentPart {
+  | ImportStatementDocumentPart
+  | RegisterLoanFromDocumentPart
+  | VaultLedgerWritePart {
   return (
     isAskUserPart(part) ||
     isExportFilePart(part) ||
     isShowSketchPart(part) ||
     isApplyBudgetEditPart(part) ||
-    isImportStatementDocumentPart(part)
+    isImportStatementDocumentPart(part) ||
+    isRegisterLoanFromDocumentPart(part) ||
+    isVaultLedgerWritePart(part)
   );
 }

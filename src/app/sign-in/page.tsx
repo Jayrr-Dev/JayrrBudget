@@ -60,25 +60,25 @@ export default function SignInPage() {
           </div>
         </header>
         <div className="grid w-full items-start gap-8 lg:grid-cols-[minmax(0,2fr)_minmax(16rem,1fr)] lg:items-center lg:gap-12">
-          <div className="order-2 w-full min-w-0 lg:order-1">
-            <ProductShowcaseCard />
-          </div>
-          <div className="relative z-10 order-1 w-full max-w-sm justify-self-center space-y-6 lg:order-2 lg:max-w-none lg:justify-self-stretch">
+          <div className="relative z-10 w-full max-w-sm justify-self-center space-y-6 lg:col-start-2 lg:max-w-none lg:justify-self-stretch">
             {flow === "signIn" || flow === "signUp" ? (
               <div
-                className="relative z-10 grid grid-cols-2 rounded-lg border border-[var(--border)] bg-surface-elevated p-1"
-                role="tablist"
+                className="grid grid-cols-2 rounded-lg border border-[var(--border)] bg-surface-elevated p-1"
                 aria-label="Account"
               >
                 <button
                   type="button"
-                  role="tab"
-                  aria-selected={flow === "signUp"}
+                  aria-pressed={flow === "signUp"}
                   className={
                     flow === "signUp"
-                      ? "min-h-11 touch-manipulation rounded-md bg-primary-subtle px-3 py-2 text-sm font-medium text-primary-subtle-foreground"
-                      : "min-h-11 touch-manipulation rounded-md px-3 py-2 text-sm font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+                      ? "min-h-11 w-full touch-manipulation rounded-md bg-primary-subtle px-3 py-2 text-sm font-medium text-primary-subtle-foreground"
+                      : "min-h-11 w-full touch-manipulation rounded-md px-3 py-2 text-sm font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
                   }
+                  onPointerDown={(event) => {
+                    event.preventDefault();
+                    setError(null);
+                    setFlow("signUp");
+                  }}
                   onClick={() => {
                     setError(null);
                     setFlow("signUp");
@@ -88,13 +88,17 @@ export default function SignInPage() {
                 </button>
                 <button
                   type="button"
-                  role="tab"
-                  aria-selected={flow === "signIn"}
+                  aria-pressed={flow === "signIn"}
                   className={
                     flow === "signIn"
-                      ? "min-h-11 touch-manipulation rounded-md bg-primary-subtle px-3 py-2 text-sm font-medium text-primary-subtle-foreground"
-                      : "min-h-11 touch-manipulation rounded-md px-3 py-2 text-sm font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+                      ? "min-h-11 w-full touch-manipulation rounded-md bg-primary-subtle px-3 py-2 text-sm font-medium text-primary-subtle-foreground"
+                      : "min-h-11 w-full touch-manipulation rounded-md px-3 py-2 text-sm font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
                   }
+                  onPointerDown={(event) => {
+                    event.preventDefault();
+                    setError(null);
+                    setFlow("signIn");
+                  }}
                   onClick={() => {
                     setError(null);
                     setFlow("signIn");
@@ -371,8 +375,9 @@ export default function SignInPage() {
                 Remember your password?{" "}
                 <button
                   type="button"
-                  className="text-primary underline-offset-2 hover:underline"
-                  onClick={() => {
+                  className="min-h-11 touch-manipulation text-primary underline-offset-2 hover:underline"
+                  onPointerDown={(event) => {
+                    event.preventDefault();
                     setError(null);
                     setFlow("signIn");
                   }}
@@ -381,6 +386,9 @@ export default function SignInPage() {
                 </button>
               </p>
             ) : null}
+          </div>
+          <div className="w-full min-w-0 lg:col-start-1 lg:row-start-1">
+            <ProductShowcaseCard />
           </div>
         </div>
       </div>

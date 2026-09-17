@@ -6,6 +6,7 @@ import {
   subscribePendingPasscode,
 } from "@/crypto/pendingPasscode";
 import { getVaultMasterKey, lockVault } from "@/crypto/session";
+import { useFeatureFlag } from "@/domains/feature-flags/ui/useFeatureFlag";
 import {
   ensureVaultFromPasscode,
   hydrateVaultSession,
@@ -24,12 +25,13 @@ const MERCHANT_TXN_COUNT_KEY = "jayrr-budget.merchant-txn-counts-v1";
 /**
  * After Convex Auth sign-in:
  * - ensure role-based modules exist for this user
- * - optionally claim ledger rows that still have no userId
- * - sync merchant phone-book rows from transaction labels
+ * - seed starter taxonomy
+ * - optionally claim/backfill plaintext ledger rows (skipped when private ledger is on)
  */
 export function EnsureUserBootstrap({ children }: { children: ReactNode }) {
   const { isAuthenticated, isLoading } = useConvexAuth();
   const convex = useConvex();
+  const encryptedLedger = useFeatureFlag("encryptedLedger");
   const claimUnowned = useMutation(api.migrations.claimUnownedData);
   const ensureModules = useMutation(api.modules.ensure);
   const ensureStarterTaxonomy = useMutation(api.classifications.ensureStarter);
@@ -63,6 +65,11 @@ export function EnsureUserBootstrap({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (isLoading || !isAuthenticated || ranForSession.current) return;
+    // Private ledger is the money store: skip plaintext claim/merchant backfill.
+    if (encryptedLedger) {
+      ranForSession.current = true;
+      return;
+    }
     ranForSession.current = true;
 
     void (async () => {
@@ -152,6 +159,7 @@ export function EnsureUserBootstrap({ children }: { children: ReactNode }) {
   }, [
     isAuthenticated,
     isLoading,
+    encryptedLedger,
     claimUnowned,
     backfillMerchants,
     syncMerchantTxnCounts,

@@ -13,7 +13,8 @@ export const FEATURE_FLAG_COPY: Record<
 > = {
   encryptedLedger: {
     name: "Private ledger",
-    description: "Your ledger is encrypted. Only you can read it.",
+    description:
+      "Money store is encrypted on this device. Only you can read it. Required for loans, statements, and transactions.",
   },
   cloudProcessing: {
     name: "Cloud Processing",

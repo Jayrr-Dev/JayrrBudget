@@ -68,9 +68,8 @@ import {
 import { usePrivateLedger } from "@/domains/vault/ui/usePrivateLedger";
 import { logMistralOcrUsage } from "@/shared/debug/aiUsageDebug";
 import { errorMessage } from "@/shared/lib/error-message";
-import { api } from "@convex/_generated/api";
 import { cn } from "cn";
-import { useConvex, useMutation } from "convex/react";
+import { useConvex } from "convex/react";
 import { Info, UploadIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -111,8 +110,6 @@ export function AddLoanDialog({ open, onOpenChange }: AddLoanDialogProps) {
   const privateLedger = usePrivateLedger();
   const flags = useFeatureFlags();
   const ocrMode = useOcrMode();
-  const createCustomLoan = useMutation(api.dashboard.createCustomLoan);
-  const linkLoanDocument = useMutation(api.loanDocuments.linkToAccount);
   const [form, setForm] = useState(emptyForm);
   const [step, setStep] = useState<LoanFormStep>(1);
   const [saving, setSaving] = useState(false);
@@ -305,90 +302,74 @@ export function AddLoanDialog({ open, onOpenChange }: AddLoanDialogProps) {
         keyId: privateLedger.keyId,
         client,
       });
-      let accountId: string;
-      if (write) {
-        accountId = `loan-${crypto.randomUUID()}`;
-        await saveEncryptedRecords(write, [
-          {
-            recordId: `account-${accountId}`,
-            kind: "account_meta",
-            value: {
-              accountId,
-              name: form.name.trim(),
-              officialName: officialLoanName(
-                form.name.trim(),
-                form.loanType,
-                form.vehicleLabel.trim() || null,
-              ),
-              mask: null,
-              type: form.loanType === "mortgage" ? "mortgage" : "loan",
-              subtype: typeMeta.subtype,
-              currentBalance: principalStart,
-              availableBalance: principalStart,
-              isoCurrencyCode: "CAD",
-            },
-            expectedRevision: null,
+      if (!write) {
+        throw new Error(
+          privateLedger.encryptedLedger
+            ? "Unlock the vault to register a lending account."
+            : "Turn on Private ledger in Modules, unlock the vault, then register the loan.",
+        );
+      }
+      const accountId = `loan-${crypto.randomUUID()}`;
+      await saveEncryptedRecords(write, [
+        {
+          recordId: `account-${accountId}`,
+          kind: "account_meta",
+          value: {
+            accountId,
+            name: form.name.trim(),
+            officialName: officialLoanName(
+              form.name.trim(),
+              form.loanType,
+              form.vehicleLabel.trim() || null,
+            ),
+            mask: null,
+            type: form.loanType === "mortgage" ? "mortgage" : "loan",
+            subtype: typeMeta.subtype,
+            currentBalance: principalStart,
+            availableBalance: principalStart,
+            isoCurrencyCode: "CAD",
           },
-        ]);
-        await saveEncryptedLoan(write, {
-          accountId,
-          principal: principalStart,
-          annualRate: annualRatePct / 100,
-          paymentAmount,
-          firstPaymentDate: form.firstPaymentDate,
-          paymentCount: Math.floor(paymentCount),
-          paymentFrequency: form.paymentFrequency,
-          loanType: form.loanType,
-          rateType: form.rateType,
-          vehicleLabel: form.vehicleLabel.trim() || null,
-          matchMerchantClean: form.matchMerchantClean.trim() || null,
-          matchAmount: paymentAmount,
           expectedRevision: null,
-        });
-        if (pendingFileHash) {
-          const masterKey = getVaultMasterKey();
-          if (masterKey) {
-            const ledger = await loadPrivateLedger(
-              client as unknown as VaultListClient,
-              {
-                userId: write.userId,
-                vaultId: write.vaultId,
-              },
-            );
-            await linkEncryptedLoanDocument({
-              client: client as unknown as MutationClient,
+        },
+      ]);
+      await saveEncryptedLoan(write, {
+        accountId,
+        principal: principalStart,
+        annualRate: annualRatePct / 100,
+        paymentAmount,
+        firstPaymentDate: form.firstPaymentDate,
+        paymentCount: Math.floor(paymentCount),
+        paymentFrequency: form.paymentFrequency,
+        loanType: form.loanType,
+        rateType: form.rateType,
+        vehicleLabel: form.vehicleLabel.trim() || null,
+        matchMerchantClean: form.matchMerchantClean.trim() || null,
+        matchAmount: paymentAmount,
+        expectedRevision: null,
+      });
+      if (pendingFileHash) {
+        const masterKey = getVaultMasterKey();
+        if (masterKey) {
+          const ledger = await loadPrivateLedger(
+            client as unknown as VaultListClient,
+            {
               userId: write.userId,
               vaultId: write.vaultId,
-              keyId: write.keyId,
-              masterKey,
-              fileHash: pendingFileHash,
-              accountId,
-              ledger,
-            });
-          }
-        }
-        privateLedger.reload();
-      } else {
-        ({ accountId } = await createCustomLoan({
-          name: form.name.trim(),
-          loanType: form.loanType,
-          rateType: form.rateType,
-          vehicleLabel: form.vehicleLabel.trim() || null,
-          principalStart,
-          annualRate: annualRatePct / 100,
-          paymentAmount,
-          paymentFrequency: form.paymentFrequency,
-          paymentCount: Math.floor(paymentCount),
-          firstPaymentDate: form.firstPaymentDate,
-          matchMerchantClean: form.matchMerchantClean.trim() || null,
-        }));
-        if (pendingFileHash) {
-          await linkLoanDocument({
+            },
+          );
+          await linkEncryptedLoanDocument({
+            client: client as unknown as MutationClient,
+            userId: write.userId,
+            vaultId: write.vaultId,
+            keyId: write.keyId,
+            masterKey,
             fileHash: pendingFileHash,
             accountId,
+            ledger,
           });
         }
       }
+      privateLedger.reload();
       resetAndClose();
       router.push(`/accounts?account=${encodeURIComponent(accountId)}`);
     } catch (error) {

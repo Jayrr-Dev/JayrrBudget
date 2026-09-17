@@ -1,6 +1,7 @@
 /**
- * Loan amortization helpers. Live refresh writes go through
- * `api.dashboard.refreshLoans` with the signed-in user's Convex JWT.
+ * Loan amortization helpers for the private ledger.
+ * Live balances are computed in the browser via dashboardFromPrivateLedger.
+ * Convex `refreshLoans` is retired for vault-only money storage.
  */
 import {
   toMatchedPads,
@@ -18,9 +19,6 @@ import {
   CIBC_CAR_LOAN_MERCHANT,
   CIBC_CAR_LOAN_TERMS,
 } from "@/domains/loans/domain/carLoanConstants";
-import { invalidateConvexUserCache } from "@/shared/convex/cachedRead";
-import { api } from "@/shared/convex/httpClient";
-import { getAuthenticatedConvexClient } from "@/shared/convex/httpClient.server";
 
 export type LoanTermsRow = {
   accountId: string;
@@ -82,7 +80,7 @@ export function summaryFromAmortize(
     paidInterest: result.paidInterest,
     paidPrincipal: result.paidPrincipal,
     matchMerchantClean: terms.matchMerchantClean,
-    payments: result.schedule.filter((s) => s.applied),
+    payments: result.schedule.filter((step) => step.applied),
   };
 }
 
@@ -131,16 +129,16 @@ export async function loadAllLoanTerms(): Promise<LoanTermsRow[]> {
   return [];
 }
 
-export async function refreshAllLoans(asOfDate?: string) {
-  const client = await getAuthenticatedConvexClient();
-  const result = await client.mutation(api.dashboard.refreshLoans, { asOfDate });
-  await invalidateConvexUserCache();
-  return result;
+/** @deprecated Vault amortizes in the browser. Convex refresh is retired. */
+export async function refreshAllLoans(_asOfDate?: string) {
+  throw new Error(
+    "refreshAllLoans is retired. Private ledger amortizes loans in the browser (dashboardFromPrivateLedger).",
+  );
 }
 
 export async function refreshLoanAccount() {
   throw new Error(
-    "refreshLoanAccount is retired. Use refreshAllLoans / api.dashboard.refreshLoans",
+    "refreshLoanAccount is retired. Private ledger amortizes loans in the browser.",
   );
 }
 
@@ -148,7 +146,7 @@ export async function ensureCarLoanSchema() {}
 
 export async function seedCibcCarLoanAccount() {
   throw new Error(
-    "seedCibcCarLoanAccount is retired. Seed loanTerms in Convex instead",
+    "seedCibcCarLoanAccount is retired. Register lending accounts in the vault.",
   );
 }
 

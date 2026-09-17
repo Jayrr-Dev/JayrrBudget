@@ -29,6 +29,7 @@ function toSourceRows(ledger: PrivateLedger): AnalysisSourceRow[] {
       region: tx.region ?? null,
       country: tx.country ?? null,
       merchantClean: tx.merchantClean ?? tx.merchantName ?? null,
+      // Vault txs do not store enrichment channel / company / brand / kind.
       enrichmentChannel: null,
       sectionName: tx.sectionName ?? null,
       categoryName: rewriteTaxonomyLabel("category", tx.categoryName),

@@ -47,6 +47,10 @@ import {
   IMPORT_STATEMENT_DOCUMENT_TOOL_NAME,
   type ImportStatementDocumentOutput,
 } from "@/domains/ledger-ai/domain/importStatementDocumentTool";
+import {
+  REGISTER_LOAN_FROM_DOCUMENT_TOOL_NAME,
+  type RegisterLoanFromDocumentOutput,
+} from "@/domains/ledger-ai/domain/registerLoanFromDocumentTool";
 import { earlierDocumentNote } from "@/domains/ledger-ai/domain/piggyDocuments";
 import {
   isApplyBudgetEditPart,
@@ -54,7 +58,10 @@ import {
   isExportFilePart,
   isImportStatementDocumentPart,
   isPiggyCardPart,
+  isRegisterLoanFromDocumentPart,
   isShowSketchPart,
+  isVaultLedgerWritePart,
+  vaultLedgerWriteToolName,
   type PiggyUIMessage,
 } from "@/domains/ledger-ai/domain/piggyUiMessage";
 import { PiggyApplyBudgetEdit } from "@/domains/ledger-ai/ui/PiggyApplyBudgetEdit";
@@ -76,6 +83,8 @@ import {
   PiggyQuestionnaire,
   PiggyQuestionnaireAnswers,
 } from "@/domains/ledger-ai/ui/PiggyQuestionnaire";
+import { PiggyRegisterLoan } from "@/domains/ledger-ai/ui/PiggyRegisterLoan";
+import { PiggyVaultLedgerWrite } from "@/domains/ledger-ai/ui/PiggyVaultLedgerWrite";
 import {
   PiggyAssistantMessage,
   PiggyCappedText,
@@ -348,6 +357,20 @@ function PiggyChatPaneSession({
       toolCallId,
       output,
     });
+  const reportLoanRegister = (
+    toolCallId: string,
+    output: RegisterLoanFromDocumentOutput,
+  ) =>
+    void addToolResult({
+      tool: REGISTER_LOAN_FROM_DOCUMENT_TOOL_NAME,
+      toolCallId,
+      output,
+    });
+  const reportVaultWrite = (
+    tool: string,
+    toolCallId: string,
+    output: unknown,
+  ) => void addToolResult({ tool, toolCallId, output });
   const bornMessageIds = useRef(new Set(messages.map((message) => message.id)));
   const mood = piggyMoodFromChat({
     status,
@@ -505,6 +528,39 @@ function PiggyChatPaneSession({
                             messages={messages}
                             onDone={(output) =>
                               reportStatementImport(part.toolCallId, output)
+                            }
+                          />
+                        );
+                      }
+                      if (isRegisterLoanFromDocumentPart(part)) {
+                        if (part.state !== "input-available") return null;
+                        return (
+                          <PiggyRegisterLoan
+                            key={part.toolCallId}
+                            input={part.input}
+                            pending
+                            messages={messages}
+                            onDone={(output) =>
+                              reportLoanRegister(part.toolCallId, output)
+                            }
+                          />
+                        );
+                      }
+                      if (isVaultLedgerWritePart(part)) {
+                        if (part.state !== "input-available") return null;
+                        const toolName = vaultLedgerWriteToolName(part);
+                        return (
+                          <PiggyVaultLedgerWrite
+                            key={part.toolCallId}
+                            toolName={toolName}
+                            input={part.input}
+                            pending
+                            onDone={(output) =>
+                              reportVaultWrite(
+                                toolName,
+                                part.toolCallId,
+                                output,
+                              )
                             }
                           />
                         );
