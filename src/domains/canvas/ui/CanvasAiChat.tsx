@@ -20,6 +20,7 @@ import {
   applyCanvasTool,
   isCanvasToolName,
 } from "@/domains/canvas/application/applyCanvasTools";
+import { focusCanvasLabel } from "@/domains/canvas/application/focusCanvasLabel";
 import { buildBudgetContextFromDashboard } from "@/domains/canvas/domain/budgetContext";
 import { getCanvasSnapshot } from "@/domains/canvas/domain/canvasContext";
 import { PIGGY_BUBBLE_MAX_CHARS } from "@/domains/canvas/domain/canvasTools";
@@ -156,10 +157,14 @@ function CanvasCappedMarkdown({
   live?: boolean;
 }) {
   const shown = useCappedTextReveal(text, live === true);
+  const api = useCanvasApi();
   return (
     <Bubble align="start" variant="piggy">
       <BubbleContent>
-        <AssistantMarkdown text={shown} />
+        <AssistantMarkdown
+          text={shown}
+          onLocalRef={(label) => (api ? focusCanvasLabel(api, label) : false)}
+        />
       </BubbleContent>
     </Bubble>
   );
@@ -241,6 +246,7 @@ function AssistantTurn({
   const sources = message.parts.filter(
     (part): part is SourceUrlUIPart => part.type === "source-url",
   );
+  const api = useCanvasApi();
   if (rows.length === 0 && sources.length === 0) return null;
 
   return (
@@ -280,7 +286,12 @@ function AssistantTurn({
             </ScratchFold>
           );
         })}
-        {!live ? <SourceList parts={sources} /> : null}
+        {!live ? (
+          <SourceList
+            parts={sources}
+            onLocalRef={(label) => (api ? focusCanvasLabel(api, label) : false)}
+          />
+        ) : null}
       </div>
     </PiggyAssistantMessage>
   );

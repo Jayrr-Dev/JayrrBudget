@@ -1,16 +1,5 @@
 "use client";
 
-import { Icon } from "@iconify/react";
-import { useConvex } from "convex/react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Info } from "lucide-react";
-import { useState } from "react";
-import { toast } from "sonner";
-import { getVaultMasterKey } from "@/crypto/session";
-import type { MutationClient } from "@/crypto/vaultRecords";
-import { applyVaultCategorization } from "@/domains/vault/application/applyVaultCategorization";
-import { deleteVaultStatement } from "@/domains/vault/application/deleteVaultStatement";
-import { usePrivateLedger } from "@/domains/vault/ui/usePrivateLedger";
 import {
   AlertDialog,
   AlertDialogContent,
@@ -28,6 +17,13 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
   Popover,
   PopoverContent,
   PopoverDescription,
@@ -35,23 +31,28 @@ import {
   PopoverTitle,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { getVaultMasterKey } from "@/crypto/session";
+import type { MutationClient } from "@/crypto/vaultRecords";
 import { analysisQueryKeys } from "@/domains/analysis/queries/query-keys";
 import { queryKeys } from "@/domains/dashboard/queries/query-keys";
 import { dbExplorerQueryKeys } from "@/domains/db-explorer/queries/query-keys";
 import type { StatementUploadLog } from "@/domains/statements/domain/types";
-import {
-  deleteStatementUploadRequest,
-  fetchStatementUpload,
-} from "@/domains/statements/queries/fetchStatementUploads";
+import { fetchStatementUpload } from "@/domains/statements/queries/fetchStatementUploads";
 import { statementQueryKeys } from "@/domains/statements/queries/query-keys";
 import { OcrMarkdownView } from "@/domains/statements/ui/OcrMarkdownView";
+import { applyVaultCategorization } from "@/domains/vault/application/applyVaultCategorization";
+import { deleteVaultStatement } from "@/domains/vault/application/deleteVaultStatement";
+import {
+  skipNextPrivateLedgerReload,
+  usePrivateLedger,
+} from "@/domains/vault/ui/usePrivateLedger";
+import { api } from "@convex/_generated/api";
+import { Icon } from "@iconify/react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useConvex } from "convex/react";
+import { Info } from "lucide-react";
+import { useState } from "react";
+import { toast } from "sonner";
 
 /**
  * Row menu for a parse log. Delete removes the upload and its ledger children.
@@ -90,9 +91,15 @@ export function StatementUploadRowActions({
           }),
         });
         const result = await response.json();
-        if (!response.ok) throw new Error(result.error ?? "Categorization failed");
+        if (!response.ok)
+          throw new Error(result.error ?? "Categorization failed");
         const masterKey = getVaultMasterKey();
-        if (!privateLedger.userId || !privateLedger.vaultId || !privateLedger.keyId || !masterKey) {
+        if (
+          !privateLedger.userId ||
+          !privateLedger.vaultId ||
+          !privateLedger.keyId ||
+          !masterKey
+        ) {
           throw new Error("Sign in again, then categorize.");
         }
         await applyVaultCategorization({
@@ -113,19 +120,27 @@ export function StatementUploadRowActions({
         body: JSON.stringify({ force: alreadyCategorized }),
       });
       const result = await response.json();
-      if (!response.ok) throw new Error(result.error ?? "Categorization failed");
+      if (!response.ok)
+        throw new Error(result.error ?? "Categorization failed");
       return result as import("../domain/importResult").CategorizationSummary;
     },
-    onSuccess: async result => {
+    onSuccess: async (result) => {
       setConfirmCategorizeOpen(false);
       const description = `${result.cached} reused, ${result.ai} categorized, ${result.pending} pending.`;
       if (result.ok) {
-        toast.success(alreadyCategorized ? "Recategorization complete" : "Categorization complete", {
-          description,
-        });
+        toast.success(
+          alreadyCategorized
+            ? "Recategorization complete"
+            : "Categorization complete",
+          {
+            description,
+          },
+        );
       } else {
         toast.warning(
-          alreadyCategorized ? "Recategorization needs attention" : "Categorization needs attention",
+          alreadyCategorized
+            ? "Recategorization needs attention"
+            : "Categorization needs attention",
           { description: result.error ?? description },
         );
       }
@@ -136,10 +151,13 @@ export function StatementUploadRowActions({
         queryClient.invalidateQueries({ queryKey: analysisQueryKeys.all }),
       ]);
     },
-    onError: error => toast.error(
-      alreadyCategorized ? "Recategorization failed" : "Categorization failed",
-      { description: error.message },
-    ),
+    onError: (error) =>
+      toast.error(
+        alreadyCategorized
+          ? "Recategorization failed"
+          : "Categorization failed",
+        { description: error.message },
+      ),
   });
   const detail = useQuery({
     queryKey: statementQueryKeys.upload(upload.id),
@@ -150,10 +168,16 @@ export function StatementUploadRowActions({
     mutationFn: async () => {
       if (vault) {
         const masterKey = getVaultMasterKey();
-        if (!privateLedger.userId || !privateLedger.vaultId || !privateLedger.keyId || !masterKey || !upload.recordId) {
+        if (
+          !privateLedger.userId ||
+          !privateLedger.vaultId ||
+          !privateLedger.keyId ||
+          !masterKey ||
+          !upload.recordId
+        ) {
           throw new Error("Sign in again, then delete.");
         }
-        return deleteVaultStatement({
+        const result = await deleteVaultStatement({
           client: client as unknown as MutationClient,
           userId: privateLedger.userId,
           vaultId: privateLedger.vaultId,
@@ -162,8 +186,15 @@ export function StatementUploadRowActions({
           ledger: privateLedger.ledger,
           statementRecordId: upload.recordId,
         });
+        skipNextPrivateLedgerReload();
+        privateLedger.applyLedger(result.nextLedger);
+        return result;
       }
-      return deleteStatementUploadRequest(upload.id);
+      const result = await client.mutation(api.statements.remove, {
+        uploadId: upload.id,
+      });
+      if (!result.ok) throw new Error(result.error);
+      return result;
     },
     onSuccess: async (result) => {
       setConfirmDeleteOpen(false);
@@ -177,7 +208,6 @@ export function StatementUploadRowActions({
         queryClient.invalidateQueries({ queryKey: dbExplorerQueryKeys.all }),
         queryClient.invalidateQueries({ queryKey: analysisQueryKeys.all }),
       ]);
-      if (vault) privateLedger.reload();
       queryClient.removeQueries({
         queryKey: statementQueryKeys.upload(upload.id),
       });
@@ -227,7 +257,10 @@ export function StatementUploadRowActions({
           <DropdownMenuItem
             variant="destructive"
             className="cursor-pointer"
-            disabled={remove.isPending || (vault && upload.recordId === "statement-inferred")}
+            disabled={
+              remove.isPending ||
+              (vault && upload.recordId === "statement-inferred")
+            }
             onClick={() => setConfirmDeleteOpen(true)}
           >
             Delete
@@ -273,7 +306,8 @@ export function StatementUploadRowActions({
               <OcrMarkdownView markdown={upload.ocrMarkdown} />
             ) : (
               <p className="text-sm text-[var(--muted-foreground)]">
-                No scan saved for this statement. Upload it again to keep a copy.
+                No scan saved for this statement. Upload it again to keep a
+                copy.
               </p>
             )
           ) : detail.isPending ? (
@@ -285,11 +319,16 @@ export function StatementUploadRowActions({
           )}
         </DialogContent>
       </Dialog>
-      <AlertDialog open={confirmCategorizeOpen} onOpenChange={setConfirmCategorizeOpen}>
+      <AlertDialog
+        open={confirmCategorizeOpen}
+        onOpenChange={setConfirmCategorizeOpen}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
-              {alreadyCategorized ? "Recategorize this statement?" : "Categorize this statement?"}
+              {alreadyCategorized
+                ? "Recategorize this statement?"
+                : "Categorize this statement?"}
             </AlertDialogTitle>
             <AlertDialogDescription>
               {alreadyCategorized
@@ -323,8 +362,39 @@ export function StatementUploadRowActions({
       <AlertDialog open={confirmDeleteOpen} onOpenChange={setConfirmDeleteOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete this statement?</AlertDialogTitle>
-            <AlertDialogDescription>
+            <AlertDialogTitle className="flex items-center gap-2">
+              Delete this statement?
+              <Popover>
+                <PopoverTrigger asChild>
+                  <button
+                    type="button"
+                    className="inline-flex size-6 shrink-0 items-center justify-center rounded-full text-accent hover:bg-accent-subtle hover:text-accent"
+                    aria-label="About deleting this statement"
+                  >
+                    <Info className="size-3.5" />
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent
+                  align="start"
+                  side="bottom"
+                  sideOffset={8}
+                  className="w-80 gap-0 p-3.5"
+                >
+                  <PopoverHeader className="gap-1.5">
+                    <PopoverTitle>Delete this statement</PopoverTitle>
+                    <PopoverDescription>
+                      Removes this parse log and the transactions from it.
+                    </PopoverDescription>
+                    <ul className="mt-1.5 list-disc space-y-1 pl-4 text-muted-foreground">
+                      <li className="break-all">{upload.filename}</li>
+                      <li>Every transaction parsed from it is deleted</li>
+                      <li>This cannot be undone</li>
+                    </ul>
+                  </PopoverHeader>
+                </PopoverContent>
+              </Popover>
+            </AlertDialogTitle>
+            <AlertDialogDescription className="sr-only">
               Removes {upload.filename} and every transaction parsed from it.
               This cannot be undone.
             </AlertDialogDescription>

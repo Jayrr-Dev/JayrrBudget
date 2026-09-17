@@ -1,6 +1,13 @@
 "use client";
 
 import { ChromeTab, ChromeTabStrip } from "@/components/layout/ChromeTab";
+import { DockPanelResizeGrip } from "@/components/layout/DockPanelResizeGrip";
+import {
+  DOCK_PANEL_DEFAULT_WIDTH,
+  useDockPanelSize,
+  type DockPanelAnchor,
+  type DockPanelSize,
+} from "@/components/layout/useDockPanelSize";
 import { Button } from "@/components/ui/button";
 import {
   InputGroup,
@@ -19,24 +26,11 @@ import {
 import { buildBudgetContextFromDashboard } from "@/domains/canvas/domain/budgetContext";
 import { useFeatureFlag } from "@/domains/feature-flags/ui/useFeatureFlag";
 import {
-  piggyMoodFromChat,
-  piggyMoodFromMessage,
-  type PiggyMood,
-} from "@/domains/ledger-ai/ui/PiggyMascot";
-import {
-  PiggyAssistantMessage,
-  PiggyCappedText,
-  PiggyTextBubble,
-  PiggyTranscript,
-  PiggyTranscriptItem,
-  PiggyUserMessage,
-} from "@/domains/ledger-ai/ui/PiggyTranscript";
-import { useScratchNote } from "@/domains/scratch-note/scratchNoteStore";
-import { dashboardFromPrivateLedger } from "@/domains/vault/application/dashboardFromPrivateLedger";
-import { usePrivateLedger } from "@/domains/vault/ui/usePrivateLedger";
-import { cn } from "@/lib/utils";
-import { errorMessage } from "@/shared/lib/error-message";
-import { logAiUsageFromMessageMetadata } from "@/shared/debug/aiUsageDebug";
+  addPiggyDocuments,
+  documentsToFileParts,
+  filesFromDataTransfer,
+  imagesFromClipboard,
+} from "@/domains/ledger-ai/application/attachDocuments";
 import {
   APPLY_BUDGET_EDIT_TOOL_NAME,
   type ApplyBudgetEditOutput,
@@ -50,21 +44,19 @@ import {
   type ExportFileOutput,
 } from "@/domains/ledger-ai/domain/exportFileTool";
 import {
+  IMPORT_STATEMENT_DOCUMENT_TOOL_NAME,
+  type ImportStatementDocumentOutput,
+} from "@/domains/ledger-ai/domain/importStatementDocumentTool";
+import { earlierDocumentNote } from "@/domains/ledger-ai/domain/piggyDocuments";
+import {
   isApplyBudgetEditPart,
   isAskUserPart,
   isExportFilePart,
+  isImportStatementDocumentPart,
   isPiggyCardPart,
   isShowSketchPart,
   type PiggyUIMessage,
 } from "@/domains/ledger-ai/domain/piggyUiMessage";
-import {
-  addPiggyDocuments,
-  documentsToFileParts,
-  filesFromDataTransfer,
-  imagesFromClipboard,
-} from "@/domains/ledger-ai/application/attachDocuments";
-import { earlierDocumentNote } from "@/domains/ledger-ai/domain/piggyDocuments";
-import { OCR_DOCUMENT_ACCEPT } from "@/domains/statements/domain/ocrDocumentTypes";
 import { PiggyApplyBudgetEdit } from "@/domains/ledger-ai/ui/PiggyApplyBudgetEdit";
 import { PiggyAttachment } from "@/domains/ledger-ai/ui/PiggyAttachment";
 import {
@@ -73,17 +65,39 @@ import {
 } from "@/domains/ledger-ai/ui/PiggyDocumentChips";
 import { PiggyFeatureCarousel } from "@/domains/ledger-ai/ui/PiggyFeatureCarousel";
 import { PiggyIdlePrompt } from "@/domains/ledger-ai/ui/PiggyIdlePrompt";
+import { PiggyImportStatement } from "@/domains/ledger-ai/ui/PiggyImportStatement";
 import { PiggyInlineSketch } from "@/domains/ledger-ai/ui/PiggyInlineSketch";
+import {
+  piggyMoodFromChat,
+  piggyMoodFromMessage,
+  type PiggyMood,
+} from "@/domains/ledger-ai/ui/PiggyMascot";
 import {
   PiggyQuestionnaire,
   PiggyQuestionnaireAnswers,
 } from "@/domains/ledger-ai/ui/PiggyQuestionnaire";
+import {
+  PiggyAssistantMessage,
+  PiggyCappedText,
+  PiggyTextBubble,
+  PiggyTranscript,
+  PiggyTranscriptItem,
+  PiggyUserMessage,
+} from "@/domains/ledger-ai/ui/PiggyTranscript";
+import { useScratchNote } from "@/domains/scratch-note/scratchNoteStore";
+import { OCR_DOCUMENT_ACCEPT } from "@/domains/statements/domain/ocrDocumentTypes";
+import { dashboardFromPrivateLedger } from "@/domains/vault/application/dashboardFromPrivateLedger";
+import { usePrivateLedger } from "@/domains/vault/ui/usePrivateLedger";
+import { cn } from "@/lib/utils";
+import { logAiUsageFromMessageMetadata } from "@/shared/debug/aiUsageDebug";
+import { errorMessage } from "@/shared/lib/error-message";
 import { useChat } from "@ai-sdk/react";
 import {
   DefaultChatTransport,
   lastAssistantMessageIsCompleteWithToolCalls,
 } from "ai";
 import { Info, Paperclip, PlusIcon, SendHorizonal } from "lucide-react";
+import type { ComponentProps } from "react";
 import {
   useEffect,
   useMemo,
@@ -93,16 +107,14 @@ import {
   type DragEvent,
 } from "react";
 import { toast } from "sonner";
-import type { ComponentProps } from "react";
-import { emptyPiggyHistory, restorePiggyHistory, restorePiggyChatIndex, type PiggyChatIndex, type PiggyHistory } from "../domain/piggyHistory";
-import { usePiggyHistory } from "./usePiggyHistory";
-import { DockPanelResizeGrip } from "@/components/layout/DockPanelResizeGrip";
 import {
-  DOCK_PANEL_DEFAULT_WIDTH,
-  useDockPanelSize,
-  type DockPanelAnchor,
-  type DockPanelSize,
-} from "@/components/layout/useDockPanelSize";
+  emptyPiggyHistory,
+  restorePiggyChatIndex,
+  restorePiggyHistory,
+  type PiggyChatIndex,
+  type PiggyHistory,
+} from "../domain/piggyHistory";
+import { usePiggyHistory } from "./usePiggyHistory";
 
 const MAX_PIGGY_TABS = 8;
 const PIGGY_PANEL_DEFAULT_SIZE: DockPanelSize = {
@@ -169,12 +181,35 @@ function PiggyAboutInfo() {
   );
 }
 
-function PiggyChatPane(props: Omit<ComponentProps<typeof PiggyChatPaneSession>, "initialHistory" | "saveHistory">) {
-  const history = usePiggyHistory(`ledger:${props.chatId}`, restorePiggyHistory);
-  return <>
-    {history.error && <p role="status" className="px-3 py-2 text-xs text-warning">{history.error}</p>}
-    {history.ready ? <PiggyChatPaneSession key={`${history.owner}:${props.chatId}`} {...props} initialHistory={history.initial!} saveHistory={history.save} /> : <p className="p-3 text-xs text-muted-foreground">Loading saved chat…</p>}
-  </>;
+function PiggyChatPane(
+  props: Omit<
+    ComponentProps<typeof PiggyChatPaneSession>,
+    "initialHistory" | "saveHistory"
+  >,
+) {
+  const history = usePiggyHistory(
+    `ledger:${props.chatId}`,
+    restorePiggyHistory,
+  );
+  return (
+    <>
+      {history.error && (
+        <p role="status" className="px-3 py-2 text-xs text-warning">
+          {history.error}
+        </p>
+      )}
+      {history.ready ? (
+        <PiggyChatPaneSession
+          key={`${history.owner}:${props.chatId}`}
+          {...props}
+          initialHistory={history.initial!}
+          saveHistory={history.save}
+        />
+      ) : (
+        <p className="p-3 text-xs text-muted-foreground">Loading saved chat…</p>
+      )}
+    </>
+  );
 }
 
 function PiggyChatPaneSession({
@@ -208,8 +243,15 @@ function PiggyChatPaneSession({
   const [attaching, setAttaching] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const { messages, sendMessage, setMessages, status, error, addToolResult, stop } =
-    useChat<PiggyUIMessage>({
+  const {
+    messages,
+    sendMessage,
+    setMessages,
+    status,
+    error,
+    addToolResult,
+    stop,
+  } = useChat<PiggyUIMessage>({
     id: chatId,
     messages: initialHistory.messages as PiggyUIMessage[],
     throttle: 250,
@@ -248,7 +290,8 @@ function PiggyChatPaneSession({
     if (incoming.length === 0) return;
     const { files, rejected } = addPiggyDocuments(pendingFiles, incoming);
     setPendingFiles(files);
-    for (const reason of rejected) toast.warning("Skipped a file", { description: reason });
+    for (const reason of rejected)
+      toast.warning("Skipped a file", { description: reason });
   };
 
   const onDragOver = (event: DragEvent<HTMLDivElement>) => {
@@ -257,7 +300,8 @@ function PiggyChatPaneSession({
     if (!dragging) setDragging(true);
   };
   const onDragLeave = (event: DragEvent<HTMLDivElement>) => {
-    if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
+    if (event.currentTarget.contains(event.relatedTarget as Node | null))
+      return;
     setDragging(false);
   };
   const onDrop = (event: DragEvent<HTMLDivElement>) => {
@@ -286,9 +330,21 @@ function PiggyChatPaneSession({
     void addToolResult({ tool: ASK_USER_TOOL_NAME, toolCallId, output });
   const reportExport = (toolCallId: string, output: ExportFileOutput) =>
     void addToolResult({ tool: EXPORT_FILE_TOOL_NAME, toolCallId, output });
-  const reportBudgetEdit = (toolCallId: string, output: ApplyBudgetEditOutput) =>
+  const reportBudgetEdit = (
+    toolCallId: string,
+    output: ApplyBudgetEditOutput,
+  ) =>
     void addToolResult({
       tool: APPLY_BUDGET_EDIT_TOOL_NAME,
+      toolCallId,
+      output,
+    });
+  const reportStatementImport = (
+    toolCallId: string,
+    output: ImportStatementDocumentOutput,
+  ) =>
+    void addToolResult({
+      tool: IMPORT_STATEMENT_DOCUMENT_TOOL_NAME,
       toolCallId,
       output,
     });
@@ -351,7 +407,12 @@ function PiggyChatPaneSession({
             const cards = message.parts.filter(isPiggyCardPart);
             const files = message.parts.flatMap((part) =>
               part.type === "file"
-                ? [{ filename: part.filename ?? "document", mediaType: part.mediaType }]
+                ? [
+                    {
+                      filename: part.filename ?? "document",
+                      mediaType: part.mediaType,
+                    },
+                  ]
                 : [],
             );
             if (!text && cards.length === 0 && files.length === 0) return null;
@@ -371,7 +432,9 @@ function PiggyChatPaneSession({
                   </PiggyUserMessage>
                 ) : (
                   <PiggyAssistantMessage
-                    mood={assistantTalking ? mood : piggyMoodFromMessage(message)}
+                    mood={
+                      assistantTalking ? mood : piggyMoodFromMessage(message)
+                    }
                   >
                     {text ? (
                       <PiggyTextBubble>
@@ -432,6 +495,20 @@ function PiggyChatPaneSession({
                           />
                         );
                       }
+                      if (isImportStatementDocumentPart(part)) {
+                        if (part.state !== "input-available") return null;
+                        return (
+                          <PiggyImportStatement
+                            key={part.toolCallId}
+                            input={part.input}
+                            pending
+                            messages={messages}
+                            onDone={(output) =>
+                              reportStatementImport(part.toolCallId, output)
+                            }
+                          />
+                        );
+                      }
                       if (part.state === "output-available") {
                         return (
                           <PiggyQuestionnaireAnswers
@@ -445,7 +522,9 @@ function PiggyChatPaneSession({
                         <PiggyQuestionnaire
                           key={part.toolCallId}
                           input={part.input}
-                          onSubmit={(output) => answerAsk(part.toolCallId, output)}
+                          onSubmit={(output) =>
+                            answerAsk(part.toolCallId, output)
+                          }
                           onDismiss={() =>
                             answerAsk(part.toolCallId, {
                               answers: [],
@@ -461,10 +540,15 @@ function PiggyChatPaneSession({
             );
           })
         )}
-        {busy && (status === "submitted" || lastMessage?.role !== "assistant" || !messageText(lastMessage?.parts ?? [])) ? (
+        {busy &&
+        (status === "submitted" ||
+          lastMessage?.role !== "assistant" ||
+          !messageText(lastMessage?.parts ?? [])) ? (
           <PiggyTranscriptItem messageId="piggy-thinking">
             <PiggyAssistantMessage mood="thinking">
-              <p role="status" className="py-2 text-xs text-muted-foreground">Piggy is thinking…</p>
+              <p role="status" className="py-2 text-xs text-muted-foreground">
+                Piggy is thinking…
+              </p>
             </PiggyAssistantMessage>
           </PiggyTranscriptItem>
         ) : null}
@@ -493,7 +577,14 @@ function PiggyChatPaneSession({
             event.preventDefault();
             const value = input.trim();
             const hasFiles = pendingFiles.length > 0;
-            if ((!value && !hasFiles) || busy || blocked || awaitingAnswer || attaching) return;
+            if (
+              (!value && !hasFiles) ||
+              busy ||
+              blocked ||
+              awaitingAnswer ||
+              attaching
+            )
+              return;
             let files;
             if (hasFiles) {
               setAttaching(true);
@@ -579,15 +670,34 @@ function PiggyChatPaneSession({
   );
 }
 
-export function LedgerAiChat(props: Omit<ComponentProps<typeof LedgerAiChatSession>, "initialIndex" | "saveIndex" | "historyError">) {
+export function LedgerAiChat(
+  props: Omit<
+    ComponentProps<typeof LedgerAiChatSession>,
+    "initialIndex" | "saveIndex" | "historyError"
+  >,
+) {
   const history = usePiggyHistory("ledger-index", restorePiggyChatIndex);
   if (!props.open) return null;
-  if (!history.ready) return (
-    <div className={`${LEDGER_AI_DOCK_PANEL} p-3`} style={{ width: PIGGY_PANEL_DEFAULT_SIZE.width }}>
-      <p className="text-xs text-muted-foreground">Loading saved Piggy chats…</p>
-    </div>
+  if (!history.ready)
+    return (
+      <div
+        className={`${LEDGER_AI_DOCK_PANEL} p-3`}
+        style={{ width: PIGGY_PANEL_DEFAULT_SIZE.width }}
+      >
+        <p className="text-xs text-muted-foreground">
+          Loading saved Piggy chats…
+        </p>
+      </div>
+    );
+  return (
+    <LedgerAiChatSession
+      key={history.owner}
+      {...props}
+      initialIndex={history.initial!}
+      saveIndex={history.save}
+      historyError={history.error}
+    />
   );
-  return <LedgerAiChatSession key={history.owner} {...props} initialIndex={history.initial!} saveIndex={history.save} historyError={history.error} />;
 }
 
 function LedgerAiChatSession({
@@ -614,7 +724,9 @@ function LedgerAiChatSession({
     defaultSize: PIGGY_PANEL_DEFAULT_SIZE,
     anchor,
   });
-  useEffect(() => { saveIndex({ tabs, activeId }); }, [tabs, activeId, saveIndex]);
+  useEffect(() => {
+    saveIndex({ tabs, activeId });
+  }, [tabs, activeId, saveIndex]);
   const encryptedLedger = useFeatureFlag("encryptedLedger");
   const cloudProcessing = useFeatureFlag("cloudProcessing");
   const privateLedger = usePrivateLedger();
@@ -640,15 +752,23 @@ function LedgerAiChatSession({
           }
           // Only the newest user message carries file bytes; older ones keep
           // a text note so the request stays small and the context stays clear.
-          const lastUserIndex = messages.findLastIndex((m) => m.role === "user");
+          const lastUserIndex = messages.findLastIndex(
+            (m) => m.role === "user",
+          );
           const slimMessages = messages.map((message, index) =>
-            index === lastUserIndex || !message.parts.some((p) => p.type === "file")
+            index === lastUserIndex ||
+            !message.parts.some((p) => p.type === "file")
               ? message
               : {
                   ...message,
                   parts: message.parts.map((part) =>
                     part.type === "file"
-                      ? { type: "text" as const, text: earlierDocumentNote(part.filename ?? "document") }
+                      ? {
+                          type: "text" as const,
+                          text: earlierDocumentNote(
+                            part.filename ?? "document",
+                          ),
+                        }
                       : part,
                   ),
                 },
@@ -694,62 +814,70 @@ function LedgerAiChatSession({
 
   return (
     <div
-      className={cn(LEDGER_AI_DOCK_PANEL, "relative", panelSize.resizing && "select-none")}
+      className={cn(
+        LEDGER_AI_DOCK_PANEL,
+        "relative",
+        panelSize.resizing && "select-none",
+      )}
       style={{ width: panelSize.size.width }}
     >
-        <DockPanelResizeGrip label="Piggy panel" resize={panelSize} />
-        <div className="relative border-b border-border bg-muted/25">
-          <ChromeTabStrip ariaLabel="Piggy chats">
-            {tabs.map((tab) => (
-              <ChromeTab
-                key={tab.id}
-                name={tab.name}
-                isActive={tab.id === activeId}
-                canClose={tabs.length > 1}
-                onSelect={() => setActiveId(tab.id)}
-                onClose={() => closeTab(tab.id)}
-                onRename={(name) => renameTab(tab.id, name)}
-              />
-            ))}
-            <div className="mb-1 ml-0.5 flex shrink-0 items-center gap-0.5">
-              <button
-                type="button"
-                aria-label="Add Piggy tab"
-                title={
-                  tabs.length >= MAX_PIGGY_TABS
-                    ? `Up to ${MAX_PIGGY_TABS} chats`
-                    : "Add tab"
-                }
-                disabled={tabs.length >= MAX_PIGGY_TABS}
-                className="inline-flex size-5 shrink-0 items-center justify-center rounded-sm text-accent hover:bg-accent-subtle hover:text-accent disabled:pointer-events-none disabled:opacity-40"
-                onClick={addTab}
-              >
-                <PlusIcon className="size-3" strokeWidth={2} />
-              </button>
-              <PiggyAboutInfo />
-            </div>
-          </ChromeTabStrip>
-        </div>
-        <p className="sr-only">
-          Ask for money advice from your numbers, or change your own budget,
-          store sheet, and notes. Recategorize transactions, edit sections and
-          categories, or summarize spend. Each tab is a separate chat.
-        </p>
+      <DockPanelResizeGrip label="Piggy panel" resize={panelSize} />
+      <div className="relative border-b border-border bg-muted/25">
+        <ChromeTabStrip ariaLabel="Piggy chats">
+          {tabs.map((tab) => (
+            <ChromeTab
+              key={tab.id}
+              name={tab.name}
+              isActive={tab.id === activeId}
+              canClose={tabs.length > 1}
+              onSelect={() => setActiveId(tab.id)}
+              onClose={() => closeTab(tab.id)}
+              onRename={(name) => renameTab(tab.id, name)}
+            />
+          ))}
+          <div className="mb-1 ml-0.5 flex shrink-0 items-center gap-0.5">
+            <button
+              type="button"
+              aria-label="Add Piggy tab"
+              title={
+                tabs.length >= MAX_PIGGY_TABS
+                  ? `Up to ${MAX_PIGGY_TABS} chats`
+                  : "Add tab"
+              }
+              disabled={tabs.length >= MAX_PIGGY_TABS}
+              className="inline-flex size-5 shrink-0 items-center justify-center rounded-sm text-accent hover:bg-accent-subtle hover:text-accent disabled:pointer-events-none disabled:opacity-40"
+              onClick={addTab}
+            >
+              <PlusIcon className="size-3" strokeWidth={2} />
+            </button>
+            <PiggyAboutInfo />
+          </div>
+        </ChromeTabStrip>
+      </div>
+      <p className="sr-only">
+        Ask for money advice from your numbers, or change your own budget, store
+        sheet, and notes. Recategorize transactions, edit sections and
+        categories, or summarize spend. Each tab is a separate chat.
+      </p>
 
-        {historyError && <p role="status" className="px-3 py-2 text-xs text-warning">{historyError}</p>}
-        {tabs.map((tab) => (
-          <PiggyChatPane
-            key={tab.id}
-            chatId={tab.id}
-            tabName={tab.name}
-            active={tab.id === activeId}
-            open={open}
-            blocked={blocked}
-            transport={transport}
-            transcriptHeight={panelSize.size.bodyHeight}
-            onMoodChange={onMoodChange}
-          />
-        ))}
+      {historyError && (
+        <p role="status" className="px-3 py-2 text-xs text-warning">
+          {historyError}
+        </p>
+      )}
+      {tabs.map((tab) => (
+        <PiggyChatPane
+          key={tab.id}
+          chatId={tab.id}
+          tabName={tab.name}
+          active={tab.id === activeId}
+          open={open}
+          blocked={blocked}
+          transport={transport}
+          transcriptHeight={panelSize.size.bodyHeight}
+          onMoodChange={onMoodChange}
+        />
+      ))}
     </div>
   );
 }

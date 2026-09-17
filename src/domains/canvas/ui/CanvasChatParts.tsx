@@ -5,6 +5,8 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import { isHttpUrl } from "@/domains/ledger-ai/domain/tidyPiggyMarkdown";
+import { PiggyMarkdown } from "@/domains/ledger-ai/ui/PiggyMarkdown";
 import { cn } from "@/lib/utils";
 import type {
   DynamicToolUIPart,
@@ -25,12 +27,12 @@ import {
   MessageCircle,
   Move,
   PencilLine,
+  Scale,
   Search,
   Sigma,
   Trash2,
   type LucideIcon,
 } from "lucide-react";
-import { PiggyMarkdown } from "@/domains/ledger-ai/ui/PiggyMarkdown";
 import { useEffect, useState, type ReactNode } from "react";
 
 /** Collapse thoughts/stamps without yanking the bubble. Height + gap fold together. */
@@ -156,6 +158,18 @@ const TOOL_META: Record<string, ToolMeta> = {
     running: "Reading statements…",
     done: "Read {n} statement(s)",
   },
+  ask_jev: {
+    icon: Scale,
+    preparing: "Posing a vote…",
+    running: "Asking Jev…",
+    done: "Jev voted",
+  },
+  plan_board_with_jev: {
+    icon: Scale,
+    preparing: "Picking a layout…",
+    running: "Asking Jev which board…",
+    done: "Layout picked",
+  },
 };
 
 const FALLBACK_META: ToolMeta = {
@@ -245,7 +259,7 @@ export function ToolActivity({
         tone === "error" && "border-danger/20 bg-danger-subtle text-danger",
       )}
     >
-        {tone === "done" ? (
+      {tone === "done" ? (
         <Check className="size-3 shrink-0" strokeWidth={2.5} />
       ) : tone === "error" ? (
         <CircleAlert className="size-3 shrink-0" />
@@ -348,7 +362,13 @@ function hostOf(url: string) {
 }
 
 /** Links Piggy cited from web_search, deduped by URL. */
-export function SourceList({ parts }: { parts: SourceUrlUIPart[] }) {
+export function SourceList({
+  parts,
+  onLocalRef,
+}: {
+  parts: SourceUrlUIPart[];
+  onLocalRef?: (label: string) => boolean;
+}) {
   const seen = new Set<string>();
   const sources = parts.filter((part) => {
     if (!part.url || seen.has(part.url)) return false;
@@ -362,19 +382,40 @@ export function SourceList({ parts }: { parts: SourceUrlUIPart[] }) {
         <Globe className="size-3" />
         Sources
       </span>
-      {sources.map((source, index) => (
-        <a
-          key={source.sourceId ?? source.url}
-          href={source.url}
-          target="_blank"
-          rel="noopener noreferrer"
-          title={source.title || source.url}
-          className="inline-flex max-w-48 items-center gap-1 rounded-full border border-border bg-surface px-2 py-0.5 hover:border-accent/40 hover:text-accent"
-        >
-          <span className="tabular-nums">{index + 1}</span>
-          <span className="truncate">{source.title?.trim() || hostOf(source.url)}</span>
-        </a>
-      ))}
+      {sources.map((source, index) => {
+        const title = source.title?.trim() || hostOf(source.url);
+        const className =
+          "inline-flex max-w-48 items-center gap-1 rounded-full border border-border bg-surface px-2 py-0.5 hover:border-accent/40 hover:text-accent";
+        if (isHttpUrl(source.url)) {
+          return (
+            <a
+              key={source.sourceId ?? source.url}
+              href={source.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              title={source.title || source.url}
+              className={className}
+            >
+              <span className="tabular-nums">{index + 1}</span>
+              <span className="truncate">{title}</span>
+            </a>
+          );
+        }
+        return (
+          <button
+            key={source.sourceId ?? source.url}
+            type="button"
+            title={title}
+            className={className}
+            onClick={() => {
+              onLocalRef?.(title);
+            }}
+          >
+            <span className="tabular-nums">{index + 1}</span>
+            <span className="truncate">{title}</span>
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -383,8 +424,14 @@ export function SourceList({ parts }: { parts: SourceUrlUIPart[] }) {
 /* Markdown                                                            */
 /* ------------------------------------------------------------------ */
 
-export function AssistantMarkdown({ text }: { text: string }) {
-  return <PiggyMarkdown text={text} />;
+export function AssistantMarkdown({
+  text,
+  onLocalRef,
+}: {
+  text: string;
+  onLocalRef?: (label: string) => boolean;
+}) {
+  return <PiggyMarkdown text={text} onLocalRef={onLocalRef} />;
 }
 
 /* ------------------------------------------------------------------ */

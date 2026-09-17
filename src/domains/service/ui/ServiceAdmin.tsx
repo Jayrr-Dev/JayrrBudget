@@ -1,7 +1,7 @@
 "use client";
 
-import { PageSpinner } from "@/components/ui/spinner";
 import { Button } from "@/components/ui/button";
+import { PageSpinner } from "@/components/ui/spinner";
 import { TitleInfo } from "@/domains/ops/ui/TitleInfo";
 import {
   findAiPriceRow,
@@ -9,9 +9,11 @@ import {
   formatUsd,
   utcMonthKey,
 } from "@/shared/ai/aiCostTable";
+import { errorMessage } from "@/shared/lib/error-message";
 import { api } from "@convex/_generated/api";
 import { useMutation, useQuery } from "convex/react";
 import { useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
 
 type PlanDraft = {
   role: "admin" | "normal" | "premium";
@@ -51,9 +53,7 @@ function PlanCard({
         <span className="text-[var(--muted-foreground)]">Name</span>
         <input
           value={draft.name}
-          onChange={(event) =>
-            onChange({ ...draft, name: event.target.value })
-          }
+          onChange={(event) => onChange({ ...draft, name: event.target.value })}
           className="w-full rounded-md border border-control-border bg-surface-elevated px-3 py-2 outline-none focus:border-primary"
         />
       </label>
@@ -87,7 +87,9 @@ function PlanCard({
         </label>
       </div>
       <label className="block space-y-1 text-sm">
-        <span className="text-[var(--muted-foreground)]">Requests / minute</span>
+        <span className="text-[var(--muted-foreground)]">
+          Requests / minute
+        </span>
         <input
           type="number"
           min={1}
@@ -135,9 +137,7 @@ export function ServiceAdmin() {
 
   useEffect(() => {
     if (!aiModels) return;
-    setModelDraft(
-      aiModels.primaryModelId ?? aiModels.catalog[0]?.id ?? "",
-    );
+    setModelDraft(aiModels.primaryModelId ?? aiModels.catalog[0]?.id ?? "");
   }, [aiModels]);
 
   useEffect(() => {
@@ -207,7 +207,9 @@ export function ServiceAdmin() {
                 })
                   .catch((err: unknown) => {
                     setError(
-                      err instanceof Error ? err.message : "Could not save plan.",
+                      err instanceof Error
+                        ? err.message
+                        : "Could not save plan.",
                     );
                   })
                   .finally(() => setSavingRole(null));
@@ -222,7 +224,7 @@ export function ServiceAdmin() {
         ) : null}
         <p className="text-xs text-[var(--muted-foreground)]">
           Caps are estimated USD from our rate table, not the provider invoice.
-          Stripe checkout comes later.
+          Polar checkout is on Profile.
         </p>
       </section>
 
@@ -238,14 +240,14 @@ export function ServiceAdmin() {
             "Until you save, the server still uses OPENROUTER_MODEL",
           ]}
         />
-        <div className="flex flex-wrap items-end gap-3">
-          <label className="block min-w-[16rem] flex-1 space-y-1 text-sm">
-            <span className="text-[var(--muted-foreground)]">Primary</span>
+        <div className="min-w-[16rem] space-y-1 text-sm">
+          <span className="text-muted-foreground">Primary</span>
+          <div className="flex flex-wrap items-stretch gap-3">
             <select
               value={modelDraft}
               onChange={(event) => setModelDraft(event.target.value)}
               disabled={!aiModels}
-              className="w-full rounded-md border border-control-border bg-surface-elevated px-3 py-2 outline-none focus:border-primary"
+              className="h-10 min-w-0 flex-1 rounded-md border border-control-border bg-surface-elevated px-3 outline-none focus:border-primary"
             >
               {(aiModels?.catalog ?? []).map((row) => {
                 const cost = modelCostLabel(row.id);
@@ -257,27 +259,34 @@ export function ServiceAdmin() {
                 );
               })}
             </select>
-          </label>
-          <Button
-            type="button"
-            size="sm"
-            disabled={savingModel || !modelDraft}
-            onClick={() => {
-              setError(null);
-              setSavingModel(true);
-              void saveAiModels({ primaryModelId: modelDraft })
-                .catch((err: unknown) => {
-                  setError(
-                    err instanceof Error
-                      ? err.message
-                      : "Could not save model.",
-                  );
-                })
-                .finally(() => setSavingModel(false));
-            }}
-          >
-            {savingModel ? "Saving…" : "Save model"}
-          </Button>
+            <Button
+              type="button"
+              size="lg"
+              className="h-10"
+              disabled={savingModel || !modelDraft}
+              onClick={() => {
+                setError(null);
+                setSavingModel(true);
+                void saveAiModels({ primaryModelId: modelDraft })
+                  .then(() => {
+                    const picked = (aiModels?.catalog ?? []).find(
+                      (row) => row.id === modelDraft,
+                    );
+                    toast.success("Default model saved", {
+                      description: picked?.label ?? modelDraft,
+                    });
+                  })
+                  .catch((err: unknown) => {
+                    const message = errorMessage(err, "Could not save model.");
+                    setError(message);
+                    toast.error(message);
+                  })
+                  .finally(() => setSavingModel(false));
+              }}
+            >
+              {savingModel ? "Saving…" : "Save model"}
+            </Button>
+          </div>
         </div>
         {selectedCost ? (
           <p className="text-xs text-[var(--muted-foreground)]">

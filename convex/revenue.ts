@@ -1,8 +1,9 @@
 import { v } from "convex/values";
 import { query } from "./_generated/server";
 import { utcMonthKey } from "./lib/aiCostTable";
-import { requireRole } from "./lib/auth";
+import { requireRole, userRole } from "./lib/auth";
 import { shiftUtcMonthKey } from "./lib/utcKeys";
+import { polarRevenueReturn, polarRevenueSnapshot } from "./polar";
 
 const MONTH_SERIES = 12;
 const USER_TAKE = 1_000;
@@ -31,12 +32,7 @@ export const dashboard = query({
       platformCalls: v.number(),
     }),
     months: v.array(monthPointValidator),
-    stripe: v.object({
-      connected: v.boolean(),
-      mrr: v.number(),
-      arr: v.number(),
-      subscribers: v.number(),
-    }),
+    polar: polarRevenueReturn,
   }),
   handler: async (ctx, args) => {
     await requireRole(ctx, "admin");
@@ -85,6 +81,10 @@ export const dashboard = query({
     const userCount = users.length;
     const costPerUser =
       userCount > 0 ? roundUsd(current.platformUsd / userCount) : 0;
+    let premiumSubscribers = 0;
+    for (const user of users) {
+      if (userRole(user) === "premium") premiumSubscribers += 1;
+    }
 
     return {
       kpis: {
@@ -96,12 +96,7 @@ export const dashboard = query({
         platformCalls: current.platformCalls,
       },
       months,
-      stripe: {
-        connected: false,
-        mrr: 0,
-        arr: 0,
-        subscribers: 0,
-      },
+      polar: await polarRevenueSnapshot(ctx, premiumSubscribers),
     };
   },
 });

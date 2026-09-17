@@ -1,4 +1,9 @@
-﻿import { formatDocumentBytes } from "@/domains/ledger-ai/domain/piggyDocuments";
+﻿import {
+  IMPORT_STATEMENT_DOCUMENT_DESCRIPTION,
+  importStatementDocumentClientTool,
+  importStatementDocumentInputSchema,
+} from "@/domains/ledger-ai/domain/importStatementDocumentTool";
+import { formatDocumentBytes } from "@/domains/ledger-ai/domain/piggyDocuments";
 import { parseLoanDocument } from "@/domains/loans/application/parseLoanDocument";
 import { importBankStatement } from "@/domains/statements/application/importBankStatement";
 import { isOcrDocumentFilename } from "@/domains/statements/domain/ocrDocumentTypes";
@@ -14,7 +19,10 @@ import type { ConvexHttpClient } from "convex/browser";
 import { z } from "zod";
 import type { PiggyDocument } from "./extractPiggyDocuments";
 
-export { extractPiggyDocuments, type PiggyDocument } from "./extractPiggyDocuments";
+export {
+  extractPiggyDocuments,
+  type PiggyDocument,
+} from "./extractPiggyDocuments";
 
 const MAX_READ_CHARS = 16_000;
 const LOAN_REQUIRED = [
@@ -26,11 +34,8 @@ const LOAN_REQUIRED = [
   "firstPaymentDate",
 ] as const;
 
-const documentIndexSchema = z
-  .number()
-  .int()
-  .min(1)
-  .describe("1-based index from the attached-document note");
+const documentIndexSchema =
+  importStatementDocumentInputSchema.shape.documentIndex;
 
 const loanOverridesSchema = z
   .object({
@@ -41,13 +46,20 @@ const loanOverridesSchema = z
     rateType: z.enum(["fixed", "variable"]).optional(),
     vehicleLabel: z.string().nullable().optional(),
     principalStart: z.number().positive().optional(),
-    annualRatePct: z.number().min(0).optional().describe("Percent, 7.99 not 0.0799"),
+    annualRatePct: z
+      .number()
+      .min(0)
+      .optional()
+      .describe("Percent, 7.99 not 0.0799"),
     paymentAmount: z.number().positive().optional(),
     paymentFrequency: z
       .enum(["weekly", "biweekly", "semimonthly", "monthly"])
       .optional(),
     paymentCount: z.number().int().min(1).optional(),
-    firstPaymentDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+    firstPaymentDate: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/)
+      .optional(),
     matchMerchantClean: z.string().nullable().optional(),
   })
   .describe("Values the user gave that beat what the document says");
@@ -67,7 +79,10 @@ export function createDocumentTools({
 }) {
   if (documents.length === 0) return {};
 
-  const ocrCache = new Map<number, Promise<{ markdown: string; pageCount: number }>>();
+  const ocrCache = new Map<
+    number,
+    Promise<{ markdown: string; pageCount: number }>
+  >();
   const pick = (index: number) => {
     const doc = documents.find((d) => d.index === index);
     if (!doc) {
@@ -121,7 +136,10 @@ export function createDocumentTools({
       execute: async ({ documentIndex, maxChars }) => {
         const doc = pick(documentIndex);
         if (!isMistralConfigured()) {
-          return { ok: false as const, error: "Document OCR is not configured on this server." };
+          return {
+            ok: false as const,
+            error: "Document OCR is not configured on this server.",
+          };
         }
         try {
           const result = await ocr(doc);
@@ -135,52 +153,56 @@ export function createDocumentTools({
             text: text.slice(0, limit),
           };
         } catch (error) {
-          return { ok: false as const, error: errorMessage(error, "OCR failed") };
+          return {
+            ok: false as const,
+            error: errorMessage(error, "OCR failed"),
+          };
         }
       },
     }),
   };
 
-  if (!allowLedgerWrites) return readTools;
+  const importStatement = allowLedgerWrites
+    ? tool({
+        description: IMPORT_STATEMENT_DOCUMENT_DESCRIPTION,
+        inputSchema: z.object({ documentIndex: documentIndexSchema }),
+        execute: async ({ documentIndex }) => {
+          const doc = pick(documentIndex);
+          const result = await importBankStatement({
+            filename: doc.filename,
+            bytes: doc.bytes,
+            mimeType: doc.mediaType,
+            client,
+            persistMode: "convex",
+          });
+          if (!result.ok) return { ok: false as const, error: result.error };
+          await invalidateConvexUserCache();
+          return {
+            ok: true as const,
+            filename: result.filename,
+            duplicateFile: result.duplicateFile,
+            institutionName: result.institutionName,
+            accountName: result.accountName,
+            statementPeriodStart: result.statementPeriodStart,
+            statementPeriodEnd: result.statementPeriodEnd,
+            transactionCount: result.transactionCount,
+            insertedCount: result.insertedCount,
+            updatedCount: result.updatedCount,
+            skippedCount: result.skippedCount,
+            balanceOk: result.balanceOk,
+            categorization: result.categorization ?? null,
+          };
+        },
+      })
+    : importStatementDocumentClientTool;
+
+  if (!allowLedgerWrites) {
+    return { ...readTools, import_statement_document: importStatement };
+  }
 
   return {
     ...readTools,
-
-    import_statement_document: tool({
-      description: [
-        "Import an attached bank or card statement into the user's budget: OCR, parse every transaction, save them under the right account, then categorize.",
-        "Use when the document is a statement and the user wants it added. Same file twice is detected and skipped.",
-        "Report institution, account, period, and how many rows were added.",
-      ].join(" "),
-      inputSchema: z.object({ documentIndex: documentIndexSchema }),
-      execute: async ({ documentIndex }) => {
-        const doc = pick(documentIndex);
-        const result = await importBankStatement({
-          filename: doc.filename,
-          bytes: doc.bytes,
-          mimeType: doc.mediaType,
-          client,
-          persistMode: "convex",
-        });
-        if (!result.ok) return { ok: false as const, error: result.error };
-        await invalidateConvexUserCache();
-        return {
-          ok: true as const,
-          filename: result.filename,
-          duplicateFile: result.duplicateFile,
-          institutionName: result.institutionName,
-          accountName: result.accountName,
-          statementPeriodStart: result.statementPeriodStart,
-          statementPeriodEnd: result.statementPeriodEnd,
-          transactionCount: result.transactionCount,
-          insertedCount: result.insertedCount,
-          updatedCount: result.updatedCount,
-          skippedCount: result.skippedCount,
-          balanceOk: result.balanceOk,
-          categorization: result.categorization ?? null,
-        };
-      },
-    }),
+    import_statement_document: importStatement,
 
     register_loan_from_document: tool({
       description: [
@@ -218,19 +240,22 @@ export function createDocumentTools({
         }
 
         try {
-          const created = await client.mutation(api.dashboard.createCustomLoan, {
-            name: terms.name!,
-            loanType: terms.loanType,
-            rateType: terms.rateType,
-            vehicleLabel: terms.vehicleLabel ?? null,
-            principalStart: terms.principalStart!,
-            annualRate: terms.annualRatePct! / 100,
-            paymentAmount: terms.paymentAmount!,
-            paymentFrequency: terms.paymentFrequency,
-            paymentCount: terms.paymentCount!,
-            firstPaymentDate: terms.firstPaymentDate!,
-            matchMerchantClean: terms.matchMerchantClean ?? null,
-          });
+          const created = await client.mutation(
+            api.dashboard.createCustomLoan,
+            {
+              name: terms.name!,
+              loanType: terms.loanType,
+              rateType: terms.rateType,
+              vehicleLabel: terms.vehicleLabel ?? null,
+              principalStart: terms.principalStart!,
+              annualRate: terms.annualRatePct! / 100,
+              paymentAmount: terms.paymentAmount!,
+              paymentFrequency: terms.paymentFrequency,
+              paymentCount: terms.paymentCount!,
+              firstPaymentDate: terms.firstPaymentDate!,
+              matchMerchantClean: terms.matchMerchantClean ?? null,
+            },
+          );
           await client.mutation(api.loanDocuments.linkToAccount, {
             fileHash: parsed.fileHash,
             accountId: created.accountId,

@@ -105,11 +105,11 @@ export function RevenueDashboard() {
       <header className="border-b border-[var(--border)] pb-6">
         <TitleInfo
           title="Revenue"
-          lead="Cost of running AI today. Stripe money comes in after a payment manager is wired up."
+          lead="AI cost versus Polar Premium revenue."
           bullets={[
             "App key is what you pay on the shared OpenRouter / OCR bill",
             "User keys are BYOK and do not hit the platform",
-            "MRR and subscribers stay zero until Stripe is connected",
+            "MRR is Polar’s Premium price times Premium accounts",
           ]}
         />
       </header>
@@ -118,7 +118,10 @@ export function RevenueDashboard() {
         <Kpi
           label="App cost this month"
           value={money(data.kpis.monthPlatformUsd)}
-          hint={deltaHint(data.kpis.monthPlatformUsd, data.kpis.prevPlatformUsd)}
+          hint={deltaHint(
+            data.kpis.monthPlatformUsd,
+            data.kpis.prevPlatformUsd,
+          )}
         />
         <Kpi
           label="Per person"
@@ -131,9 +134,13 @@ export function RevenueDashboard() {
           hint="Platform-billed AI / OCR"
         />
         <Kpi
-          label="Stripe MRR"
-          value={money(data.stripe.mrr)}
-          hint="Placeholder until Stripe connects"
+          label="Polar MRR"
+          value={money(data.polar.mrr)}
+          hint={
+            data.polar.connected
+              ? `${data.polar.subscribers} Premium`
+              : "Sync Polar products on Profile"
+          }
         />
       </section>
 
@@ -149,9 +156,17 @@ export function RevenueDashboard() {
             className="aspect-[8/3] w-full"
             initialDimension={{ width: 640, height: 220 }}
           >
-            <AreaChart data={months} margin={{ left: 4, right: 8, top: 8, bottom: 0 }}>
+            <AreaChart
+              data={months}
+              margin={{ left: 4, right: 8, top: 8, bottom: 0 }}
+            >
               <CartesianGrid vertical={false} />
-              <XAxis dataKey="label" tickLine={false} axisLine={false} tickMargin={8} />
+              <XAxis
+                dataKey="label"
+                tickLine={false}
+                axisLine={false}
+                tickMargin={8}
+              />
               <YAxis
                 tickLine={false}
                 axisLine={false}
@@ -163,12 +178,14 @@ export function RevenueDashboard() {
                   <ChartTooltipContent
                     formatter={(value, name) => {
                       const label =
-                        TREND_CONFIG[name as keyof typeof TREND_CONFIG]?.label ??
-                        String(name);
+                        TREND_CONFIG[name as keyof typeof TREND_CONFIG]
+                          ?.label ?? String(name);
                       return (
                         <span className="flex w-full justify-between gap-4">
                           <span>{label}</span>
-                          <span className="tabular-nums">{money(Number(value))}</span>
+                          <span className="tabular-nums">
+                            {money(Number(value))}
+                          </span>
                         </span>
                       );
                     }}
@@ -241,28 +258,44 @@ export function RevenueDashboard() {
         </section>
       </div>
 
-      <section className="rounded-xl border border-dashed border-[var(--border)] bg-[var(--surface)] px-5 py-6">
+      <section className="rounded-xl border border-[var(--border)] bg-[var(--surface)] px-5 py-6">
         <TitleInfo
           heading="h2"
-          title="Stripe"
-          lead="Slot for a payment manager. Numbers stay at zero until it is connected."
+          title="Polar"
+          lead="Premium checkout is Polar. Cost above is still AI spend, not Polar fees."
           bullets={[
-            "MRR, ARR, and subscriber count will land here",
-            "Cost above stays independent so AI spend is still visible",
+            "Subscribers are accounts Polar marked Premium",
+            "Price comes from the synced Polar product",
+            "Sync products from Profile if the catalog is empty",
           ]}
         />
-        <dl className="mt-4 grid gap-3 sm:grid-cols-3">
+        <dl className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <div>
             <dt className="type-kicker">Status</dt>
-            <dd className="mt-1 text-sm">Not connected</dd>
+            <dd className="mt-1 text-sm">
+              {data.polar.connected ? "Connected" : "Not synced"}
+            </dd>
+          </div>
+          <div>
+            <dt className="type-kicker">Product</dt>
+            <dd className="mt-1 text-sm">
+              {data.polar.productName ?? "—"}
+              {data.polar.priceUsd != null
+                ? ` · ${money(data.polar.priceUsd)}/mo`
+                : ""}
+            </dd>
           </div>
           <div>
             <dt className="type-kicker">Subscribers</dt>
-            <dd className="mt-1 text-sm tabular-nums">{data.stripe.subscribers}</dd>
+            <dd className="mt-1 text-sm tabular-nums">
+              {data.polar.subscribers}
+            </dd>
           </div>
           <div>
             <dt className="type-kicker">ARR</dt>
-            <dd className="mt-1 text-sm tabular-nums">{money(data.stripe.arr)}</dd>
+            <dd className="mt-1 text-sm tabular-nums">
+              {money(data.polar.arr)}
+            </dd>
           </div>
         </dl>
       </section>

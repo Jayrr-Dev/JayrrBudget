@@ -148,7 +148,7 @@ export const SEED_MODULES: SeedModule[] = [
   {
     slug: "revenue",
     name: "Revenue",
-    description: "AI cost now. Stripe billing later.",
+    description: "AI cost now. Polar billing for Premium.",
     href: "/revenue",
     icon: "IconCurrencyDollar",
     category: "system",

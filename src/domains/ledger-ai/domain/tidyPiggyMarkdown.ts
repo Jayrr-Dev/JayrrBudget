@@ -12,10 +12,34 @@ export function tidyPiggyMarkdown(source: string): string {
 function tidyProse(source: string): string {
   let text = source.replace(/\*{4,}/g, "**");
   text = text.replace(/\*\*([^*\n]+?):\*\*\s*/g, "**$1:** ");
+  text = rewriteLocalImages(text);
   return text
     .split("\n")
     .map((line) => pipesToTable(line) ?? line)
     .join("\n");
+}
+
+export function isHttpUrl(value: string) {
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+/** `![Board title](not-a-url)` is a fake embed; keep the title as a markdown link. */
+function rewriteLocalImages(source: string) {
+  return source.replace(
+    /!\[([^\]]*)\]\(([^)]*)\)/g,
+    (_match, alt: string, src: string) => {
+      const label = alt.trim();
+      const href = src.trim().replace(/^<|>$/g, "");
+      if (isHttpUrl(href)) return _match;
+      if (!label) return "";
+      return `[${label}](${label})`;
+    },
+  );
 }
 
 function pipesToTable(line: string): string | null {

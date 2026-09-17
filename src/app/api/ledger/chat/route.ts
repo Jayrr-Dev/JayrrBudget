@@ -2,23 +2,34 @@ import {
   createDocumentTools,
   extractPiggyDocuments,
 } from "@/domains/ledger-ai/application/createDocumentTools";
+import {
+  createJevTools,
+  piggyMayUseJev,
+} from "@/domains/ledger-ai/application/createJevTools";
 import { createLedgerAiTools } from "@/domains/ledger-ai/application/createLedgerAiTools";
-import { PIGGY_VOICE_LINES } from "@/domains/ledger-ai/domain/piggyVoice";
-import { formatTaxonomyPrompt } from "@/domains/ledger-ai/domain/taxonomyPrompt";
 import { getLedgerAiContext } from "@/domains/ledger-ai/application/getLedgerAiContext";
+import { createPiggyCrewTools } from "@/domains/ledger-ai/application/piggyCrew.server";
 import {
   createPiggyMemoryTools,
   loadPiggyUserContext,
   recordPiggySession,
 } from "@/domains/ledger-ai/application/piggyMemory.server";
-import { createPiggyCrewTools } from "@/domains/ledger-ai/application/piggyCrew.server";
+import { PIGGY_VOICE_LINES } from "@/domains/ledger-ai/domain/piggyVoice";
+import { formatTaxonomyPrompt } from "@/domains/ledger-ai/domain/taxonomyPrompt";
 import {
-  chatModel,
-  getModelChain,
-} from "@/shared/ai/openRouter";
+  persistAiUsage,
+  runMeteredOpenRouter,
+} from "@/shared/ai/aiMeter.server";
 import { aiUsageMessageMetadata } from "@/shared/ai/aiUsageMetadata";
-import { persistAiUsage, runMeteredOpenRouter } from "@/shared/ai/aiMeter.server";
-import { aiCallDeniedResponse, checkAiCall } from "@/shared/ai/enforceAiCall.server";
+import {
+  compactModelMessages,
+  prepareCompactChatStep,
+} from "@/shared/ai/compactChatContext";
+import {
+  aiCallDeniedResponse,
+  checkAiCall,
+} from "@/shared/ai/enforceAiCall.server";
+import { chatModel, getModelChain } from "@/shared/ai/openRouter";
 import { loadOpenRouterKeyOr503 } from "@/shared/ai/resolveOpenRouter.server";
 import {
   AuthRequiredError,
@@ -26,10 +37,6 @@ import {
 } from "@/shared/convex/httpClient.server";
 import { errorMessage } from "@/shared/lib/error-message";
 import { api } from "@convex/_generated/api";
-import {
-  compactModelMessages,
-  prepareCompactChatStep,
-} from "@/shared/ai/compactChatContext";
 import {
   convertToModelMessages,
   stepCountIs,
@@ -89,6 +96,7 @@ export async function POST(request: Request) {
     } = extractPiggyDocuments(body.messages ?? []);
     const client = await getAuthenticatedConvexClient();
     const piggyUser = await loadPiggyUserContext(client);
+    const jevOn = await piggyMayUseJev(client);
     // Taxonomy names are plaintext in Convex in both modes, so Piggy always
     // sees the real Section > Category > Subcategory tree.
     let taxonomyPrompt: string;
@@ -162,27 +170,28 @@ export async function POST(request: Request) {
         helperContext: useClientBudget ? JSON.stringify(context) : undefined,
       }),
       ...createLedgerAiTools(client, {
-      allowLedgerWrites: !useClientBudget,
-      allowStoreSheetWrites: !useClientBudget,
-      storeSheetSnapshot: useClientBudget
-        ? (body.storeSheet as {
-            tabs: Array<{
-              id: string;
-              name: string;
-              rows: Array<{
+        allowLedgerWrites: !useClientBudget,
+        allowStoreSheetWrites: !useClientBudget,
+        storeSheetSnapshot: useClientBudget
+          ? (body.storeSheet as {
+              tabs: Array<{
                 id: string;
                 name: string;
-                spend: number;
-                count: number;
-                currency: string;
-                parent?: string;
+                rows: Array<{
+                  id: string;
+                  name: string;
+                  spend: number;
+                  count: number;
+                  currency: string;
+                  parent?: string;
+                }>;
               }>;
-            }>;
-            activeId: string;
-            receiveId: string;
-          } | null)
-        : null,
+              activeId: string;
+              receiveId: string;
+            } | null)
+          : null,
       }),
+      ...(jevOn ? createJevTools() : {}),
     };
 
     const startedAt = Date.now();
@@ -245,16 +254,21 @@ export async function POST(request: Request) {
       "When the user wants a file, export, report, or something to print or share, call export_file. Pull the rows first (search_transactions, summaries, taxonomy), then pass columns and string rows, max 300. Use csv for spreadsheet data and pdf for a readable report with a title, subtitle, and notes. After the receipt comes back, tell the user the file is ready in one short line; do not repeat the table in chat.",
       "Attached documents: the user can drop PDFs or photos into chat. They show up as [Attached document #n] notes; the bytes are only reachable through tools. If the user says what it is, act on it: a bank or card statement goes through import_statement_document; a loan contract, disclosure, or loan statement goes through register_loan_from_document. If they did not say, call read_document on it, decide from the text, and confirm with ask_user before filing (choices: import as statement, register as loan, just answer questions about it). Receipts or one-off documents: read_document, then create_transaction if they want it recorded.",
       "After filing a document, confirm in one line: what it was, the account or loan name, and the row count. If a loan is missing terms, ask_user for exactly those fields and retry with overrides. Attachments only live for the message they were sent with; if you need one again, ask the user to attach it again.",
-      documentError ? `Attachment warning to relay to the user: ${documentError}` : "",
+      documentError
+        ? `Attachment warning to relay to the user: ${documentError}`
+        : "",
       "For the store sheet, use add_store_sheet_row or remove_store_sheet_row.",
       "Reminders: use create_piggy_ping when they want a toast, email, popup, or banner reminder. cycle is Weekly, Monthly, EOM (end of month), SOM (start of month), weekdays like Mon or Mon,Tue, a yearly day like 9/16, or a one-off date like 9/16/26. Empty startDate or endDate means that bound is indefinite. Leave trigger blank. list_piggy_pings to review. delete_piggy_ping only after they confirm.",
       "Spend caps: use create_budget when they want a budget. amount is the cap. warningThreshold and overageThreshold are percents of that cap (defaults 80 and 100). classLookup is a section, category, or subcategory name from list_taxonomy. descriptionLookup is an optional merchant or description fragment. list_budgets to review existing ones before creating a duplicate.",
-      "Notes: the user's note tabs are in the context and via list_notes. To save something new, use create_note (new tab) or append_note (adds to the end, keeps what is there). Never wipe a note on your own. replace_note is only for when the user explicitly asks to rewrite or clear a note; tell them what will be lost, get a yes, then pass confirmed: true.",
+      "Notes: the user's note tabs are in the context and via list_notes. Content is GitHub-flavored markdown and renders in the notes panel (tables, lists, task checks, fenced code). For a comparison or action list, write a real markdown table: header row, then | --- | --- |, then data rows. Do not dump one pipe-separated line. To save something new, use create_note (new tab) or append_note (adds to the end, keeps what is there). Never wipe a note on your own. replace_note is only for when the user explicitly asks to rewrite or clear a note; tell them what will be lost, get a yes, then pass confirmed: true.",
       "Confirm what changed in one short sentence, including how many rows.",
       "Do not mention being an AI model. You are Piggy.",
+      jevOn
+        ? "Jev: typed votes only (yes/no, pick-one, score). Call ask_jev when a branch is fuzzy (treat vs bill, ping vs not, which next step). Then you speak. Do not quote Jev as a paragraph."
+        : "",
       "Cloud Processing notice: this chat receives readable budget, store sheet, and note context. It is not end-to-end encrypted.",
       useClientBudget
-        ? "Encrypted vault is on. Answer from the budget snapshot. To recategorize or edit a transaction, call apply_budget_edit; the browser writes the encrypted row. Do not tell the user to edit it themselves. Store sheet writes from this chat are off. You can read attached documents but not import them; point the user to Statements or Register Lending Account for that."
+        ? "Encrypted vault is on. Answer from the budget snapshot. To recategorize or edit a transaction, call apply_budget_edit; the browser writes the encrypted row. Do not tell the user to edit it themselves. Store sheet writes from this chat are off. Import attached bank statements with import_statement_document; the browser encrypts the rows. Loan registration from a document is off here; point them to Register Lending Account for that."
         : "Write tools are available for this user's plaintext budget, store sheet, and notes. Prefer apply_budget_edit or update_transaction over instructions.",
       "",
       ...piggyUser.systemLines,

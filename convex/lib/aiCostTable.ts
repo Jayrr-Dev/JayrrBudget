@@ -8,7 +8,7 @@
 export type TokenPriceRow = {
   id: string;
   label: string;
-  provider: "openrouter";
+  provider: "openrouter" | "typesafe";
   unit: "tokens";
   /** USD per 1M input tokens */
   inputPerMillionUsd: number;
@@ -91,6 +91,17 @@ export const AI_COST_TABLE: readonly AiPriceRow[] = [
     asOf: "2026-09-16",
   },
   {
+    id: "typesafe/jev",
+    label: "TypeSafe Jev",
+    provider: "typesafe",
+    unit: "tokens",
+    // TypeSafe: $0.042 / MTok in, output unmetered. https://typesafe.ai
+    inputPerMillionUsd: 0.042,
+    outputPerMillionUsd: 0,
+    sourceUrl: "https://typesafe.ai/blog/introducing-system-one-models-and-jev",
+    asOf: "2026-09-16",
+  },
+  {
     id: "mistral-ocr-latest",
     label: "Mistral OCR",
     provider: "mistral",
@@ -114,6 +125,9 @@ export function findAiPriceRow(modelId: string | null | undefined) {
   }
   if (modelId.includes("mistral-ocr") || modelId === "mistral-ocr-latest") {
     return BY_ID.get("mistral-ocr-latest") ?? null;
+  }
+  if (modelId.includes("typesafe/jev") || modelId.includes("jev-")) {
+    return BY_ID.get("typesafe/jev") ?? null;
   }
   return null;
 }

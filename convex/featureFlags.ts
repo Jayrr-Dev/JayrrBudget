@@ -2,10 +2,20 @@ import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { requireRole, requireUser } from "./lib/auth";
 
-export const FEATURE_FLAG_KEYS = ["encryptedLedger", "cloudProcessing"] as const;
+export const FEATURE_FLAG_KEYS = [
+  "encryptedLedger",
+  "cloudProcessing",
+  "jevCategorization",
+  "jevPiggy",
+] as const;
 export type FeatureFlagKey = (typeof FEATURE_FLAG_KEYS)[number];
 
-const keyValidator = v.union(v.literal("encryptedLedger"), v.literal("cloudProcessing"));
+const keyValidator = v.union(
+  v.literal("encryptedLedger"),
+  v.literal("cloudProcessing"),
+  v.literal("jevCategorization"),
+  v.literal("jevPiggy"),
+);
 
 function isKnownKey(key: string): key is FeatureFlagKey {
   return (FEATURE_FLAG_KEYS as readonly string[]).includes(key);

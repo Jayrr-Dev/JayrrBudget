@@ -1,24 +1,38 @@
+import { createBudgetTools } from "@/domains/budgets/application/createBudgetTools";
 import { getBudgetContextForCanvas } from "@/domains/canvas/application/getBudgetContextForCanvas";
 import type { CanvasSnapshot } from "@/domains/canvas/domain/canvasContext";
 import { CANVAS_SYSTEM_PROMPT } from "@/domains/canvas/domain/canvasSystemPrompt";
 import { createCanvasTools } from "@/domains/canvas/domain/canvasTools";
+import {
+  createCanvasJevTools,
+  piggyMayUseJev,
+} from "@/domains/ledger-ai/application/createJevTools";
 import { createLedgerReadTools } from "@/domains/ledger-ai/application/createLedgerAiTools";
-import { createBudgetTools } from "@/domains/budgets/application/createBudgetTools";
-import { createPiggyPingTools } from "@/domains/piggy-pings/application/createPiggyPingTools";
 import { createPiggyCrewTools } from "@/domains/ledger-ai/application/piggyCrew.server";
 import {
   createPiggyMemoryTools,
   loadPiggyUserContext,
   recordPiggySession,
 } from "@/domains/ledger-ai/application/piggyMemory.server";
+import { createPiggyPingTools } from "@/domains/piggy-pings/application/createPiggyPingTools";
+import {
+  persistAiUsage,
+  runMeteredOpenRouter,
+} from "@/shared/ai/aiMeter.server";
+import { aiUsageMessageMetadata } from "@/shared/ai/aiUsageMetadata";
+import {
+  compactModelMessages,
+  prepareCompactChatStep,
+} from "@/shared/ai/compactChatContext";
+import {
+  aiCallDeniedResponse,
+  checkAiCall,
+} from "@/shared/ai/enforceAiCall.server";
 import {
   chatModel,
   getModelChain,
   webSearchTool,
 } from "@/shared/ai/openRouter";
-import { persistAiUsage, runMeteredOpenRouter } from "@/shared/ai/aiMeter.server";
-import { aiCallDeniedResponse, checkAiCall } from "@/shared/ai/enforceAiCall.server";
-import { aiUsageMessageMetadata } from "@/shared/ai/aiUsageMetadata";
 import { loadOpenRouterKeyOr503 } from "@/shared/ai/resolveOpenRouter.server";
 import {
   AuthRequiredError,
@@ -26,10 +40,6 @@ import {
 } from "@/shared/convex/httpClient.server";
 import { errorMessage } from "@/shared/lib/error-message";
 import { api } from "@convex/_generated/api";
-import {
-  compactModelMessages,
-  prepareCompactChatStep,
-} from "@/shared/ai/compactChatContext";
 import {
   convertToModelMessages,
   stepCountIs,
@@ -60,10 +70,7 @@ export async function POST(request: Request) {
 
   const me = await convex.query(api.users.me, {});
   if (!me) {
-    return Response.json(
-      { error: "Authentication required" },
-      { status: 401 },
-    );
+    return Response.json({ error: "Authentication required" }, { status: 401 });
   }
   if (me.role !== "admin" && me.role !== "premium") {
     return Response.json(
@@ -101,6 +108,7 @@ export async function POST(request: Request) {
 
     const canvas = body.canvas ?? null;
     const piggyUser = await loadPiggyUserContext(convex);
+    const jevOn = await piggyMayUseJev(convex);
     let budget: unknown;
     if (body.useClientBudget) {
       // Encrypted ledger: client already decrypted. Do not load plaintext dashboard.
@@ -154,6 +162,11 @@ export async function POST(request: Request) {
       "You may hire up to 2 helper piggies with hire_piggy, then ask_piggy_helper. They research numbers through crew mail. You still draw and talk to the user.",
       "Reminders: create_piggy_ping for toast/email/popup/banner. Cycle from the start date (Weekly, Mon, Mon,Tue, 9/16, 9/16/26, Monthly, EOM, SOM). Empty dates are indefinite. Leave trigger blank.",
       "Spend caps: create_budget for a named amount cap. warningThreshold / overageThreshold are percents (defaults 80 / 100). classLookup from taxonomy names. list_budgets first if they may already have one.",
+      ...(jevOn
+        ? [
+            "Jev is on. For any request that could get a board, the first tool call MUST be plan_board_with_jev with the user's ask. Wait for the vote. Then use_skeleton with that kind and slots, unless shouldDraw is under 0.4 — then chat only. Do not skip Jev because the layout seems obvious. For treat vs need, ping vs not, or urgency, also call ask_jev. Never quote Jev as a paragraph.",
+          ]
+        : []),
       ...(serverLedger
         ? [
             "You can look things up yourself: list_accounts, search_transactions, summarize_spend (both take an account filter), and list_statements. Use them when the BUDGET DATA below is not enough, for example one card's spend, a statement's closing balance, or an older month.",
@@ -196,6 +209,7 @@ export async function POST(request: Request) {
           helperContext: JSON.stringify(budget),
         }),
         ...createCanvasTools(canvas?.shapes.map((shape) => shape.id)),
+        ...(jevOn ? createCanvasJevTools(canvas) : {}),
       },
       stopWhen: stepCountIs(MAX_STEPS),
       prepareStep: prepareCompactChatStep,

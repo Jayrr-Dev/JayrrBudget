@@ -190,5 +190,9 @@ export function usePrivateLedger() {
     ledger,
     version,
     reload: bumpLedgerEpoch,
+    applyLedger: (next: PrivateLedger) => {
+      hasLedger.current = true;
+      setLedger(next);
+    },
   };
 }

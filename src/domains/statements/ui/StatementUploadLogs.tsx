@@ -3,14 +3,14 @@
 import { Badge } from "@/components/ui/badge";
 import { DataTable } from "@/components/ui/data-table";
 import type { DataTableFeatures } from "@/components/ui/data-table-features";
-import type { StatementUploadLog } from "@/domains/statements/domain/types";
-import { StatementUploadRowActions } from "@/domains/statements/ui/StatementUploadRowActions";
-import { DecryptingStatus } from "@/domains/vault/ui/DecryptingStatus";
 import { PageSpinner } from "@/components/ui/spinner";
+import type { StatementUploadLog } from "@/domains/statements/domain/types";
+import { StatementUploadBulkActions } from "@/domains/statements/ui/StatementUploadBulkActions";
+import { StatementUploadRowActions } from "@/domains/statements/ui/StatementUploadRowActions";
 import type { PrivateStatementLog } from "@/domains/vault/domain/privateLedger";
+import { DecryptingStatus } from "@/domains/vault/ui/DecryptingStatus";
 import { usePrivateLedger } from "@/domains/vault/ui/usePrivateLedger";
 import { api } from "@convex/_generated/api";
-import { Icon } from "@iconify/react";
 import { createColumnHelper } from "@tanstack/react-table";
 import { useConvexAuth, useQuery } from "convex/react";
 
@@ -64,15 +64,10 @@ function statusVariant(status: string) {
 const columns = columnHelper.columns([
   columnHelper.display({
     id: "actions",
-    header: () => (
-      <span className="flex items-center justify-center">
-        <Icon
-          icon="mynaui:mouse-pointer-click-solid"
-          className="size-4 text-[var(--muted-foreground)]"
-          aria-hidden
-        />
-        <span className="sr-only">Actions</span>
-      </span>
+    header: ({ table }) => (
+      <StatementUploadBulkActions
+        uploads={table.getRowModel().rows.map((row) => row.original)}
+      />
     ),
     cell: ({ row }) => (
       <div className="flex items-center justify-center">
@@ -286,6 +281,19 @@ function fromVaultLog(
   };
 }
 
+function StatementUploadLogsTable({ data }: { data: StatementUploadLog[] }) {
+  return (
+    <DataTable
+      columns={columns}
+      data={data}
+      searchKey="filename"
+      searchPlaceholder="Filter files…"
+      pageSize={10}
+      enableColumnToggle
+    />
+  );
+}
+
 export function StatementUploadLogs() {
   const { isAuthenticated } = useConvexAuth();
   const privateLedger = usePrivateLedger();
@@ -312,16 +320,7 @@ export function StatementUploadLogs() {
         </p>
       );
     }
-    return (
-      <DataTable
-        columns={columns}
-        data={uploads}
-        searchKey="filename"
-        searchPlaceholder="Filter files…"
-        pageSize={10}
-        enableColumnToggle
-      />
-    );
+    return <StatementUploadLogsTable data={uploads} />;
   }
 
   if (result === undefined) {
@@ -345,13 +344,6 @@ export function StatementUploadLogs() {
   }
 
   return (
-    <DataTable
-      columns={columns}
-      data={result.uploads as StatementUploadLog[]}
-      searchKey="filename"
-      searchPlaceholder="Filter files…"
-      pageSize={10}
-      enableColumnToggle
-    />
+    <StatementUploadLogsTable data={result.uploads as StatementUploadLog[]} />
   );
 }

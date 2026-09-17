@@ -5,9 +5,12 @@ import {
   type CategoryVocabulary,
 } from "@/domains/statements/application/categoryVocabulary";
 import {
+  detectPaperFactsFields,
   paperFactsStatementSchema,
   paperFactsToParsed,
-  type PaperFactsStatement,
+  paperFactsTransactionSchemaFor,
+  type PaperFactsFieldSet,
+  type PaperFactsStatementInput,
 } from "@/domains/statements/domain/paperFactsStatement";
 import {
   parsedStatementSchema,
@@ -33,9 +36,14 @@ const paperFactsMetaSchema = paperFactsStatementSchema.omit({
   transactions: true,
 });
 
-const paperFactsBatchSchema = z.object({
-  transactions: paperFactsStatementSchema.shape.transactions,
-});
+/** Statement + row schema trimmed to the field groups this OCR shows. */
+function paperFactsSchemasFor(fields: PaperFactsFieldSet) {
+  const transactions = z.array(paperFactsTransactionSchemaFor(fields));
+  return {
+    statement: paperFactsMetaSchema.extend({ transactions }),
+    batch: z.object({ transactions }),
+  };
+}
 
 function splitOcrPages(ocrMarkdown: string) {
   const parts = ocrMarkdown
@@ -114,15 +122,21 @@ const BALANCE_AND_DEDUP_RULES = [
 ].join("\n");
 
 /** Paper-facts extract: ledger math + line text only (no categories / merchants). */
-const PAPER_FACTS_RULES = [
-  SIGN_AND_BALANCE_RULES,
-  DEDUP_AND_META_RULES,
-  MASK_RULES,
-  "Do NOT invent categories, subcategories, paymentChannel, merchantName, or transactionCode.",
-  "Fill date, authorizedDate, description, amount, pending, and locationCity/Region/Country when present.",
-  "When a line shows FX (e.g. `12,280.00 PHP @ 0.024` or `USD 12.00 @ 1.42`), fill foreignAmount, foreignCurrency (ISO 4217), and exchangeRate. Leave all three null for domestic CAD lines.",
-  "Keep description as the full original statement line (minus OCR dingbats).",
-].join("\n");
+function paperFactsRules(fields: PaperFactsFieldSet) {
+  return [
+    SIGN_AND_BALANCE_RULES,
+    DEDUP_AND_META_RULES,
+    MASK_RULES,
+    "Do NOT invent categories, subcategories, paymentChannel, merchantName, or transactionCode.",
+    `Fill date, authorizedDate, description, amount, pending${fields.location ? ", and locationCity/Region/Country when present" : ""}.`,
+    ...(fields.fx
+      ? [
+          "When a line shows FX (e.g. `12,280.00 PHP @ 0.024` or `USD 12.00 @ 1.42`), fill foreignAmount, foreignCurrency (ISO 4217), and exchangeRate. Leave all three null for domestic CAD lines.",
+        ]
+      : []),
+    "Keep description as the full original statement line (minus OCR dingbats).",
+  ].join("\n");
+}
 
 function sourceHintBlock(sourceHint?: string) {
   if (!sourceHint?.trim()) return [];
@@ -281,24 +295,30 @@ export async function parseStatementPaperFacts(
   const hintBlock = sourceHintBlock(options?.sourceHint);
   // After hard rules in each prompt - preferences are advisory for this PDF only.
   const userBlock = formatUserAiRulesPromptBlock(options?.userRules);
+  // Only ask for FX / location columns when the OCR shows them; the code-side
+  // FX regex (fillFxGapsFromDescription) still catches stragglers.
+  const fields = detectPaperFactsFields(ocrMarkdown);
+  const schemas = paperFactsSchemasFor(fields);
+  const rules = paperFactsRules(fields);
+  const fieldNote = `fields: fx=${fields.fx ? "on" : "off"} location=${fields.location ? "on" : "off"}`;
 
   if (pages.length <= 2) {
     const { object } = await generateObjectWithFallback({
-      schema: paperFactsStatementSchema,
+      schema: schemas.statement,
       logLabel: "statements-paper",
       prompt: [
         "Extract paper facts from this Canadian bank/credit-card OCR.",
         "Extract EVERY posted transaction line. Prefer CAD.",
         "accountType (pick one): chequing|checking, savings, credit|credit_card (Visa/Mastercard/Amex), lending|line_of_credit (LOC/HELOC/loan), other (TFSA/business/unclear).",
         ...hintBlock,
-        PAPER_FACTS_RULES,
+        rules,
         ...userBlock,
         ocrMarkdown.slice(0, 120_000),
       ].join("\n"),
     });
 
     console.info(
-      `[statements] paper-facts single-pass ${object.transactions.length} txns in ${Date.now() - started}ms`,
+      `[statements] paper-facts single-pass ${object.transactions.length} txns in ${Date.now() - started}ms (${fieldNote})`,
     );
     return paperFactsToParsed(object);
   }
@@ -324,13 +344,13 @@ export async function parseStatementPaperFacts(
 
   const pageResults = await mapPool(pages, 2, async (pageText, index) => {
     const { object } = await generateObjectWithFallback({
-      schema: paperFactsBatchSchema,
+      schema: schemas.batch,
       logLabel: "statements-paper-page",
       prompt: [
         "Extract EVERY posted transaction LINE on this statement page OCR.",
         "Canadian bank/credit card statement (often CIBC Visa).",
         ...hintBlock,
-        PAPER_FACTS_RULES,
+        rules,
         ...userBlock,
         `This is page ${index + 1} of ${pages.length}.`,
         pageText.slice(0, 40_000),
@@ -341,13 +361,13 @@ export async function parseStatementPaperFacts(
   });
 
   const { object: meta } = await metaPromise;
-  const paper: PaperFactsStatement = {
+  const paper: PaperFactsStatementInput = {
     ...meta,
     transactions: pageResults.flat(),
   };
 
   console.info(
-    `[statements] paper-facts ${paper.transactions.length} txns across ${pages.length} pages in ${Date.now() - started}ms`,
+    `[statements] paper-facts ${paper.transactions.length} txns across ${pages.length} pages in ${Date.now() - started}ms (${fieldNote})`,
   );
 
   return paperFactsToParsed(paper);

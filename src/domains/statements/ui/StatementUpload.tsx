@@ -74,6 +74,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
 import { logMistralOcrUsage } from "@/shared/debug/aiUsageDebug";
 import { errorMessage } from "@/shared/lib/error-message";
+import { mapPool } from "@/shared/lib/map-pool";
 import { api } from "@convex/_generated/api";
 import { useConvex, useMutation, useQuery } from "convex/react";
 import {
@@ -96,6 +97,8 @@ const UPLOAD_TOAST = "statement-upload";
 const MERCHANT_BACKFILL_KEY = "jayrr-budget.merchant-backfill-v1";
 const MAX_FILES = 24;
 const MAX_BYTES = 20 * 1024 * 1024;
+/** Files parsed at once. OCR + AI parse dominate, so 3 keeps wall-clock ~3x shorter. */
+const UPLOAD_CONCURRENCY = 3;
 
 type ItemState = "idle" | "uploading" | "processing" | "error" | "done";
 type DupKind = "exact" | "filename" | "queue" | null;
@@ -141,6 +144,16 @@ function newItemId() {
 
 function fileKey(file: File) {
   return `${file.name}:${file.size}:${file.lastModified}`;
+}
+
+/** Run async steps one at a time (vault encrypt reads the ledger, then writes). */
+function serialQueue() {
+  let tail: Promise<unknown> = Promise.resolve();
+  return function enqueue<T>(fn: () => Promise<T>): Promise<T> {
+    const run = tail.then(fn, fn);
+    tail = run.catch(() => undefined);
+    return run;
+  };
 }
 
 function periodLabel(fp: Fingerprint) {
@@ -394,9 +407,8 @@ export function StatementUpload({ onImported }: Props) {
   }
 
   function closeDialog() {
-    if (busyRef.current) {
-      cancelUpload();
-    }
+    // Click-out / X / Escape hides the dialog. Cancel upload is the
+    // footer button; keep the batch running and let the loading toast speak.
     setDialogOpen(false);
   }
 
@@ -426,25 +438,44 @@ export function StatementUpload({ onImported }: Props) {
     let warningCount = 0;
     let cancelled = false;
 
-    toast.loading(`Uploading 0/${pending.length}…`, { id: UPLOAD_TOAST });
+    // One toast for the batch: "X/N done" plus the files currently in flight.
+    const inFlight = new Map<string, string>();
+    let finished = 0;
+    const refreshToast = () => {
+      const lines = [...inFlight.entries()];
+      toast.loading(
+        `Importing ${finished}/${pending.length}${lines.length ? ` · ${lines.length} in progress` : ""}`,
+        {
+          id: UPLOAD_TOAST,
+          description: lines.length ? (
+            <div className="space-y-0.5">
+              {lines.map(([id, line]) => (
+                <div key={id} className="truncate">
+                  {line}
+                </div>
+              ))}
+            </div>
+          ) : undefined,
+        },
+      );
+    };
+    const vaultWrite = serialQueue();
 
-    for (let index = 0; index < pending.length; index += 1) {
+    refreshToast();
+
+    await mapPool(pending, UPLOAD_CONCURRENCY, async (item) => {
       if (controller.signal.aborted) {
         cancelled = true;
-        break;
+        return;
       }
 
-      const item = pending[index]!;
       patchItem(item.id, {
         state: "uploading",
         progress: { step: "receive", ...STATEMENT_IMPORT_STEPS.receive },
         error: null,
       });
-
-      toast.loading(`Uploading ${index + 1}/${pending.length}…`, {
-        id: UPLOAD_TOAST,
-        description: item.file.name,
-      });
+      inFlight.set(item.id, `${item.file.name} · starting…`);
+      refreshToast();
 
       try {
         const result = await uploadBankStatement(item.file, {
@@ -459,13 +490,11 @@ export function StatementUpload({ onImported }: Props) {
                 ? "processing"
                 : "uploading";
             patchItem(item.id, { state, progress });
-            toast.loading(
-              `Uploading ${index + 1}/${pending.length} · ${formatImportProgress(progress)}`,
-              {
-                id: UPLOAD_TOAST,
-                description: item.file.name,
-              },
+            inFlight.set(
+              item.id,
+              `${item.file.name} · ${formatImportProgress(progress)}`,
             );
+            refreshToast();
           },
         });
 
@@ -475,32 +504,34 @@ export function StatementUpload({ onImported }: Props) {
               "Turn on Cloud Processing in Modules before uploading a document.",
             );
           }
-          const opened = await hydrateVaultSession(
-            client as unknown as VaultClient,
-          );
-          const masterKey = getVaultMasterKey();
-          const vaultId = privateLedger.vaultId ?? opened?.vaultId ?? null;
-          const keyId = privateLedger.keyId ?? opened?.keyId ?? null;
-          if (!privateLedger.userId || !vaultId || !keyId || !masterKey) {
-            throw new Error("Sign in again, then retry the upload.");
-          }
-          const ledger = await loadPrivateLedger(
-            client as unknown as VaultListClient,
-            {
+          await vaultWrite(async () => {
+            const opened = await hydrateVaultSession(
+              client as unknown as VaultClient,
+            );
+            const masterKey = getVaultMasterKey();
+            const vaultId = privateLedger.vaultId ?? opened?.vaultId ?? null;
+            const keyId = privateLedger.keyId ?? opened?.keyId ?? null;
+            if (!privateLedger.userId || !vaultId || !keyId || !masterKey) {
+              throw new Error("Sign in again, then retry the upload.");
+            }
+            const ledger = await loadPrivateLedger(
+              client as unknown as VaultListClient,
+              {
+                userId: privateLedger.userId,
+                vaultId,
+              },
+            );
+            await encryptStatementImportToVault({
+              client: client as unknown as MutationClient,
               userId: privateLedger.userId,
               vaultId,
-            },
-          );
-          await encryptStatementImportToVault({
-            client: client as unknown as MutationClient,
-            userId: privateLedger.userId,
-            vaultId,
-            keyId,
-            masterKey,
-            result,
-            ledger,
+              keyId,
+              masterKey,
+              result,
+              ledger,
+            });
+            privateLedger.reload();
           });
-          privateLedger.reload();
         }
 
         const copy = describeImportResult(result);
@@ -532,7 +563,7 @@ export function StatementUpload({ onImported }: Props) {
             progress: null,
             error: "Cancelled",
           });
-          break;
+          return;
         }
         failCount += 1;
         patchItem(item.id, {
@@ -540,8 +571,12 @@ export function StatementUpload({ onImported }: Props) {
           progress: null,
           error: errorMessage(error, "Upload failed"),
         });
+      } finally {
+        inFlight.delete(item.id);
+        finished += 1;
+        if (!controller.signal.aborted) refreshToast();
       }
-    }
+    });
 
     abortRef.current = null;
     setBusySafe(false);

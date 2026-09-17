@@ -9,6 +9,7 @@ import {
   query,
   type ActionCtx,
   type MutationCtx,
+  type QueryCtx,
 } from "./_generated/server";
 import { requireUser, userRole } from "./lib/auth";
 import { ensureModulesForUser } from "./lib/ensureModules";
@@ -18,22 +19,23 @@ const PREMIUM_MONTHLY_PRODUCT_ID =
   process.env.POLAR_PREMIUM_PRODUCT_ID ??
   "62d62556-0c5c-40b7-81a3-003382c35bf3";
 
-interface PolarProducts {
-  premiumMonthly: string;
-}
+const POLAR_PRODUCTS: Record<string, string> = {
+  premiumMonthly: PREMIUM_MONTHLY_PRODUCT_ID,
+};
 
-export const polar = new Polar<DataModel, PolarProducts>(components.polar, {
-  getUserInfo: async (ctx) => {
-    const identity = await ctx.runQuery(api.users.polarIdentity, {});
-    return {
-      userId: identity.userId,
-      email: identity.email,
-    };
+export const polar = new Polar<DataModel, Record<string, string>>(
+  components.polar,
+  {
+    getUserInfo: async (ctx) => {
+      const identity = await ctx.runQuery(api.users.polarIdentity, {});
+      return {
+        userId: identity.userId,
+        email: identity.email,
+      };
+    },
+    products: POLAR_PRODUCTS,
   },
-  products: {
-    premiumMonthly: PREMIUM_MONTHLY_PRODUCT_ID,
-  },
-});
+);
 
 export const {
   changeCurrentSubscription,
@@ -105,6 +107,71 @@ async function findBillingUser(
     .query("users")
     .withIndex("email", (q) => q.eq("email", email))
     .unique();
+}
+
+type PolarListedProduct = {
+  id: string;
+  name: string;
+  isArchived: boolean;
+  recurringInterval?: string | null;
+  prices: Array<{
+    isArchived: boolean;
+    amountType?: string;
+    priceAmount?: number;
+    recurringInterval?: string | null;
+  }>;
+};
+
+function monthlyUsdFromProduct(product: PolarListedProduct | null) {
+  if (!product) return null;
+  const price =
+    product.prices.find(
+      (row) =>
+        !row.isArchived &&
+        row.amountType === "fixed" &&
+        row.priceAmount != null,
+    ) ??
+    product.prices.find((row) => !row.isArchived && row.priceAmount != null);
+  if (price?.priceAmount == null) return null;
+  const usd = price.priceAmount / 100;
+  const interval = price.recurringInterval ?? product.recurringInterval;
+  if (interval === "year") return usd / 12;
+  return usd;
+}
+
+export const polarRevenueReturn = v.object({
+  connected: v.boolean(),
+  productName: v.union(v.string(), v.null()),
+  priceUsd: v.union(v.number(), v.null()),
+  subscribers: v.number(),
+  mrr: v.number(),
+  arr: v.number(),
+});
+
+/** Admin snapshot: Polar catalog price × Premium entitlements. */
+export async function polarRevenueSnapshot(
+  ctx: QueryCtx,
+  premiumSubscribers: number,
+) {
+  const products = (await polar.listProducts(ctx)) as PolarListedProduct[];
+  const live = products.filter((row) => !row.isArchived);
+  const product =
+    live.find((row) => row.id === PREMIUM_MONTHLY_PRODUCT_ID) ??
+    live[0] ??
+    null;
+  const priceUsd = monthlyUsdFromProduct(product);
+  const mrr =
+    priceUsd == null
+      ? 0
+      : Math.round(priceUsd * premiumSubscribers * 100) / 100;
+  return {
+    connected: live.length > 0,
+    productName: product?.name ?? null,
+    priceUsd,
+    subscribers: premiumSubscribers,
+    mrr,
+    arr: Math.round(mrr * 12 * 100) / 100,
+  };
 }
 
 const billingReturn = v.object({

@@ -20,7 +20,6 @@ import {
 } from "@/components/ui/popover";
 import { RowActionsMenu } from "@/components/ui/row-actions-menu";
 import { PageSpinner } from "@/components/ui/spinner";
-import { DecryptingPage } from "@/domains/vault/ui/DecryptingStatus";
 import {
   ScrollTopX,
   Table,
@@ -77,6 +76,7 @@ import {
   DescriptionActionsButton,
   EditDescriptionDialog,
 } from "@/domains/transactions/ui/EditDescriptionDialog";
+import { DecryptingPage } from "@/domains/vault/ui/DecryptingStatus";
 import { cn } from "@/lib/utils";
 import { downloadCsv, toCsv } from "@/shared/lib/csv";
 import {
@@ -500,6 +500,18 @@ function PieDonutLabel({
   );
 }
 
+const TREEMAP_LABEL_BASE_PX = 14;
+const TREEMAP_LABEL_MAX_PX = 28;
+
+/** Floor at text-sm; grow with the shorter tile side so big blocks read larger. */
+function treemapLabelFontPx(width: number, height: number) {
+  const minSide = Math.min(width, height);
+  const t = Math.max(0, Math.min(1, (minSide - 100) / 220));
+  return Math.round(
+    TREEMAP_LABEL_BASE_PX + t * (TREEMAP_LABEL_MAX_PX - TREEMAP_LABEL_BASE_PX),
+  );
+}
+
 /** Squarified area blocks for breakdown "Area" view (treemap). */
 function AreaTreemapCell({
   x = 0,
@@ -533,11 +545,16 @@ function AreaTreemapCell({
   const showValue = width >= 56 && height >= 32;
   const showName = width >= 72 && height >= 48;
   const showPct = width >= 88 && height >= 68 && share > 0;
-  const maxChars = Math.max(4, Math.floor((width - 12) / 7.4));
+  const fontPx = treemapLabelFontPx(width, height);
+  const maxChars = Math.max(4, Math.floor((width - 12) / (fontPx * 0.55)));
   const displayName =
     label.length > maxChars
       ? `${label.slice(0, Math.max(3, maxChars - 1))}…`
       : label;
+  const lineStyle = {
+    fontSize: `${fontPx}px`,
+    lineHeight: 1.15,
+  } as const;
 
   return (
     <g>
@@ -563,17 +580,17 @@ function AreaTreemapCell({
             style={{ color: "#111", WebkitTextFillColor: "#111" }}
           >
             {showValue ? (
-              <div className="text-sm leading-tight font-semibold">
+              <div className="font-semibold" style={lineStyle}>
                 {moneyTick(spend, currency)}
               </div>
             ) : null}
             {showName ? (
-              <div className="truncate text-sm leading-tight">
+              <div className="truncate" style={lineStyle}>
                 {displayName}
               </div>
             ) : null}
             {showPct ? (
-              <div className="text-sm leading-tight font-normal opacity-70">
+              <div className="font-normal opacity-70" style={lineStyle}>
                 {formatPiePercent(share)}
               </div>
             ) : null}
@@ -3378,7 +3395,9 @@ function LeaderboardTable({
             <span className="text-left font-mono tabular-nums">
               <MoneyText amount={topTotal} currency={currency} align="left" />
             </span>
-            <span className="text-right font-mono tabular-nums">{topCount}</span>
+            <span className="text-right font-mono tabular-nums">
+              {topCount}
+            </span>
             <span className="text-left font-mono tabular-nums">
               {formatShare(topTotal, totalSpend)}
             </span>

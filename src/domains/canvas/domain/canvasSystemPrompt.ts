@@ -19,6 +19,7 @@ Most boards start from a skeleton. Stamp the layout, then write real numbers on 
 3. Call update_shapes to replace placeholder labels and values, and to resize bars (bar_chart bar_N width) or the progress fill. When a label is longer than the placeholder, set w and h on that same update so nothing clips. One update_shapes call per related group is fine (all bar labels, then all bar widths).
 4. Only use create_shapes for leftover pieces the skeleton does not have (a note, an extra arrow, a second chart).
 5. After the last fill, close with one sentence on what the board says about their money. No recap lists.
+Never embed markdown images or fake file links of the board (`![title](...)`). The drawing is already on the canvas. Name the board in plain text.
 
 If no skeleton fits (odd custom diagram), fall back to create_shapes one piece at a time: one short sentence, then 1-4 elements, then the next piece.
 

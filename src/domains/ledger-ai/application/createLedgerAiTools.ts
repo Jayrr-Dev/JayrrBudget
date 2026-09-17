@@ -1,3 +1,4 @@
+import { createBudgetTools } from "@/domains/budgets/application/createBudgetTools";
 import {
   APPLY_BUDGET_EDIT_TOOL_NAME,
   applyBudgetEditTool,
@@ -7,14 +8,13 @@ import {
   askUserTool,
 } from "@/domains/ledger-ai/domain/askUserTool";
 import {
-  SHOW_SKETCH_TOOL_NAME,
-  showSketchTool,
-} from "@/domains/ledger-ai/domain/sketchBoard";
-import {
   EXPORT_FILE_TOOL_NAME,
   exportFileTool,
 } from "@/domains/ledger-ai/domain/exportFileTool";
-import { createBudgetTools } from "@/domains/budgets/application/createBudgetTools";
+import {
+  SHOW_SKETCH_TOOL_NAME,
+  showSketchTool,
+} from "@/domains/ledger-ai/domain/sketchBoard";
 import { createPiggyPingTools } from "@/domains/piggy-pings/application/createPiggyPingTools";
 import { invalidateConvexUserCache } from "@/shared/convex/cachedRead";
 import { api } from "@/shared/convex/httpClient";
@@ -70,7 +70,9 @@ function sameName(a: string | null | undefined, b: string) {
 const accountArg = z
   .string()
   .optional()
-  .describe("Account id, name, or last-4 digits. Narrows to one account (card, chequing, loan).");
+  .describe(
+    "Account id, name, or last-4 digits. Narrows to one account (card, chequing, loan).",
+  );
 
 /** Users paste rows, not ids: find one transaction from date, amount, and text. */
 const transactionMatchSchema = z.object({
@@ -79,12 +81,15 @@ const transactionMatchSchema = z.object({
   query: z
     .string()
     .optional()
-    .describe("Description or merchant text from the row (a distinctive fragment is enough)"),
+    .describe(
+      "Description or merchant text from the row (a distinctive fragment is enough)",
+    ),
   account: accountArg,
 });
 
 type TransactionMatch = z.infer<typeof transactionMatchSchema>;
-type AiTxnRow = (typeof api.transactions.searchForAi._returnType)["matches"][number];
+type AiTxnRow =
+  (typeof api.transactions.searchForAi._returnType)["matches"][number];
 
 const AMOUNT_TOLERANCE = 0.005;
 /** Statement dates drift a day or two from what the user pasted. */
@@ -115,12 +120,21 @@ async function resolveTransaction(
   const date = match.date?.trim();
   const query = match.query?.trim() || undefined;
   if (!date && match.amount === undefined && !query) {
-    return { error: "Pass transactionId, or match with date, amount, and/or query." };
+    return {
+      error: "Pass transactionId, or match with date, amount, and/or query.",
+    };
   }
-  const attempts: Array<{ startDate?: string; endDate?: string; query?: string }> = [];
+  const attempts: Array<{
+    startDate?: string;
+    endDate?: string;
+    query?: string;
+  }> = [];
   if (date) {
     attempts.push({ startDate: date, endDate: date, query });
-    const wide = { startDate: shiftDate(date, -DATE_WINDOW_DAYS), endDate: shiftDate(date, DATE_WINDOW_DAYS) };
+    const wide = {
+      startDate: shiftDate(date, -DATE_WINDOW_DAYS),
+      endDate: shiftDate(date, DATE_WINDOW_DAYS),
+    };
     attempts.push({ ...wide, query });
     if (query) attempts.push(wide);
   } else {
@@ -135,7 +149,9 @@ async function resolveTransaction(
       limit: MAX_BULK_IDS,
     });
     if (found.accountNotFound) {
-      return { error: `Account not found: ${match.account}. Call list_accounts.` };
+      return {
+        error: `Account not found: ${match.account}. Call list_accounts.`,
+      };
     }
     candidates =
       match.amount === undefined
@@ -308,7 +324,7 @@ function createWorkspaceTools(
 
     create_note: tool({
       description:
-        "Create a NEW note tab for the signed-in user. Fails if a tab with that name already exists (use append_note for those). Never overwrites.",
+        "Create a NEW note tab for the signed-in user. content is GitHub-flavored markdown (tables, lists, headings, fenced code) and renders in the notes panel. Fails if a tab with that name already exists (use append_note for those). Never overwrites.",
       inputSchema: z.object({
         tabName: z.string(),
         content: z.string(),
@@ -338,7 +354,7 @@ function createWorkspaceTools(
 
     append_note: tool({
       description:
-        "Add text to the END of one of the signed-in user's note tabs. Existing text is kept. Creates the tab if it does not exist yet.",
+        "Add GitHub-flavored markdown to the END of one of the signed-in user's note tabs. Existing text is kept. Creates the tab if it does not exist yet.",
       inputSchema: z.object({
         tabName: z.string(),
         content: z.string(),
@@ -524,7 +540,9 @@ export function createLedgerAiTools(
         transactionId: z.string().optional(),
         match: transactionMatchSchema
           .optional()
-          .describe("Find the row from what the user pasted when you have no transactionId"),
+          .describe(
+            "Find the row from what the user pasted when you have no transactionId",
+          ),
         ...transactionPatchSchema,
       }),
       execute: async ({ transactionId, match, ...patch }) => {
@@ -604,10 +622,10 @@ export function createLedgerAiTools(
             matches: found.matches,
           };
         }
-        const result = await client.mutation(
-          api.transactions.bulkUpdateForAi,
-          { transactionIds, patch },
-        );
+        const result = await client.mutation(api.transactions.bulkUpdateForAi, {
+          transactionIds,
+          patch,
+        });
         return afterWrite({ ...result, truncated: found.truncated });
       },
     }),

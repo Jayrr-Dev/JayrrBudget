@@ -13,7 +13,11 @@ import { TXN_CODES } from "@convex/lib/txnCodes";
 import type { ConvexHttpClient } from "convex/browser";
 import { z } from "zod";
 import type { CategorizationSummary } from "../domain/importResult";
-import { formatUserAiRulesCategorizeBlock } from "../domain/userAiRules";
+import {
+  formatUserAiRulesCategorizeBlock,
+  normalizeUserAiRules,
+} from "../domain/userAiRules";
+import { labelGroupsWithJev, shouldUseJevCategorization } from "./labelWithJev";
 
 type Row = {
   transactionId: string;
@@ -192,6 +196,37 @@ export async function labelDescriptionGroups(
       );
     }
     const aiRules = await client.query(api.aiRules.get, {});
+    const deadline = Date.now() + 240_000;
+
+    // Flag-gated: Jev picks from the existing catalog. Whatever it cannot
+    // label stays in `unknown` and falls through to the OpenRouter path.
+    if (await shouldUseJevCategorization(client)) {
+      const jev = await labelGroupsWithJev({
+        groups: unknown.map((key) => ({
+          key,
+          description: groups.get(key)![0].description,
+          amount: groups.get(key)![0].amount,
+        })),
+        paths,
+        spreads: vocabulary.spreads,
+        types: vocabulary.types,
+        tags: tagCatalog,
+        ownerRules: normalizeUserAiRules(aiRules.rules ?? []),
+        deadline,
+      });
+      remember(jev.matches, "ai");
+      unknown.length = 0;
+      unknown.push(...jev.failed);
+      if (jev.error) {
+        console.warn(
+          `[categorization] jev left ${jev.failed.length} group(s) for fallback: ${jev.error}`,
+        );
+      }
+      if (!unknown.length) {
+        return { summary: { ...summary, ok: summary.pending === 0 }, labeled };
+      }
+    }
+
     const ownerRules = formatUserAiRulesCategorizeBlock(aiRules.rules);
     const schema = z.object({
       results: z.array(
@@ -226,7 +261,6 @@ export async function labelDescriptionGroups(
     const batches: string[][] = [];
     for (let i = 0; i < unknown.length; i += 40)
       batches.push(unknown.slice(i, i + 40));
-    const deadline = Date.now() + 240_000;
     await mapPool(batches, 3, async (batch) => {
       try {
         const remaining = deadline - Date.now();

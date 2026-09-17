@@ -13,6 +13,7 @@ import {
 } from "@/components/layout/VaultCacheDebugFab";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { PiggyIcon } from "@/components/ui/piggy-icon";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Tooltip,
@@ -22,11 +23,12 @@ import {
 } from "@/components/ui/tooltip";
 import { MoneyText } from "@/domains/dashboard/ui/MoneyText";
 import { LedgerAiChat } from "@/domains/ledger-ai/ui/LedgerAiChat";
-import { PiggySketchDialog } from "@/domains/ledger-ai/ui/PiggySketchDialog";
+import { PiggyMarkdown } from "@/domains/ledger-ai/ui/PiggyMarkdown";
 import {
   PiggyMascot,
   type PiggyMood,
 } from "@/domains/ledger-ai/ui/PiggyMascot";
+import { PiggySketchDialog } from "@/domains/ledger-ai/ui/PiggySketchDialog";
 import {
   subscribeScratchNoteOpen,
   useScratchNote,
@@ -42,12 +44,7 @@ import {
 } from "@/domains/user-notes/userNotesStore";
 import { cn } from "@/lib/utils";
 import { downloadCsv, toCsv } from "@/shared/lib/csv";
-import {
-  ChevronLeft,
-  PlusIcon,
-  XIcon,
-} from "lucide-react";
-import { PiggyIcon } from "@/components/ui/piggy-icon";
+import { ChevronLeft, PencilIcon, PlusIcon, XIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type ReactElement } from "react";
 
 function storeSheetCsvFilename(tabName: string) {
@@ -196,12 +193,21 @@ function StoreSheetTab({
   );
 }
 
-function StoreSheetPanel({ open, anchor }: { open: boolean; anchor: DockPanelAnchor }) {
+function StoreSheetPanel({
+  open,
+  anchor,
+}: {
+  open: boolean;
+  anchor: DockPanelAnchor;
+}) {
   const { tabs, activeId, receiveId } = useScratchNote();
   const actions = useScratchNoteActions();
   const resize = useDockPanelSize({
     storageKey: "store-sheet-panel-size",
-    defaultSize: { width: DOCK_PANEL_DEFAULT_WIDTH, bodyHeight: FAB_DOCK_BODY_DEFAULT_PX },
+    defaultSize: {
+      width: DOCK_PANEL_DEFAULT_WIDTH,
+      bodyHeight: FAB_DOCK_BODY_DEFAULT_PX,
+    },
     anchor,
   });
   const activeTab = tabs.find((tab) => tab.id === activeId) ?? tabs[0];
@@ -223,157 +229,170 @@ function StoreSheetPanel({ open, anchor }: { open: boolean; anchor: DockPanelAnc
       className={cn(FAB_DOCK_PANEL, resize.resizing && "select-none")}
       style={{ width: resize.size.width }}
     >
-        <DockPanelResizeGrip label="store sheet" resize={resize} />
-        <div className="relative border-b border-[var(--border)] bg-[var(--muted)]/25">
-          <ChromeTabStrip
-            ariaLabel="Store sheet tabs"
-            trailing={
-              <button
-                type="button"
-                aria-label="Add store sheet tab"
-                title="Add tab"
-                className="inline-flex size-5 shrink-0 items-center justify-center rounded-sm text-accent hover:bg-accent-subtle hover:text-accent"
-                onClick={() => actions.addTab()}
-              >
-                <PlusIcon className="size-3" strokeWidth={2} />
-              </button>
-            }
-          >
-            {tabs.map((tab) => (
-              <StoreSheetTab
-                key={tab.id}
-                tab={tab}
-                isActive={tab.id === activeId}
-                isReceive={tab.id === receiveId}
-                canClose={tabs.length > 1}
-                onSelect={() => actions.selectTab(tab.id)}
-                onClose={() => actions.closeTab(tab.id)}
-                onRename={(name) => actions.renameTab(tab.id, name)}
-                onReceive={() => actions.setReceiveTab(tab.id)}
-              />
-            ))}
-          </ChromeTabStrip>
-        </div>
+      <DockPanelResizeGrip label="store sheet" resize={resize} />
+      <div className="relative border-b border-[var(--border)] bg-[var(--muted)]/25">
+        <ChromeTabStrip
+          ariaLabel="Store sheet tabs"
+          trailing={
+            <button
+              type="button"
+              aria-label="Add store sheet tab"
+              title="Add tab"
+              className="inline-flex size-5 shrink-0 items-center justify-center rounded-sm text-accent hover:bg-accent-subtle hover:text-accent"
+              onClick={() => actions.addTab()}
+            >
+              <PlusIcon className="size-3" strokeWidth={2} />
+            </button>
+          }
+        >
+          {tabs.map((tab) => (
+            <StoreSheetTab
+              key={tab.id}
+              tab={tab}
+              isActive={tab.id === activeId}
+              isReceive={tab.id === receiveId}
+              canClose={tabs.length > 1}
+              onSelect={() => actions.selectTab(tab.id)}
+              onClose={() => actions.closeTab(tab.id)}
+              onRename={(name) => actions.renameTab(tab.id, name)}
+              onReceive={() => actions.setReceiveTab(tab.id)}
+            />
+          ))}
+        </ChromeTabStrip>
+      </div>
 
-        {rows.length === 0 ? (
-          <p className="px-3 py-6 text-center text-sm text-[var(--muted-foreground)]">
-            Check a tab, then use + on a vendor line in Analysis.
-          </p>
-        ) : (
-          <div className="overflow-auto" style={{ maxHeight: resize.size.bodyHeight }}>
-            <table className="w-full border-collapse text-sm">
-              <thead className="sticky top-0 bg-[var(--background)]">
-                <tr className="border-b border-[var(--border)] text-xs text-[var(--muted-foreground)]">
-                  <th className="px-2 py-1.5 text-left font-medium">Name</th>
-                  <th className="px-2 py-1.5 text-right font-medium">Spend</th>
-                  <th className="px-2 py-1.5 text-right font-medium">Count</th>
-                  <th className="w-7 px-1 py-1.5">
-                    <span className="sr-only">Remove</span>
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((row) => (
-                  <tr
-                    key={row.id}
-                    className="border-b border-[var(--border)] last:border-b-0"
-                  >
-                    <td className="max-w-[10rem] px-2 py-1.5">
-                      <div className="truncate font-medium text-[var(--foreground)]">
-                        {row.name}
+      {rows.length === 0 ? (
+        <p className="px-3 py-6 text-center text-sm text-[var(--muted-foreground)]">
+          Check a tab, then use + on a vendor line in Analysis.
+        </p>
+      ) : (
+        <div
+          className="overflow-auto"
+          style={{ maxHeight: resize.size.bodyHeight }}
+        >
+          <table className="w-full border-collapse text-sm">
+            <thead className="sticky top-0 bg-[var(--background)]">
+              <tr className="border-b border-[var(--border)] text-xs text-[var(--muted-foreground)]">
+                <th className="px-2 py-1.5 text-left font-medium">Name</th>
+                <th className="px-2 py-1.5 text-right font-medium">Spend</th>
+                <th className="px-2 py-1.5 text-right font-medium">Count</th>
+                <th className="w-7 px-1 py-1.5">
+                  <span className="sr-only">Remove</span>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row) => (
+                <tr
+                  key={row.id}
+                  className="border-b border-[var(--border)] last:border-b-0"
+                >
+                  <td className="max-w-[10rem] px-2 py-1.5">
+                    <div className="truncate font-medium text-[var(--foreground)]">
+                      {row.name}
+                    </div>
+                    {row.parent ? (
+                      <div className="truncate text-[10px] text-[var(--muted-foreground)]">
+                        {row.parent}
                       </div>
-                      {row.parent ? (
-                        <div className="truncate text-[10px] text-[var(--muted-foreground)]">
-                          {row.parent}
-                        </div>
-                      ) : null}
-                    </td>
-                    <td className="px-2 py-1.5 text-right">
-                      <MoneyText amount={row.spend} currency={row.currency} />
-                    </td>
-                    <td className="px-2 py-1.5 text-right font-mono tabular-nums text-[var(--muted-foreground)]">
-                      {row.count}
-                    </td>
-                    <td className="px-1 py-1.5 text-center">
-                      <button
-                        type="button"
-                        aria-label={`Remove ${row.name}`}
-                        className="inline-flex size-5 items-center justify-center rounded text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]"
-                        onClick={() => actions.removeRow(row.id)}
-                      >
-                        <XIcon className="size-3" strokeWidth={2} />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-              <tfoot>
-                <tr className="border-t border-[var(--border)] bg-[var(--muted)]/40 text-sm font-medium">
-                  <td className="px-2 py-2">Total</td>
-                  <td className="px-2 py-2 text-right">
-                    <MoneyText amount={totalSpend} currency={currency} />
+                    ) : null}
                   </td>
-                  <td className="px-2 py-2 text-right font-mono tabular-nums">
-                    {totalCount}
+                  <td className="px-2 py-1.5 text-right">
+                    <MoneyText amount={row.spend} currency={row.currency} />
                   </td>
-                  <td />
+                  <td className="px-2 py-1.5 text-right font-mono tabular-nums text-[var(--muted-foreground)]">
+                    {row.count}
+                  </td>
+                  <td className="px-1 py-1.5 text-center">
+                    <button
+                      type="button"
+                      aria-label={`Remove ${row.name}`}
+                      className="inline-flex size-5 items-center justify-center rounded text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]"
+                      onClick={() => actions.removeRow(row.id)}
+                    >
+                      <XIcon className="size-3" strokeWidth={2} />
+                    </button>
+                  </td>
                 </tr>
-              </tfoot>
-            </table>
-          </div>
-        )}
-
-        <div className="flex items-center justify-end gap-0.5 border-t border-[var(--border)] px-2 py-1.5">
-          <Button
-            type="button"
-            variant="ghost"
-            size="xs"
-            className="text-[var(--muted-foreground)]"
-            disabled={rows.length === 0}
-            onClick={() => actions.clearActive()}
-          >
-            Clear
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            size="xs"
-            className="text-[var(--muted-foreground)]"
-            disabled={rows.length === 0}
-            onClick={() =>
-              downloadCsv(
-                storeSheetCsvFilename(activeTab?.name ?? "store-sheet"),
-                toCsv(
-                  ["Name", "Parent", "Spend", "Count", "Currency"],
-                  rows.map((row) => [
-                    row.name,
-                    row.parent ?? "",
-                    row.spend,
-                    row.count,
-                    row.currency,
-                  ]),
-                ),
-              )
-            }
-          >
-            Export CSV
-          </Button>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr className="border-t border-[var(--border)] bg-[var(--muted)]/40 text-sm font-medium">
+                <td className="px-2 py-2">Total</td>
+                <td className="px-2 py-2 text-right">
+                  <MoneyText amount={totalSpend} currency={currency} />
+                </td>
+                <td className="px-2 py-2 text-right font-mono tabular-nums">
+                  {totalCount}
+                </td>
+                <td />
+              </tr>
+            </tfoot>
+          </table>
         </div>
+      )}
+
+      <div className="flex items-center justify-end gap-0.5 border-t border-[var(--border)] px-2 py-1.5">
+        <Button
+          type="button"
+          variant="ghost"
+          size="xs"
+          className="text-[var(--muted-foreground)]"
+          disabled={rows.length === 0}
+          onClick={() => actions.clearActive()}
+        >
+          Clear
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          size="xs"
+          className="text-[var(--muted-foreground)]"
+          disabled={rows.length === 0}
+          onClick={() =>
+            downloadCsv(
+              storeSheetCsvFilename(activeTab?.name ?? "store-sheet"),
+              toCsv(
+                ["Name", "Parent", "Spend", "Count", "Currency"],
+                rows.map((row) => [
+                  row.name,
+                  row.parent ?? "",
+                  row.spend,
+                  row.count,
+                  row.currency,
+                ]),
+              ),
+            )
+          }
+        >
+          Export CSV
+        </Button>
+      </div>
     </div>
   );
 }
 
-function NotesPanel({ open, anchor }: { open: boolean; anchor: DockPanelAnchor }) {
+function NotesPanel({
+  open,
+  anchor,
+}: {
+  open: boolean;
+  anchor: DockPanelAnchor;
+}) {
   const notes = useUserNotes();
   const actions = useUserNotesActions();
   const resize = useDockPanelSize({
     storageKey: "notes-panel-size",
-    defaultSize: { width: DOCK_PANEL_DEFAULT_WIDTH, bodyHeight: FAB_DOCK_BODY_DEFAULT_PX },
+    defaultSize: {
+      width: DOCK_PANEL_DEFAULT_WIDTH,
+      bodyHeight: FAB_DOCK_BODY_DEFAULT_PX,
+    },
     anchor,
   });
   useEnsureDefaultUserNote(open, notes);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
+  const [editing, setEditing] = useState(false);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const active = notes.find((n) => n.id === activeId) ?? notes[0] ?? null;
 
@@ -390,6 +409,14 @@ function NotesPanel({ open, anchor }: { open: boolean; anchor: DockPanelAnchor }
   useEffect(() => {
     setDraft(active?.content ?? "");
   }, [active?.id, active?.content]);
+
+  useEffect(() => {
+    if (!active) {
+      setEditing(false);
+      return;
+    }
+    setEditing(!active.content.trim());
+  }, [active?.id]);
 
   useEffect(() => {
     return () => {
@@ -419,43 +446,48 @@ function NotesPanel({ open, anchor }: { open: boolean; anchor: DockPanelAnchor }
       className={cn(FAB_DOCK_PANEL, resize.resizing && "select-none")}
       style={{ width: resize.size.width }}
     >
-        <DockPanelResizeGrip label="notes" resize={resize} />
-        <div className="relative border-b border-[var(--border)] bg-[var(--muted)]/25">
-          <ChromeTabStrip
-            ariaLabel="Note tabs"
-            trailing={
-              <button
-                type="button"
-                aria-label="Add note tab"
-                title="Add tab"
-                className="inline-flex size-5 shrink-0 items-center justify-center rounded-sm text-accent hover:bg-accent-subtle hover:text-accent"
-                onClick={() => {
-                  void actions.insertTab().then((created) => {
-                    setActiveId(created.id);
-                    setDraft(created.content);
-                  });
-                }}
-              >
-                <PlusIcon className="size-3" strokeWidth={2} />
-              </button>
-            }
-          >
-            {notes.map((note) => (
-              <ChromeTab
-                key={note.id}
-                name={note.tabName}
-                isActive={note.id === active?.id}
-                canClose={notes.length > 1}
-                onSelect={() => void selectTab(note.id)}
-                onClose={() => actions.removeTab(note.id)}
-                onRename={(name) => actions.renameTab(note.id, name)}
-              />
-            ))}
-          </ChromeTabStrip>
-        </div>
+      <DockPanelResizeGrip label="notes" resize={resize} />
+      <div className="relative border-b border-[var(--border)] bg-[var(--muted)]/25">
+        <ChromeTabStrip
+          ariaLabel="Note tabs"
+          trailing={
+            <button
+              type="button"
+              aria-label="Add note tab"
+              title="Add tab"
+              className="inline-flex size-5 shrink-0 items-center justify-center rounded-sm text-accent hover:bg-accent-subtle hover:text-accent"
+              onClick={() => {
+                void actions.insertTab().then((created) => {
+                  setActiveId(created.id);
+                  setDraft(created.content);
+                  setEditing(true);
+                });
+              }}
+            >
+              <PlusIcon className="size-3" strokeWidth={2} />
+            </button>
+          }
+        >
+          {notes.map((note) => (
+            <ChromeTab
+              key={note.id}
+              name={note.tabName}
+              isActive={note.id === active?.id}
+              canClose={notes.length > 1}
+              onSelect={() => void selectTab(note.id)}
+              onClose={() => actions.removeTab(note.id)}
+              onRename={(name) => actions.renameTab(note.id, name)}
+            />
+          ))}
+        </ChromeTabStrip>
+      </div>
 
-        <div className="w-full bg-[var(--background)]" style={{ height: resize.size.bodyHeight }}>
-          {active ? (
+      <div
+        className="flex w-full flex-col bg-[var(--background)]"
+        style={{ height: resize.size.bodyHeight }}
+      >
+        {active ? (
+          editing ? (
             <Textarea
               value={draft}
               onChange={(event) => {
@@ -469,16 +501,72 @@ function NotesPanel({ open, anchor }: { open: boolean; anchor: DockPanelAnchor }
                   void actions.updateContent(active.id, draft);
                 }
               }}
-              placeholder="Type or paste a note…"
-              aria-label={`${active.tabName} note`}
-              className="h-full min-h-0 w-full resize-none rounded-none border-0 bg-transparent px-2.5 py-2 text-[11px] shadow-none focus-visible:ring-0"
+              placeholder="Type or paste markdown…"
+              aria-label={`${active.tabName} note source`}
+              className="h-full min-h-0 w-full flex-1 resize-none rounded-none border-0 bg-transparent px-2.5 py-2 text-[11px] shadow-none focus-visible:ring-0"
             />
           ) : (
-            <p className="px-2.5 py-3 text-[11px] text-[var(--muted-foreground)]">
-              Loading…
-            </p>
+            <div
+              role="article"
+              aria-label={`${active.tabName} note. Double-click to edit.`}
+              className="h-full min-h-0 w-full flex-1 overflow-auto px-2.5 py-2"
+              onDoubleClick={() => setEditing(true)}
+            >
+              {draft.trim() ? (
+                <PiggyMarkdown
+                  text={draft}
+                  className="text-[11px] [&_h1]:text-xs [&_h2]:text-xs [&_h3]:text-xs"
+                />
+              ) : (
+                <p className="text-[11px] text-[var(--muted-foreground)]">
+                  Empty note. Switch to Edit to type, or ask Piggy to save a
+                  table here.
+                </p>
+              )}
+            </div>
+          )
+        ) : (
+          <p className="px-2.5 py-3 text-[11px] text-[var(--muted-foreground)]">
+            Loading…
+          </p>
+        )}
+      </div>
+
+      <div className="flex items-center justify-end gap-0.5 border-t border-[var(--border)] px-2 py-1.5">
+        <Button
+          type="button"
+          variant="ghost"
+          size="xs"
+          className={cn(
+            "text-[var(--muted-foreground)]",
+            !editing && "text-[var(--foreground)]",
           )}
-        </div>
+          disabled={!active}
+          onClick={() => {
+            if (active && draft !== active.content) {
+              if (saveTimer.current) clearTimeout(saveTimer.current);
+              void actions.updateContent(active.id, draft);
+            }
+            setEditing(false);
+          }}
+        >
+          Preview
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          size="xs"
+          className={cn(
+            "text-[var(--muted-foreground)]",
+            editing && "text-[var(--foreground)]",
+          )}
+          disabled={!active}
+          onClick={() => setEditing(true)}
+        >
+          <PencilIcon className="size-3" strokeWidth={2} />
+          <span>Edit</span>
+        </Button>
+      </div>
     </div>
   );
 }
@@ -507,8 +595,7 @@ export function PersistentNoteFab({
     [tabs],
   );
   const noteCount = notes.length;
-  const isExpanded =
-    hovered || sheetOpen || notesOpen || aiOpen || debugOpen;
+  const isExpanded = hovered || sheetOpen || notesOpen || aiOpen || debugOpen;
   const badgeLabel = formatBadge(totalSheetRows);
   const showBadge = totalSheetRows > 0;
 
@@ -590,91 +677,91 @@ export function PersistentNoteFab({
   const actions = (
     <>
       <FabTooltip label="Open store sheet" side={contentSide}>
-          <button
-            type="button"
-            aria-expanded={sheetOpen}
-            aria-haspopup="dialog"
-            aria-label={
-              sheetRowCount > 0
-                ? `Store sheet, ${sheetRowCount} lines`
-                : "Store sheet"
-            }
-            className={segmentBtn(sheetOpen)}
-            onClick={() => handleSheetOpenChange(!sheetOpen)}
-          >
-            <PiggyIcon name="sheet" className="size-6" />
-            {sheetOpen && !isNavbar ? (
-              <span className="flex min-w-0 select-none items-center gap-1 pr-0.5 text-sm font-medium tracking-tight whitespace-nowrap">
-                <span>Sheet</span>
-                <span
-                  className="tabular-nums text-[var(--muted-foreground)]"
-                  aria-hidden
-                >
-                  {sheetRowCount}
-                </span>
-              </span>
-            ) : null}
-            {showBadge && !sheetOpen ? (
+        <button
+          type="button"
+          aria-expanded={sheetOpen}
+          aria-haspopup="dialog"
+          aria-label={
+            sheetRowCount > 0
+              ? `Store sheet, ${sheetRowCount} lines`
+              : "Store sheet"
+          }
+          className={segmentBtn(sheetOpen)}
+          onClick={() => handleSheetOpenChange(!sheetOpen)}
+        >
+          <PiggyIcon name="sheet" className="size-6" />
+          {sheetOpen && !isNavbar ? (
+            <span className="flex min-w-0 select-none items-center gap-1 pr-0.5 text-sm font-medium tracking-tight whitespace-nowrap">
+              <span>Sheet</span>
               <span
-                className={cn(
-                  isNavbar
-                    ? cn(CORNER_BADGE_CLASS, "-top-0.5 -right-0.5")
-                    : FAB_SEGMENT_BADGE_CLASS,
-                  badgeLabel.length > 1 ? "min-w-6 px-1" : "aspect-square px-0",
-                )}
+                className="tabular-nums text-[var(--muted-foreground)]"
                 aria-hidden
               >
-                {badgeLabel}
+                {sheetRowCount}
               </span>
-            ) : null}
-          </button>
+            </span>
+          ) : null}
+          {showBadge && !sheetOpen ? (
+            <span
+              className={cn(
+                isNavbar
+                  ? cn(CORNER_BADGE_CLASS, "-top-0.5 -right-0.5")
+                  : FAB_SEGMENT_BADGE_CLASS,
+                badgeLabel.length > 1 ? "min-w-6 px-1" : "aspect-square px-0",
+              )}
+              aria-hidden
+            >
+              {badgeLabel}
+            </span>
+          ) : null}
+        </button>
       </FabTooltip>
 
       <FabTooltip label="Open notes" side={contentSide}>
-          <button
-            type="button"
-            aria-expanded={notesOpen}
-            aria-haspopup="dialog"
-            aria-label={noteCount > 0 ? `Notes, ${noteCount} tabs` : "Notes"}
-            className={segmentBtn(notesOpen)}
-            onClick={() => handleNotesOpenChange(!notesOpen)}
-          >
-            <PiggyIcon name="notes" className="size-6" />
-            {notesOpen && !isNavbar ? (
-              <span className="flex min-w-0 select-none items-center gap-1 pr-0.5 text-sm font-medium tracking-tight whitespace-nowrap">
-                <span>Note</span>
-                <span
-                  className="tabular-nums text-[var(--muted-foreground)]"
-                  aria-hidden
-                >
-                  {noteCount}
-                </span>
+        <button
+          type="button"
+          aria-expanded={notesOpen}
+          aria-haspopup="dialog"
+          aria-label={noteCount > 0 ? `Notes, ${noteCount} tabs` : "Notes"}
+          className={segmentBtn(notesOpen)}
+          onClick={() => handleNotesOpenChange(!notesOpen)}
+        >
+          <PiggyIcon name="notes" className="size-6" />
+          {notesOpen && !isNavbar ? (
+            <span className="flex min-w-0 select-none items-center gap-1 pr-0.5 text-sm font-medium tracking-tight whitespace-nowrap">
+              <span>Note</span>
+              <span
+                className="tabular-nums text-[var(--muted-foreground)]"
+                aria-hidden
+              >
+                {noteCount}
               </span>
-            ) : null}
-          </button>
+            </span>
+          ) : null}
+        </button>
       </FabTooltip>
 
       <PiggySketchDialog />
 
       <FabTooltip label="Piggy" side={contentSide}>
-          <button
-            type="button"
-            aria-expanded={aiOpen}
-            aria-haspopup="dialog"
-            aria-label="Piggy"
-            className={segmentBtn(aiOpen)}
-            onClick={() => handleAiOpenChange(!aiOpen)}
-          >
-            <PiggyMascot
-              mood={aiOpen ? piggyMood : "still"}
-              iconClassName="size-8 shrink-0"
-            />
-            {aiOpen && !isNavbar ? (
-              <span className="flex min-w-0 select-none items-center pr-0.5 text-sm font-medium tracking-tight whitespace-nowrap">
-                Piggy
-              </span>
-            ) : null}
-          </button>
+        <button
+          type="button"
+          aria-expanded={aiOpen}
+          aria-haspopup="dialog"
+          aria-label="Piggy"
+          className={segmentBtn(aiOpen)}
+          onClick={() => handleAiOpenChange(!aiOpen)}
+        >
+          <PiggyMascot
+            mood={aiOpen ? piggyMood : "still"}
+            iconClassName="size-8 shrink-0"
+          />
+          {aiOpen && !isNavbar ? (
+            <span className="flex min-w-0 select-none items-center pr-0.5 text-sm font-medium tracking-tight whitespace-nowrap">
+              Piggy
+            </span>
+          ) : null}
+        </button>
       </FabTooltip>
 
       {showDebug ? (
