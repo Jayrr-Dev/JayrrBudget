@@ -819,10 +819,8 @@ export function StatementUpload({ onImported }: Props) {
                 <DropdownMenuTrigger
                   disabled={busy}
                   render={
-                    <div
-                      role="button"
-                      tabIndex={busy ? -1 : 0}
-                      aria-disabled={busy}
+                    <button
+                      type="button"
                       aria-label="Upload statement files or take a photo"
                       onDragEnter={(event) => {
                         event.preventDefault();

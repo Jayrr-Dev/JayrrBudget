@@ -1,7 +1,12 @@
 "use client";
 
 import { PersistentNoteFab } from "@/components/layout/PersistentNoteFab";
-import { TrackingUsageHeartbeat } from "@/domains/user-metrics/ui/TrackingUsageHeartbeat";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import { PiggyIcon } from "@/components/ui/piggy-icon";
 import {
   Popover,
   PopoverContent,
@@ -16,14 +21,15 @@ import {
   SidebarLink,
   useSidebar,
 } from "@/components/ui/sidebar";
-import { PiggyMascot } from "@/domains/ledger-ai/ui/PiggyMascot";
 import { clearPendingPasscode } from "@/crypto/pendingPasscode";
 import { lockVault } from "@/crypto/session";
 import { usePrefetchAnalysis } from "@/domains/analysis/queries/useAnalysisQuery";
 import { WarmSaasQueries } from "@/domains/dashboard/ui/WarmSaasQueries";
 import { clearLedgerQuerySnapshots } from "@/domains/dashboard/ui/ledgerQuerySnapshot";
+import { PiggyMascot } from "@/domains/ledger-ai/ui/PiggyMascot";
 import type { AppModuleRecord } from "@/domains/modules/domain/types";
 import { resolveModuleIcon } from "@/domains/modules/ui/moduleIcons";
+import { TrackingUsageHeartbeat } from "@/domains/user-metrics/ui/TrackingUsageHeartbeat";
 import {
   useVaultPageLocked,
   VaultLockedGate,
@@ -33,13 +39,21 @@ import { cn } from "@/lib/utils";
 import { budgetBrandLabel } from "@/shared/lib/budget-brand";
 import { useAuthActions } from "@convex-dev/auth/react";
 import { api } from "@convex/_generated/api";
-import { PiggyIcon } from "@/components/ui/piggy-icon";
 import { useQueryClient } from "@tanstack/react-query";
 import { useConvexAuth, useQuery } from "convex/react";
+import { ChevronDown } from "lucide-react";
 import { motion } from "motion/react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
+
+const ADMIN_MODULE_SLUGS = new Set([
+  "database",
+  "modules",
+  "revenue",
+  "service",
+  "users",
+]);
 
 function useBrandLabel() {
   const { isAuthenticated } = useConvexAuth();
@@ -55,9 +69,9 @@ function Brand({ label }: { label: string }) {
     <Link
       href="/"
       className={cn(
-        "mb-2 flex items-center rounded-lg",
+        "mb-1 flex items-center rounded-lg",
         showLabel
-          ? "h-10 w-full gap-2 px-4"
+          ? "h-10 w-full gap-2.5 px-2.5"
           : "size-10 shrink-0 justify-center self-center px-0",
       )}
     >
@@ -66,14 +80,14 @@ function Brand({ label }: { label: string }) {
         alt=""
         width={28}
         height={28}
-        className="size-7 shrink-0"
+        className="size-8 shrink-0"
       />
       {showLabel ? (
         <motion.span
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ duration: 0.15 }}
-          className="overflow-hidden text-sm font-semibold tracking-tight whitespace-nowrap text-[var(--sidebar-foreground)]"
+          className="overflow-hidden text-base font-semibold tracking-tight whitespace-nowrap text-[var(--sidebar-foreground)]"
         >
           {label}
         </motion.span>
@@ -87,37 +101,131 @@ function isActivePath(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-function ModuleNav({ modules }: { modules: AppModuleRecord[] }) {
+function ModuleNavLink({
+  mod,
+  forceLabel = false,
+}: {
+  mod: AppModuleRecord;
+  forceLabel?: boolean;
+}) {
+  const pathname = usePathname();
+  const prefetchAnalysis = usePrefetchAnalysis();
+  const Icon = resolveModuleIcon(mod.icon);
+
+  return (
+    <SidebarLink
+      active={isActivePath(pathname, mod.href)}
+      forceLabel={forceLabel}
+      onMouseEnter={mod.href === "/analysis" ? prefetchAnalysis : undefined}
+      onFocus={mod.href === "/analysis" ? prefetchAnalysis : undefined}
+      link={{
+        label: mod.name,
+        href: mod.href,
+        icon: <Icon className="size-6 shrink-0 opacity-90" />,
+      }}
+    />
+  );
+}
+
+function AdminModuleSection({ modules }: { modules: AppModuleRecord[] }) {
   const pathname = usePathname();
   const { open, animate } = useSidebar();
   const showLabel = !animate || open;
-  const prefetchAnalysis = usePrefetchAnalysis();
+  const adminActive = modules.some((mod) => isActivePath(pathname, mod.href));
+  const [expanded, setExpanded] = useState(adminActive);
+
+  if (modules.length === 0) {
+    return null;
+  }
+
+  const triggerClassName = cn(
+    "group/sidebar relative flex items-center rounded-lg transition-colors",
+    showLabel
+      ? "h-10 w-full gap-2.5 px-2.5"
+      : "size-10 shrink-0 justify-center self-center px-0",
+    adminActive
+      ? "bg-primary-subtle font-medium text-primary-subtle-foreground"
+      : "text-[var(--sidebar-foreground)] hover:bg-[var(--sidebar-accent)]/70",
+  );
+
+  if (!showLabel) {
+    return (
+      <Popover>
+        <PopoverTrigger asChild>
+          <button
+            type="button"
+            title="Admin"
+            aria-label="Admin"
+            className={triggerClassName}
+          >
+            <span className="flex size-6 shrink-0 items-center justify-center [&_svg]:size-6">
+              <PiggyIcon name="service" />
+            </span>
+          </button>
+        </PopoverTrigger>
+        <PopoverContent
+          side="right"
+          align="start"
+          sideOffset={8}
+          className="w-48 gap-0.5 bg-surface-elevated p-2 text-foreground ring-border"
+        >
+          <p className="px-2.5 pb-1 text-xs font-medium text-[var(--muted-foreground)]">
+            Admin
+          </p>
+          {modules.map((mod) => (
+            <ModuleNavLink key={mod.slug} mod={mod} forceLabel />
+          ))}
+        </PopoverContent>
+      </Popover>
+    );
+  }
+
+  return (
+    <Collapsible open={expanded} onOpenChange={setExpanded}>
+      <CollapsibleTrigger className={triggerClassName} aria-label="Admin">
+        <span className="flex size-6 shrink-0 items-center justify-center [&_svg]:size-6">
+          <PiggyIcon name="service" />
+        </span>
+        <span className="flex-1 overflow-hidden text-left text-base font-medium whitespace-nowrap">
+          Admin
+        </span>
+        <ChevronDown
+          className={cn(
+            "size-3.5 shrink-0 opacity-70 transition-transform",
+            expanded ? "rotate-180" : "rotate-0",
+          )}
+        />
+      </CollapsibleTrigger>
+      <CollapsibleContent className="flex flex-col gap-0.5 pt-0.5 pl-2">
+        {modules.map((mod) => (
+          <ModuleNavLink key={mod.slug} mod={mod} />
+        ))}
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
+
+function ModuleNav({ modules }: { modules: AppModuleRecord[] }) {
+  const { open, animate } = useSidebar();
+  const showLabel = !animate || open;
+  const mainModules = modules.filter(
+    (mod) => !ADMIN_MODULE_SLUGS.has(mod.slug),
+  );
+  const adminModules = modules.filter((mod) =>
+    ADMIN_MODULE_SLUGS.has(mod.slug),
+  );
 
   return (
     <nav
       className={cn(
-        "flex w-full flex-1 flex-col gap-1 overflow-y-auto",
+        "flex w-full min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto scrollbar-none",
         showLabel ? "items-stretch" : "items-center",
       )}
     >
-      {modules.map((mod) => {
-        const Icon = resolveModuleIcon(mod.icon);
-        return (
-          <SidebarLink
-            key={mod.slug}
-            active={isActivePath(pathname, mod.href)}
-            onMouseEnter={
-              mod.href === "/analysis" ? prefetchAnalysis : undefined
-            }
-            onFocus={mod.href === "/analysis" ? prefetchAnalysis : undefined}
-            link={{
-              label: mod.name,
-              href: mod.href,
-              icon: <Icon className="size-5 shrink-0 opacity-90" />,
-            }}
-          />
-        );
-      })}
+      {mainModules.map((mod) => (
+        <ModuleNavLink key={mod.slug} mod={mod} />
+      ))}
+      <AdminModuleSection modules={adminModules} />
     </nav>
   );
 }
@@ -138,7 +246,7 @@ function ModulesLoading() {
     >
       <PiggyMascot
         mood="thinking"
-        iconClassName="size-5"
+        iconClassName="size-6"
         className="text-[var(--sidebar-foreground)]"
       />
       {showLabel ? (
@@ -156,8 +264,8 @@ function SidebarFooterLink() {
   return (
     <div
       className={cn(
-        "flex w-full flex-col gap-1 border-t border-[var(--sidebar-border)] pt-4",
-        !showLabel && "items-center",
+        "flex w-full flex-col gap-0.5 border-t border-[var(--sidebar-border)] pt-2",
+        showLabel ? "items-stretch" : "items-center",
       )}
     >
       <SidebarLink
@@ -190,13 +298,13 @@ function SignOutButton() {
           className={cn(
             "group/sidebar relative flex items-center rounded-lg transition-colors",
             showLabel
-              ? "h-10 w-full gap-2 px-4"
+              ? "h-10 w-full gap-2.5 px-2.5"
               : "size-10 shrink-0 justify-center self-center px-0",
             "text-[var(--sidebar-foreground)] hover:bg-[var(--sidebar-accent)]/70",
-            openConfirm && "bg-[var(--sidebar-accent)]/70",
+            openConfirm ? "bg-[var(--sidebar-accent)]/70" : "",
           )}
         >
-          <span className="flex size-5 shrink-0 items-center justify-center [&_svg]:size-5">
+          <span className="flex size-6 shrink-0 items-center justify-center [&_svg]:size-6">
             <PiggyIcon name="logout" />
           </span>
           {showLabel ? (
@@ -204,7 +312,7 @@ function SignOutButton() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ duration: 0.15 }}
-              className="overflow-hidden text-sm font-medium whitespace-nowrap"
+              className="overflow-hidden text-base font-medium whitespace-nowrap"
             >
               Sign out
             </motion.span>
@@ -301,11 +409,11 @@ export function AppShell({
       <TrackingUsageHeartbeat />
       <Sidebar open={open} setOpen={setOpen} animate>
         <SidebarBody
-          className="w-full justify-between gap-8"
+          className="w-full justify-between gap-3"
           title={brandLabel}
           headerActions={isMobile ? workspaceTools : undefined}
         >
-          <div className="flex min-h-0 w-full flex-1 flex-col gap-4 overflow-hidden">
+          <div className="flex min-h-0 w-full flex-1 flex-col gap-2 overflow-hidden">
             <Brand label={brandLabel} />
             {modulesQuery.isPending ? (
               <ModulesLoading />

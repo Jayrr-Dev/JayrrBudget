@@ -1,9 +1,9 @@
+import { PING_TYPES } from "@/domains/piggy-pings/domain/types";
 import { api } from "@/shared/convex/httpClient";
 import type { Id } from "@convex/_generated/dataModel";
 import { tool } from "ai";
 import type { ConvexHttpClient } from "convex/browser";
 import { z } from "zod";
-import { PING_TYPES } from "@/domains/piggy-pings/domain/types";
 
 const pingTypeSchema = z.enum(PING_TYPES);
 
@@ -15,7 +15,7 @@ const pingFields = {
   cycle: z
     .string()
     .describe(
-      "From the start date: Weekly, Monthly, EOM, SOM, a weekday (Mon), weekdays (Mon,Tue), a month-day (9/16), or a one-off date (9/16/26)",
+      "Comma list from start date. Mix Weekly, Monthly, EOM, SOM, weekdays (Mon,Tue), a month-day (9/16), and a one-off date (9/16/26).",
     ),
   startDate: z
     .string()

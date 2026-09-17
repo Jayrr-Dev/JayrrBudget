@@ -1,11 +1,17 @@
 "use client";
 
+import { PiggyIcon } from "@/components/ui/piggy-icon";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
-import Link from "next/link";
-import React, { useEffect, useRef, useState, createContext, useContext } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { PiggyIcon } from "@/components/ui/piggy-icon";
+import Link from "next/link";
+import React, {
+  createContext,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 
 export interface SidebarLinkItem {
   label: string;
@@ -137,13 +143,13 @@ export const DesktopSidebar = ({
     <motion.aside
       ref={rootRef}
       className={cn(
-        "sticky top-0 z-30 hidden h-screen shrink-0 overflow-hidden border-r border-[var(--sidebar-border)] bg-[var(--surface)] py-5 md:flex md:flex-col",
+        "sticky top-0 z-30 hidden h-screen shrink-0 overflow-hidden border-r border-[var(--sidebar-border)] bg-[var(--surface)] py-3 md:flex md:flex-col",
         open || !animate ? "px-3" : "items-center px-0",
         className,
       )}
       initial={false}
       animate={{
-        width: animate ? (open ? 260 : 56) : 260,
+        width: animate ? (open ? 280 : 64) : 280,
       }}
       transition={{
         duration: open ? 0.25 : 0.45,
@@ -252,14 +258,16 @@ export const SidebarLink = ({
   link,
   className,
   active = false,
+  forceLabel = false,
   ...props
 }: {
   link: SidebarLinkItem;
   className?: string;
   active?: boolean;
+  forceLabel?: boolean;
 } & Omit<React.ComponentProps<typeof Link>, "href">) => {
   const { open, animate } = useSidebar();
-  const showLabel = !animate || open;
+  const showLabel = forceLabel || !animate || open;
 
   return (
     <Link
@@ -268,7 +276,7 @@ export const SidebarLink = ({
       className={cn(
         "group/sidebar relative flex items-center rounded-lg transition-colors",
         showLabel
-          ? "h-10 w-full gap-2 px-4"
+          ? "h-10 w-full gap-2.5 px-2.5"
           : "size-10 shrink-0 justify-center self-center px-0",
         active
           ? "bg-primary-subtle font-medium text-primary-subtle-foreground"
@@ -277,7 +285,7 @@ export const SidebarLink = ({
       )}
       {...props}
     >
-      <span className="flex size-5 shrink-0 items-center justify-center [&_svg]:size-5">
+      <span className="flex size-6 shrink-0 items-center justify-center [&_svg]:size-6">
         {link.icon}
       </span>
       {showLabel ? (
@@ -285,7 +293,7 @@ export const SidebarLink = ({
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ duration: 0.15 }}
-          className="overflow-hidden text-sm font-medium whitespace-nowrap"
+          className="overflow-hidden text-base font-medium whitespace-nowrap"
         >
           {link.label}
         </motion.span>

@@ -1,17 +1,19 @@
 "use client";
 
-import { createColumnHelper } from "@tanstack/react-table";
-import { useMutation, useQuery } from "convex/react";
-import { useState, type FormEvent } from "react";
-import { api } from "@convex/_generated/api";
-import type { Id } from "@convex/_generated/dataModel";
-import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import type { DataTableFeatures } from "@/components/ui/data-table-features";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { EmptyPrompt } from "@/components/ui/empty-prompt";
-import { PageSpinner } from "@/components/ui/spinner";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -22,14 +24,26 @@ import {
   PopoverTitle,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { PageSpinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import {
   CYCLE_PRESETS,
   PING_TYPES,
+  applyCycleDate,
+  cycleDateToIso,
+  isCycleDateValue,
+  isCyclePresetOn,
+  toggleCyclePreset,
   type PingType,
 } from "@/domains/piggy-pings/domain/types";
+import { api } from "@convex/_generated/api";
+import type { Id } from "@convex/_generated/dataModel";
+import { createColumnHelper } from "@tanstack/react-table";
+import { useMutation, useQuery } from "convex/react";
 import { Info } from "lucide-react";
+import { useState, type FormEvent } from "react";
+import { toast } from "sonner";
 
 type PingRow = {
   id: Id<"piggyPings">;
@@ -80,6 +94,7 @@ function CycleInfo() {
             When the ping repeats, counted from the start date.
           </PopoverDescription>
           <ul className="mt-1.5 list-disc space-y-1 pl-4 text-muted-foreground">
+            <li>Combine any chips; they save as a comma list</li>
             <li>Weekly: every 7 days</li>
             <li>Mon or Mon,Tue: those weekdays each week</li>
             <li>9/16: that month-day every year</li>
@@ -91,6 +106,130 @@ function CycleInfo() {
         </PopoverHeader>
       </PopoverContent>
     </Popover>
+  );
+}
+
+function CycleChip({
+  label,
+  pressed,
+  disabled,
+  onToggle,
+}: {
+  label: string;
+  pressed: boolean;
+  disabled: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <Button
+      type="button"
+      size="xs"
+      variant={pressed ? "default" : "outline"}
+      aria-pressed={pressed}
+      disabled={disabled}
+      onClick={onToggle}
+    >
+      {label}
+    </Button>
+  );
+}
+
+function CycleDateChip({
+  cycle,
+  disabled,
+  onPick,
+}: {
+  cycle: string;
+  disabled: boolean;
+  onPick: (value: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState("");
+  const dateOn = isCycleDateValue(cycle);
+
+  function handleOpenChange(next: boolean) {
+    if (next) {
+      setDraft(cycleDateToIso(cycle));
+    }
+    setOpen(next);
+  }
+
+  function apply() {
+    if (!draft) {
+      return;
+    }
+    onPick(applyCycleDate(cycle, draft));
+    setOpen(false);
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      <DialogTrigger asChild>
+        <Button
+          type="button"
+          size="xs"
+          variant={dateOn ? "default" : "outline"}
+          aria-pressed={dateOn}
+          disabled={disabled}
+        >
+          Date
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-sm">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            Cycle date
+            <Popover>
+              <PopoverTrigger asChild>
+                <button
+                  type="button"
+                  className="inline-flex size-6 shrink-0 items-center justify-center rounded-full text-accent hover:bg-accent-subtle hover:text-accent"
+                  aria-label="Cycle date info"
+                >
+                  <Info className="size-3.5" />
+                </button>
+              </PopoverTrigger>
+              <PopoverContent align="start" side="bottom" className="w-72">
+                <PopoverHeader>
+                  <PopoverTitle>Cycle date</PopoverTitle>
+                  <PopoverDescription>
+                    One calendar day for this ping.
+                  </PopoverDescription>
+                  <ul className="mt-1.5 list-disc space-y-1 pl-4 text-muted-foreground">
+                    <li>Saves as 9/16/26 for that one day</li>
+                    <li>Edit the cycle field to 9/16 to repeat yearly</li>
+                  </ul>
+                </PopoverHeader>
+              </PopoverContent>
+            </Popover>
+          </DialogTitle>
+          <DialogDescription className="sr-only">
+            Enter a month, day, and year for this ping cycle.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="grid gap-1.5">
+          <Label htmlFor="ping-cycle-date">Date</Label>
+          <Input
+            id="ping-cycle-date"
+            type="date"
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+          />
+        </div>
+        <DialogFooter>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setOpen(false)}
+          >
+            Cancel
+          </Button>
+          <Button type="button" disabled={!draft} onClick={apply}>
+            Use date
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -143,7 +282,10 @@ const columns = columnHelper.columns([
   columnHelper.accessor("id", {
     header: "Id",
     cell: ({ getValue }) => (
-      <span className="block max-w-[7rem] truncate font-mono text-xs" title={String(getValue())}>
+      <span
+        className="block max-w-[7rem] truncate font-mono text-xs"
+        title={String(getValue())}
+      >
         {String(getValue())}
       </span>
     ),
@@ -173,7 +315,10 @@ const columns = columnHelper.columns([
   columnHelper.accessor("message", {
     header: "Message",
     cell: ({ getValue }) => (
-      <span className="block truncate text-sm text-[var(--muted-foreground)]" title={String(getValue())}>
+      <span
+        className="block truncate text-sm text-[var(--muted-foreground)]"
+        title={String(getValue())}
+      >
         {String(getValue())}
       </span>
     ),
@@ -186,7 +331,9 @@ const columns = columnHelper.columns([
   }),
   columnHelper.accessor("pingType", {
     header: "Type",
-    cell: ({ getValue }) => <Badge variant="outline">{String(getValue())}</Badge>,
+    cell: ({ getValue }) => (
+      <Badge variant="outline">{String(getValue())}</Badge>
+    ),
     meta: { width: "6.5rem", nowrap: true },
   }),
   columnHelper.accessor("cycle", {
@@ -247,7 +394,10 @@ const columns = columnHelper.columns([
   columnHelper.accessor("notes", {
     header: "Notes",
     cell: ({ getValue }) => (
-      <span className="block truncate text-sm text-[var(--muted-foreground)]" title={getValue() ? String(getValue()) : ""}>
+      <span
+        className="block truncate text-sm text-[var(--muted-foreground)]"
+        title={getValue() ? String(getValue()) : ""}
+      >
         {getValue() ? String(getValue()) : "—"}
       </span>
     ),
@@ -384,17 +534,19 @@ function CreatePingForm() {
           />
           <div className="flex flex-wrap gap-1">
             {CYCLE_PRESETS.map((preset) => (
-              <Button
+              <CycleChip
                 key={preset}
-                type="button"
-                size="xs"
-                variant="outline"
+                label={preset}
+                pressed={isCyclePresetOn(cycle, preset)}
                 disabled={submitting}
-                onClick={() => setCycle(preset)}
-              >
-                {preset}
-              </Button>
+                onToggle={() => setCycle(toggleCyclePreset(cycle, preset))}
+              />
             ))}
+            <CycleDateChip
+              cycle={cycle}
+              disabled={submitting}
+              onPick={setCycle}
+            />
           </div>
         </div>
         <div className="grid grid-cols-2 gap-3">
@@ -440,7 +592,16 @@ function CreatePingForm() {
             disabled={submitting}
           />
         </div>
-        <Button type="submit" disabled={submitting || !name.trim() || !title.trim() || !message.trim() || !cycle.trim()}>
+        <Button
+          type="submit"
+          disabled={
+            submitting ||
+            !name.trim() ||
+            !title.trim() ||
+            !message.trim() ||
+            !cycle.trim()
+          }
+        >
           {submitting ? "Saving…" : "Save ping"}
         </Button>
       </div>
