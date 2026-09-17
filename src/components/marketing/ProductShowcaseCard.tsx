@@ -1,7 +1,19 @@
 "use client";
 
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Popover,
+  PopoverContent,
+  PopoverDescription,
+  PopoverHeader,
+  PopoverTitle,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import {
   BarChart3,
+  ChevronLeft,
+  ChevronRight,
   EyeOff,
   FileScan,
   Info,
@@ -18,17 +30,13 @@ import {
   TrendingUp,
 } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { type ComponentType, useCallback, useState } from "react";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
-  Popover,
-  PopoverContent,
-  PopoverDescription,
-  PopoverHeader,
-  PopoverTitle,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+  type ComponentType,
+  type PointerEvent as ReactPointerEvent,
+  useCallback,
+  useRef,
+  useState,
+} from "react";
 import { AnalysisScene } from "./scenes/AnalysisScene";
 import { ClassificationScene } from "./scenes/ClassificationScene";
 import { EncryptionScene } from "./scenes/EncryptionScene";
@@ -60,9 +68,18 @@ const SLIDES: readonly Slide[] = [
       ],
     },
     features: [
-      { icon: ShieldCheck, label: "Nobody, including us, can read your ledger" },
-      { icon: KeyRound, label: "Your password is the only key, and it stays on your device" },
-      { icon: EyeOff, label: "A breach on our side leaks noise, not your spending" },
+      {
+        icon: ShieldCheck,
+        label: "Nobody, including us, can read your ledger",
+      },
+      {
+        icon: KeyRound,
+        label: "Your password is the only key, and it stays on your device",
+      },
+      {
+        icon: EyeOff,
+        label: "A breach on our side leaks noise, not your spending",
+      },
     ],
     Scene: EncryptionScene,
   },
@@ -76,13 +93,22 @@ const SLIDES: readonly Slide[] = [
       bullets: [
         "Up to 24 files per upload, 20MB each.",
         "Already-imported files are flagged before the scan.",
-        "Upload rules like \"ACME payroll is income\" guide the reader.",
+        'Upload rules like "ACME payroll is income" guide the reader.',
       ],
     },
     features: [
-      { icon: ScanLine, label: "Photograph a statement and the rows type themselves" },
-      { icon: ShieldCheck, label: "Upload the same month twice, nothing doubles up" },
-      { icon: Layers, label: "Tell it once how your bank writes and it remembers" },
+      {
+        icon: ScanLine,
+        label: "Photograph a statement and the rows type themselves",
+      },
+      {
+        icon: ShieldCheck,
+        label: "Upload the same month twice, nothing doubles up",
+      },
+      {
+        icon: Layers,
+        label: "Tell it once how your bank writes and it remembers",
+      },
     ],
     Scene: StatementImportScene,
   },
@@ -100,9 +126,18 @@ const SLIDES: readonly Slide[] = [
       ],
     },
     features: [
-      { icon: Layers, label: "The $14 you forgot about has nowhere left to hide" },
-      { icon: Tag, label: "Tag a trip in one click and see what it really cost" },
-      { icon: ShieldCheck, label: "Sensible labels to start, rename anything you like" },
+      {
+        icon: Layers,
+        label: "The $14 you forgot about has nowhere left to hide",
+      },
+      {
+        icon: Tag,
+        label: "Tag a trip in one click and see what it really cost",
+      },
+      {
+        icon: ShieldCheck,
+        label: "Sensible labels to start, rename anything you like",
+      },
     ],
     Scene: ClassificationScene,
   },
@@ -120,9 +155,18 @@ const SLIDES: readonly Slide[] = [
       ],
     },
     features: [
-      { icon: TrendingUp, label: "One chart tells you if you came out ahead this month" },
-      { icon: BarChart3, label: "Spot the merchant eating a third of your food budget" },
-      { icon: Layers, label: "Catch the wild months before they become normal" },
+      {
+        icon: TrendingUp,
+        label: "One chart tells you if you came out ahead this month",
+      },
+      {
+        icon: BarChart3,
+        label: "Spot the merchant eating a third of your food budget",
+      },
+      {
+        icon: Layers,
+        label: "Catch the wild months before they become normal",
+      },
     ],
     Scene: AnalysisScene,
   },
@@ -140,9 +184,18 @@ const SLIDES: readonly Slide[] = [
       ],
     },
     features: [
-      { icon: Landmark, label: "See how much of each payment really shrinks the loan" },
-      { icon: ScanLine, label: "Photograph the paperwork instead of retyping it" },
-      { icon: Sparkles, label: "AI sees your numbers only when you switch it on" },
+      {
+        icon: Landmark,
+        label: "See how much of each payment really shrinks the loan",
+      },
+      {
+        icon: ScanLine,
+        label: "Photograph the paperwork instead of retyping it",
+      },
+      {
+        icon: Sparkles,
+        label: "AI sees your numbers only when you switch it on",
+      },
     ],
     Scene: LoansAiScene,
   },
@@ -158,6 +211,31 @@ export function ProductShowcaseCard() {
   const goNext = useCallback(() => {
     setIndex((current) => (current + 1) % SLIDES.length);
   }, []);
+  const goPrev = useCallback(() => {
+    setIndex((current) => (current - 1 + SLIDES.length) % SLIDES.length);
+  }, []);
+
+  const swipeStart = useRef<{ x: number; y: number } | null>(null);
+  const onSwipePointerDown = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      if ((event.target as HTMLElement | null)?.closest("button, a")) return;
+      swipeStart.current = { x: event.clientX, y: event.clientY };
+    },
+    [],
+  );
+  const onSwipePointerUp = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      const start = swipeStart.current;
+      swipeStart.current = null;
+      if (!start) return;
+      const dx = event.clientX - start.x;
+      const dy = event.clientY - start.y;
+      if (Math.abs(dx) < 40 || Math.abs(dx) < Math.abs(dy) * 1.2) return;
+      if (dx < 0) goNext();
+      else goPrev();
+    },
+    [goNext, goPrev],
+  );
 
   const slide = SLIDES[index];
   const BadgeIcon = slide.badge.icon;
@@ -216,7 +294,14 @@ export function ProductShowcaseCard() {
         </div>
       </CardHeader>
 
-      <CardContent className="flex min-h-0 flex-1 flex-col gap-4">
+      <CardContent
+        className="flex min-h-0 flex-1 touch-pan-y flex-col gap-4"
+        onPointerDown={onSwipePointerDown}
+        onPointerUp={onSwipePointerUp}
+        onPointerCancel={() => {
+          swipeStart.current = null;
+        }}
+      >
         <div className="relative min-h-0 flex-1 overflow-hidden">
           <AnimatePresence mode="wait" initial={false}>
             <motion.div
@@ -246,34 +331,54 @@ export function ProductShowcaseCard() {
           </AnimatePresence>
         </div>
 
-        <div
-          className="flex h-8 shrink-0 items-center justify-center gap-1.5"
-          role="tablist"
-          aria-label="Product tour"
-        >
-          {SLIDES.map((item, itemIndex) => {
-            const selected = itemIndex === index;
-            return (
-              <button
-                key={item.id}
-                type="button"
-                role="tab"
-                aria-selected={selected}
-                aria-label={item.title}
-                onClick={() => setIndex(itemIndex)}
-                className="flex min-h-11 min-w-8 items-center justify-center"
-              >
-                <motion.span
-                  className="block h-1.5 rounded-full"
-                  animate={{
-                    width: selected ? 20 : 6,
-                    backgroundColor: selected ? "var(--accent)" : "var(--border)",
-                  }}
-                  transition={{ duration: 0.25 }}
-                />
-              </button>
-            );
-          })}
+        <div className="flex h-11 shrink-0 items-center justify-center gap-1">
+          <button
+            type="button"
+            aria-label="Previous slide"
+            onClick={goPrev}
+            className="inline-flex size-11 items-center justify-center rounded-full text-muted-foreground touch-manipulation hover:bg-accent-subtle hover:text-accent"
+          >
+            <ChevronLeft className="size-5" />
+          </button>
+          <div
+            className="flex items-center justify-center gap-1.5"
+            role="tablist"
+            aria-label="Product tour"
+          >
+            {SLIDES.map((item, itemIndex) => {
+              const selected = itemIndex === index;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={selected}
+                  aria-label={item.title}
+                  onClick={() => setIndex(itemIndex)}
+                  className="flex min-h-11 min-w-8 items-center justify-center touch-manipulation"
+                >
+                  <motion.span
+                    className="block h-1.5 rounded-full"
+                    animate={{
+                      width: selected ? 20 : 6,
+                      backgroundColor: selected
+                        ? "var(--accent)"
+                        : "var(--border)",
+                    }}
+                    transition={{ duration: 0.25 }}
+                  />
+                </button>
+              );
+            })}
+          </div>
+          <button
+            type="button"
+            aria-label="Next slide"
+            onClick={goNext}
+            className="inline-flex size-11 items-center justify-center rounded-full text-muted-foreground touch-manipulation hover:bg-accent-subtle hover:text-accent"
+          >
+            <ChevronRight className="size-5" />
+          </button>
         </div>
       </CardContent>
     </Card>

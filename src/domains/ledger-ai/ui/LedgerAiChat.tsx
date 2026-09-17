@@ -123,7 +123,7 @@ const PIGGY_PANEL_DEFAULT_SIZE: DockPanelSize = {
 };
 /** Same shell as the fab's docked panels, so the chat hugs the right edge under the pill. */
 const LEDGER_AI_DOCK_PANEL =
-  "pointer-events-auto max-w-[calc(100vw-1.5rem)] overflow-hidden rounded-xl border border-border bg-background shadow-lg ring-1 ring-border/40";
+  "pointer-events-auto max-w-[calc(100vw-1.5rem)] overflow-hidden rounded-xl border border-border bg-background shadow-lg ring-1 ring-border/40 max-md:w-[calc(100vw-1.5rem)]";
 type PiggyTab = {
   id: string;
   name: string;
@@ -845,7 +845,7 @@ function LedgerAiChatSession({
                   : "Add tab"
               }
               disabled={tabs.length >= MAX_PIGGY_TABS}
-              className="inline-flex size-5 shrink-0 items-center justify-center rounded-sm text-accent hover:bg-accent-subtle hover:text-accent disabled:pointer-events-none disabled:opacity-40"
+              className="inline-flex size-5 shrink-0 touch-manipulation items-center justify-center rounded-sm text-accent max-md:size-8 hover:bg-accent-subtle hover:text-accent disabled:pointer-events-none disabled:opacity-40"
               onClick={addTab}
             >
               <PlusIcon className="size-3" strokeWidth={2} />

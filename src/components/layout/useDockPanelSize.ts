@@ -78,6 +78,9 @@ export function useDockPanelSize({
   useEffect(() => {
     const stored = readStoredSize(storageKey);
     if (stored) setSize(stored);
+    const onResize = () => setSize((current) => clampSize(current));
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
   }, [storageKey]);
 
   const onPointerDown = useCallback(

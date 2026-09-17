@@ -63,10 +63,10 @@ export default function SignInPage() {
           <div className="order-2 w-full min-w-0 lg:order-1">
             <ProductShowcaseCard />
           </div>
-          <div className="order-1 w-full max-w-sm justify-self-center space-y-6 lg:order-2 lg:max-w-none lg:justify-self-stretch">
+          <div className="relative z-10 order-1 w-full max-w-sm justify-self-center space-y-6 lg:order-2 lg:max-w-none lg:justify-self-stretch">
             {flow === "signIn" || flow === "signUp" ? (
               <div
-                className="grid grid-cols-2 rounded-lg border border-[var(--border)] bg-surface-elevated p-1"
+                className="relative z-10 grid grid-cols-2 rounded-lg border border-[var(--border)] bg-surface-elevated p-1"
                 role="tablist"
                 aria-label="Account"
               >
@@ -76,8 +76,8 @@ export default function SignInPage() {
                   aria-selected={flow === "signUp"}
                   className={
                     flow === "signUp"
-                      ? "rounded-md bg-primary-subtle px-3 py-2 text-sm font-medium text-primary-subtle-foreground"
-                      : "rounded-md px-3 py-2 text-sm font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+                      ? "min-h-11 touch-manipulation rounded-md bg-primary-subtle px-3 py-2 text-sm font-medium text-primary-subtle-foreground"
+                      : "min-h-11 touch-manipulation rounded-md px-3 py-2 text-sm font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
                   }
                   onClick={() => {
                     setError(null);
@@ -92,8 +92,8 @@ export default function SignInPage() {
                   aria-selected={flow === "signIn"}
                   className={
                     flow === "signIn"
-                      ? "rounded-md bg-primary-subtle px-3 py-2 text-sm font-medium text-primary-subtle-foreground"
-                      : "rounded-md px-3 py-2 text-sm font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+                      ? "min-h-11 touch-manipulation rounded-md bg-primary-subtle px-3 py-2 text-sm font-medium text-primary-subtle-foreground"
+                      : "min-h-11 touch-manipulation rounded-md px-3 py-2 text-sm font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
                   }
                   onClick={() => {
                     setError(null);
@@ -280,6 +280,10 @@ export default function SignInPage() {
                     }
                     minLength={MIN_PASSCODE_LENGTH}
                     readOnly={!passwordAutofillReady}
+                    onPointerDown={() => {
+                      // iOS will not focus a readOnly field, so unlock before focus.
+                      setPasswordAutofillReady(true);
+                    }}
                     onFocus={(event) => {
                       setPasswordAutofillReady(true);
                       const input = event.currentTarget;
@@ -334,7 +338,7 @@ export default function SignInPage() {
               <button
                 type="submit"
                 disabled={pending}
-                className="w-full rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary-hover disabled:opacity-60"
+                className="min-h-11 w-full touch-manipulation rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary-hover disabled:opacity-60"
               >
                 {pending
                   ? "Working…"

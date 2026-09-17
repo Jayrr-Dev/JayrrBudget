@@ -261,6 +261,10 @@ export async function saveEncryptedLoan(
     paymentAmount: number;
     firstPaymentDate: string;
     paymentCount: number;
+    paymentFrequency?: string | null;
+    loanType?: string | null;
+    rateType?: string | null;
+    vehicleLabel?: string | null;
     matchMerchantClean?: string | null;
     matchAmount?: number | null;
     expectedRevision?: number | null;

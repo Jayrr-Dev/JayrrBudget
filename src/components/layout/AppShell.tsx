@@ -141,7 +141,7 @@ function AdminModuleSection({ modules }: { modules: AppModuleRecord[] }) {
   const triggerClassName = cn(
     "group/sidebar relative flex items-center rounded-lg transition-colors",
     showLabel
-      ? "h-10 w-full gap-2.5 px-2.5"
+      ? "h-10 w-full gap-2.5 px-2.5 max-md:min-h-11"
       : "size-10 shrink-0 justify-center self-center px-0",
     adminActive
       ? "bg-primary-subtle font-medium text-primary-subtle-foreground"
@@ -298,7 +298,7 @@ function SignOutButton() {
           className={cn(
             "group/sidebar relative flex items-center rounded-lg transition-colors",
             showLabel
-              ? "h-10 w-full gap-2.5 px-2.5"
+              ? "h-10 w-full gap-2.5 px-2.5 max-md:min-h-11"
               : "size-10 shrink-0 justify-center self-center px-0",
             "text-[var(--sidebar-foreground)] hover:bg-[var(--sidebar-accent)]/70",
             openConfirm ? "bg-[var(--sidebar-accent)]/70" : "",
@@ -409,7 +409,7 @@ export function AppShell({
       <TrackingUsageHeartbeat />
       <Sidebar open={open} setOpen={setOpen} animate>
         <SidebarBody
-          className="w-full justify-between gap-3"
+          className="justify-between gap-3"
           title={brandLabel}
           headerActions={isMobile ? workspaceTools : undefined}
         >
@@ -427,7 +427,7 @@ export function AppShell({
       <main className="flex max-h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background text-foreground">
         <div
           className={cn(
-            "mx-auto w-full max-w-[90rem] min-h-0 flex-1 overflow-y-auto px-4 py-6 sm:px-8 sm:py-8",
+            "mx-auto w-full max-w-[90rem] min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-4 py-6 sm:px-8 sm:py-8 [-webkit-overflow-scrolling:touch]",
             fullBleedDatabase &&
               "flex h-full max-h-full max-w-none flex-col overflow-hidden p-2 sm:p-3",
             vaultLocked && "flex flex-col",

@@ -17,8 +17,15 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { DataTable } from "@/components/ui/data-table";
-import type { DataTableFeatures } from "@/components/ui/data-table-features";
+import {
+  Card,
+  CardAction,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -31,6 +38,7 @@ import {
 import { EmptyPrompt } from "@/components/ui/empty-prompt";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { PiggyIcon } from "@/components/ui/piggy-icon";
 import {
   Popover,
   PopoverContent,
@@ -56,12 +64,16 @@ import {
 } from "@/domains/piggy-pings/domain/types";
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
-import { Icon } from "@iconify/react";
-import { createColumnHelper } from "@tanstack/react-table";
 import { cn } from "cn";
 import { useMutation, useQuery } from "convex/react";
 import { Info, X } from "lucide-react";
-import { useEffect, useState, type FormEvent, type ReactNode } from "react";
+import {
+  useEffect,
+  useMemo,
+  useState,
+  type FormEvent,
+  type ReactNode,
+} from "react";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
 
@@ -83,11 +95,13 @@ type PingRow = {
   ownerLabel: string;
 };
 
-const columnHelper = createColumnHelper<DataTableFeatures, PingRow>();
-
 function dateLabel(value: string | null) {
   if (!value) return "Indefinite";
   return value;
+}
+
+function pingTypeList(ping: PingRow): PingType[] {
+  return ping.pingTypes.length > 0 ? ping.pingTypes : [ping.pingType];
 }
 
 function copyName(name: string) {
@@ -291,7 +305,7 @@ function PingActions({ ping }: { ping: PingRow }) {
   const [bannerOpen, setBannerOpen] = useState(false);
 
   function handleTest() {
-    const types = ping.pingTypes.length > 0 ? ping.pingTypes : [ping.pingType];
+    const types = pingTypeList(ping);
     for (const type of types) {
       if (type === "Popup") {
         setPopupOpen(true);
@@ -321,8 +335,8 @@ function PingActions({ ping }: { ping: PingRow }) {
         name: copyName(ping.name),
         title: ping.title,
         message: ping.message,
-        pingType: ping.pingTypes[0] ?? ping.pingType,
-        pingTypes: ping.pingTypes,
+        pingType: pingTypeList(ping)[0] ?? ping.pingType,
+        pingTypes: pingTypeList(ping),
         cycle: ping.cycle,
         trigger: ping.trigger,
         startDate: ping.startDate,
@@ -399,148 +413,78 @@ function PingActions({ ping }: { ping: PingRow }) {
   );
 }
 
-function actionsHeader() {
-  return (
-    <span className="flex items-center justify-center">
-      <Icon
-        icon="mynaui:mouse-pointer-click-solid"
-        className="size-4 text-[var(--muted-foreground)]"
-        aria-hidden
-      />
-      <span className="sr-only">Actions</span>
-    </span>
-  );
-}
+function PingCard({ ping }: { ping: PingRow }) {
+  const types = pingTypeList(ping);
+  const created = new Date(ping.createdAt).toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
 
-const columns = columnHelper.columns([
-  columnHelper.display({
-    id: "actions",
-    header: actionsHeader,
-    cell: ({ row }) => (
-      <div className="flex items-center justify-center">
-        <PingActions ping={row.original} />
-      </div>
-    ),
-    enableSorting: false,
-    enableHiding: true,
-    meta: { label: "Actions", width: "2rem" },
-  }),
-  columnHelper.accessor("name", {
-    header: "Name",
-    cell: ({ getValue }) => (
-      <span className="block truncate font-medium">{String(getValue())}</span>
-    ),
-    meta: { width: "8rem", nowrap: true },
-  }),
-  columnHelper.accessor("title", {
-    header: "Title",
-    cell: ({ getValue }) => (
-      <span className="block truncate">{String(getValue())}</span>
-    ),
-    meta: { width: "10rem", nowrap: true, grow: true },
-  }),
-  columnHelper.accessor("message", {
-    header: "Message",
-    cell: ({ getValue }) => (
-      <span
-        className="block truncate text-sm text-[var(--muted-foreground)]"
-        title={String(getValue())}
-      >
-        {String(getValue())}
-      </span>
-    ),
-    meta: { width: "12rem", nowrap: true },
-  }),
-  columnHelper.accessor("isActive", {
-    header: "Active",
-    cell: ({ row }) => <ActiveToggle ping={row.original} />,
-    meta: { width: "5.5rem", nowrap: true },
-  }),
-  columnHelper.accessor("pingTypes", {
-    header: "Type",
-    cell: ({ row, getValue }) => {
-      const types = (getValue() as PingType[] | undefined) ?? [];
-      const shown = types.length > 0 ? types : [row.original.pingType];
-      return (
-        <span className="flex flex-wrap gap-1">
-          {shown.map((type) => (
+  return (
+    <Card size="sm" className="h-full">
+      <CardHeader>
+        <div className="flex min-w-0 items-start gap-2.5">
+          <span className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-lg bg-accent-subtle">
+            <PiggyIcon name="pings" className="size-5" />
+          </span>
+          <div className="min-w-0">
+            <CardTitle className="truncate">{ping.name}</CardTitle>
+            <CardDescription className="truncate">{ping.title}</CardDescription>
+          </div>
+        </div>
+        <CardAction>
+          <PingActions ping={ping} />
+        </CardAction>
+      </CardHeader>
+      <CardContent className="grid gap-3">
+        <p className="line-clamp-3 text-sm text-muted-foreground">
+          {ping.message}
+        </p>
+        <div className="flex flex-wrap gap-1">
+          {types.map((type) => (
             <Badge key={type} variant="outline">
               {type}
             </Badge>
           ))}
-        </span>
-      );
-    },
-    meta: { width: "9rem", nowrap: true },
-  }),
-  columnHelper.accessor("cycle", {
-    header: () => (
-      <span className="inline-flex items-center gap-1">
-        Cycle
-        <CycleInfo />
-      </span>
-    ),
-    cell: ({ getValue }) => (
-      <span className="block truncate text-sm">{String(getValue())}</span>
-    ),
-    meta: { width: "7rem", nowrap: true },
-  }),
-  columnHelper.accessor("trigger", {
-    header: "Trigger",
-    cell: ({ getValue }) => (
-      <span className="text-sm text-[var(--muted-foreground)]">
-        {getValue() ? String(getValue()) : "—"}
-      </span>
-    ),
-    meta: { width: "6rem", nowrap: true },
-  }),
-  columnHelper.accessor("triggerCount", {
-    header: "Count",
-    cell: ({ getValue }) => (
-      <span className="text-sm tabular-nums">{Number(getValue())}</span>
-    ),
-    meta: { width: "5rem", nowrap: true },
-  }),
-  columnHelper.accessor("createdAt", {
-    header: "Created",
-    cell: ({ getValue }) => (
-      <span className="text-xs text-[var(--muted-foreground)]">
-        {new Date(Number(getValue())).toLocaleString(undefined, {
-          month: "short",
-          day: "numeric",
-          year: "numeric",
-        })}
-      </span>
-    ),
-    meta: { width: "8rem", nowrap: true },
-  }),
-  columnHelper.accessor("startDate", {
-    header: "Start",
-    cell: ({ getValue }) => (
-      <span className="text-sm">{dateLabel(getValue() as string | null)}</span>
-    ),
-    meta: { width: "7rem", nowrap: true },
-  }),
-  columnHelper.accessor("endDate", {
-    header: "End",
-    cell: ({ getValue }) => (
-      <span className="text-sm">{dateLabel(getValue() as string | null)}</span>
-    ),
-    meta: { width: "7rem", nowrap: true },
-  }),
-  columnHelper.accessor("notes", {
-    header: "Notes",
-    cell: ({ getValue }) => (
-      <span
-        className="block truncate text-sm text-[var(--muted-foreground)]"
-        title={getValue() ? String(getValue()) : ""}
-      >
-        {getValue() ? String(getValue()) : "—"}
-      </span>
-    ),
-    meta: { width: "8rem", nowrap: true },
-  }),
-]);
+        </div>
+        <dl className="grid grid-cols-2 gap-x-3 gap-y-2 text-sm">
+          <div className="col-span-2 flex items-center gap-1.5">
+            <dt className="text-muted-foreground">Cycle</dt>
+            <CycleInfo />
+            <dd className="min-w-0 truncate font-medium">{ping.cycle}</dd>
+          </div>
+          <div>
+            <dt className="text-muted-foreground">Start</dt>
+            <dd className="font-medium">{dateLabel(ping.startDate)}</dd>
+          </div>
+          <div>
+            <dt className="text-muted-foreground">End</dt>
+            <dd className="font-medium">{dateLabel(ping.endDate)}</dd>
+          </div>
+          <div>
+            <dt className="text-muted-foreground">Count</dt>
+            <dd className="font-medium tabular-nums">{ping.triggerCount}</dd>
+          </div>
+          <div>
+            <dt className="text-muted-foreground">Created</dt>
+            <dd className="font-medium">{created}</dd>
+          </div>
+          {ping.notes ? (
+            <div className="col-span-2">
+              <dt className="text-muted-foreground">Notes</dt>
+              <dd className="line-clamp-2">{ping.notes}</dd>
+            </div>
+          ) : null}
+        </dl>
+      </CardContent>
+      <CardFooter className="justify-between gap-3">
+        <span className="text-sm text-muted-foreground">Active</span>
+        <ActiveToggle ping={ping} />
+      </CardFooter>
+    </Card>
+  );
+}
 
 const PING_FORM_STEPS = [
   { id: 1, title: "What to send" },
@@ -959,6 +903,25 @@ export function PiggyPingsManager({
   onCreatePing: () => void;
 }) {
   const pings = useQuery(api.piggyPings.list, {});
+  const [query, setQuery] = useState("");
+
+  const filtered = useMemo(() => {
+    if (!pings) return [];
+    const needle = query.trim().toLowerCase();
+    if (!needle) return pings as PingRow[];
+    return (pings as PingRow[]).filter((ping) => {
+      const haystack = [
+        ping.name,
+        ping.title,
+        ping.message,
+        ping.cycle,
+        ping.notes ?? "",
+      ]
+        .join(" ")
+        .toLowerCase();
+      return haystack.includes(needle);
+    });
+  }, [pings, query]);
 
   if (pings === undefined) {
     return <PageSpinner className="min-h-40 py-8" />;
@@ -967,7 +930,7 @@ export function PiggyPingsManager({
   if (pings.length === 0) {
     return (
       <EmptyPrompt
-        className="bg-[var(--surface)] py-10"
+        className="bg-surface py-10"
         title="No pings yet"
         description="Add a reminder here, or ask Piggy to create one."
         action={
@@ -980,11 +943,34 @@ export function PiggyPingsManager({
   }
 
   return (
-    <DataTable
-      columns={columns}
-      data={pings as PingRow[]}
-      searchKey="name"
-      searchPlaceholder="Filter pings…"
-    />
+    <div className="space-y-4">
+      <div className="flex items-center justify-between gap-3">
+        <Input
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="Filter pings…"
+          aria-label="Filter pings"
+          className="max-w-sm"
+        />
+        <p className="shrink-0 text-xs text-muted-foreground tabular-nums">
+          Showing {filtered.length} of {pings.length}
+        </p>
+      </div>
+      {filtered.length === 0 ? (
+        <EmptyPrompt
+          className="bg-surface py-10"
+          title="No matching pings"
+          description="Try a different name, title, or message."
+        />
+      ) : (
+        <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {filtered.map((ping) => (
+            <li key={ping.id}>
+              <PingCard ping={ping} />
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }

@@ -2,9 +2,11 @@
 
 import { PiggyIcon } from "@/components/ui/piggy-icon";
 import { Separator } from "@/components/ui/separator";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
 import { AnimatePresence, motion } from "motion/react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import React, {
   createContext,
   useContext,
@@ -12,6 +14,7 @@ import React, {
   useRef,
   useState,
 } from "react";
+import { createPortal } from "react-dom";
 
 export interface SidebarLinkItem {
   label: string;
@@ -139,25 +142,32 @@ export const DesktopSidebar = ({
     }, 220);
   };
 
+  const expanded = open || !animate;
+  const railWidth = expanded ? 280 : 64;
+
   return (
     <motion.aside
       ref={rootRef}
       className={cn(
-        "sticky top-0 z-30 hidden h-screen shrink-0 overflow-hidden border-r border-[var(--sidebar-border)] bg-[var(--surface)] py-3 md:flex md:flex-col",
-        open || !animate ? "px-3" : "items-center px-0",
+        "sticky top-0 z-30 hidden h-screen max-w-[280px] shrink-0 overflow-hidden border-r border-[var(--sidebar-border)] bg-[var(--surface)] py-3 md:flex md:flex-col",
         className,
+        expanded ? "w-[280px] px-3" : "w-16 items-center px-0",
       )}
       initial={false}
-      animate={{
-        width: animate ? (open ? 280 : 64) : 280,
-      }}
+      {...props}
+      animate={{ width: railWidth }}
       transition={{
         duration: open ? 0.25 : 0.45,
         ease: open ? "easeOut" : [0.32, 0.72, 0, 1],
       }}
-      {...props}
-      onPointerEnter={keepOpen}
-      onPointerLeave={(event) => scheduleClose(event.relatedTarget)}
+      onPointerEnter={(event) => {
+        if (event.pointerType !== "mouse") return;
+        keepOpen();
+      }}
+      onPointerLeave={(event) => {
+        if (event.pointerType !== "mouse") return;
+        scheduleClose(event.relatedTarget);
+      }}
     >
       {children}
     </motion.aside>
@@ -175,11 +185,68 @@ export const MobileSidebar = ({
   headerActions?: React.ReactNode;
 }) => {
   const { open, setOpen } = useSidebar();
+  const pathname = usePathname();
+  const [mounted, setMounted] = useState(false);
+  const isMobile = useIsMobile();
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (window.matchMedia("(max-width: 767px)").matches) {
+      setOpen(false);
+    }
+  }, [pathname, setOpen]);
+
+  const drawer = (
+    <AnimatePresence>
+      {open ? (
+        <motion.button
+          key="sidebar-backdrop"
+          type="button"
+          aria-label="Close menu backdrop"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 z-[90] bg-black/30 md:hidden"
+          onClick={() => setOpen(false)}
+        />
+      ) : null}
+      {open ? (
+        <motion.div
+          key="sidebar-drawer"
+          initial={{ x: "-100%" }}
+          animate={{
+            x: 0,
+            transition: { duration: 0.3, ease: "easeOut" },
+          }}
+          exit={{
+            x: "-100%",
+            transition: { duration: 0.45, ease: [0.32, 0.72, 0, 1] },
+          }}
+          className={cn(
+            "fixed inset-y-0 left-0 z-[100] flex h-dvh w-[min(100%,20rem)] flex-col justify-between overflow-y-auto border-r border-[var(--sidebar-border)] bg-[var(--surface)] p-6 shadow-xl md:hidden",
+            className,
+          )}
+        >
+          <button
+            type="button"
+            aria-label="Close menu"
+            className="absolute top-3 right-3 flex size-11 items-center justify-center rounded-lg text-[var(--foreground)] hover:bg-[var(--sidebar-accent)]"
+            onClick={() => setOpen(false)}
+          >
+            <PiggyIcon name="close" />
+          </button>
+          {children}
+        </motion.div>
+      ) : null}
+    </AnimatePresence>
+  );
+
   return (
     <div
-      className={cn(
-        "flex w-full items-center justify-between border-b border-[var(--sidebar-border)] bg-[var(--surface)] px-4 py-3 md:hidden",
-      )}
+      className="relative z-40 flex w-full items-center justify-between border-b border-[var(--sidebar-border)] bg-[var(--surface)] px-4 py-2 md:hidden"
       {...props}
     >
       <div className="flex min-w-0 items-center gap-2">
@@ -194,7 +261,7 @@ export const MobileSidebar = ({
           {title}
         </p>
       </div>
-      <div className="flex h-8 shrink-0 items-center">
+      <div className="flex h-11 shrink-0 items-center">
         {headerActions}
         {headerActions ? (
           <Separator
@@ -204,52 +271,15 @@ export const MobileSidebar = ({
         ) : null}
         <button
           type="button"
-          aria-label="Open menu"
-          className="rounded-lg p-1.5 text-[var(--sidebar-foreground)] hover:bg-[var(--sidebar-accent)]"
+          aria-label={open ? "Close menu" : "Open menu"}
+          aria-expanded={open}
+          className="flex size-11 items-center justify-center rounded-lg text-[var(--sidebar-foreground)] hover:bg-[var(--sidebar-accent)]"
           onClick={() => setOpen(!open)}
         >
           <PiggyIcon name="menu" />
         </button>
       </div>
-      <AnimatePresence>
-        {open ? (
-          <motion.div
-            initial={{ x: "-100%", opacity: 0 }}
-            animate={{
-              x: 0,
-              opacity: 1,
-              transition: { duration: 0.3, ease: "easeOut" },
-            }}
-            exit={{
-              x: "-100%",
-              opacity: 0,
-              transition: { duration: 0.45, ease: [0.32, 0.72, 0, 1] },
-            }}
-            className={cn(
-              "fixed inset-0 z-[100] flex h-full w-[min(100%,20rem)] flex-col justify-between border-r border-[var(--sidebar-border)] bg-[var(--surface)] p-6 shadow-xl",
-              className,
-            )}
-          >
-            <button
-              type="button"
-              aria-label="Close menu"
-              className="absolute top-4 right-4 rounded-lg p-1.5 text-[var(--foreground)] hover:bg-[var(--sidebar-accent)]"
-              onClick={() => setOpen(false)}
-            >
-              <PiggyIcon name="close" />
-            </button>
-            {children}
-          </motion.div>
-        ) : null}
-      </AnimatePresence>
-      {open ? (
-        <button
-          type="button"
-          aria-label="Close menu backdrop"
-          className="fixed inset-0 z-[90] bg-black/30 md:hidden"
-          onClick={() => setOpen(false)}
-        />
-      ) : null}
+      {mounted && isMobile ? createPortal(drawer, document.body) : null}
     </div>
   );
 };
@@ -259,6 +289,7 @@ export const SidebarLink = ({
   className,
   active = false,
   forceLabel = false,
+  onClick,
   ...props
 }: {
   link: SidebarLinkItem;
@@ -266,7 +297,7 @@ export const SidebarLink = ({
   active?: boolean;
   forceLabel?: boolean;
 } & Omit<React.ComponentProps<typeof Link>, "href">) => {
-  const { open, animate } = useSidebar();
+  const { open, setOpen, animate } = useSidebar();
   const showLabel = forceLabel || !animate || open;
 
   return (
@@ -274,15 +305,21 @@ export const SidebarLink = ({
       href={link.href}
       title={link.label}
       className={cn(
-        "group/sidebar relative flex items-center rounded-lg transition-colors",
+        "group/sidebar relative flex touch-manipulation items-center rounded-lg transition-colors",
         showLabel
-          ? "h-10 w-full gap-2.5 px-2.5"
+          ? "h-10 w-full gap-2.5 px-2.5 max-md:min-h-11"
           : "size-10 shrink-0 justify-center self-center px-0",
         active
           ? "bg-primary-subtle font-medium text-primary-subtle-foreground"
           : "text-[var(--sidebar-foreground)] hover:bg-[var(--sidebar-accent)]/70",
         className,
       )}
+      onClick={(event) => {
+        onClick?.(event);
+        if (window.matchMedia("(max-width: 767px)").matches) {
+          setOpen(false);
+        }
+      }}
       {...props}
     >
       <span className="flex size-6 shrink-0 items-center justify-center [&_svg]:size-6">

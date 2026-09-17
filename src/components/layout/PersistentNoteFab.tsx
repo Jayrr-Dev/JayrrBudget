@@ -58,7 +58,7 @@ function storeSheetCsvFilename(tabName: string) {
 const FAB_COLLAPSED_PX = 44;
 /** Panels stack in the same fixed column as the pill, so they hug the right edge like the debug panel. */
 const FAB_DOCK_PANEL =
-  "pointer-events-auto relative max-w-[calc(100vw-1.5rem)] overflow-hidden rounded-xl border border-border bg-background text-foreground shadow-lg ring-1 ring-border/40";
+  "pointer-events-auto relative max-w-[calc(100vw-1.5rem)] overflow-hidden rounded-xl border border-border bg-background text-foreground shadow-lg ring-1 ring-border/40 max-md:w-[calc(100vw-1.5rem)]";
 const FAB_DOCK_BODY_DEFAULT_PX = 320;
 const FAB_EXPANDED_ICON_ONLY_SEGMENT_PX = 36;
 const FAB_EXPANDED_PILL_INNER_PADDING_PX = 8;
@@ -182,7 +182,7 @@ function StoreSheetTab({
             checked={isReceive}
             aria-label={`Add Analysis lines to ${tab.name}`}
             title="Receive + adds"
-            className="size-3 rounded-[3px] border-[var(--border)] after:inset-0 data-checked:border-[var(--foreground)] data-checked:bg-[var(--foreground)] data-checked:text-[var(--background)]"
+            className="size-3 rounded-[3px] border-[var(--border)] after:inset-0 max-md:size-4 data-checked:border-[var(--foreground)] data-checked:bg-[var(--foreground)] data-checked:text-[var(--background)]"
             onCheckedChange={(checked) => {
               if (checked) onReceive();
             }}
@@ -238,7 +238,7 @@ function StoreSheetPanel({
               type="button"
               aria-label="Add store sheet tab"
               title="Add tab"
-              className="inline-flex size-5 shrink-0 items-center justify-center rounded-sm text-accent hover:bg-accent-subtle hover:text-accent"
+              className="inline-flex size-5 shrink-0 touch-manipulation items-center justify-center rounded-sm text-accent max-md:size-8 hover:bg-accent-subtle hover:text-accent"
               onClick={() => actions.addTab()}
             >
               <PlusIcon className="size-3" strokeWidth={2} />
@@ -455,7 +455,7 @@ function NotesPanel({
               type="button"
               aria-label="Add note tab"
               title="Add tab"
-              className="inline-flex size-5 shrink-0 items-center justify-center rounded-sm text-accent hover:bg-accent-subtle hover:text-accent"
+              className="inline-flex size-5 shrink-0 touch-manipulation items-center justify-center rounded-sm text-accent max-md:size-8 hover:bg-accent-subtle hover:text-accent"
               onClick={() => {
                 void actions.insertTab().then((created) => {
                   setActiveId(created.id);
@@ -663,7 +663,7 @@ export function PersistentNoteFab({
   const segmentBtn = (active: boolean) =>
     isNavbar
       ? cn(
-          "relative flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-lg outline-none",
+          "relative flex size-11 shrink-0 cursor-pointer touch-manipulation items-center justify-center rounded-lg outline-none",
           "text-[var(--sidebar-foreground)] hover:bg-[var(--sidebar-accent)]",
           active && "bg-[var(--sidebar-accent)]",
           "focus-visible:ring-2 focus-visible:ring-[var(--ring)]",
@@ -813,10 +813,12 @@ export function PersistentNoteFab({
   if (isNavbar) {
     return (
       <TooltipProvider>
-        <div className="pointer-events-auto fixed top-16 right-3 z-40 flex flex-col items-end gap-2">
-          {dockedPanels}
+        <div className="pointer-events-none fixed top-14 right-3 z-40 flex max-h-[min(70dvh,calc(100dvh-4.5rem))] flex-col items-end gap-2">
+          <div className="pointer-events-auto flex max-h-full flex-col items-end gap-2 overflow-y-auto">
+            {dockedPanels}
+          </div>
         </div>
-        <div className="flex h-8 items-center gap-0.5">{actions}</div>
+        <div className="flex h-11 items-center gap-0.5">{actions}</div>
       </TooltipProvider>
     );
   }

@@ -457,6 +457,7 @@ body {
   input[type="button"]:not(:disabled),
   input[type="image"]:not(:disabled) {
     cursor: pointer;
+    touch-action: manipulation;
   }
 
   button:disabled,

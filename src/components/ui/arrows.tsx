@@ -1,20 +1,19 @@
-import { Button as ButtonPrimitive } from "@base-ui/react/button"
-import { cva, type VariantProps } from "class-variance-authority"
-import { cn } from "cn"
-import * as React from "react"
+import { Button as ButtonPrimitive } from "@base-ui/react/button";
+import { cva, type VariantProps } from "class-variance-authority";
+import { cn } from "cn";
+import * as React from "react";
 
 const ARROW_LABELS = {
   left: "Previous",
   right: "Next",
-} as const
+} as const;
 
 const arrowsVariants = cva(
-  "inline-flex shrink-0 cursor-pointer items-center justify-center border border-transparent bg-clip-padding text-sm font-medium transition-all outline-none select-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 active:translate-y-px disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0",
+  "inline-flex shrink-0 cursor-pointer touch-manipulation items-center justify-center border border-transparent bg-clip-padding text-sm font-medium transition-all outline-none select-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 active:translate-y-px disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0",
   {
     variants: {
       variant: {
-        default:
-          "bg-primary text-primary-foreground hover:bg-primary-hover",
+        default: "bg-primary text-primary-foreground hover:bg-primary-hover",
         outline:
           "border-control-border bg-surface-elevated hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50",
         secondary:
@@ -73,7 +72,7 @@ const arrowsVariants = cva(
       size: "default",
     },
   },
-)
+);
 
 function ChevronLeftIcon({ className }: { className?: string }) {
   return (
@@ -90,7 +89,7 @@ function ChevronLeftIcon({ className }: { className?: string }) {
     >
       <path d="m15 18-6-6 6-6" />
     </svg>
-  )
+  );
 }
 
 function ChevronRightIcon({ className }: { className?: string }) {
@@ -108,7 +107,7 @@ function ChevronRightIcon({ className }: { className?: string }) {
     >
       <path d="m9 18 6-6-6-6" />
     </svg>
-  )
+  );
 }
 
 function Arrows({
@@ -122,9 +121,9 @@ function Arrows({
   ...props
 }: ButtonPrimitive.Props &
   VariantProps<typeof arrowsVariants> & {
-    direction?: keyof typeof ARROW_LABELS
+    direction?: keyof typeof ARROW_LABELS;
   }) {
-  const Icon = direction === "right" ? ChevronRightIcon : ChevronLeftIcon
+  const Icon = direction === "right" ? ChevronRightIcon : ChevronLeftIcon;
 
   return (
     <ButtonPrimitive
@@ -138,7 +137,7 @@ function Arrows({
     >
       {children ?? <Icon />}
     </ButtonPrimitive>
-  )
+  );
 }
 
 function ArrowsPair({
@@ -154,12 +153,12 @@ function ArrowsPair({
   ...props
 }: React.ComponentProps<"div"> &
   Pick<VariantProps<typeof arrowsVariants>, "variant" | "size"> & {
-    previousLabel?: string
-    nextLabel?: string
-    onPrevious?: React.MouseEventHandler<HTMLButtonElement>
-    onNext?: React.MouseEventHandler<HTMLButtonElement>
-    previousDisabled?: boolean
-    nextDisabled?: boolean
+    previousLabel?: string;
+    nextLabel?: string;
+    onPrevious?: React.MouseEventHandler<HTMLButtonElement>;
+    onNext?: React.MouseEventHandler<HTMLButtonElement>;
+    previousDisabled?: boolean;
+    nextDisabled?: boolean;
   }) {
   return (
     <div
@@ -187,7 +186,7 @@ function ArrowsPair({
         onClick={onNext}
       />
     </div>
-  )
+  );
 }
 
-export { Arrows, ArrowsPair, arrowsVariants }
+export { Arrows, ArrowsPair, arrowsVariants };

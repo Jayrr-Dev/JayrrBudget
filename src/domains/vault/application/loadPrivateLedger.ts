@@ -321,6 +321,11 @@ function asLoan(
     matchMerchantClean:
       row.matchMerchantClean == null ? null : String(row.matchMerchantClean),
     matchAmount: row.matchAmount == null ? null : Number(row.matchAmount),
+    paymentFrequency:
+      row.paymentFrequency == null ? null : String(row.paymentFrequency),
+    loanType: row.loanType == null ? null : String(row.loanType),
+    rateType: row.rateType == null ? null : String(row.rateType),
+    vehicleLabel: row.vehicleLabel == null ? null : String(row.vehicleLabel),
   };
 }
 
@@ -426,49 +431,49 @@ async function decryptLedgerFromRecords(
     const recordId = row.recordId;
     const revision = row.revision;
     if (kind === "tx" || kind === "tx_batch") {
-        const tx = asTx(value, recordId, revision);
-        if (tx) ledger.transactions.push(tx);
-      } else if (kind === "account_meta") {
-        const account = asAccount(value, recordId, revision);
-        if (account) ledger.accounts.push(account);
-      } else if (kind === "category") {
-        // reserved for taxonomy prefs
-      } else if (kind === "note") {
-        if (recordId.startsWith("scratch-")) {
-          const pad = asScratch(value, recordId, revision);
-          if (pad) ledger.scratchPads.push(pad);
-        } else if (recordId.startsWith("loan-")) {
-          const loan = asLoan(value, recordId, revision);
-          if (loan) ledger.loans.push(loan);
-        } else if (recordId.startsWith("merchant-")) {
-          const merchant = asMerchant(value, recordId, revision, {
-            createdAt: row.createdAt || undefined,
-            updatedAt: row.updatedAt || undefined,
-          });
-          if (merchant) ledger.merchants.push(merchant);
+      const tx = asTx(value, recordId, revision);
+      if (tx) ledger.transactions.push(tx);
+    } else if (kind === "account_meta") {
+      const account = asAccount(value, recordId, revision);
+      if (account) ledger.accounts.push(account);
+    } else if (kind === "category") {
+      // reserved for taxonomy prefs
+    } else if (kind === "note") {
+      if (recordId.startsWith("scratch-")) {
+        const pad = asScratch(value, recordId, revision);
+        if (pad) ledger.scratchPads.push(pad);
+      } else if (recordId.startsWith("loan-")) {
+        const loan = asLoan(value, recordId, revision);
+        if (loan) ledger.loans.push(loan);
+      } else if (recordId.startsWith("merchant-")) {
+        const merchant = asMerchant(value, recordId, revision, {
+          createdAt: row.createdAt || undefined,
+          updatedAt: row.updatedAt || undefined,
+        });
+        if (merchant) ledger.merchants.push(merchant);
+      } else {
+        const note = asNote(value, recordId, revision);
+        if (note) ledger.notes.push(note);
+      }
+    } else if (kind === "document") {
+      const ocr = asOcrDoc(value, recordId, revision);
+      if (ocr) {
+        ocrDocs.push(ocr);
+      } else {
+        const loanOcr = asLoanOcrDoc(value, recordId, revision);
+        if (loanOcr) {
+          loanOcrDocs.push(loanOcr);
         } else {
-          const note = asNote(value, recordId, revision);
-          if (note) ledger.notes.push(note);
-        }
-      } else if (kind === "document") {
-        const ocr = asOcrDoc(value, recordId, revision);
-        if (ocr) {
-          ocrDocs.push(ocr);
-        } else {
-          const loanOcr = asLoanOcrDoc(value, recordId, revision);
-          if (loanOcr) {
-            loanOcrDocs.push(loanOcr);
+          const loanDoc = asLoanDocument(value, recordId, revision);
+          if (loanDoc) {
+            ledger.loanDocuments.push(loanDoc);
           } else {
-            const loanDoc = asLoanDocument(value, recordId, revision);
-            if (loanDoc) {
-              ledger.loanDocuments.push(loanDoc);
-            } else {
-              const log = asStatementLog(value, recordId, revision);
-              if (log) ledger.statementLogs.push(log);
-            }
+            const log = asStatementLog(value, recordId, revision);
+            if (log) ledger.statementLogs.push(log);
           }
         }
       }
+    }
   }
 
   for (const ocr of ocrDocs) {
@@ -567,11 +572,19 @@ export async function loadPrivateLedger(
 
   const vaultUpdatedAt = input.vaultUpdatedAt ?? 0;
   if (vaultUpdatedAt <= 0) {
-    return loadPrivateLedgerUncached(client, { ...input, vaultUpdatedAt }, masterKey);
+    return loadPrivateLedgerUncached(
+      client,
+      { ...input, vaultUpdatedAt },
+      masterKey,
+    );
   }
 
   const key = memoKey({ ...input, vaultUpdatedAt });
-  if (lastLedger && lastLedger.key === key && lastLedger.masterKey === masterKey) {
+  if (
+    lastLedger &&
+    lastLedger.key === key &&
+    lastLedger.masterKey === masterKey
+  ) {
     logVaultCacheDebug("cache-hit", "Reused decrypted ledger in memory", {
       vaultId: input.vaultId,
       updatedAt: vaultUpdatedAt,
@@ -648,11 +661,15 @@ async function loadPrivateLedgerUncached(
         updatedAt: vaultUpdatedAt,
         records,
       });
-      logVaultCacheDebug("cache-write", "Wrote ciphertext snapshot to IndexedDB", {
-        vaultId: input.vaultId,
-        updatedAt: vaultUpdatedAt,
-        records: records.length,
-      });
+      logVaultCacheDebug(
+        "cache-write",
+        "Wrote ciphertext snapshot to IndexedDB",
+        {
+          vaultId: input.vaultId,
+          updatedAt: vaultUpdatedAt,
+          records: records.length,
+        },
+      );
     }
   }
 

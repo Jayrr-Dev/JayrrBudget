@@ -37,6 +37,7 @@ import {
   LOAN_TYPES,
   RATE_TYPES,
   loanTypeMeta,
+  officialLoanName,
   type LoanType,
   type RateType,
 } from "@/domains/loans/domain/loanTypes";
@@ -68,9 +69,9 @@ import { usePrivateLedger } from "@/domains/vault/ui/usePrivateLedger";
 import { logMistralOcrUsage } from "@/shared/debug/aiUsageDebug";
 import { errorMessage } from "@/shared/lib/error-message";
 import { api } from "@convex/_generated/api";
+import { cn } from "cn";
 import { useConvex, useMutation } from "convex/react";
 import { Info, UploadIcon } from "lucide-react";
-import { cn } from "cn";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -314,12 +315,16 @@ export function AddLoanDialog({ open, onOpenChange }: AddLoanDialogProps) {
             value: {
               accountId,
               name: form.name.trim(),
-              officialName: form.name.trim(),
+              officialName: officialLoanName(
+                form.name.trim(),
+                form.loanType,
+                form.vehicleLabel.trim() || null,
+              ),
               mask: null,
-              type: "loan",
-              subtype: form.loanType,
+              type: form.loanType === "mortgage" ? "mortgage" : "loan",
+              subtype: typeMeta.subtype,
               currentBalance: principalStart,
-              availableBalance: null,
+              availableBalance: principalStart,
               isoCurrencyCode: "CAD",
             },
             expectedRevision: null,
@@ -332,7 +337,12 @@ export function AddLoanDialog({ open, onOpenChange }: AddLoanDialogProps) {
           paymentAmount,
           firstPaymentDate: form.firstPaymentDate,
           paymentCount: Math.floor(paymentCount),
+          paymentFrequency: form.paymentFrequency,
+          loanType: form.loanType,
+          rateType: form.rateType,
+          vehicleLabel: form.vehicleLabel.trim() || null,
           matchMerchantClean: form.matchMerchantClean.trim() || null,
+          matchAmount: paymentAmount,
           expectedRevision: null,
         });
         if (pendingFileHash) {
