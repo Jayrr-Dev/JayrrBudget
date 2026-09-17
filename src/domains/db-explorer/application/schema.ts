@@ -250,6 +250,7 @@ const FALLBACK_COLUMNS: Record<string, string[]> = {
     "title",
     "message",
     "pingType",
+    "pingTypes",
     "cycle",
     "trigger",
     "triggerCount",

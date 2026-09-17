@@ -39,7 +39,9 @@ function PiggyPingsTitleInfo() {
             Reminders for you, or ones Piggy creates in chat.
           </PopoverDescription>
           <ul className="mt-1.5 list-disc space-y-1 pl-4 text-muted-foreground">
-            <li>Toast, email, popup, or banner</li>
+            <li>
+              Toast, email, popup, and banner. One ping can use more than one
+            </li>
             <li>
               Cycle from the start date: weekly, weekdays, a date, monthly, EOM,
               or SOM
@@ -66,7 +68,7 @@ export default function PiggyPingsPage() {
           </h1>
           <p className="sr-only">
             Reminders for you, or ones Piggy creates in chat. Toast, email,
-            popup, or banner. Blank start or end means that side never closes.
+            popup, and banner. Blank start or end means that side never closes.
           </p>
         </div>
         <CreatePingDialog open={createOpen} onOpenChange={setCreateOpen} />

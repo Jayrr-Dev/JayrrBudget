@@ -576,6 +576,16 @@ export default defineSchema({
       v.literal("Popup"),
       v.literal("Banner"),
     ),
+    pingTypes: v.optional(
+      v.array(
+        v.union(
+          v.literal("Toast"),
+          v.literal("Email"),
+          v.literal("Popup"),
+          v.literal("Banner"),
+        ),
+      ),
+    ),
     cycle: v.string(),
     trigger: v.union(v.string(), v.null()),
     triggerCount: v.number(),

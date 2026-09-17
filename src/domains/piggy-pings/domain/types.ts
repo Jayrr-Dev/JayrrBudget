@@ -1,6 +1,21 @@
 export const PING_TYPES = ["Toast", "Email", "Popup", "Banner"] as const;
 export type PingType = (typeof PING_TYPES)[number];
 
+export function normalizePingTypes(types: readonly string[]): PingType[] {
+  return PING_TYPES.filter((type) => types.includes(type));
+}
+
+export function togglePingType(
+  selected: readonly PingType[],
+  type: PingType,
+): PingType[] {
+  if (selected.includes(type)) {
+    const next = selected.filter((item) => item !== type);
+    return next.length > 0 ? next : [...selected];
+  }
+  return normalizePingTypes([...selected, type]);
+}
+
 export const CYCLE_MODES = ["Weekly", "Monthly", "EOM", "SOM"] as const;
 export const CYCLE_WEEKDAYS = [
   "Mon",

@@ -1,7 +1,10 @@
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
+import { mutation, query } from "./_generated/server";
 import { requireUser } from "./lib/auth";
+
+const PING_TYPE_ORDER = ["Toast", "Email", "Popup", "Banner"] as const;
+type PingType = (typeof PING_TYPE_ORDER)[number];
 
 const pingTypeValidator = v.union(
   v.literal("Toast"),
@@ -10,12 +13,37 @@ const pingTypeValidator = v.union(
   v.literal("Banner"),
 );
 
+function normalizePingTypes(types: readonly string[]): PingType[] {
+  const unique = PING_TYPE_ORDER.filter((type) => types.includes(type));
+  const first = unique[0];
+  if (!first) {
+    throw new Error("Pick at least one ping type");
+  }
+  return [first, ...unique.slice(1)];
+}
+
+function primaryPingType(types: PingType[]): PingType {
+  const first = types[0];
+  if (!first) {
+    throw new Error("Pick at least one ping type");
+  }
+  return first;
+}
+
+function typesFromDoc(doc: Doc<"piggyPings">): PingType[] {
+  if (doc.pingTypes && doc.pingTypes.length > 0) {
+    return normalizePingTypes(doc.pingTypes);
+  }
+  return [doc.pingType];
+}
+
 const pingRecord = v.object({
   id: v.id("piggyPings"),
   name: v.string(),
   title: v.string(),
   message: v.string(),
   pingType: pingTypeValidator,
+  pingTypes: v.array(pingTypeValidator),
   cycle: v.string(),
   trigger: v.union(v.string(), v.null()),
   triggerCount: v.number(),
@@ -58,12 +86,14 @@ function ownerLabel(user: Doc<"users">) {
 }
 
 function toRecord(doc: Doc<"piggyPings">, owner: string) {
+  const pingTypes = typesFromDoc(doc);
   return {
     id: doc._id,
     name: doc.name,
     title: doc.title,
     message: doc.message,
-    pingType: doc.pingType,
+    pingType: primaryPingType(pingTypes),
+    pingTypes,
     cycle: doc.cycle,
     trigger: doc.trigger,
     triggerCount: doc.triggerCount,
@@ -77,7 +107,9 @@ function toRecord(doc: Doc<"piggyPings">, owner: string) {
 }
 
 async function ownPing(
-  ctx: { db: { get: (id: Id<"piggyPings">) => Promise<Doc<"piggyPings"> | null> } },
+  ctx: {
+    db: { get: (id: Id<"piggyPings">) => Promise<Doc<"piggyPings"> | null> };
+  },
   userId: Id<"users">,
   pingId: Id<"piggyPings">,
 ) {
@@ -109,7 +141,8 @@ export const create = mutation({
     name: v.string(),
     title: v.string(),
     message: v.string(),
-    pingType: pingTypeValidator,
+    pingType: v.optional(pingTypeValidator),
+    pingTypes: v.optional(v.array(pingTypeValidator)),
     cycle: v.string(),
     trigger: optionalText,
     startDate: optionalText,
@@ -121,12 +154,17 @@ export const create = mutation({
   handler: async (ctx, args) => {
     const user = await requireUser(ctx);
     const now = Date.now();
+    const fromList = args.pingTypes ?? [];
+    const pingTypes = normalizePingTypes(
+      fromList.length > 0 ? fromList : args.pingType ? [args.pingType] : [],
+    );
     const id = await ctx.db.insert("piggyPings", {
       userId: user._id,
       name: requiredText(args.name, "Name", MAX_NAME),
       title: requiredText(args.title, "Title", MAX_TITLE),
       message: requiredText(args.message, "Message", MAX_MESSAGE),
-      pingType: args.pingType,
+      pingType: primaryPingType(pingTypes),
+      pingTypes,
       cycle: requiredText(args.cycle, "Cycle", MAX_CYCLE),
       trigger: optionalTrim(args.trigger, MAX_CYCLE),
       triggerCount: 0,
@@ -150,6 +188,7 @@ export const update = mutation({
     title: v.optional(v.string()),
     message: v.optional(v.string()),
     pingType: v.optional(pingTypeValidator),
+    pingTypes: v.optional(v.array(pingTypeValidator)),
     cycle: v.optional(v.string()),
     trigger: optionalText,
     startDate: optionalText,
@@ -171,7 +210,15 @@ export const update = mutation({
     if (args.message !== undefined) {
       patch.message = requiredText(args.message, "Message", MAX_MESSAGE);
     }
-    if (args.pingType !== undefined) patch.pingType = args.pingType;
+    if (args.pingTypes !== undefined) {
+      const pingTypes = normalizePingTypes(args.pingTypes);
+      patch.pingTypes = pingTypes;
+      patch.pingType = primaryPingType(pingTypes);
+    } else if (args.pingType !== undefined) {
+      const pingTypes = normalizePingTypes([args.pingType]);
+      patch.pingTypes = pingTypes;
+      patch.pingType = primaryPingType(pingTypes);
+    }
     if (args.cycle !== undefined) {
       patch.cycle = requiredText(args.cycle, "Cycle", MAX_CYCLE);
     }

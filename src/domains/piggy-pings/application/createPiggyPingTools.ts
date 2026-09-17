@@ -11,7 +11,14 @@ const pingFields = {
   name: z.string().describe("Short label, e.g. Rent reminder"),
   title: z.string().describe("Headline shown on the ping"),
   message: z.string().describe("Body of the reminder"),
-  pingType: pingTypeSchema.describe("Toast, Email, Popup, or Banner"),
+  pingTypes: z
+    .array(pingTypeSchema)
+    .min(1)
+    .optional()
+    .describe("Toast, Email, Popup, and/or Banner. Pick one or more."),
+  pingType: pingTypeSchema
+    .optional()
+    .describe("Single type if pingTypes is omitted."),
   cycle: z
     .string()
     .describe(
@@ -38,7 +45,7 @@ export function createPiggyPingTools(client: ConvexHttpClient) {
   return {
     list_piggy_pings: tool({
       description:
-        "List this user's Piggy Pings reminders (name, title, type, cycle, dates).",
+        "List this user's Piggy Pings reminders (name, title, types, cycle, dates).",
       inputSchema: z.object({}),
       execute: async () => {
         return await client.query(api.piggyPings.list, {});
@@ -47,19 +54,25 @@ export function createPiggyPingTools(client: ConvexHttpClient) {
 
     create_piggy_ping: tool({
       description:
-        "Create a Piggy Ping reminder for the signed-in user. Leave startDate or endDate empty for an open-ended window. Do not set trigger; that comes later.",
+        "Create a Piggy Ping reminder for the signed-in user. Pass pingTypes for one or more of Toast, Email, Popup, Banner. Leave startDate or endDate empty for an open-ended window. Do not set trigger; that comes later.",
       inputSchema: z.object(pingFields),
       execute: async (input) => {
+        const pingTypes =
+          input.pingTypes && input.pingTypes.length > 0
+            ? input.pingTypes
+            : input.pingType
+              ? [input.pingType]
+              : [];
         return await client.mutation(api.piggyPings.create, {
           name: input.name,
           title: input.title,
           message: input.message,
-          pingType: input.pingType,
-          cycle: input.cycle,
+          pingTypes,
           startDate: input.startDate ?? null,
           endDate: input.endDate ?? null,
           notes: input.notes ?? null,
           trigger: null,
+          cycle: input.cycle,
           isActive: input.isActive ?? true,
         });
       },

@@ -161,7 +161,7 @@ export async function POST(request: Request) {
       "",
       "Coordinate space: x increases right, y increases down. Origin is top-left.",
       "You may hire up to 2 helper piggies with hire_piggy, then ask_piggy_helper. They research numbers through crew mail. You still draw and talk to the user.",
-      "Reminders: create_piggy_ping for toast/email/popup/banner. Cycle from the start date (Weekly, Mon, Mon,Tue, 9/16, 9/16/26, Monthly, EOM, SOM). Empty dates are indefinite. Leave trigger blank.",
+      "Reminders: create_piggy_ping for toast/email/popup/banner. pingTypes can include more than one. Cycle from the start date (Weekly, Mon, Mon,Tue, 9/16, 9/16/26, Monthly, EOM, SOM). Empty dates are indefinite. Leave trigger blank.",
       "Spend caps: create_budget for a named amount cap. warningThreshold / overageThreshold are percents (defaults 80 / 100). classLookup from taxonomy names. list_budgets first if they may already have one.",
       ...(jevOn
         ? [

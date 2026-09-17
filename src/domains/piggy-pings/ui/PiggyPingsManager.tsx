@@ -51,6 +51,7 @@ import {
   isCycleDateValue,
   isCyclePresetOn,
   toggleCyclePreset,
+  togglePingType,
   type PingType,
 } from "@/domains/piggy-pings/domain/types";
 import { api } from "@convex/_generated/api";
@@ -70,6 +71,7 @@ type PingRow = {
   title: string;
   message: string;
   pingType: PingType;
+  pingTypes: PingType[];
   cycle: string;
   trigger: string | null;
   triggerCount: number;
@@ -289,25 +291,28 @@ function PingActions({ ping }: { ping: PingRow }) {
   const [bannerOpen, setBannerOpen] = useState(false);
 
   function handleTest() {
-    if (ping.pingType === "Popup") {
-      setPopupOpen(true);
-      return;
-    }
-    if (ping.pingType === "Banner") {
-      setBannerOpen(true);
-      return;
-    }
-    if (ping.pingType === "Email") {
-      toast.info(ping.title, {
-        description: `${ping.message}\n\nEmail send is not wired yet. This is the preview.`,
+    const types = ping.pingTypes.length > 0 ? ping.pingTypes : [ping.pingType];
+    for (const type of types) {
+      if (type === "Popup") {
+        setPopupOpen(true);
+        continue;
+      }
+      if (type === "Banner") {
+        setBannerOpen(true);
+        continue;
+      }
+      if (type === "Email") {
+        toast.info(ping.title, {
+          description: `${ping.message}\n\nEmail send is not wired yet. This is the preview.`,
+          duration: 8000,
+        });
+        continue;
+      }
+      toast.message(ping.title, {
+        description: ping.message,
         duration: 8000,
       });
-      return;
     }
-    toast.message(ping.title, {
-      description: ping.message,
-      duration: 8000,
-    });
   }
 
   async function handleDuplicate() {
@@ -316,7 +321,8 @@ function PingActions({ ping }: { ping: PingRow }) {
         name: copyName(ping.name),
         title: ping.title,
         message: ping.message,
-        pingType: ping.pingType,
+        pingType: ping.pingTypes[0] ?? ping.pingType,
+        pingTypes: ping.pingTypes,
         cycle: ping.cycle,
         trigger: ping.trigger,
         startDate: ping.startDate,
@@ -450,12 +456,22 @@ const columns = columnHelper.columns([
     cell: ({ row }) => <ActiveToggle ping={row.original} />,
     meta: { width: "5.5rem", nowrap: true },
   }),
-  columnHelper.accessor("pingType", {
+  columnHelper.accessor("pingTypes", {
     header: "Type",
-    cell: ({ getValue }) => (
-      <Badge variant="outline">{String(getValue())}</Badge>
-    ),
-    meta: { width: "6.5rem", nowrap: true },
+    cell: ({ row, getValue }) => {
+      const types = (getValue() as PingType[] | undefined) ?? [];
+      const shown = types.length > 0 ? types : [row.original.pingType];
+      return (
+        <span className="flex flex-wrap gap-1">
+          {shown.map((type) => (
+            <Badge key={type} variant="outline">
+              {type}
+            </Badge>
+          ))}
+        </span>
+      );
+    },
+    meta: { width: "9rem", nowrap: true },
   }),
   columnHelper.accessor("cycle", {
     header: () => (
@@ -526,9 +542,6 @@ const columns = columnHelper.columns([
   }),
 ]);
 
-const SELECT_CLASS =
-  "h-9 w-full min-w-0 rounded-lg border border-control-border bg-surface-elevated px-3 py-2 text-sm text-foreground outline-none focus-visible:border-primary focus-visible:ring-3 focus-visible:ring-ring/50";
-
 const PING_FORM_STEPS = [
   { id: 1, title: "What to send" },
   { id: 2, title: "When it fires" },
@@ -556,7 +569,7 @@ function PingFormDialog({
   const [name, setName] = useState("");
   const [title, setTitle] = useState("");
   const [message, setMessage] = useState("");
-  const [pingType, setPingType] = useState<PingType>("Toast");
+  const [pingTypes, setPingTypes] = useState<PingType[]>(["Toast"]);
   const [cycle, setCycle] = useState("Weekly");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
@@ -570,7 +583,7 @@ function PingFormDialog({
     setName("");
     setTitle("");
     setMessage("");
-    setPingType("Toast");
+    setPingTypes(["Toast"]);
     setCycle("Weekly");
     setStartDate("");
     setEndDate("");
@@ -583,7 +596,7 @@ function PingFormDialog({
     setName(row.name);
     setTitle(row.title);
     setMessage(row.message);
-    setPingType(row.pingType);
+    setPingTypes(row.pingTypes.length > 0 ? row.pingTypes : [row.pingType]);
     setCycle(row.cycle);
     setStartDate(row.startDate ?? "");
     setEndDate(row.endDate ?? "");
@@ -642,7 +655,7 @@ function PingFormDialog({
           name,
           title,
           message,
-          pingType,
+          pingTypes,
           cycle,
           startDate: startDate || null,
           endDate: endDate || null,
@@ -654,7 +667,7 @@ function PingFormDialog({
           name,
           title,
           message,
-          pingType,
+          pingTypes,
           cycle,
           startDate: startDate || null,
           endDate: endDate || null,
@@ -711,7 +724,7 @@ function PingFormDialog({
                       : "Save a reminder for you, or one Piggy can also create in chat."}
                   </PopoverDescription>
                   <ul className="mt-1.5 list-disc space-y-1 pl-4 text-muted-foreground">
-                    <li>Toast, email, popup, or banner</li>
+                    <li>Toast, email, popup, and banner. Pick one or more</li>
                     <li>Cycle from the start date</li>
                     <li>Blank start or end means that side never closes</li>
                   </ul>
@@ -789,20 +802,20 @@ function PingFormDialog({
                 />
               </div>
               <div className="grid gap-1.5">
-                <Label htmlFor={`${formId}-type`}>Ping type</Label>
-                <select
-                  id={`${formId}-type`}
-                  className={SELECT_CLASS}
-                  value={pingType}
-                  onChange={(e) => setPingType(e.target.value as PingType)}
-                  disabled={submitting}
-                >
+                <Label>Ping type</Label>
+                <div className="flex flex-wrap gap-1">
                   {PING_TYPES.map((type) => (
-                    <option key={type} value={type}>
-                      {type}
-                    </option>
+                    <CycleChip
+                      key={type}
+                      label={type}
+                      pressed={pingTypes.includes(type)}
+                      disabled={submitting}
+                      onToggle={() =>
+                        setPingTypes(togglePingType(pingTypes, type))
+                      }
+                    />
                   ))}
-                </select>
+                </div>
               </div>
             </>
           ) : null}
