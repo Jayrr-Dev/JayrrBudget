@@ -29,6 +29,8 @@ const TABLE_META = {
   app_modules: { convex: "appModules", scope: "ledger" },
   scratch_notes: { convex: "scratchNotes", scope: "ledger" },
   canvas_scenes: { convex: "canvasScenes", scope: "ledger" },
+  piggy_pings: { convex: "piggyPings", scope: "ledger" },
+  budgets: { convex: "budgets", scope: "ledger" },
   // Auth / users (global admin view)
   users: { convex: "users", scope: "auth" },
   auth_sessions: { convex: "authSessions", scope: "auth" },

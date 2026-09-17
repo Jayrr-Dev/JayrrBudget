@@ -3,6 +3,8 @@ import type { CanvasSnapshot } from "@/domains/canvas/domain/canvasContext";
 import { CANVAS_SYSTEM_PROMPT } from "@/domains/canvas/domain/canvasSystemPrompt";
 import { createCanvasTools } from "@/domains/canvas/domain/canvasTools";
 import { createLedgerReadTools } from "@/domains/ledger-ai/application/createLedgerAiTools";
+import { createBudgetTools } from "@/domains/budgets/application/createBudgetTools";
+import { createPiggyPingTools } from "@/domains/piggy-pings/application/createPiggyPingTools";
 import { createPiggyCrewTools } from "@/domains/ledger-ai/application/piggyCrew.server";
 import {
   createPiggyMemoryTools,
@@ -150,6 +152,8 @@ export async function POST(request: Request) {
       "",
       "Coordinate space: x increases right, y increases down. Origin is top-left.",
       "You may hire up to 2 helper piggies with hire_piggy, then ask_piggy_helper. They research numbers through crew mail. You still draw and talk to the user.",
+      "Reminders: create_piggy_ping for toast/email/popup/banner. Cycle from the start date (Weekly, Mon, Mon,Tue, 9/16, 9/16/26, Monthly, EOM, SOM). Empty dates are indefinite. Leave trigger blank.",
+      "Spend caps: create_budget for a named amount cap. warningThreshold / overageThreshold are percents (defaults 80 / 100). classLookup from taxonomy names. list_budgets first if they may already have one.",
       ...(serverLedger
         ? [
             "You can look things up yourself: list_accounts, search_transactions, summarize_spend (both take an account filter), and list_statements. Use them when the BUDGET DATA below is not enough, for example one card's spend, a statement's closing balance, or an older month.",
@@ -177,6 +181,8 @@ export async function POST(request: Request) {
       messages: modelMessages,
       tools: {
         ...createPiggyMemoryTools(convex),
+        ...createPiggyPingTools(convex),
+        ...createBudgetTools(convex),
         ...(serverLedger
           ? { ...createLedgerReadTools(convex), web_search: webSearchTool() }
           : {}),

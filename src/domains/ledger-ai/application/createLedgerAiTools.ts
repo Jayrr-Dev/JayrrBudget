@@ -14,6 +14,8 @@ import {
   EXPORT_FILE_TOOL_NAME,
   exportFileTool,
 } from "@/domains/ledger-ai/domain/exportFileTool";
+import { createBudgetTools } from "@/domains/budgets/application/createBudgetTools";
+import { createPiggyPingTools } from "@/domains/piggy-pings/application/createPiggyPingTools";
 import { invalidateConvexUserCache } from "@/shared/convex/cachedRead";
 import { api } from "@/shared/convex/httpClient";
 import type { Id } from "@convex/_generated/dataModel";
@@ -201,6 +203,8 @@ function createWorkspaceTools(
     [EXPORT_FILE_TOOL_NAME]: exportFileTool,
     [SHOW_SKETCH_TOOL_NAME]: showSketchTool,
     [APPLY_BUDGET_EDIT_TOOL_NAME]: applyBudgetEditTool,
+    ...createPiggyPingTools(client),
+    ...createBudgetTools(client),
 
     list_store_sheet: tool({
       description:

@@ -33,6 +33,16 @@ export const MODULE_CATALOG: readonly ModuleCatalogEntry[] = [
     isCore: false,
   },
   {
+    slug: "budgets",
+    name: "Budgets",
+    description: "Spend caps Piggy can set and you can edit.",
+    href: "/budgets",
+    icon: "IconWallet",
+    category: "finance",
+    sortOrder: 17,
+    isCore: false,
+  },
+  {
     slug: "accounts",
     name: "Accounts",
     description: "Linked and statement accounts.",
@@ -90,6 +100,16 @@ export const MODULE_CATALOG: readonly ModuleCatalogEntry[] = [
     icon: "IconLayoutBoard",
     category: "core",
     sortOrder: 50,
+    isCore: false,
+  },
+  {
+    slug: "piggy-pings",
+    name: "Piggy Pings",
+    description: "Reminders Piggy can send as toast, email, popup, or banner.",
+    href: "/piggy-pings",
+    icon: "IconBell",
+    category: "core",
+    sortOrder: 55,
     isCore: false,
   },
   {

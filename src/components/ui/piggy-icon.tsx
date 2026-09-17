@@ -4,8 +4,8 @@ import { cn } from "@/lib/utils";
 export type PiggyIconName =
   | "overview" | "accounts" | "transactions" | "merchants"
   | "classifications" | "analysis" | "statements" | "canvas"
-  | "issues" | "database" | "modules" | "service" | "users"
-  | "revenue" | "profile" | "logout" | "sheet" | "notes" | "menu" | "close";
+  | "issues" | "pings" | "database" | "modules" | "service" | "users"
+  | "revenue" | "budgets" | "profile" | "logout" | "sheet" | "notes" | "menu" | "close";
 
 /** Decorative artwork; the containing link/button supplies its accessible name. */
 export function PiggyIcon({ name, className }: { name: PiggyIconName; className?: string }) {

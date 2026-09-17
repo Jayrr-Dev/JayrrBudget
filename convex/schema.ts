@@ -561,6 +561,50 @@ export default defineSchema({
     updatedAt: v.number(),
   }).index("by_userId", ["userId"]),
 
+  /**
+   * Piggy Pings: owner-scoped reminders. Empty startDate or endDate means
+   * that bound is indefinite. trigger is reserved for a later engine.
+   */
+  piggyPings: defineTable({
+    userId: v.id("users"),
+    name: v.string(),
+    title: v.string(),
+    message: v.string(),
+    pingType: v.union(
+      v.literal("Toast"),
+      v.literal("Email"),
+      v.literal("Popup"),
+      v.literal("Banner"),
+    ),
+    cycle: v.string(),
+    trigger: v.union(v.string(), v.null()),
+    triggerCount: v.number(),
+    isActive: v.optional(v.boolean()),
+    startDate: v.union(v.string(), v.null()),
+    endDate: v.union(v.string(), v.null()),
+    notes: v.union(v.string(), v.null()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_userId", ["userId"]),
+
+  /**
+   * Spend caps. classLookup / descriptionLookup are name fragments for
+   * later matching against classifications and ledger descriptions.
+   * warningThreshold / overageThreshold are percent of amount (0–100+).
+   */
+  budgets: defineTable({
+    userId: v.id("users"),
+    name: v.string(),
+    classLookup: v.union(v.string(), v.null()),
+    descriptionLookup: v.union(v.string(), v.null()),
+    amount: v.number(),
+    warningThreshold: v.number(),
+    overageThreshold: v.number(),
+    isActive: v.boolean(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_userId", ["userId"]),
+
   /** Per-user AI preferences for that owner's statement PDF imports only. */
   userAiRules: defineTable({
     userId,

@@ -25,6 +25,8 @@ const ROLE_MODULES: Record<UserRole, readonly string[]> = {
     "classifications",
     "statements",
     "analysis",
+    "budgets",
+    "piggy-pings",
     "issues",
   ],
   premium: [
@@ -35,7 +37,9 @@ const ROLE_MODULES: Record<UserRole, readonly string[]> = {
     "classifications",
     "statements",
     "analysis",
+    "budgets",
     "canvas",
+    "piggy-pings",
     "issues",
   ],
   admin: [
@@ -46,7 +50,9 @@ const ROLE_MODULES: Record<UserRole, readonly string[]> = {
     "classifications",
     "statements",
     "analysis",
+    "budgets",
     "canvas",
+    "piggy-pings",
     "users",
     "revenue",
     "issues",

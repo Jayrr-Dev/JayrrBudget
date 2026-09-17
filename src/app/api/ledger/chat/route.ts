@@ -4,6 +4,7 @@ import {
 } from "@/domains/ledger-ai/application/createDocumentTools";
 import { createLedgerAiTools } from "@/domains/ledger-ai/application/createLedgerAiTools";
 import { PIGGY_VOICE_LINES } from "@/domains/ledger-ai/domain/piggyVoice";
+import { formatTaxonomyPrompt } from "@/domains/ledger-ai/domain/taxonomyPrompt";
 import { getLedgerAiContext } from "@/domains/ledger-ai/application/getLedgerAiContext";
 import {
   createPiggyMemoryTools,
@@ -88,6 +89,16 @@ export async function POST(request: Request) {
     } = extractPiggyDocuments(body.messages ?? []);
     const client = await getAuthenticatedConvexClient();
     const piggyUser = await loadPiggyUserContext(client);
+    // Taxonomy names are plaintext in Convex in both modes, so Piggy always
+    // sees the real Section > Category > Subcategory tree.
+    let taxonomyPrompt: string;
+    try {
+      taxonomyPrompt = formatTaxonomyPrompt(
+        await client.query(api.classifications.list, {}),
+      );
+    } catch (error) {
+      taxonomyPrompt = `TAXONOMY unavailable: ${errorMessage(error, "could not load")}. Call list_taxonomy before choosing names.`;
+    }
     let context: unknown;
     if (useClientBudget) {
       let notes: unknown = [];
@@ -102,9 +113,6 @@ export async function POST(request: Request) {
           note: "Encrypted vault: store sheet snapshot missing.",
         },
         notes,
-        taxonomy: {
-          note: "Encrypted vault: taxonomy edits from this chat are off.",
-        },
       };
     } else {
       try {
@@ -223,7 +231,11 @@ export async function POST(request: Request) {
       "Budget edits: update_transaction (one row) or update_transactions (many ids). Both take description, date, amount, section, category, subcategory, spread, addTags, removeTags, merchant in one call. Only pass fields the user asked to change; pass null to clear.",
       "Never ask the user for a transaction id. Never tell them to open the transaction list or click category fields. You make the edit with a tool.",
       "When they paste or describe a row, call apply_budget_edit (always) or update_transaction with match: date as YYYY-MM-DD, amount, and a distinctive fragment of the description. If the tool returns candidates, use ask_user so they pick, then call again. For many rows, search_transactions first, then update_transactions.",
-      "Setting a subcategory fills in its category and section; setting a section drops a category that no longer fits. Use list_taxonomy to reuse existing names before inventing new ones.",
+      "Setting a subcategory fills in its category and section; setting a section drops a category that no longer fits.",
+      "Categorizing: pick section, category, and subcategory only from the TAXONOMY tree below, copied exactly. Choose the most specific match (subcategory when one fits, else category, else section). Never pair a subcategory with a different category or section than the tree shows. If nothing fits, ask_user with 2 to 4 real names from the tree, or offer to create a new one; do not invent a name silently. list_taxonomy returns the same tree with ids if you need them.",
+      useClientBudget
+        ? "Encrypted vault: taxonomy edits (create/rename sections, categories, subcategories) from this chat are off."
+        : "",
       "To fix a whole payee, use recategorize_matching with merchant or query (dryRun: true to preview). rename_descriptions renames every row with an exact description match.",
       "Taxonomy names and descriptions: create_section / update_section / create_category / update_category / create_subcategory / update_subcategory. Renames flow to linked transactions.",
       "create_transaction adds a manual line; call list_accounts first. Positive amount = spend, negative = money in.",
@@ -235,6 +247,8 @@ export async function POST(request: Request) {
       "After filing a document, confirm in one line: what it was, the account or loan name, and the row count. If a loan is missing terms, ask_user for exactly those fields and retry with overrides. Attachments only live for the message they were sent with; if you need one again, ask the user to attach it again.",
       documentError ? `Attachment warning to relay to the user: ${documentError}` : "",
       "For the store sheet, use add_store_sheet_row or remove_store_sheet_row.",
+      "Reminders: use create_piggy_ping when they want a toast, email, popup, or banner reminder. cycle is Weekly, Monthly, EOM (end of month), SOM (start of month), weekdays like Mon or Mon,Tue, a yearly day like 9/16, or a one-off date like 9/16/26. Empty startDate or endDate means that bound is indefinite. Leave trigger blank. list_piggy_pings to review. delete_piggy_ping only after they confirm.",
+      "Spend caps: use create_budget when they want a budget. amount is the cap. warningThreshold and overageThreshold are percents of that cap (defaults 80 and 100). classLookup is a section, category, or subcategory name from list_taxonomy. descriptionLookup is an optional merchant or description fragment. list_budgets to review existing ones before creating a duplicate.",
       "Notes: the user's note tabs are in the context and via list_notes. To save something new, use create_note (new tab) or append_note (adds to the end, keeps what is there). Never wipe a note on your own. replace_note is only for when the user explicitly asks to rewrite or clear a note; tell them what will be lost, get a yes, then pass confirmed: true.",
       "Confirm what changed in one short sentence, including how many rows.",
       "Do not mention being an AI model. You are Piggy.",
@@ -244,6 +258,8 @@ export async function POST(request: Request) {
         : "Write tools are available for this user's plaintext budget, store sheet, and notes. Prefer apply_budget_edit or update_transaction over instructions.",
       "",
       ...piggyUser.systemLines,
+      "",
+      taxonomyPrompt,
       "",
       "LEDGER DATA (JSON):",
       JSON.stringify(context),
