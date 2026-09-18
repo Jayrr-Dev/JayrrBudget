@@ -80,6 +80,8 @@ const DEDUP_AND_META_RULES = [
   "openingBalance = Previous balance. closingBalance = Total balance / New balance.",
   "totalDebits = purchases/charges total when shown. totalCredits = payments/credits total when shown.",
   "Strip OCR dingbats (arrows, stars, warning marks) from description and merchantName.",
+  "WRAPPED LINES: chequing statements often print the rail on one OCR line and the payee on the next ('ONLINE PURCHASE -' then 'AMAZON.CA'; 'PAD -' then 'SPOTIFY'; 'BILL PAYMENT -' then 'CIBC VISA'). Join them into ONE description: 'ONLINE PURCHASE - AMAZON.CA'.",
+  "A description must name who was paid when the statement does. Never emit a description that is only a rail ('PAD -', 'ONLINE PURCHASE -', 'BILL PAYMENT -') or that ends with a dash; look at the neighbouring OCR line for the payee first.",
   "Keep FX notes like 'USD 12.00 @ 1.42' in description, and ALSO fill foreignAmount, foreignCurrency, and exchangeRate when present.",
   MERCHANT_CLEAN_AI_RULES,
 ].join("\n");

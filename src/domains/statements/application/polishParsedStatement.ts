@@ -220,12 +220,18 @@ export function alignParsedAmountSigns(
   return parsed;
 }
 
+/** "ONLINE PURCHASE -" with the payee lost to a wrapped OCR line: drop the dangling dash. */
+const DANGLING_SEPARATOR = /\s*[-–—:/]+$/;
+
 function cleanTransactionText(parsed: ParsedStatement): ParsedStatement {
   return {
     ...parsed,
     transactions: parsed.transactions.map((txn) => ({
       ...txn,
-      description: cleanStatementLine(txn.description),
+      description: cleanStatementLine(txn.description).replace(
+        DANGLING_SEPARATOR,
+        "",
+      ),
       merchantName: txn.merchantName
         ? (cleanMerchantDescriptor(cleanStatementLine(txn.merchantName)) ??
           cleanStatementLine(txn.merchantName))

@@ -23,6 +23,7 @@ export type BudgetSpendLine = {
   date?: string | null;
   amount: number;
   description: string;
+  currency?: string | null;
   merchantName?: string | null;
   merchantClean?: string | null;
   sectionName?: string | null;
@@ -30,6 +31,13 @@ export type BudgetSpendLine = {
   subcategoryName?: string | null;
   spreadName?: string | null;
   transactionTypeName?: string | null;
+};
+
+export type BudgetTxnPeek = {
+  date: string;
+  description: string;
+  amount: number;
+  currency: string;
 };
 
 export type BudgetProgressItem = {
@@ -44,7 +52,10 @@ export type BudgetProgressItem = {
   percent: number;
   warningThreshold: number;
   overageThreshold: number;
+  transactions: BudgetTxnPeek[];
 };
+
+export const BUDGET_TXN_PEEK_LIMIT = 48;
 
 function norm(value: string | null | undefined) {
   return value?.trim().toLowerCase() ?? "";
@@ -151,6 +162,33 @@ export function spentForBudget(lines: BudgetSpendLine[], budget: BudgetCap) {
   return spent;
 }
 
+function sortBudgetTxnPeeks(peeks: BudgetTxnPeek[]) {
+  return peeks
+    .slice()
+    .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+}
+
+export function peeksForBudget(
+  lines: BudgetSpendLine[],
+  budget: BudgetCap,
+): BudgetTxnPeek[] {
+  const cycle = parseBudgetCycle(budget.cycle);
+  const peeks: BudgetTxnPeek[] = [];
+  for (const line of lines) {
+    if (!dateInBudgetSlice(line.date, cycle, budget.startDate)) continue;
+    if (!transactionMatchesBudget(line, budget)) continue;
+    const date = line.date?.trim();
+    if (!date) continue;
+    peeks.push({
+      date,
+      description: line.description,
+      amount: line.amount,
+      currency: line.currency?.trim() || "CAD",
+    });
+  }
+  return sortBudgetTxnPeeks(peeks).slice(0, BUDGET_TXN_PEEK_LIMIT);
+}
+
 export function buildBudgetProgressItems(
   budgets: BudgetCap[],
   lines: BudgetSpendLine[],
@@ -172,6 +210,7 @@ export function buildBudgetProgressItems(
       percent: budgetUsedPercent(spent, budget.amount),
       warningThreshold: budget.warningThreshold,
       overageThreshold: budget.overageThreshold,
+      transactions: peeksForBudget(lines, budget),
     };
   });
 }

@@ -118,7 +118,7 @@ function IssuesBulkActions({ issues }: { issues: IssueRow[] }) {
       label: "Delete visible",
       onSelect: () => void deleteBulk(),
       disabled: busy || issues.length === 0,
-      variant: "destructive",
+      variant: "destructive" as const,
     },
   ].filter((action) => action !== null);
 

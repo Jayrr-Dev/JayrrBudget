@@ -90,6 +90,7 @@ export function useBudgetProgressItems() {
         date: txn.date,
         amount: txn.amount,
         description: txn.description,
+        currency: txn.currency,
         merchantName: txn.merchantName,
         merchantClean: txn.merchantClean,
         sectionName: txn.sectionName,

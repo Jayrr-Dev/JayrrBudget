@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/popover";
 import { useFeatureFlag } from "@/domains/feature-flags/ui/useFeatureFlag";
 import { applyVaultMerchantMerges } from "@/domains/merchants/application/applyVaultMerchantMerges";
+import { planBankLineMerchantNames } from "@/domains/merchants/domain/planBankLineMerchantNames";
 import { vaultWriteReady } from "@/domains/vault/application/saveEncryptedLedger";
 import { usePrivateLedger } from "@/domains/vault/ui/usePrivateLedger";
 import { errorMessage } from "@/shared/lib/error-message";
@@ -97,10 +98,17 @@ export function CleanMerchantsButton() {
         throw new Error("Merchant clean failed");
       }
 
+      // Bank-internal lines (Monthly Plan Fee, Credit Interest) get the
+      // institution from the ledger; that plan wins over the server plan.
+      const bankRenames = planBankLineMerchantNames(privateLedger.ledger);
+      const bankIds = new Set(bankRenames.flatMap((row) => row.merchantIds));
+      const serverMerges = (body.merges ?? []).filter(
+        (merge) => !merge.merchantIds.some((id) => bankIds.has(id)),
+      );
       const applied = await applyVaultMerchantMerges({
         ctx,
         ledger: privateLedger.ledger,
-        merges: body.merges ?? [],
+        merges: [...bankRenames, ...serverMerges],
       });
       privateLedger.reload();
       const result: CleanResult = {
@@ -114,13 +122,13 @@ export function CleanMerchantsButton() {
       if (result.mergesApplied === 0) {
         toast.message(
           result.clustersFound === 0
-            ? "No similar merchants to merge."
+            ? "Merchant names already look clean."
             : "Similar names found, but none should merge.",
         );
         return;
       }
       toast.success(
-        `Merged ${result.mergesApplied} group${result.mergesApplied === 1 ? "" : "s"}. ${result.transactionsUpdated} transaction${result.transactionsUpdated === 1 ? "" : "s"} updated.`,
+        `Cleaned ${result.mergesApplied} merchant name${result.mergesApplied === 1 ? "" : "s"}. ${result.transactionsUpdated} transaction${result.transactionsUpdated === 1 ? "" : "s"} updated.`,
       );
     } catch (error) {
       toast.error(errorMessage(error, "Merchant clean failed"));
@@ -166,12 +174,18 @@ export function CleanMerchantsButton() {
                   <PopoverHeader className="gap-1.5">
                     <PopoverTitle>Clean similar merchants</PopoverTitle>
                     <PopoverDescription>
-                      Cleans card-rail prefixes and merges near-duplicate payee
-                      names.
+                      Turns statement lines into payee names and merges
+                      near-duplicates.
                     </PopoverDescription>
                     <ul className="mt-1.5 list-disc space-y-1 pl-4 text-muted-foreground">
                       <li>
-                        Strips POS Debit, PAD, Interac, and Visa Debit prefixes
+                        Drops rails like Bill Payment, PAD, Direct Dep, EFT,
+                        Online Payment
+                      </li>
+                      <li>Drops trailing account and ATM numbers</li>
+                      <li>
+                        Fees and interest get the bank name (CIBC Monthly Plan
+                        Fee)
                       </li>
                       <li>Fuzzy match finds close names (typos, locations)</li>
                       <li>AI keeps distinct services separate</li>
@@ -181,9 +195,9 @@ export function CleanMerchantsButton() {
               </Popover>
             </DialogTitle>
             <DialogDescription className="sr-only">
-              Strips POS Debit and other card-rail prefixes, then merges
-              near-duplicate payee names. Merged payees keep every linked
-              transaction.
+              Strips payment rails, trailing account numbers, and names bank
+              fees after the bank, then merges near-duplicate payee names.
+              Merged payees keep every linked transaction.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

@@ -721,7 +721,7 @@ export function ClassificationsPanel() {
                       ? (row) => row.id
                       : (row) => findMineSection(row.name)?.id ?? null,
                   ),
-                variant: "destructive",
+                variant: "destructive" as const,
               },
             ].filter((action) => action !== null);
             return (
@@ -833,7 +833,7 @@ export function ClassificationsPanel() {
                             row.name,
                           )?.id ?? null,
                   ),
-                variant: "destructive",
+                variant: "destructive" as const,
               },
             ].filter((action) => action !== null);
             return (
@@ -958,7 +958,7 @@ export function ClassificationsPanel() {
                             row.name,
                           )?.id ?? null,
                   ),
-                variant: "destructive",
+                variant: "destructive" as const,
               },
             ].filter((action) => action !== null);
             return (

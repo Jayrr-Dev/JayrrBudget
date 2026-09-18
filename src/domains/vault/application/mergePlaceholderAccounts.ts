@@ -43,7 +43,7 @@ export function resolveImportAccountId(
   payload: {
     accountId: string;
     accountName?: string | null;
-    accountType: string;
+    accountType: string | null;
     accountSubtype: string | null;
   },
 ) {
@@ -54,7 +54,7 @@ export function resolveImportAccountId(
     accountId: payload.accountId,
     name: payload.accountName ?? payload.accountId,
     officialName: payload.accountName ?? null,
-    type: payload.accountType,
+    type: payload.accountType ?? "other",
     subtype: payload.accountSubtype,
   });
   return keeper?.accountId ?? payload.accountId;

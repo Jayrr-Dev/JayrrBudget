@@ -28,6 +28,7 @@ import { MerchantLabel } from "@/domains/merchants/ui/MerchantLabel";
 import { StatementUpload } from "@/domains/statements/ui/StatementUpload";
 import { dashboardFromPrivateLedger } from "@/domains/vault/application/dashboardFromPrivateLedger";
 import { DecryptingPage } from "@/domains/vault/ui/DecryptingStatus";
+import { cn } from "@/lib/utils";
 import { usePrivateLedger } from "@/domains/vault/ui/usePrivateLedger";
 import { formatDisplayDate } from "@/shared/lib/format-date";
 import { api } from "@convex/_generated/api";
@@ -298,8 +299,7 @@ export function TransactionsList({
                   <MoneyText
                     amount={txn.amount}
                     currency={txn.isoCurrencyCode ?? "CAD"}
-                    className="text-sm"
-                    {...flowMoneyProps(txn)}
+                    className={cn("text-sm", flowMoneyProps(txn).className)}
                   />
                 </div>
               </li>

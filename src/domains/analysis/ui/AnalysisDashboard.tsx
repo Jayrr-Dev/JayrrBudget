@@ -86,10 +86,7 @@ import {
   formatMoney,
   formatMoneyParts,
 } from "@/domains/dashboard/domain/money";
-import {
-  FitMoneyScale,
-  MoneyText,
-} from "@/domains/dashboard/ui/MoneyText";
+import { MoneyText } from "@/domains/dashboard/ui/MoneyText";
 import { MerchantLabel } from "@/domains/merchants/ui/MerchantLabel";
 import { keepTxnPeekPopoverOpen } from "@/domains/merchants/ui/MerchantTxnsPopover";
 import { MoveMerchantDialog } from "@/domains/merchants/ui/MoveMerchantDialog";
@@ -729,7 +726,7 @@ function AreaTreemapCell({
   depth?: number;
   currency: string;
   total: number;
-  payload?: { children?: unknown[]; fillIndex?: number };
+  payload?: { children?: readonly unknown[]; fillIndex?: number };
 }) {
   if (width < 2 || height < 2) return null;
   const nestedKids = payload?.children;
@@ -4087,7 +4084,11 @@ function RowTxnsPopover({
               keepTxnPeekPopoverOpen(event);
             }}
           >
-            <DialogHeader className="border-b border-border py-2 pr-3">
+            <DialogHeader
+              className={`border-b border-border py-2 pr-3 ${
+                headerActions ? "" : "pl-3"
+              }`}
+            >
               <div className={blurb ? "flex items-start" : "flex items-center"}>
                 {headerActions ? (
                   <div className="flex w-8 shrink-0 items-center justify-center">
@@ -4138,8 +4139,8 @@ function RowTxnsPopover({
         >
           <div
             className={`border-b border-border py-2 pr-3 ${
-              blurb ? "flex items-start" : "flex items-center"
-            }`}
+              headerActions ? "" : "pl-3"
+            } ${blurb ? "flex items-start" : "flex items-center"}`}
           >
             {headerActions ? (
               <div className="flex w-8 shrink-0 items-center justify-center">
@@ -4521,15 +4522,12 @@ function RangeLeaderboardTable({
   const top = ranked.slice(0, 10);
 
   const grid = showTxns
-    ? "grid w-full min-w-0 grid-cols-[1.5rem_minmax(5rem,0.55fr)_minmax(0,1fr)_2.75rem] items-center gap-x-3 px-3 sm:grid-cols-[1.5rem_minmax(6rem,0.45fr)_minmax(0,1fr)_1.5rem]"
-    : "grid w-full min-w-0 grid-cols-[1.5rem_minmax(5rem,0.55fr)_minmax(0,1fr)] items-center gap-x-3 px-3";
+    ? "grid w-full min-w-max grid-cols-[1.5rem_minmax(5rem,8rem)_minmax(0,1fr)_2.75rem] items-center gap-x-3 px-3 sm:grid-cols-[1.5rem_minmax(6rem,10rem)_minmax(0,1fr)_1.5rem]"
+    : "grid w-full min-w-max grid-cols-[1.5rem_minmax(5rem,8rem)_minmax(0,1fr)] items-center gap-x-3 px-3";
   const metricGrid =
-    "grid min-w-0 w-full self-stretch grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)] divide-x divide-border";
+    "grid min-w-0 w-full self-stretch grid-cols-[repeat(3,minmax(6.75rem,1fr))] divide-x divide-border";
   const metricCell =
     "flex min-w-0 items-center justify-end px-2 text-right font-mono tabular-nums sm:px-3";
-  const moneyFitKey = top
-    .map((row) => `${row.high}:${row.mid}:${row.low}`)
-    .join("|");
 
   return (
     <section className="min-w-0 space-y-3 rounded-xl border border-border bg-surface-elevated p-3 sm:space-y-4 sm:p-6">
@@ -4548,83 +4546,63 @@ function RangeLeaderboardTable({
       ) : (
         <div className="min-w-0 overflow-x-auto rounded-lg border border-[var(--border)]">
           <ScrollTopX className="rounded-lg">
-            <FitMoneyScale className="min-w-0 w-full" contentKey={moneyFitKey}>
-              <div
-                className={`${grid} border-b border-[var(--border)] py-2 text-xs text-[var(--muted-foreground)]`}
-              >
-                <span className="tabular-nums">#</span>
-                <span className="min-w-0 truncate text-left">{nameLabel}</span>
-                <div className={metricGrid}>
-                  <span className="flex items-center justify-end px-2 text-right sm:px-3">
-                    High
-                  </span>
-                  <span className="flex items-center justify-end px-2 text-right sm:px-3">
-                    Mid
-                  </span>
-                  <span className="flex items-center justify-end px-2 text-right sm:px-3">
-                    Low
-                  </span>
-                </div>
-                {showTxns ? <span className="sr-only">Info</span> : null}
+            <div
+              className={`${grid} border-b border-[var(--border)] py-2 text-xs text-[var(--muted-foreground)]`}
+            >
+              <span className="tabular-nums">#</span>
+              <span className="min-w-0 truncate text-left">{nameLabel}</span>
+              <div className={metricGrid}>
+                <span className="flex items-center justify-end px-2 text-right sm:px-3">
+                  High
+                </span>
+                <span className="flex items-center justify-end px-2 text-right sm:px-3">
+                  Mid
+                </span>
+                <span className="flex items-center justify-end px-2 text-right sm:px-3">
+                  Low
+                </span>
               </div>
-              <div>
-                {top.map((row, index) => (
-                  <div
-                    key={row.name}
-                    className={`${grid} not-last:border-b border-[var(--border)] py-2.5 text-sm`}
-                  >
-                    <span className="text-[var(--muted-foreground)] tabular-nums">
-                      {index + 1}
+              {showTxns ? <span className="sr-only">Info</span> : null}
+            </div>
+            <div>
+              {top.map((row, index) => (
+                <div
+                  key={row.name}
+                  className={`${grid} not-last:border-b border-[var(--border)] py-2.5 text-sm`}
+                >
+                  <span className="text-[var(--muted-foreground)] tabular-nums">
+                    {index + 1}
+                  </span>
+                  <span className="min-w-0 truncate font-medium text-[var(--foreground)]">
+                    {asMerchant ? <MerchantLabel name={row.name} /> : row.name}
+                  </span>
+                  <div className={metricGrid}>
+                    <span className={`${metricCell} text-[var(--foreground)]`}>
+                      <MoneyText amount={row.high} currency={currency} />
                     </span>
-                    <span className="min-w-0 truncate font-medium text-[var(--foreground)]">
-                      {asMerchant ? (
-                        <MerchantLabel name={row.name} />
-                      ) : (
-                        row.name
-                      )}
+                    <span
+                      className={`${metricCell} text-[var(--muted-foreground)]`}
+                    >
+                      <MoneyText amount={row.mid} currency={currency} />
                     </span>
-                    <div className={metricGrid}>
-                      <span
-                        className={`${metricCell} text-[var(--foreground)]`}
-                      >
-                        <MoneyText
-                          amount={row.high}
-                          currency={currency}
-                          fit
-                        />
-                      </span>
-                      <span
-                        className={`${metricCell} text-[var(--muted-foreground)]`}
-                      >
-                        <MoneyText
-                          amount={row.mid}
-                          currency={currency}
-                          fit
-                        />
-                      </span>
-                      <span
-                        className={`${metricCell} text-[var(--muted-foreground)]`}
-                      >
-                        <MoneyText
-                          amount={row.low}
-                          currency={currency}
-                          fit
-                        />
-                      </span>
-                    </div>
-                    {showTxns ? (
-                      <RowTxnsPopover
-                        label={row.name}
-                        nameLabel={nameLabel}
-                        currency={currency}
-                        canMoveMerchant={asMerchant}
-                        transactions={transactionsForRow?.(row.name) ?? []}
-                      />
-                    ) : null}
+                    <span
+                      className={`${metricCell} text-[var(--muted-foreground)]`}
+                    >
+                      <MoneyText amount={row.low} currency={currency} />
+                    </span>
                   </div>
-                ))}
-              </div>
-            </FitMoneyScale>
+                  {showTxns ? (
+                    <RowTxnsPopover
+                      label={row.name}
+                      nameLabel={nameLabel}
+                      currency={currency}
+                      canMoveMerchant={asMerchant}
+                      transactions={transactionsForRow?.(row.name) ?? []}
+                    />
+                  ) : null}
+                </div>
+              ))}
+            </div>
           </ScrollTopX>
         </div>
       )}
