@@ -3,6 +3,7 @@ import {
   budgetProgressRingColor,
   type BudgetProgressItem,
 } from "@/domains/budgets/domain/budgetProgress";
+import { BudgetTxnsPopover } from "@/domains/budgets/ui/BudgetTxnsPopover";
 import { formatCompactDisplayDate } from "@/shared/lib/format-date";
 import { cn } from "cn";
 
@@ -32,10 +33,15 @@ function BudgetProgressCard({ item }: { item: BudgetProgressItem }) {
 
   return (
     <article
-      className="flex min-h-56 flex-col rounded-2xl border border-border bg-surface-elevated px-4 py-3.5"
+      className="relative flex min-h-56 flex-col rounded-2xl border border-border bg-surface-elevated px-4 py-3.5"
       aria-label={`${item.name} ${remainingLabel} remaining`}
     >
-      <header className="min-w-0">
+      <BudgetTxnsPopover
+        budgetName={item.name}
+        lookup={item.lookup}
+        transactions={item.transactions}
+      />
+      <header className="min-w-0 pr-8">
         <h2
           className="truncate text-sm font-semibold tracking-wide uppercase"
           title={item.name}
