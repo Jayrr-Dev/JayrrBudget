@@ -4,7 +4,12 @@ import {
   type MutationClient,
   type PrivateRecordInput,
 } from "@/crypto/vaultRecords";
-import type { PrivateTransaction } from "@/domains/vault/domain/privateLedger";
+import { normalizeAccountLabel } from "@/domains/dashboard/domain/accountName";
+import type {
+  PrivateAccount,
+  PrivateLedger,
+  PrivateTransaction,
+} from "@/domains/vault/domain/privateLedger";
 import { api } from "@convex/_generated/api";
 import { rewriteTaxonomyLabel } from "@convex/lib/seedCategoryPaths";
 import type { ConvexReactClient } from "convex/react";
@@ -34,6 +39,83 @@ export async function saveEncryptedRecords(
     masterKey: requireMasterKey(),
     records,
   });
+}
+
+export function encryptedAccountMetaValue(
+  account: Omit<PrivateAccount, "recordId" | "revision">,
+) {
+  return {
+    accountId: account.accountId,
+    name: account.name,
+    label: normalizeAccountLabel(account.label),
+    officialName: account.officialName ?? null,
+    mask: account.mask ?? null,
+    type: account.type ?? null,
+    subtype: account.subtype ?? null,
+    currentBalance: account.currentBalance ?? null,
+    availableBalance: account.availableBalance ?? null,
+    isoCurrencyCode: account.isoCurrencyCode ?? null,
+  };
+}
+
+/** Nickname only. Leaves accountId and the stored bank name unchanged. */
+export async function saveEncryptedAccountLabel(
+  ctx: VaultWriteContext,
+  ledger: PrivateLedger,
+  seed: {
+    accountId: string;
+    name: string;
+    officialName?: string | null;
+    mask?: string | null;
+    type?: string | null;
+    subtype?: string | null;
+    currentBalance?: number | null;
+    availableBalance?: number | null;
+    isoCurrencyCode?: string | null;
+  },
+  label: string | null,
+): Promise<PrivateLedger> {
+  const existing = ledger.accounts.find(
+    (row) => row.accountId === seed.accountId,
+  );
+  const recordId = existing?.recordId ?? `account-${seed.accountId}`;
+  const value = encryptedAccountMetaValue({
+    accountId: seed.accountId,
+    name: existing?.name ?? seed.name,
+    label,
+    officialName: existing?.officialName ?? seed.officialName ?? null,
+    mask: existing?.mask ?? seed.mask ?? null,
+    type: existing?.type ?? seed.type ?? null,
+    subtype: existing?.subtype ?? seed.subtype ?? null,
+    currentBalance: existing?.currentBalance ?? seed.currentBalance ?? null,
+    availableBalance:
+      existing?.availableBalance ?? seed.availableBalance ?? null,
+    isoCurrencyCode: existing?.isoCurrencyCode ?? seed.isoCurrencyCode ?? null,
+  });
+  const saved = await saveEncryptedRecords(ctx, [
+    {
+      recordId,
+      kind: "account_meta",
+      value,
+      expectedRevision: existing?.revision ?? null,
+    },
+  ]);
+  const revision =
+    saved.revisions?.find((row) => row.recordId === recordId)?.revision ??
+    (existing?.revision ?? 0) + 1;
+  const nextAccount: PrivateAccount = {
+    recordId,
+    revision,
+    ...value,
+  };
+  return {
+    ...ledger,
+    accounts: existing
+      ? ledger.accounts.map((row) =>
+          row.accountId === seed.accountId ? nextAccount : row,
+        )
+      : [...ledger.accounts, nextAccount],
+  };
 }
 
 function encryptedTxValue(

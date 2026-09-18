@@ -30,6 +30,7 @@ export const ANALYSIS_PERIOD_META: Record<
     txnRateLabel: string;
     incomeRateLabel: string;
     avgCostLabel: string;
+    avgCostLabelCompact: string;
     avgCountLabel: string;
   }
 > = {
@@ -41,8 +42,9 @@ export const ANALYSIS_PERIOD_META: Record<
     peakLabel: "Peak month",
     txnRateLabel: "Transactions /m",
     incomeRateLabel: "Income /m",
-    avgCostLabel: "Avg $/m",
-    avgCountLabel: "Avg #/m",
+    avgCostLabel: "Avg Cost/m",
+    avgCostLabelCompact: "Avg $/m",
+    avgCountLabel: "Avg Count/m",
   },
   biweekly: {
     label: "Biweekly",
@@ -52,8 +54,9 @@ export const ANALYSIS_PERIOD_META: Record<
     peakLabel: "Peak 2 weeks",
     txnRateLabel: "Transactions /BiWk",
     incomeRateLabel: "Income /BiWk",
-    avgCostLabel: "Avg $/BiWk",
-    avgCountLabel: "Avg #/BiWk",
+    avgCostLabel: "Avg Cost/BiWk",
+    avgCostLabelCompact: "Avg $/BiWk",
+    avgCountLabel: "Avg Count/BiWk",
   },
   weekly: {
     label: "Weekly",
@@ -63,8 +66,9 @@ export const ANALYSIS_PERIOD_META: Record<
     peakLabel: "Peak week",
     txnRateLabel: "Transactions /Wk",
     incomeRateLabel: "Income /Wk",
-    avgCostLabel: "Avg $/Wk",
-    avgCountLabel: "Avg #/Wk",
+    avgCostLabel: "Avg Cost/Wk",
+    avgCostLabelCompact: "Avg $/Wk",
+    avgCountLabel: "Avg Count/Wk",
   },
   daily: {
     label: "Daily",
@@ -74,8 +78,9 @@ export const ANALYSIS_PERIOD_META: Record<
     peakLabel: "Peak day",
     txnRateLabel: "Transactions /d",
     incomeRateLabel: "Income /d",
-    avgCostLabel: "Avg $/d",
-    avgCountLabel: "Avg #/d",
+    avgCostLabel: "Avg Cost/d",
+    avgCostLabelCompact: "Avg $/d",
+    avgCountLabel: "Avg Count/d",
   },
 };
 

@@ -36,6 +36,8 @@ export type PrivateAccount = {
   revision: number;
   accountId: string;
   name: string;
+  /** Nickname shown in the UI. Does not replace name or accountId. */
+  label?: string | null;
   officialName?: string | null;
   mask?: string | null;
   type?: string | null;

@@ -2,29 +2,41 @@
 
 import { BankAccountsDashboard } from "@/domains/dashboard/ui/BankAccountsDashboard";
 import { useDashboard } from "@/domains/dashboard/ui/DashboardPanels";
+import { TitleInfo } from "@/domains/ops/ui/TitleInfo";
 import { TransactionsDataTable } from "@/domains/transactions/ui/TransactionsDataTable";
-import { formatLongDisplayDate } from "@/shared/lib/format-date";
+import {
+  formatDisplayDate,
+  formatLongDisplayDate,
+} from "@/shared/lib/format-date";
 
 export default function OverviewPage() {
   const dashboard = useDashboard();
   const data = dashboard.data;
   const isInitialLoading = dashboard.isPending || (!data && !dashboard.isError);
+  const shortDate = isInitialLoading
+    ? "\u00a0"
+    : formatDisplayDate(data?.latestStatementDate);
+  const longDate = isInitialLoading
+    ? "\u00a0"
+    : formatLongDisplayDate(data?.latestStatementDate);
 
   return (
     <div className="space-y-8">
-      <header className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:gap-6 border-b border-[var(--border)] pb-6">
-        <div className="space-y-2">
-          <h1 className="type-kicker text-[20px]">Dashboard</h1>
-          <p className="type-lead max-w-xl">
-            See balances across chequing, credit, and loan accounts.
+      <header className="flex items-center justify-between gap-3 border-b border-[var(--border)] pb-6 sm:items-start sm:gap-6">
+        <TitleInfo
+          title="Dashboard"
+          lead="See balances across chequing, credit, and loan accounts."
+        />
+        <p className="sr-only">
+          See balances across chequing, credit, and loan accounts.
+        </p>
+        <div className="shrink-0 text-right">
+          <p className="type-kicker hidden sm:block">Latest statement</p>
+          <p className="whitespace-nowrap text-sm font-medium text-muted-foreground sm:hidden">
+            {shortDate}
           </p>
-        </div>
-        <div className="shrink-0 sm:text-right">
-          <p className="type-kicker">Latest statement</p>
-          <p className="type-section mt-1 min-h-7">
-            {isInitialLoading
-              ? "\u00a0"
-              : formatLongDisplayDate(data?.latestStatementDate)}
+          <p className="type-section mt-1 hidden min-h-7 sm:block">
+            {longDate}
           </p>
         </div>
       </header>

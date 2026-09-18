@@ -730,6 +730,7 @@ export const accountsForAi = query({
     v.object({
       accountId: v.string(),
       name: v.string(),
+      label: v.union(v.string(), v.null()),
       officialName: v.union(v.string(), v.null()),
       mask: v.union(v.string(), v.null()),
       type: v.union(v.string(), v.null()),
@@ -749,6 +750,7 @@ export const accountsForAi = query({
       .map((row) => ({
         accountId: row.accountId,
         name: row.name,
+        label: row.label ?? null,
         officialName: row.officialName,
         mask: row.mask,
         type: row.type,

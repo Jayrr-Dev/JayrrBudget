@@ -2,6 +2,7 @@ import type { MutationClient, PrivateRecordInput } from "@/crypto/vaultRecords";
 import { savePrivateRecords } from "@/crypto/vaultRecords";
 import { toSlug } from "@/domains/enrichment/domain/slug";
 import type { ImportBankStatementSuccess } from "@/domains/statements/domain/importResult";
+import { encryptedAccountMetaValue } from "@/domains/vault/application/saveEncryptedLedger";
 import type { PrivateLedger } from "@/domains/vault/domain/privateLedger";
 
 function txValue(
@@ -84,9 +85,10 @@ export async function encryptStatementImportToVault(input: {
     {
       recordId: accountRecordId,
       kind: "account_meta",
-      value: {
+      value: encryptedAccountMetaValue({
         accountId: payload.accountId,
         name: payload.accountName ?? payload.accountId,
+        label: existingAccount?.label ?? null,
         officialName: payload.accountName,
         mask: payload.accountMask,
         type: payload.accountType,
@@ -94,7 +96,7 @@ export async function encryptStatementImportToVault(input: {
         currentBalance: payload.closingBalance,
         availableBalance: null,
         isoCurrencyCode: payload.currency,
-      },
+      }),
       expectedRevision: existingAccount?.revision ?? null,
     },
     ...payload.transactions.map((txn) => {

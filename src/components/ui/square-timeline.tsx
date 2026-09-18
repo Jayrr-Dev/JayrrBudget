@@ -1,5 +1,6 @@
 "use client";
 
+import { Arrows } from "@/components/ui/arrows";
 import type {
   SquareTimelineCell,
   SquareTimelineLevel,
@@ -7,7 +8,13 @@ import type {
 } from "@/components/ui/square-timeline.types";
 import { cn } from "cn";
 import { format, isValid, parseISO } from "date-fns";
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
 
 export type {
   SquareTimelineCell,
@@ -37,6 +44,9 @@ const LOAN_LEGEND: Array<{ tone: SquareTimelineTone; label: string }> = [
 ];
 
 const WEEK_ROWS = 7;
+const SLIDER_SCROLL_RATIO = 0.85;
+const ARROW_CLASS =
+  "absolute top-1/2 z-20 -translate-y-1/2 bg-surface-elevated/90 shadow-sm transition-colors hover:-translate-y-1/2 active:!-translate-y-1/2 group-hover:bg-[var(--muted)]/80 group-focus-within:bg-[var(--muted)]/80";
 
 export const WEEKDAY_ROW_LABELS = ["", "Mon", "", "Wed", "", "Fri", ""];
 
@@ -95,37 +105,15 @@ function columnLabels(cells: SquareTimelineCell[], rows: number) {
   return { colCount, labels };
 }
 
-function cssLengthToPx(length: string) {
-  const value = parseFloat(length);
-  if (!Number.isFinite(value)) return 0;
-  if (length.endsWith("rem") && typeof document !== "undefined") {
-    const root = parseFloat(
-      getComputedStyle(document.documentElement).fontSize,
-    );
-    return value * (Number.isFinite(root) ? root : 16);
-  }
-  return value;
-}
-
-function wrapColumnCount(
-  widthPx: number,
-  sizePx: number,
-  gapPx: number,
-  cellCount: number,
-  minRows: number,
-) {
-  const colsFit = Math.max(1, Math.floor((widthPx + gapPx) / (sizePx + gapPx)));
-  const colsForMinRows = Math.max(1, Math.ceil(cellCount / minRows));
-  return Math.min(colsFit, colsForMinRows);
-}
-
-function cellBands(cells: SquareTimelineCell[], columns: number, rows: number) {
-  const perBand = Math.max(1, columns * rows);
-  const bands: SquareTimelineCell[][] = [];
-  for (let index = 0; index < cells.length; index += perBand) {
-    bands.push(cells.slice(index, index + perBand));
-  }
-  return bands;
+function sliderEdgeMask(canLeft: boolean, canRight: boolean) {
+  if (!canLeft && !canRight) return undefined;
+  const start = canLeft
+    ? "transparent 0, black 2.75rem"
+    : "black 0, black 2.75rem";
+  const end = canRight
+    ? "black calc(100% - 2.75rem), transparent"
+    : "black calc(100% - 2.75rem), black";
+  return `linear-gradient(to right, ${start}, ${end})`;
 }
 
 function SquareTimelineBand({
@@ -133,95 +121,101 @@ function SquareTimelineBand({
   rows,
   ariaLabel,
   showColumnLabels,
-  rowLabels,
   minHeightRows,
 }: {
   cells: SquareTimelineCell[];
   rows: number;
   ariaLabel?: string;
   showColumnLabels: boolean;
-  rowLabels?: string[];
   minHeightRows?: number;
 }) {
   const { colCount, labels } = columnLabels(cells, rows);
   const labelByColumn = new Map(
     labels.map((item) => [item.column, item.label]),
   );
-  const showRowLabels = (rowLabels?.length ?? 0) > 0;
   const gridMinHeight =
     minHeightRows && minHeightRows > 0
       ? `calc(${minHeightRows} * var(--st-size) + ${minHeightRows - 1} * var(--st-gap))`
       : undefined;
 
   return (
-    <div className="flex min-w-0 gap-2">
-      {showRowLabels ? (
+    <div className="w-max">
+      {showColumnLabels ? (
         <div
-          className="grid shrink-0 self-end"
+          className="mb-1 grid"
           style={{
-            gridTemplateRows: `repeat(${rows}, var(--st-size))`,
-            rowGap: "var(--st-gap)",
-            marginTop: showColumnLabels ? "1.125rem" : 0,
+            gridTemplateColumns: `repeat(${colCount}, var(--st-size))`,
+            columnGap: "var(--st-gap)",
           }}
+          aria-hidden
         >
-          {Array.from({ length: rows }, (_, row) => (
-            <span
-              key={row}
-                className="text-[10px] leading-(--st-size) whitespace-nowrap text-muted-foreground"
-            >
-              {rowLabels?.[row] ?? ""}
+          {Array.from({ length: colCount }, (_, column) => (
+            <span key={column} className="relative h-3.5">
+              {labelByColumn.has(column) ? (
+                <span className="absolute top-0 left-0 text-[10px] leading-none whitespace-nowrap text-muted-foreground">
+                  {labelByColumn.get(column)}
+                </span>
+              ) : null}
             </span>
           ))}
         </div>
       ) : null}
-      <div className="min-w-0">
-        {showColumnLabels ? (
-          <div
-            className="mb-1 grid"
-            style={{
-              gridTemplateColumns: `repeat(${colCount}, var(--st-size))`,
-              columnGap: "var(--st-gap)",
-            }}
-            aria-hidden
-          >
-            {Array.from({ length: colCount }, (_, column) => (
-              <span key={column} className="relative h-3.5">
-                {labelByColumn.has(column) ? (
-                  <span className="absolute top-0 left-0 text-[10px] leading-none whitespace-nowrap text-muted-foreground">
-                    {labelByColumn.get(column)}
-                  </span>
-                ) : null}
-              </span>
-            ))}
-          </div>
-        ) : null}
-        <div
-          role="img"
-          aria-label={ariaLabel}
-          className="grid w-max"
-          style={{
-            gridTemplateRows: `repeat(${rows}, var(--st-size))`,
-            gridAutoFlow: "column",
-            gridAutoColumns: "var(--st-size)",
-            gap: "var(--st-gap)",
-            minHeight: gridMinHeight,
-          }}
-        >
-          {cells.map((cell) => (
-            <span
-              key={cell.id}
-              title={cell.title}
-              data-level={cell.level}
-              data-tone={cell.tone}
-              data-faded={cell.faded ? "true" : undefined}
-              className={cn(
-                "block size-(--st-size) rounded-xs",
-                cellFillClass(cell),
-              )}
-            />
-          ))}
-        </div>
+      <div
+        role="img"
+        aria-label={ariaLabel}
+        className="grid w-max"
+        style={{
+          gridTemplateRows: `repeat(${rows}, var(--st-size))`,
+          gridAutoFlow: "column",
+          gridAutoColumns: "var(--st-size)",
+          gap: "var(--st-gap)",
+          minHeight: gridMinHeight,
+        }}
+      >
+        {cells.map((cell) => (
+          <span
+            key={cell.id}
+            title={cell.title}
+            data-level={cell.level}
+            data-tone={cell.tone}
+            data-faded={cell.faded ? "true" : undefined}
+            className={cn(
+              "block size-(--st-size) rounded-xs",
+              cellFillClass(cell),
+            )}
+          />
+        ))}
       </div>
+    </div>
+  );
+}
+
+function WeekdayLabels({
+  rows,
+  labels,
+  showColumnLabels,
+}: {
+  rows: number;
+  labels: string[];
+  showColumnLabels: boolean;
+}) {
+  return (
+    <div
+      className="grid shrink-0 self-end"
+      style={{
+        gridTemplateRows: `repeat(${rows}, var(--st-size))`,
+        rowGap: "var(--st-gap)",
+        marginTop: showColumnLabels ? "1.125rem" : 0,
+      }}
+    >
+      {Array.from({ length: rows }, (_, row) => (
+        <span
+          key={row}
+          className="text-[10px] leading-(--st-size) whitespace-nowrap text-muted-foreground"
+        >
+          {labels[row] ?? ""}
+        </span>
+      ))}
     </div>
   );
 }
@@ -235,7 +229,7 @@ export function SquareTimeline({
   showLegend = false,
   showColumnLabels = true,
   rowLabels,
-  wrap = false,
+  slider = false,
 }: {
   cells: SquareTimelineCell[];
   rows?: number;
@@ -245,46 +239,71 @@ export function SquareTimeline({
   showLegend?: boolean;
   showColumnLabels?: boolean;
   rowLabels?: string[];
-  wrap?: boolean;
+  slider?: boolean;
 }) {
   const vars = SIZE_VARS[size];
-  const wrapRef = useRef<HTMLDivElement>(null);
-  const [wrapColumns, setWrapColumns] = useState<number | null>(null);
-  const bandRows = Math.min(WEEK_ROWS, wrap ? WEEK_ROWS : rows);
+  const scrollerRef = useRef<HTMLDivElement>(null);
+  const [canLeft, setCanLeft] = useState(false);
+  const [canRight, setCanRight] = useState(false);
+  const bandRows = Math.min(WEEK_ROWS, rows);
   const usesLoanTones = cells.some((cell) => cell.tone != null);
+  const showRowLabels = (rowLabels?.length ?? 0) > 0;
+
+  const syncOverflow = useCallback(() => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    setCanLeft(el.scrollLeft > 1);
+    setCanRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 1);
+  }, []);
+
+  const pinOverlayArrow = (event: {
+    preventDefault: () => void;
+    stopPropagation: () => void;
+  }) => {
+    event.preventDefault();
+    event.stopPropagation();
+  };
+
+  const scrollByPage = (direction: -1 | 1) => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    el.scrollBy({
+      left: direction * el.clientWidth * SLIDER_SCROLL_RATIO,
+      behavior: "smooth",
+    });
+  };
 
   useEffect(() => {
-    if (!wrap) return;
-    const el = wrapRef.current;
+    const el = scrollerRef.current;
     if (!el) return;
-
-    const measure = () => {
-      if (el.clientWidth <= 0) return;
-      const sizePx = cssLengthToPx(vars.size);
-      const gapPx = cssLengthToPx(vars.gap);
-      const labelGutter = rowLabels && rowLabels.length > 0 ? 28 : 0;
-      setWrapColumns(
-        wrapColumnCount(
-          el.clientWidth - labelGutter,
-          sizePx,
-          gapPx,
-          cells.length,
-          bandRows,
-        ),
-      );
-    };
-
-    measure();
-    const observer = new ResizeObserver(measure);
+    const next = el.querySelector<HTMLElement>(
+      '[data-tone="due"]:not([data-faded="true"])',
+    );
+    if (next) {
+      const nextBox = next.getBoundingClientRect();
+      const view = el.getBoundingClientRect();
+      el.scrollBy({
+        left: nextBox.left - view.left - view.width / 2 + nextBox.width / 2,
+        behavior: "instant",
+      });
+    }
+    syncOverflow();
+    const observer = new ResizeObserver(syncOverflow);
     observer.observe(el);
     return () => observer.disconnect();
-  }, [bandRows, cells.length, rowLabels, vars.gap, vars.size, wrap]);
+  }, [cells, syncOverflow]);
 
   if (cells.length === 0) return null;
 
-  const columnsForMinRows = Math.max(1, Math.ceil(cells.length / bandRows));
-  const columns = wrapColumns ?? columnsForMinRows;
-  const bands = wrap ? cellBands(cells, columns, bandRows) : [cells];
+  const chart = (
+    <SquareTimelineBand
+      cells={cells}
+      rows={bandRows}
+      ariaLabel={ariaLabel}
+      showColumnLabels={showColumnLabels}
+      minHeightRows={bandRows}
+    />
+  );
 
   return (
     <div
@@ -296,26 +315,69 @@ export function SquareTimeline({
         } as CSSProperties
       }
     >
-      <div
-        ref={wrapRef}
-        className={
-          wrap
-            ? "flex min-w-0 flex-col gap-3"
-            : "flex min-w-0 gap-2 overflow-x-auto overscroll-x-contain pb-0.5"
-        }
-      >
-        {bands.map((band, bandIndex) => (
-          <SquareTimelineBand
-            key={band[0]?.id ?? bandIndex}
-            cells={band}
-            rows={bandRows}
-            ariaLabel={bandIndex === 0 ? ariaLabel : undefined}
-            showColumnLabels={showColumnLabels}
-            rowLabels={rowLabels}
-            minHeightRows={wrap ? bandRows : undefined}
-          />
-        ))}
-      </div>
+      {slider ? (
+        <div className="flex min-w-0 items-stretch gap-2">
+          {showRowLabels ? (
+            <WeekdayLabels
+              rows={bandRows}
+              labels={rowLabels ?? []}
+              showColumnLabels={showColumnLabels}
+            />
+          ) : null}
+          <div className="relative min-w-0 flex-1">
+            {canLeft ? (
+              <Arrows
+                variant="outline"
+                shape="tower"
+                size="sm"
+                direction="left"
+                aria-label="Scroll timeline back"
+                className={cn(ARROW_CLASS, "left-1")}
+                onMouseDown={pinOverlayArrow}
+                onClick={() => scrollByPage(-1)}
+              />
+            ) : null}
+            {canRight ? (
+              <Arrows
+                variant="outline"
+                shape="tower"
+                size="sm"
+                direction="right"
+                aria-label="Scroll timeline forward"
+                className={cn(ARROW_CLASS, "right-1")}
+                onMouseDown={pinOverlayArrow}
+                onClick={() => scrollByPage(1)}
+              />
+            ) : null}
+            <div
+              ref={scrollerRef}
+              onScroll={syncOverflow}
+              className="scrollbar-none overflow-x-auto overscroll-x-contain scroll-smooth pb-0.5"
+              style={{
+                maskImage: sliderEdgeMask(canLeft, canRight),
+                WebkitMaskImage: sliderEdgeMask(canLeft, canRight),
+              }}
+            >
+              {chart}
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div
+          ref={scrollerRef}
+          onScroll={syncOverflow}
+          className="flex min-w-0 gap-2 overflow-x-auto overscroll-x-contain pb-0.5"
+        >
+          {showRowLabels ? (
+            <WeekdayLabels
+              rows={bandRows}
+              labels={rowLabels ?? []}
+              showColumnLabels={showColumnLabels}
+            />
+          ) : null}
+          {chart}
+        </div>
+      )}
       {showLegend ? (
         <div className="mt-2 flex flex-wrap items-center justify-end gap-2 text-[10px] text-muted-foreground">
           {usesLoanTones ? (

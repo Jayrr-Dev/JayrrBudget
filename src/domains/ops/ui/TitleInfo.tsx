@@ -60,8 +60,12 @@ export function TitleInfo({
       {isMobile ? (
         <Dialog>
           <DialogTrigger asChild>{trigger}</DialogTrigger>
-          <DialogContent className="sm:max-w-md">
-            <DialogHeader>
+          <DialogContent
+            className="w-auto max-w-[min(20rem,calc(100%-2rem))] gap-2 p-3.5 sm:max-w-[20rem]"
+            showMaximizeButton={false}
+            showMinimizeButton={false}
+          >
+            <DialogHeader className="gap-1.5 pr-8">
               <DialogTitle>{title}</DialogTitle>
               <DialogDescription>{lead}</DialogDescription>
               {bulletsList}

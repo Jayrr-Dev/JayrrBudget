@@ -112,6 +112,9 @@ function asAccount(
     revision,
     accountId,
     name,
+    label: row.label == null || String(row.label).trim() === ""
+      ? null
+      : String(row.label).trim(),
     officialName: row.officialName == null ? null : String(row.officialName),
     mask: row.mask == null ? null : String(row.mask),
     type: row.type == null ? null : String(row.type),

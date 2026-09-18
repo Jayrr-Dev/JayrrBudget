@@ -2,6 +2,7 @@ import { format, isValid, parseISO } from "date-fns";
 import { enUS } from "date-fns/locale";
 
 const DISPLAY_PATTERN = "EEE, MMM d, yy";
+const COMPACT_DISPLAY_PATTERN = "MMM d, yy";
 const LONG_DISPLAY_PATTERN = "EEEE, MMMM d, yyyy";
 
 function parseCalendarDate(value: string | null | undefined): Date | null {
@@ -60,4 +61,19 @@ export function formatShortDisplayDate(
   value: string | null | undefined,
 ): string {
   return formatDisplayDate(value);
+}
+
+/**
+ * Mobile peek rows: "Dec 26, 26" (no weekday).
+ */
+export function formatCompactDisplayDate(
+  value: string | null | undefined,
+): string {
+  const date = parseCalendarDate(value);
+  if (!date) {
+    const trimmed = value?.trim();
+    return trimmed || "-";
+  }
+
+  return format(date, COMPACT_DISPLAY_PATTERN);
 }

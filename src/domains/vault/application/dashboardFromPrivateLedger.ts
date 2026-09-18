@@ -98,6 +98,7 @@ function toDashboardAccount(
     PrivateAccount,
     | "accountId"
     | "name"
+    | "label"
     | "officialName"
     | "mask"
     | "type"
@@ -116,6 +117,7 @@ function toDashboardAccount(
   return {
     accountId: account.accountId,
     name: account.name,
+    label: account.label ?? null,
     officialName: account.officialName ?? null,
     mask: account.mask ?? null,
     type: account.type ?? null,
@@ -164,6 +166,7 @@ export function dashboardFromPrivateLedger(
           {
             accountId: tx.accountId,
             name: tx.accountId,
+            label: null,
             officialName: null,
             mask: null,
             type: null,
@@ -188,6 +191,7 @@ export function dashboardFromPrivateLedger(
         {
           accountId: loan.accountId,
           name: loan.matchMerchantClean?.trim() || "Loan",
+          label: null,
           officialName: null,
           mask: null,
           type: typeMeta.value === "mortgage" ? "mortgage" : "loan",

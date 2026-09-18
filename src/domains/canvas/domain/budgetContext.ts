@@ -1,4 +1,5 @@
 import { classifyCashFlow, type CashFlowKind } from "@/domains/analysis/domain/cashFlow";
+import { displayAccountName } from "@/domains/dashboard/domain/accountName";
 import type {
   DashboardData,
   DashboardLoanSummary,
@@ -82,7 +83,7 @@ export function buildBudgetContextFromDashboard(data: DashboardData) {
       const activity = byAccount.get(account.accountId);
       return {
         accountId: account.accountId,
-        name: account.name,
+        name: displayAccountName(account),
         officialName: account.officialName,
         mask: account.mask,
         type: account.type,

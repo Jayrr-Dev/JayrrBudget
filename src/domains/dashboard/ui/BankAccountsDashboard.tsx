@@ -33,7 +33,10 @@ import { LoanPaymentTimeline } from "@/domains/loans/ui/LoanPaymentTimeline";
 import { StatementUpload } from "@/domains/statements/ui/StatementUpload";
 import { DecryptingStatus } from "@/domains/vault/ui/DecryptingStatus";
 import { usePrivateLedger } from "@/domains/vault/ui/usePrivateLedger";
-import { formatDisplayDate } from "@/shared/lib/format-date";
+import {
+  formatCompactDisplayDate,
+  formatDisplayDate,
+} from "@/shared/lib/format-date";
 import { PlusIcon } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -82,6 +85,17 @@ function accountSecondaryLine(account: DashboardAccount) {
 const ROW_LINK_CLASS =
   "transition-colors hover:bg-[var(--muted)]/70 focus-visible:bg-[var(--muted)]/70 focus-visible:outline-none";
 
+function loanTypeProgressLine(loan: DashboardLoanSummary) {
+  const typeLabel =
+    LOAN_TYPES.find((t) => t.value === loan.loanType)?.label ?? "Loan";
+  return `${loan.vehicleLabel ?? typeLabel} · ${loan.paymentsApplied} of ${loan.paymentCount} payments`;
+}
+
+function loanNextPaymentLine(loan: DashboardLoanSummary, currency: string) {
+  if (!loan.nextPaymentDate) return "Paid off";
+  return `Next Payment ${formatMoney(loan.paymentAmount, currency)} for ${formatCompactDisplayDate(loan.nextPaymentDate)}`;
+}
+
 function LoanAccountRow({
   account,
   loan,
@@ -94,25 +108,25 @@ function LoanAccountRow({
   const category = resolveAccountCategory(account);
   const amount = displayBalanceAmount(account.currentBalance, category);
   const currency = account.isoCurrencyCode ?? "CAD";
-  const typeLabel =
-    LOAN_TYPES.find((t) => t.value === loan.loanType)?.label ?? "Loan";
   const fill = Math.min(100, Math.max(0, loan.progressPct));
   const percentLabel = `${Math.round(fill)}% paid`;
 
   return (
-    <div className={`px-4 py-3.5 ${ROW_LINK_CLASS}`}>
+    <div className={`group px-4 py-3.5 ${ROW_LINK_CLASS}`}>
       <Link
         href={href}
         className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-4"
         aria-label={`Open ${account.name} details`}
       >
         <div className="min-w-0">
-          <p className="truncate font-medium text-[var(--foreground)]">
-            {account.name}
-          </p>
-          <p className="truncate text-sm text-[var(--muted-foreground)]">
-            {loan.vehicleLabel ?? typeLabel} · {loan.paymentsApplied} of{" "}
-            {loan.paymentCount} payments
+          <div className="flex items-center gap-2">
+            <p className="truncate text-lg font-semibold text-[var(--foreground)]">
+              {account.name}
+            </p>
+            <LoanTypeIcon loanType={loan.loanType} className="size-6" />
+          </div>
+          <p className="truncate text-base text-[var(--muted-foreground)]">
+            {loanNextPaymentLine(loan, currency)}
           </p>
         </div>
         <div className="flex shrink-0 items-center justify-between gap-2 sm:justify-end">
@@ -130,11 +144,7 @@ function LoanAccountRow({
       </div>
       <div className="mt-1.5 flex items-center justify-between gap-3 text-xs tabular-nums text-[var(--muted-foreground)]">
         <span>{percentLabel}</span>
-        <span className="truncate">
-          {loan.nextPaymentDate
-            ? `Next payment ${formatDisplayDate(loan.nextPaymentDate)}`
-            : "Paid off"}
-        </span>
+        <span className="truncate">{loanTypeProgressLine(loan)}</span>
       </div>
     </div>
   );

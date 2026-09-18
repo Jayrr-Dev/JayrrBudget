@@ -189,7 +189,7 @@ export const loadMeta = internalQuery({
       earliestDate: earliestTxn?.posted ?? null,
       accounts: accounts.map((account) => ({
         accountId: account.accountId,
-        name: account.name,
+        name: account.label?.trim() || account.name,
         type: account.type,
       })),
     };

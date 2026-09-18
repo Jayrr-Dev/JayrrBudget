@@ -2,6 +2,7 @@
 
 import { DataTable } from "@/components/ui/data-table";
 import type { DataTableFeatures } from "@/components/ui/data-table-features";
+import { displayAccountName } from "@/domains/dashboard/domain/accountName";
 import { formatMoney } from "@/domains/dashboard/domain/money";
 import type {
   DashboardAccount,
@@ -664,7 +665,7 @@ export function TransactionsDataTable({
   const accountNameById = useMemo(() => {
     const map = new Map<string, string>();
     for (const account of accounts) {
-      map.set(account.accountId, account.name);
+      map.set(account.accountId, displayAccountName(account));
     }
     return map;
   }, [accounts]);

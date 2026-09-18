@@ -40,7 +40,7 @@ export function LoanPaymentTimeline({
         cells={cells}
         size={size}
         rows={7}
-        wrap
+        slider
         rowLabels={WEEKDAY_ROW_LABELS}
         ariaLabel={ariaLabel}
         className={className}
@@ -90,7 +90,7 @@ export function LoanPaymentTimeline({
           cells={cells}
           size={size}
           rows={7}
-          wrap
+          slider
           rowLabels={WEEKDAY_ROW_LABELS}
           ariaLabel={ariaLabel}
           showLegend

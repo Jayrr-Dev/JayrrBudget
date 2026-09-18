@@ -25,9 +25,9 @@ const COPY_DIALOG_MINIMIZED_LABEL_FALLBACK = "Dialog";
 const DIALOG_UNPADDED_CLASS = /(^|\s)p-0(\s|$)/;
 
 const DIALOG_CHROME_ACTIONS_CONTAINER_CLASS =
-  "sticky top-0 z-10 flex h-6 shrink-0 items-center justify-end gap-0 border-b border-border bg-popover px-0.5";
+  "absolute top-0 right-0 z-10 flex h-6 w-fit items-center justify-end gap-0 bg-popover px-0.5";
 
-const DIALOG_CHROME_ACTIONS_PADDED_CLASS = "-mx-6 -mt-6 -mb-4";
+const DIALOG_CHROME_ACTIONS_PADDED_CLASS = "top-1.5 right-1.5";
 
 const DIALOG_CHROME_ACTION_BUTTON_CLASS =
   "group inline-flex size-5 shrink-0 cursor-pointer items-center justify-center rounded-xs p-0 opacity-70 transition-opacity hover:opacity-100 focus:outline-hidden disabled:pointer-events-none disabled:opacity-40";
@@ -324,7 +324,7 @@ function DialogContent({
               className={cn(
                 DIALOG_CHROME_ACTIONS_CONTAINER_CLASS,
                 isUnpaddedContent
-                  ? undefined
+                  ? "relative ml-auto shrink-0"
                   : DIALOG_CHROME_ACTIONS_PADDED_CLASS,
               )}
             >
@@ -376,7 +376,7 @@ function DialogHeader({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="dialog-header"
-      className={cn("flex flex-col gap-2", className)}
+      className={cn("flex flex-col gap-2 pr-14", className)}
       {...props}
     />
   );

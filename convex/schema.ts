@@ -150,6 +150,8 @@ export default defineSchema({
     accountId: v.string(),
     institutionId: v.string(),
     name: v.string(),
+    /** Nickname shown in the UI. Does not replace name or accountId. */
+    label: v.optional(v.union(v.string(), v.null())),
     officialName: v.union(v.string(), v.null()),
     mask: v.union(v.string(), v.null()),
     type: v.union(v.string(), v.null()),

@@ -29,6 +29,7 @@ import { getVaultMasterKey } from "@/crypto/session";
 import type { MutationClient } from "@/crypto/vaultRecords";
 import { analysisQueryKeys } from "@/domains/analysis/queries/query-keys";
 import { queryKeys } from "@/domains/dashboard/queries/query-keys";
+import { AddLoanDialog } from "@/domains/dashboard/ui/AddLoanDialog";
 import { dbExplorerQueryKeys } from "@/domains/db-explorer/queries/query-keys";
 import { OcrMarkdownView } from "@/domains/statements/ui/OcrMarkdownView";
 import { deleteVaultLoan } from "@/domains/vault/application/deleteVaultLoan";
@@ -55,6 +56,7 @@ export function LoanAccountActions({ accountId, accountName }: Props) {
   const client = useConvex();
   const privateLedger = usePrivateLedger();
   const [ocrOpen, setOcrOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
 
   const vaultDoc = privateLedger.encryptedLedger
@@ -121,6 +123,11 @@ export function LoanAccountActions({ accountId, accountName }: Props) {
         size="sm"
         actions={[
           {
+            label: "Edit",
+            onSelect: () => setEditOpen(true),
+            disabled: !canDelete,
+          },
+          {
             label: "View OCR",
             onSelect: () => setOcrOpen(true),
             disabled: !hasOcr || ocrLoading,
@@ -132,6 +139,11 @@ export function LoanAccountActions({ accountId, accountName }: Props) {
             disabled: !canDelete || remove.isPending,
           },
         ]}
+      />
+      <AddLoanDialog
+        open={editOpen}
+        onOpenChange={setEditOpen}
+        accountId={accountId}
       />
       <Dialog open={ocrOpen} onOpenChange={setOcrOpen}>
         <DialogContent className="sm:max-w-3xl">

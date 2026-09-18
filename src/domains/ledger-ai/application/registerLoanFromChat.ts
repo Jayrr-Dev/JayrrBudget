@@ -25,6 +25,7 @@ import {
   type VaultListClient,
 } from "@/domains/vault/application/loadPrivateLedger";
 import {
+  encryptedAccountMetaValue,
   saveEncryptedLoan,
   saveEncryptedRecords,
 } from "@/domains/vault/application/saveEncryptedLedger";
@@ -153,9 +154,10 @@ export async function registerLoanFromChat(options: {
       {
         recordId: `account-${accountId}`,
         kind: "account_meta",
-        value: {
+        value: encryptedAccountMetaValue({
           accountId,
           name,
+          label: null,
           officialName: officialLoanName(name, loanType, vehicleLabel),
           mask: null,
           type: loanType === "mortgage" ? "mortgage" : "loan",
@@ -163,7 +165,7 @@ export async function registerLoanFromChat(options: {
           currentBalance: principalStart,
           availableBalance: principalStart,
           isoCurrencyCode: "CAD",
-        },
+        }),
         expectedRevision: null,
       },
     ]);

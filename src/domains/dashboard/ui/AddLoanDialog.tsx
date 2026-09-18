@@ -37,12 +37,15 @@ import {
   LOAN_TYPES,
   RATE_TYPES,
   loanTypeMeta,
+  normalizeLoanType,
+  normalizeRateType,
   officialLoanName,
   type LoanType,
   type RateType,
 } from "@/domains/loans/domain/loanTypes";
 import {
   PAYMENT_FREQUENCIES,
+  normalizePaymentFrequency,
   type PaymentFrequency,
 } from "@/domains/loans/domain/paymentFrequency";
 import {
@@ -61,6 +64,7 @@ import {
   type VaultListClient,
 } from "@/domains/vault/application/loadPrivateLedger";
 import {
+  encryptedAccountMetaValue,
   saveEncryptedLoan,
   saveEncryptedRecords,
   vaultWriteReady,
@@ -74,12 +78,14 @@ import { cn } from "cn";
 import { useConvex } from "convex/react";
 import { Info, UploadIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 type AddLoanDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** When set, the dialog updates this lending account instead of creating one. */
+  accountId?: string;
 };
 
 const emptyForm = {
@@ -106,7 +112,51 @@ const LOAN_FORM_STEPS = [
 
 type LoanFormStep = (typeof LOAN_FORM_STEPS)[number]["id"];
 
-export function AddLoanDialog({ open, onOpenChange }: AddLoanDialogProps) {
+function compactNumber(value: number, digits = 4) {
+  return String(Number(value.toFixed(digits)));
+}
+
+function formFromLedger(
+  account: { name: string } | undefined,
+  loan:
+    | {
+        principal: number;
+        annualRate: number;
+        paymentAmount: number;
+        firstPaymentDate: string;
+        paymentCount: number;
+        paymentFrequency?: string | null;
+        loanType?: string | null;
+        rateType?: string | null;
+        vehicleLabel?: string | null;
+        matchMerchantClean?: string | null;
+      }
+    | undefined,
+) {
+  if (!account || !loan) return emptyForm;
+  const loanType = normalizeLoanType(loan.loanType);
+  return {
+    name: account.name,
+    loanType,
+    rateType: normalizeRateType(loan.rateType),
+    vehicleLabel: loan.vehicleLabel ?? "",
+    principalStart: compactNumber(loan.principal, 2),
+    annualRatePct: compactNumber(loan.annualRate * 100, 4),
+    paymentAmount: compactNumber(loan.paymentAmount, 2),
+    paymentFrequency: normalizePaymentFrequency(
+      loan.paymentFrequency ?? loanTypeMeta(loanType).defaultFrequency,
+    ),
+    paymentCount: String(Math.floor(loan.paymentCount)),
+    firstPaymentDate: loan.firstPaymentDate,
+    matchMerchantClean: loan.matchMerchantClean ?? "",
+  };
+}
+
+export function AddLoanDialog({
+  open,
+  onOpenChange,
+  accountId,
+}: AddLoanDialogProps) {
   const router = useRouter();
   const client = useConvex();
   const privateLedger = usePrivateLedger();
@@ -121,6 +171,7 @@ export function AddLoanDialog({ open, onOpenChange }: AddLoanDialogProps) {
   const stepMeta = LOAN_FORM_STEPS[step - 1];
   const typeMeta = loanTypeMeta(form.loanType);
   const busy = saving || uploading;
+  const isEditing = Boolean(accountId);
   function setField(key: keyof typeof emptyForm, value: string) {
     setForm((prev) => ({ ...prev, [key]: value }));
   }
@@ -145,6 +196,23 @@ export function AddLoanDialog({ open, onOpenChange }: AddLoanDialogProps) {
     resetFormState();
     onOpenChange(false);
   }
+
+  useEffect(() => {
+    if (!open) return;
+    if (!accountId) {
+      resetFormState();
+      return;
+    }
+    const account = privateLedger.ledger.accounts.find(
+      (row) => row.accountId === accountId,
+    );
+    const loan = privateLedger.ledger.loans.find(
+      (row) => row.accountId === accountId,
+    );
+    setForm(formFromLedger(account, loan));
+    setStep(1);
+    setPendingFileHash(null);
+  }, [open, accountId]);
 
   function stepError(current: LoanFormStep): string | null {
     if (current === 1) {
@@ -306,35 +374,46 @@ export function AddLoanDialog({ open, onOpenChange }: AddLoanDialogProps) {
       if (!write) {
         throw new Error(
           privateLedger.encryptedLedger
-            ? "Unlock the vault to register a lending account."
+            ? isEditing
+              ? "Unlock the vault to edit this lending account."
+              : "Unlock the vault to register a lending account."
             : "Turn on Private ledger in Modules, unlock the vault, then register the loan.",
         );
       }
-      const accountId = `loan-${crypto.randomUUID()}`;
+      const existingAccount = accountId
+        ? privateLedger.ledger.accounts.find(
+            (row) => row.accountId === accountId,
+          )
+        : undefined;
+      const existingLoan = accountId
+        ? privateLedger.ledger.loans.find((row) => row.accountId === accountId)
+        : undefined;
+      const savedAccountId = accountId ?? `loan-${crypto.randomUUID()}`;
       await saveEncryptedRecords(write, [
         {
-          recordId: `account-${accountId}`,
+          recordId: existingAccount?.recordId ?? `account-${savedAccountId}`,
           kind: "account_meta",
-          value: {
-            accountId,
+          value: encryptedAccountMetaValue({
+            accountId: savedAccountId,
             name: form.name.trim(),
+            label: existingAccount?.label ?? null,
             officialName: officialLoanName(
               form.name.trim(),
               form.loanType,
               form.vehicleLabel.trim() || null,
             ),
-            mask: null,
+            mask: existingAccount?.mask ?? null,
             type: form.loanType === "mortgage" ? "mortgage" : "loan",
             subtype: typeMeta.subtype,
             currentBalance: principalStart,
             availableBalance: principalStart,
-            isoCurrencyCode: "CAD",
-          },
-          expectedRevision: null,
+            isoCurrencyCode: existingAccount?.isoCurrencyCode ?? "CAD",
+          }),
+          expectedRevision: existingAccount?.revision ?? null,
         },
       ]);
       await saveEncryptedLoan(write, {
-        accountId,
+        accountId: savedAccountId,
         principal: principalStart,
         annualRate: annualRatePct / 100,
         paymentAmount,
@@ -346,7 +425,7 @@ export function AddLoanDialog({ open, onOpenChange }: AddLoanDialogProps) {
         vehicleLabel: form.vehicleLabel.trim() || null,
         matchMerchantClean: form.matchMerchantClean.trim() || null,
         matchAmount: paymentAmount,
-        expectedRevision: null,
+        expectedRevision: existingLoan?.revision ?? null,
       });
       if (pendingFileHash) {
         const masterKey = getVaultMasterKey();
@@ -365,17 +444,25 @@ export function AddLoanDialog({ open, onOpenChange }: AddLoanDialogProps) {
             keyId: write.keyId,
             masterKey,
             fileHash: pendingFileHash,
-            accountId,
+            accountId: savedAccountId,
             ledger,
           });
         }
       }
       privateLedger.reload();
       resetAndClose();
-      router.push(`/accounts?account=${encodeURIComponent(accountId)}`);
+      if (isEditing) {
+        toast.success("Lending account updated");
+      } else {
+        router.push(`/accounts?account=${encodeURIComponent(savedAccountId)}`);
+      }
     } catch (error) {
       toast.error(
-        error instanceof Error ? error.message : "Could not create loan",
+        error instanceof Error
+          ? error.message
+          : isEditing
+            ? "Could not save loan"
+            : "Could not create loan",
       );
     } finally {
       setSaving(false);
@@ -398,22 +485,32 @@ export function AddLoanDialog({ open, onOpenChange }: AddLoanDialogProps) {
         <form onSubmit={onSubmit} className="grid gap-4">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              Register Lending Account
+              {isEditing ? "Edit Lending Account" : "Register Lending Account"}
               <Popover>
                 <PopoverTrigger asChild>
                   <button
                     type="button"
                     className="inline-flex size-6 shrink-0 items-center justify-center rounded-full text-accent hover:text-primary"
-                    aria-label="Register Lending Account info"
+                    aria-label={
+                      isEditing
+                        ? "Edit Lending Account info"
+                        : "Register Lending Account info"
+                    }
                   >
                     <Info className="size-3.5" />
                   </button>
                 </PopoverTrigger>
                 <PopoverContent align="start" side="bottom" className="w-72">
                   <PopoverHeader>
-                    <PopoverTitle>Register Lending Account</PopoverTitle>
+                    <PopoverTitle>
+                      {isEditing
+                        ? "Edit Lending Account"
+                        : "Register Lending Account"}
+                    </PopoverTitle>
                     <PopoverDescription>
-                      Track a loan with amortization terms.
+                      {isEditing
+                        ? "Update loan name, type, and amortization terms."
+                        : "Track a loan with amortization terms."}
                     </PopoverDescription>
                     <ul className="mt-1.5 list-disc space-y-1 pl-4 text-muted-foreground">
                       <li>
@@ -429,8 +526,9 @@ export function AddLoanDialog({ open, onOpenChange }: AddLoanDialogProps) {
               </Popover>
             </DialogTitle>
             <DialogDescription className="sr-only">
-              Track a mortgage, auto, student, personal, HELOC, or other loan
-              with amortization terms.
+              {isEditing
+                ? "Update this lending account’s name, type, and amortization terms."
+                : "Track a mortgage, auto, student, personal, HELOC, or other loan with amortization terms."}
             </DialogDescription>
           </DialogHeader>
 
@@ -715,7 +813,13 @@ export function AddLoanDialog({ open, onOpenChange }: AddLoanDialogProps) {
               </Button>
             )}
             <Button type="submit" disabled={busy}>
-              {step < 3 ? "Next" : saving ? "Saving…" : "Create Loan"}
+              {step < 3
+                ? "Next"
+                : saving
+                  ? "Saving…"
+                  : isEditing
+                    ? "Save"
+                    : "Create Loan"}
             </Button>
           </DialogFooter>
         </form>

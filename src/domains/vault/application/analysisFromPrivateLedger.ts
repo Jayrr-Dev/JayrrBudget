@@ -3,6 +3,7 @@ import type {
   AnalysisPeriod,
   AnalysisRange,
 } from "@/domains/analysis/domain/types";
+import { displayAccountName } from "@/domains/dashboard/domain/accountName";
 import type { PrivateLedger } from "@/domains/vault/domain/privateLedger";
 import type { AnalysisSourceRow } from "@convex/lib/analysisTypes";
 import { computeAnalysis } from "@convex/lib/computeAnalysis";
@@ -17,7 +18,9 @@ function toSourceRows(ledger: PrivateLedger): AnalysisSourceRow[] {
     const account = tx.accountId ? accountById.get(tx.accountId) : undefined;
     return {
       description: tx.description,
-      accountName: account?.name ?? tx.accountId ?? null,
+      accountName: account
+        ? displayAccountName(account)
+        : (tx.accountId ?? null),
       accountType: account?.type ?? null,
       amount: tx.amount,
       currencyCode: tx.currency,

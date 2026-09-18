@@ -94,6 +94,7 @@ import { useHoverPointer, useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
 import { downloadCsv, toCsv } from "@/shared/lib/csv";
 import {
+  formatCompactDisplayDate,
   formatDisplayDate,
   formatShortDisplayDate,
 } from "@/shared/lib/format-date";
@@ -103,6 +104,7 @@ import { IconInfoCircle } from "@tabler/icons-react";
 import { useQuery } from "convex/react";
 import { ChevronDownIcon, PlusIcon } from "lucide-react";
 import {
+  Fragment,
   useCallback,
   useEffect,
   useMemo,
@@ -675,6 +677,8 @@ function PieDonutLabel({
 
 const TREEMAP_LABEL_BASE_PX = 14;
 const TREEMAP_LABEL_MAX_PX = 28;
+/** Side legend + parent groups when the filter list is longer than this. */
+const LEGEND_GROUP_AFTER = 8;
 
 /** Floor at text-sm; grow with the shorter tile side so big blocks read larger. */
 function treemapLabelFontPx(width: number, height: number) {
@@ -1007,6 +1011,7 @@ function TrendChart({
         }}
       />
       <ChartWithSeriesList
+        placement={legendPlacement(TREND_SERIES.length)}
         list={
           <SeriesLegend
             series={TREND_SERIES}
@@ -1352,13 +1357,65 @@ function useVisibleSeries(series: AnalysisCategorySeries[]) {
   };
 }
 
+function legendPlacement(count: number): "side" | "top" {
+  return count > LEGEND_GROUP_AFTER ? "side" : "top";
+}
+
+function seriesGroupsByRow(
+  rows: Array<Record<string, string | number>>,
+  series: AnalysisCategorySeries[],
+): { label: string; series: AnalysisCategorySeries[] }[] {
+  const parentByKey = new Map<string, string>();
+  for (const item of series) {
+    let bestName = "";
+    let bestSpend = 0;
+    for (const row of rows) {
+      const amount = Number(row[item.key] ?? 0);
+      if (amount > bestSpend) {
+        bestSpend = amount;
+        bestName = String(row.name ?? "");
+      }
+    }
+    parentByKey.set(item.key, bestName.length > 0 ? bestName : "Other");
+  }
+
+  const groups: { label: string; series: AnalysisCategorySeries[] }[] = [];
+  const used = new Set<string>();
+  const pushGroup = (label: string) => {
+    if (used.has(label)) return;
+    used.add(label);
+    const items = series.filter((item) => parentByKey.get(item.key) === label);
+    if (items.length === 0) return;
+    groups.push({ label, series: items });
+  };
+
+  for (const row of rows) {
+    pushGroup(String(row.name ?? ""));
+  }
+  for (const label of parentByKey.values()) {
+    pushGroup(label);
+  }
+  return groups;
+}
+
 function ChartWithSeriesList({
   list,
   children,
+  placement = "side",
 }: {
   list: ReactNode;
   children: ReactNode;
+  placement?: "side" | "top";
 }) {
+  if (placement === "top") {
+    return (
+      <div className="flex min-w-0 flex-col gap-3">
+        <div className="min-w-0">{list}</div>
+        <div className="min-w-0 space-y-3">{children}</div>
+      </div>
+    );
+  }
+
   return (
     <div className="grid min-w-0 items-start gap-4 md:grid-cols-4">
       <aside className="min-w-0 pb-1 md:col-span-1 md:sticky md:top-4 md:max-h-[min(72vh,44rem)] md:overflow-y-auto md:pr-1 md:pb-2">
@@ -1374,13 +1431,21 @@ function SeriesLegend({
   value,
   onValueChange,
   colors = CATEGORY_COLORS,
+  groups,
 }: {
   series: AnalysisCategorySeries[];
   value: string[];
   onValueChange: (keys: string[]) => void;
   colors?: string[];
+  groups?: { label: string; series: AnalysisCategorySeries[] }[];
 }) {
   if (series.length === 0) return null;
+  const colorByKey = new Map(
+    series.map((item, index) => [item.key, colors[index % colors.length]]),
+  );
+  const sections =
+    groups && groups.length > 1 ? groups : [{ label: "", series }];
+
   return (
     <ToggleGroup
       type="multiple"
@@ -1398,25 +1463,34 @@ function SeriesLegend({
       aria-label="Filter series"
       className="flex h-auto w-full max-w-full flex-wrap items-start justify-start gap-1 overflow-visible bg-transparent py-1"
     >
-      {series.map((item, index) => (
-        <ToggleGroupItem
-          key={item.key}
-          value={item.key}
-          size="sm"
-          aria-label={`Toggle ${item.label}`}
-          className={cn(
-            badgeVariants({ variant: "outline" }),
-            "min-h-11 min-w-0 max-w-full shrink rounded-sm px-3 font-normal shadow-none sm:min-h-0 sm:px-2 hover:bg-muted data-[state=off]:opacity-40 data-[state=on]:bg-transparent data-[state=on]:text-foreground",
-          )}
-        >
-          <span
-            className="size-2 shrink-0 rounded-[2px]"
-            style={{
-              backgroundColor: colors[index % colors.length],
-            }}
-          />
-          <span className="truncate text-foreground">{item.label}</span>
-        </ToggleGroupItem>
+      {sections.map((section) => (
+        <Fragment key={section.label || "all"}>
+          {section.label.length > 0 ? (
+            <span className="text-muted-foreground mt-2 basis-full text-xs font-medium first:mt-0">
+              {section.label}
+            </span>
+          ) : null}
+          {section.series.map((item) => (
+            <ToggleGroupItem
+              key={item.key}
+              value={item.key}
+              size="sm"
+              aria-label={`Toggle ${item.label}`}
+              className={cn(
+                badgeVariants({ variant: "outline" }),
+                "min-h-11 min-w-0 max-w-full shrink rounded-sm px-3 font-normal shadow-none sm:min-h-0 sm:px-2 hover:bg-muted data-[state=off]:opacity-40 data-[state=on]:bg-transparent data-[state=on]:text-foreground",
+              )}
+            >
+              <span
+                className="size-2 shrink-0 rounded-[2px]"
+                style={{
+                  backgroundColor: colorByKey.get(item.key),
+                }}
+              />
+              <span className="truncate text-foreground">{item.label}</span>
+            </ToggleGroupItem>
+          ))}
+        </Fragment>
       ))}
     </ToggleGroup>
   );
@@ -1640,7 +1714,9 @@ function OtherBreakdownTable({
           <TableRow>
             <TableHead className="font-mono">Name</TableHead>
             <TableHead className="text-right font-mono">Spend</TableHead>
-            <TableHead className="text-right font-mono">Share</TableHead>
+            <TableHead className="hidden text-right font-mono sm:table-cell">
+              Share
+            </TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -1681,7 +1757,7 @@ function OtherBreakdownTable({
                 </TableCell>
                 <TableCell
                   className={cn(
-                    "text-right font-mono text-[0.7rem] tabular-nums text-muted-foreground sm:text-sm",
+                    "hidden text-right font-mono text-[0.7rem] tabular-nums text-muted-foreground sm:table-cell sm:text-sm",
                     !on && "opacity-40",
                   )}
                 >
@@ -1701,7 +1777,7 @@ function OtherBreakdownTable({
                 className="w-auto text-[0.7rem] sm:text-sm"
               />
             </TableCell>
-            <TableCell className="text-right font-mono text-[0.7rem] tabular-nums sm:text-sm">
+            <TableCell className="hidden text-right font-mono text-[0.7rem] tabular-nums sm:table-cell sm:text-sm">
               100.0%
             </TableCell>
           </TableRow>
@@ -1875,6 +1951,7 @@ function StackedMixChart({
         }}
       />
       <ChartWithSeriesList
+        placement={legendPlacement(series.length)}
         list={
           <SeriesLegend
             series={series}
@@ -2152,6 +2229,13 @@ function StackedRankedBarChart({
   const lastKey = visibleSeries[visibleSeries.length - 1]?.key ?? "";
   const isPie = showViewToggle && view === "pie";
   const isArea = showViewToggle && view === "area";
+  const legendGroups = useMemo(
+    () =>
+      series.length > LEGEND_GROUP_AFTER
+        ? seriesGroupsByRow(rows, series)
+        : undefined,
+    [rows, series],
+  );
   const visibleRows = useMemo(
     () =>
       rows
@@ -2211,11 +2295,13 @@ function StackedRankedBarChart({
         }}
       />
       <ChartWithSeriesList
+        placement={legendPlacement(series.length)}
         list={
           <SeriesLegend
             series={series}
             value={visibleKeys}
             onValueChange={setVisibleKeys}
+            groups={legendGroups}
           />
         }
       >
@@ -2516,8 +2602,12 @@ function TaxonomyBreakdownTable({
             <TableHead>{nameLabel}</TableHead>
             {nestedLabel ? <TableHead>{nestedLabel}</TableHead> : null}
             <TableHead className="text-right">Spend</TableHead>
-            <TableHead className="text-right">Count</TableHead>
-            <TableHead className="text-right">Share</TableHead>
+            <TableHead className="hidden text-right sm:table-cell">
+              Count
+            </TableHead>
+            <TableHead className="hidden text-right sm:table-cell">
+              Share
+            </TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -2553,10 +2643,10 @@ function TaxonomyBreakdownTable({
                 <TableCell className="text-right">
                   <MoneyText amount={row.spend} currency={currency} />
                 </TableCell>
-                <TableCell className="text-right font-mono tabular-nums text-[var(--muted-foreground)]">
+                <TableCell className="hidden text-right font-mono tabular-nums text-[var(--muted-foreground)] sm:table-cell">
                   {formatCount(row.count ?? 0)}
                 </TableCell>
-                <TableCell className="text-right font-mono tabular-nums text-[var(--muted-foreground)]">
+                <TableCell className="hidden text-right font-mono tabular-nums text-[var(--muted-foreground)] sm:table-cell">
                   {on ? formatShare(row.spend, totalSpend) : "-"}
                 </TableCell>
               </TableRow>
@@ -2569,10 +2659,10 @@ function TaxonomyBreakdownTable({
             <TableCell className="text-right">
               <MoneyText amount={tableTotal} currency={currency} />
             </TableCell>
-            <TableCell className="text-right font-mono tabular-nums">
+            <TableCell className="hidden text-right font-mono tabular-nums sm:table-cell">
               {visibleRows.reduce((sum, row) => sum + (row.count ?? 0), 0)}
             </TableCell>
-            <TableCell className="text-right font-mono tabular-nums">
+            <TableCell className="hidden text-right font-mono tabular-nums sm:table-cell">
               {formatShare(tableTotal, totalSpend)}
             </TableCell>
           </TableRow>
@@ -3534,7 +3624,7 @@ function TxnPeekRows({
 
   return (
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[20rem] text-sm">
+      <table className="w-full min-w-0 text-sm md:min-w-[20rem]">
         <tbody>
           {transactions.map((txn, index) => {
             const isCredit = txn.amount < 0;
@@ -3551,10 +3641,15 @@ function TxnPeekRows({
                     />
                   </td>
                 )}
-                <td className="whitespace-nowrap px-3 py-1.5 align-top tabular-nums text-muted-foreground">
-                  {formatShortDisplayDate(txn.date)}
+                <td className="whitespace-nowrap px-1.5 py-1 align-top tabular-nums text-muted-foreground md:px-3 md:py-1.5">
+                  <span className="md:hidden">
+                    {formatCompactDisplayDate(txn.date)}
+                  </span>
+                  <span className="hidden md:inline">
+                    {formatShortDisplayDate(txn.date)}
+                  </span>
                 </td>
-                <td className="max-w-[12rem] px-2 py-1.5 align-top text-foreground">
+                <td className="max-w-[9rem] px-1.5 py-1 align-top text-foreground md:max-w-[12rem] md:px-2 md:py-1.5">
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <span className="block truncate">{txn.description}</span>
@@ -3568,18 +3663,24 @@ function TxnPeekRows({
                     </TooltipContent>
                   </Tooltip>
                 </td>
-                <td className="w-[1%] whitespace-nowrap px-2 py-1.5 pr-3 text-right align-top">
+                <td className="w-[1%] whitespace-nowrap px-1.5 py-1 pr-2 text-right align-top md:px-2 md:py-1.5 md:pr-3">
+                  <span className="sr-only">
+                    {isCredit ? "Credit" : "Debit"}
+                  </span>
                   <MoneyText
                     amount={Math.abs(txn.amount)}
                     currency={currency}
+                    className={
+                      isCredit ? "text-[var(--income)]" : "text-[var(--spend)]"
+                    }
                   />
                 </td>
-                <td className="px-3 py-1.5 text-right align-top">
+                <td className="hidden px-3 py-1.5 text-right align-top md:table-cell">
                   <span
                     className={`text-xs font-medium tabular-nums ${
                       isCredit ? "text-foreground" : "text-muted-foreground"
                     }`}
-                    aria-label={isCredit ? "Credit" : "Debit"}
+                    aria-hidden="true"
                   >
                     {isCredit ? "CR" : "DR"}
                   </span>
@@ -3606,6 +3707,7 @@ function RowTxnsPopover({
   transactions: AnalysisTxnPeek[];
   canMoveMerchant?: boolean;
 }) {
+  const isMobile = useIsMobile();
   const catalog = useQuery(api.classifications.list, {});
   const [open, setOpen] = useState(false);
   const [editDescription, setEditDescription] = useState<string | null>(null);
@@ -3629,7 +3731,7 @@ function RowTxnsPopover({
   const headerActions = canMoveMerchant ? (
     <RowActionsMenu
       label={label}
-      size="sm"
+      size="xs"
       actions={[
         {
           label: "Move",
@@ -3653,11 +3755,19 @@ function RowTxnsPopover({
   ) : null;
 
   const list = (
-    <TxnPeekRows
-      transactions={transactions}
-      currency={currency}
-      onEditDescription={setEditDescription}
-    />
+    <div
+      className={
+        isMobile
+          ? "min-h-0 flex-1 overflow-auto scrollbar-gutter-stable"
+          : "max-h-72 overflow-auto scrollbar-gutter-stable"
+      }
+    >
+      <TxnPeekRows
+        transactions={transactions}
+        currency={currency}
+        onEditDescription={setEditDescription}
+      />
+    </div>
   );
 
   const nestedDialogs = (
@@ -3679,42 +3789,83 @@ function RowTxnsPopover({
     </>
   );
 
+  if (isMobile) {
+    return (
+      <>
+        <Dialog
+          open={open}
+          onOpenChange={(next) => {
+            if (!next && nestedOpen) return;
+            setOpen(next);
+          }}
+        >
+          <DialogTrigger asChild>{trigger}</DialogTrigger>
+          <DialogContent
+            className="flex max-h-[calc(100dvh-2rem)] w-full max-w-[calc(100%-1.5rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-lg"
+            minimizeLabel={label}
+            onInteractOutside={(event) => {
+              keepTxnPeekPopoverOpen(event);
+            }}
+          >
+            <DialogHeader className="border-b border-border px-3 py-2">
+              <div className="flex items-center gap-2">
+                {headerActions ? (
+                  <div className="shrink-0">{headerActions}</div>
+                ) : null}
+                <div className="min-w-0">
+                  <DialogTitle className="text-sm">{titleRow}</DialogTitle>
+                  {blurbRow}
+                  <DialogDescription className="sr-only">
+                    Recent transactions for {label} in this range.
+                  </DialogDescription>
+                </div>
+              </div>
+            </DialogHeader>
+            {list}
+          </DialogContent>
+        </Dialog>
+        {nestedDialogs}
+      </>
+    );
+  }
+
   return (
     <>
-      <Dialog
+      <Popover
         open={open}
         onOpenChange={(next) => {
           if (!next && nestedOpen) return;
           setOpen(next);
         }}
       >
-        <DialogTrigger asChild>{trigger}</DialogTrigger>
-        <DialogContent
-          className="flex max-h-[calc(100dvh-2rem)] w-full max-w-[calc(100%-1.5rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-lg"
-          minimizeLabel={label}
+        <PopoverTrigger asChild>{trigger}</PopoverTrigger>
+        <PopoverContent
+          align="end"
+          side="left"
+          sideOffset={8}
+          className="w-[min(34rem,calc(100vw-2rem))] gap-0 overflow-hidden p-0"
+          onPointerDownOutside={(event) => {
+            keepTxnPeekPopoverOpen(event);
+          }}
+          onFocusOutside={(event) => {
+            keepTxnPeekPopoverOpen(event);
+          }}
           onInteractOutside={(event) => {
             keepTxnPeekPopoverOpen(event);
           }}
         >
-          <DialogHeader className="border-b border-border px-3 py-2">
-            <div className="flex items-center justify-between gap-2">
-              <div className="min-w-0">
-                <DialogTitle className="text-sm">{titleRow}</DialogTitle>
-                {blurbRow}
-                <DialogDescription className="sr-only">
-                  Recent transactions for {label} in this range.
-                </DialogDescription>
-              </div>
-              {headerActions ? (
-                <div className="shrink-0">{headerActions}</div>
-              ) : null}
+          <div className="flex items-start gap-2 border-b border-border px-3 py-2">
+            {headerActions ? (
+              <div className="shrink-0">{headerActions}</div>
+            ) : null}
+            <div className="min-w-0">
+              {titleRow}
+              {blurbRow}
             </div>
-          </DialogHeader>
-          <div className="min-h-0 flex-1 overflow-auto scrollbar-gutter-stable">
-            {list}
           </div>
-        </DialogContent>
-      </Dialog>
+          {list}
+        </PopoverContent>
+      </Popover>
       {nestedDialogs}
     </>
   );
@@ -3762,13 +3913,9 @@ function LeaderboardTable({
   const canExpand = Boolean(vendorsByRow);
   const showTxns = Boolean(transactionsForRow);
   const asMerchant = isMerchantNameLabel(nameLabel);
-  const gridCols = canExpand
-    ? showTxns
-      ? "grid-cols-[1.75rem_minmax(0,1fr)_9rem_4rem_3.75rem_1rem_2.75rem] sm:grid-cols-[1.75rem_minmax(0,1fr)_9rem_4rem_3.75rem_1rem_1.5rem]"
-      : "grid-cols-[1.75rem_minmax(0,1fr)_9rem_4rem_3.75rem_1rem]"
-    : showTxns
-      ? "grid-cols-[1.75rem_minmax(0,1fr)_9rem_4rem_3.75rem_2.75rem] sm:grid-cols-[1.75rem_minmax(0,1fr)_9rem_4rem_3.75rem_1.5rem]"
-      : "grid-cols-[1.75rem_minmax(0,1fr)_9rem_4rem_3.75rem]";
+  const gridCols = showTxns
+    ? "grid-cols-[1.75rem_minmax(0,1fr)_7.5rem_2.75rem] sm:grid-cols-[1.75rem_minmax(0,1fr)_9rem_4rem_3.75rem_1.5rem]"
+    : "grid-cols-[1.75rem_minmax(0,1fr)_7.5rem] sm:grid-cols-[1.75rem_minmax(0,1fr)_9rem_4rem_3.75rem]";
   const grid = `grid min-w-0 w-full items-center gap-x-3 px-3 ${gridCols}`;
   const rankCol = "flex h-5 w-full items-center justify-center";
 
@@ -3801,9 +3948,8 @@ function LeaderboardTable({
             <span className={`${rankCol} tabular-nums`}>#</span>
             <span className="min-w-0 truncate text-left">{nameLabel}</span>
             <span className="w-full text-left">Spend</span>
-            <span className="w-full text-right">Count</span>
-            <span className="w-full text-left">Share</span>
-            {canExpand ? <span /> : null}
+            <span className="hidden w-full text-right sm:block">Count</span>
+            <span className="hidden w-full text-left sm:block">Share</span>
             {showTxns ? <span className="sr-only">Info</span> : null}
           </div>
           <div>
@@ -3844,19 +3990,12 @@ function LeaderboardTable({
                       align="left"
                     />
                   </span>
-                  <span className="text-right font-mono text-sm tabular-nums text-[var(--muted-foreground)]">
+                  <span className="hidden text-right font-mono text-sm tabular-nums text-[var(--muted-foreground)] sm:block">
                     {formatCount(row.count ?? 0)}
                   </span>
-                  <span className="text-left font-mono text-sm tabular-nums text-[var(--muted-foreground)]">
+                  <span className="hidden text-left font-mono text-sm tabular-nums text-[var(--muted-foreground)] sm:block">
                     {formatShare(row.spend, totalSpend)}
                   </span>
-                  {canExpand ? (
-                    <ChevronDownIcon
-                      className={`size-4 shrink-0 text-[var(--muted-foreground)] transition-transform ${
-                        isOpen ? "rotate-180" : ""
-                      }`}
-                    />
-                  ) : null}
                 </>
               );
               return (
@@ -3864,11 +4003,23 @@ function LeaderboardTable({
                   key={row.name}
                   className="not-last:border-b border-[var(--border)]"
                 >
-                  <div className={`${grid} py-2.5 text-sm`}>
+                  <div
+                    className={cn(
+                      grid,
+                      "py-2.5 text-sm",
+                      canExpand && "cursor-pointer hover:bg-muted/50",
+                      isOpen && "bg-muted/30",
+                    )}
+                  >
                     {canExpand ? (
                       <button
                         type="button"
                         aria-expanded={isOpen}
+                        aria-label={
+                          isOpen
+                            ? `Hide vendors for ${row.name}`
+                            : `Show vendors for ${row.name}`
+                        }
                         onClick={() =>
                           setOpenName((current) =>
                             current === row.name ? null : row.name,
@@ -3889,7 +4040,9 @@ function LeaderboardTable({
                         className={`${grid} pb-2.5 text-sm text-[var(--muted-foreground)]`}
                       >
                         <span />
-                        <span className="col-span-4">None in this range.</span>
+                        <span className="col-span-2 sm:col-span-4">
+                          None in this range.
+                        </span>
                       </p>
                     ) : (
                       <div className="pb-2">
@@ -3939,13 +4092,12 @@ function LeaderboardTable({
                                 align="left"
                               />
                             </span>
-                            <span className="text-right font-mono tabular-nums text-[var(--muted-foreground)]">
+                            <span className="hidden text-right font-mono tabular-nums text-[var(--muted-foreground)] sm:block">
                               {formatCount(vendor.count ?? 0)}
                             </span>
-                            <span className="text-left font-mono tabular-nums text-[var(--muted-foreground)]">
+                            <span className="hidden text-left font-mono tabular-nums text-[var(--muted-foreground)] sm:block">
                               {formatShare(vendor.spend, row.spend)}
                             </span>
-                            {canExpand ? <span /> : null}
                             {showTxns ? (
                               <RowTxnsPopover
                                 label={vendor.name}
@@ -3977,13 +4129,12 @@ function LeaderboardTable({
             <span className="text-left font-mono tabular-nums">
               <MoneyText amount={topTotal} currency={currency} align="left" />
             </span>
-            <span className="text-right font-mono tabular-nums">
+            <span className="hidden text-right font-mono tabular-nums sm:block">
               {topCount}
             </span>
-            <span className="text-left font-mono tabular-nums">
+            <span className="hidden text-left font-mono tabular-nums sm:block">
               {formatShare(topTotal, totalSpend)}
             </span>
-            {canExpand ? <span /> : null}
             {showTxns ? <span /> : null}
           </div>
         </div>
@@ -4193,13 +4344,9 @@ function AverageLeaderboardTable({
   const canExpand = Boolean(vendorsByRow);
   const showTxns = Boolean(transactionsForRow);
   const asMerchant = isMerchantNameLabel(nameLabel);
-  const gridCols = canExpand
-    ? showTxns
-      ? "grid-cols-[1.15rem_minmax(0,1fr)_6.5rem_4rem_1rem_2.75rem] sm:grid-cols-[1.15rem_minmax(0,1fr)_6.5rem_4rem_1rem_1.5rem]"
-      : "grid-cols-[1.15rem_minmax(0,1fr)_6.5rem_4rem_1rem]"
-    : showTxns
-      ? "grid-cols-[1.15rem_minmax(0,1fr)_6.5rem_4rem_2.75rem] sm:grid-cols-[1.15rem_minmax(0,1fr)_6.5rem_4rem_1.5rem]"
-      : "grid-cols-[1.15rem_minmax(0,1fr)_6.5rem_4rem]";
+  const gridCols = showTxns
+    ? "grid-cols-[1.15rem_minmax(0,1fr)_6.5rem_2.75rem] sm:grid-cols-[1.15rem_minmax(0,1fr)_8.25rem_8.25rem_1.5rem]"
+    : "grid-cols-[1.15rem_minmax(0,1fr)_6.5rem] sm:grid-cols-[1.15rem_minmax(0,1fr)_8.25rem_8.25rem]";
   const grid = `grid min-w-0 w-full items-center gap-x-2 px-2 sm:gap-x-3 sm:px-3 ${gridCols}`;
   const rankCol = "flex h-5 w-full items-center justify-center text-xs";
 
@@ -4229,12 +4376,12 @@ function AverageLeaderboardTable({
             <span className={`${rankCol} tabular-nums`}>#</span>
             <span className="min-w-0 truncate text-left">{nameLabel}</span>
             <span className="w-full whitespace-nowrap text-right">
-              {meta.avgCostLabel}
+              <span className="sm:hidden">{meta.avgCostLabelCompact}</span>
+              <span className="hidden sm:inline">{meta.avgCostLabel}</span>
             </span>
-            <span className="w-full whitespace-nowrap text-right">
+            <span className="hidden w-full whitespace-nowrap text-right sm:block">
               {meta.avgCountLabel}
             </span>
-            {canExpand ? <span /> : null}
             {showTxns ? <span className="sr-only">Info</span> : null}
           </div>
           <div>
@@ -4260,16 +4407,9 @@ function AverageLeaderboardTable({
                       showSymbol={false}
                     />
                   </span>
-                  <span className="text-right font-mono text-sm tabular-nums text-[var(--muted-foreground)]">
+                  <span className="hidden text-right font-mono text-sm tabular-nums text-[var(--muted-foreground)] sm:block">
                     {formatAvgCount(avgCount)}
                   </span>
-                  {canExpand ? (
-                    <ChevronDownIcon
-                      className={`size-4 shrink-0 text-[var(--muted-foreground)] transition-transform ${
-                        isOpen ? "rotate-180" : ""
-                      }`}
-                    />
-                  ) : null}
                 </>
               );
               return (
@@ -4277,11 +4417,23 @@ function AverageLeaderboardTable({
                   key={row.name}
                   className="not-last:border-b border-[var(--border)]"
                 >
-                  <div className={`${grid} py-2.5 text-sm`}>
+                  <div
+                    className={cn(
+                      grid,
+                      "py-2.5 text-sm",
+                      canExpand && "cursor-pointer hover:bg-muted/50",
+                      isOpen && "bg-muted/30",
+                    )}
+                  >
                     {canExpand ? (
                       <button
                         type="button"
                         aria-expanded={isOpen}
+                        aria-label={
+                          isOpen
+                            ? `Hide vendors for ${row.name}`
+                            : `Show vendors for ${row.name}`
+                        }
                         onClick={() =>
                           setOpenName((current) =>
                             current === row.name ? null : row.name,
@@ -4372,10 +4524,9 @@ function AverageLeaderboardTable({
                                 showSymbol={false}
                               />
                             </span>
-                            <span className="text-right font-mono tabular-nums text-[var(--muted-foreground)]">
+                            <span className="hidden text-right font-mono tabular-nums text-[var(--muted-foreground)] sm:block">
                               {formatAvgCount((vendor.count ?? 0) / divisor)}
                             </span>
-                            {canExpand ? <span /> : null}
                             {showTxns ? (
                               <RowTxnsPopover
                                 label={vendor.name}
@@ -4413,10 +4564,9 @@ function AverageLeaderboardTable({
                 showSymbol={false}
               />
             </span>
-            <span className="text-right font-mono tabular-nums">
+            <span className="hidden text-right font-mono tabular-nums sm:block">
               {formatAvgCount(visibleAvgCount)}
             </span>
-            {canExpand ? <span /> : null}
             {showTxns ? <span /> : null}
           </div>
         </div>

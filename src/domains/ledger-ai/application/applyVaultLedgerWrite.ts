@@ -66,6 +66,7 @@ function resolveAccount(
     (account) =>
       sameName(account.accountId, key) ||
       sameName(account.name, key) ||
+      sameName(account.label, key) ||
       sameName(account.officialName, key),
   );
   if (exact) return exact;
@@ -80,7 +81,8 @@ function resolveAccount(
     accounts.find(
       (account) =>
         account.accountId.toLowerCase().includes(key) ||
-        account.name.toLowerCase().includes(key),
+        account.name.toLowerCase().includes(key) ||
+        (account.label ?? "").toLowerCase().includes(key),
     ) ?? null
   );
 }

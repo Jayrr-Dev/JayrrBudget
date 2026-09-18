@@ -24,6 +24,12 @@ export const PIGGY_ICON_NAMES = [
   "notes",
   "menu",
   "close",
+  "loan-auto",
+  "loan-mortgage",
+  "loan-student",
+  "loan-personal",
+  "loan-heloc",
+  "loan-other",
 ] as const;
 
 export type PiggyIconName = (typeof PIGGY_ICON_NAMES)[number];

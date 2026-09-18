@@ -7,7 +7,7 @@
       <path d="M201 114C121 111 65 160 65 226C65 295 121 335 201 335C280 335 335 291 335 226C335 159 279 115 201 114Z" fill="#F8C3CC"/>
       <path d="M88 267C110 302 151 316 202 316C254 316 297 299 319 268C302 310 256 335 201 335C149 335 106 316 88 267Z" fill="#ECA5B7" stroke="none"/>
       <path d="M107 171C127 148 154 137 181 135" stroke="#FFE5E8" stroke-width="9"/>
-<g class="eyes"><path d="M134 214Q146 193 158 214M242 214Q254 193 266 214" /></g>      <g fill="#EF94AF" stroke="none" opacity=".65">
+<g class="eyes"><path d="M122 218Q146 182 170 218M230 218Q254 182 278 218" stroke-width="8"/></g>      <g fill="#EF94AF" stroke="none" opacity=".65">
         <ellipse cx="112" cy="242" rx="20" ry="12" transform="rotate(12 112 242)"/>
         <ellipse cx="287" cy="239" rx="20" ry="12" transform="rotate(-12 287 239)"/>
       </g>
@@ -16,4 +16,4 @@
       <path d="M174 234Q187 227 200 229" stroke="#FFD6DF" stroke-width="5"/>
       <ellipse cx="183" cy="251" rx="6" ry="8" fill="#854653" stroke="none"/>
       <ellipse cx="217" cy="251" rx="6" ry="8" fill="#854653" stroke="none"/>
-<path d="M181 294Q200 312 219 294" /></g></g></svg>
+<path d="M165 284Q200 328 235 284" stroke-width="8"/></g></g></svg>

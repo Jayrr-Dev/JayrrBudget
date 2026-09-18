@@ -28,7 +28,10 @@ import {
   EditDescriptionDialog,
 } from "@/domains/transactions/ui/EditDescriptionDialog";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { formatShortDisplayDate } from "@/shared/lib/format-date";
+import {
+  formatCompactDisplayDate,
+  formatShortDisplayDate,
+} from "@/shared/lib/format-date";
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { useQuery } from "convex/react";
@@ -100,7 +103,7 @@ export function MerchantTxnsPopover({
   const headerActions = (
     <RowActionsMenu
       label={merchantName}
-      size="sm"
+      size="xs"
       actions={[
         {
           label: "Move",
@@ -131,7 +134,7 @@ export function MerchantTxnsPopover({
           </p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[20rem] text-sm">
+            <table className="w-full min-w-0 text-sm md:min-w-[20rem]">
               <tbody>
                 {peeks.map((txn, index) => {
                   const isCredit = txn.amount < 0;
@@ -140,16 +143,21 @@ export function MerchantTxnsPopover({
                       key={`${txn.date}-${txn.description}-${index}`}
                       className="border-b border-border last:border-b-0"
                     >
-                      <td className="w-4 px-1.5 py-1.5 align-middle">
+                      <td className="w-4 px-1 py-1 align-middle md:px-1.5 md:py-1.5">
                         <DescriptionActionsButton
                           description={txn.description}
                           onEdit={setEditDescription}
                         />
                       </td>
-                      <td className="whitespace-nowrap px-3 py-1.5 align-top tabular-nums text-muted-foreground">
-                        {formatShortDisplayDate(txn.date)}
+                      <td className="whitespace-nowrap px-1.5 py-1 align-top tabular-nums text-muted-foreground md:px-3 md:py-1.5">
+                        <span className="md:hidden">
+                          {formatCompactDisplayDate(txn.date)}
+                        </span>
+                        <span className="hidden md:inline">
+                          {formatShortDisplayDate(txn.date)}
+                        </span>
                       </td>
-                      <td className="max-w-[12rem] px-2 py-1.5 align-top text-foreground">
+                      <td className="max-w-[9rem] px-1.5 py-1 align-top text-foreground md:max-w-[12rem] md:px-2 md:py-1.5">
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <span className="block truncate">
@@ -165,20 +173,28 @@ export function MerchantTxnsPopover({
                           </TooltipContent>
                         </Tooltip>
                       </td>
-                      <td className="w-[1%] whitespace-nowrap px-2 py-1.5 pr-3 text-right align-top">
+                      <td className="w-[1%] whitespace-nowrap px-1.5 py-1 pr-2 text-right align-top md:px-2 md:py-1.5 md:pr-3">
+                        <span className="sr-only">
+                          {isCredit ? "Credit" : "Debit"}
+                        </span>
                         <MoneyText
                           amount={Math.abs(txn.amount)}
                           currency={txn.currency}
+                          className={
+                            isCredit
+                              ? "text-[var(--income)]"
+                              : "text-[var(--spend)]"
+                          }
                         />
                       </td>
-                      <td className="px-3 py-1.5 text-right align-top">
+                      <td className="hidden px-3 py-1.5 text-right align-top md:table-cell">
                         <span
                           className={`text-xs font-medium tabular-nums ${
                             isCredit
                               ? "text-foreground"
                               : "text-muted-foreground"
                           }`}
-                          aria-label={isCredit ? "Credit" : "Debit"}
+                          aria-hidden="true"
                         >
                           {isCredit ? "CR" : "DR"}
                         </span>
@@ -230,7 +246,8 @@ export function MerchantTxnsPopover({
             }}
           >
             <DialogHeader className="border-b border-border px-3 py-2">
-              <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <div className="shrink-0">{headerActions}</div>
                 <DialogTitle className="flex min-w-0 items-baseline gap-2 text-sm">
                   <span className="min-w-0 truncate">{merchantName}</span>
                   {countLabel ? (
@@ -239,7 +256,6 @@ export function MerchantTxnsPopover({
                     </span>
                   ) : null}
                 </DialogTitle>
-                <div className="shrink-0">{headerActions}</div>
               </div>
               <DialogDescription className="sr-only">
                 Recent transactions for {merchantName}.
@@ -272,7 +288,8 @@ export function MerchantTxnsPopover({
             keepTxnPeekPopoverOpen(event);
           }}
         >
-          <div className="flex items-center justify-between gap-2 border-b border-border px-3 py-2">
+          <div className="flex items-center gap-2 border-b border-border px-3 py-2">
+            <div className="shrink-0">{headerActions}</div>
             <div className="min-w-0 text-sm font-medium">
               {merchantName}
               {countLabel ? (
@@ -281,7 +298,6 @@ export function MerchantTxnsPopover({
                 </span>
               ) : null}
             </div>
-            <div className="shrink-0">{headerActions}</div>
           </div>
           {list}
         </PopoverContent>

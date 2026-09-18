@@ -210,6 +210,7 @@ export const get = query({
           return {
             accountId: account.accountId,
             name: account.name,
+            label: account.label ?? null,
             officialName: account.officialName,
             mask: account.mask,
             type: account.type,
