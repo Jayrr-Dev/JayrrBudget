@@ -61,9 +61,9 @@ export default function TransactionsPage() {
 
   return (
     <div className="space-y-4 sm:space-y-8">
-      <header className="flex flex-col gap-3 border-b border-border pb-4 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:pb-6">
-        <div>
-          <h1 className="type-kicker text-[20px] flex items-center gap-2">
+      <header className="flex flex-nowrap items-center justify-between gap-2 border-b border-border pb-4 sm:gap-4 sm:pb-6">
+        <div className="min-w-0">
+          <h1 className="type-kicker flex items-center gap-2 text-[20px] whitespace-nowrap">
             Transactions
             <TransactionsTitleInfo />
           </h1>

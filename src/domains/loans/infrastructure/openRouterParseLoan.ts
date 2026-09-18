@@ -13,7 +13,7 @@ const LOAN_PARSE_RULES = [
   "loanType: auto, mortgage, student, personal, heloc, or other.",
   "rateType: fixed or variable (floating / prime-linked → variable).",
   "vehicleLabel: vehicle year/make/model, property address, school, or collateral note when present.",
-  "matchMerchantClean: PAD / pre-authorized debit payee name if shown; else lender short name.",
+  "txnDescriptionLookup: phrase from the bank transaction description that identifies PAD payments; not the merchant name.",
   "Skip ads, insurance upsells, and payment history tables unless they are the only source of terms.",
   "If a field is missing or ambiguous, return null for that field (do not invent).",
 ].join("\n");

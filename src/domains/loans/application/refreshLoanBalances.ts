@@ -31,6 +31,7 @@ export type LoanTermsRow = {
   firstPaymentDate: string;
   maturityDate: string;
   matchMerchantClean: string;
+  txnDescriptionLookup: string;
   matchAmount: number;
   principalOverride: number | null;
   overrideAsOf: string | null;
@@ -53,6 +54,7 @@ export type LoanDashboardSummary = {
   paidInterest: number;
   paidPrincipal: number;
   matchMerchantClean: string;
+  txnDescriptionLookup: string;
   payments: LoanPaymentStep[];
 };
 
@@ -79,7 +81,8 @@ export function summaryFromAmortize(
     vehicleLabel: terms.vehicleLabel,
     paidInterest: result.paidInterest,
     paidPrincipal: result.paidPrincipal,
-    matchMerchantClean: terms.matchMerchantClean,
+    matchMerchantClean: terms.txnDescriptionLookup || terms.matchMerchantClean,
+    txnDescriptionLookup: terms.txnDescriptionLookup || terms.matchMerchantClean,
     payments: result.schedule.filter((step) => step.applied),
   };
 }
@@ -92,7 +95,7 @@ export function computeLoanAmortization(
   const matchedPads = toMatchedPads(
     pads,
     terms.matchAmount,
-    terms.matchMerchantClean,
+    terms.txnDescriptionLookup || terms.matchMerchantClean,
   );
   const scheduledDates = buildScheduledDates(
     terms.firstPaymentDate,

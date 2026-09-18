@@ -104,6 +104,7 @@ export type PrivateLoanTerms = {
   rateType?: string | null;
   vehicleLabel?: string | null;
   matchMerchantClean?: string | null;
+  txnDescriptionLookup?: string | null;
   matchAmount?: number | null;
 };
 

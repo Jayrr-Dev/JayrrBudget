@@ -26,6 +26,7 @@ const loanFieldsValidator = v.object({
   paymentCount: v.union(v.number(), v.null()),
   firstPaymentDate: v.union(v.string(), v.null()),
   matchMerchantClean: v.union(v.string(), v.null()),
+  txnDescriptionLookup: v.optional(v.union(v.string(), v.null())),
   institutionName: v.union(v.string(), v.null()),
 });
 
@@ -51,6 +52,7 @@ function fieldsFromRow(row: {
   paymentCount: number | null;
   firstPaymentDate: string | null;
   matchMerchantClean: string | null;
+  txnDescriptionLookup?: string | null;
   institutionName: string | null;
 }) {
   const loanType =

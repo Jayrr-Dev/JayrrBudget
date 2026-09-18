@@ -16,12 +16,12 @@ import {
   MessageScrollerViewport,
   useMessageScrollerScrollable,
 } from "@/components/ui/message-scroller";
+import { PiggyMarkdown } from "@/domains/ledger-ai/ui/PiggyMarkdown";
 import {
   PiggyMascot,
   type PiggyMood,
 } from "@/domains/ledger-ai/ui/PiggyMascot";
 import { UserMascot } from "@/domains/ledger-ai/ui/UserMascot";
-import { PiggyMarkdown } from "@/domains/ledger-ai/ui/PiggyMarkdown";
 import { cn } from "@/lib/utils";
 import { Eraser } from "lucide-react";
 import {
@@ -56,7 +56,10 @@ export function PiggyTranscript({
   canClearChat?: boolean;
 }) {
   return (
-    <div className={cn("min-h-0 bg-background", className)} style={style}>
+    <div
+      className={cn("min-h-0 overflow-hidden bg-background", className)}
+      style={style}
+    >
       <MessageScrollerProvider autoScroll defaultScrollPosition="end">
         <PiggyTranscriptScroller
           ariaLabel={ariaLabel}
@@ -138,9 +141,7 @@ function PiggyTranscriptScroller({
         <div
           className={cn(
             "pointer-events-none absolute inset-x-0 bottom-0 z-10 flex justify-center bg-linear-to-t from-background via-background/90 to-transparent px-3 pt-6 pb-2 transition-[opacity,translate] duration-200",
-            revealed
-              ? "translate-y-0 opacity-100"
-              : "translate-y-2 opacity-0",
+            revealed ? "translate-y-0 opacity-100" : "translate-y-2 opacity-0",
           )}
         >
           <Button
@@ -190,7 +191,10 @@ export function PiggyUserMessage({
   children?: ReactNode;
 }) {
   return (
-    <Message align="end" className={cn("motion-safe:animate-piggy-pop", styles.user)}>
+    <Message
+      align="end"
+      className={cn("motion-safe:animate-piggy-pop", styles.user)}
+    >
       <MessageAvatar className="size-14 self-start overflow-visible rounded-none bg-transparent">
         <UserMascot iconClassName="size-14" />
       </MessageAvatar>
@@ -220,7 +224,11 @@ export function PiggyAssistantMessage({
   return (
     <Message
       align="start"
-      className={cn("motion-safe:animate-piggy-pop", styles.assistant, className)}
+      className={cn(
+        "motion-safe:animate-piggy-pop",
+        styles.assistant,
+        className,
+      )}
     >
       <MessageAvatar className="size-14 self-start overflow-visible rounded-none bg-transparent">
         <PiggyMascot mood={mood} iconClassName="size-14" />

@@ -99,7 +99,7 @@ const emptyForm = {
   paymentFrequency: "biweekly" as PaymentFrequency,
   paymentCount: "",
   firstPaymentDate: "",
-  matchMerchantClean: "",
+  txnDescriptionLookup: "",
 };
 
 const UPLOAD_TOAST = "loan-document-upload";
@@ -130,13 +130,19 @@ function formFromLedger(
         rateType?: string | null;
         vehicleLabel?: string | null;
         matchMerchantClean?: string | null;
+        txnDescriptionLookup?: string | null;
       }
     | undefined,
 ) {
-  if (!account || !loan) return emptyForm;
+  if (!loan) return emptyForm;
   const loanType = normalizeLoanType(loan.loanType);
+  const fromDescription =
+    loan.txnDescriptionLookup == null ? "" : loan.txnDescriptionLookup.trim();
+  const fromLegacyMerchant =
+    loan.matchMerchantClean == null ? "" : loan.matchMerchantClean.trim();
+  const txnDescriptionLookup = fromDescription || fromLegacyMerchant;
   return {
-    name: account.name,
+    name: account?.name?.trim() || txnDescriptionLookup || "",
     loanType,
     rateType: normalizeRateType(loan.rateType),
     vehicleLabel: loan.vehicleLabel ?? "",
@@ -148,7 +154,7 @@ function formFromLedger(
     ),
     paymentCount: String(Math.floor(loan.paymentCount)),
     firstPaymentDate: loan.firstPaymentDate,
-    matchMerchantClean: loan.matchMerchantClean ?? "",
+    txnDescriptionLookup,
   };
 }
 
@@ -209,10 +215,13 @@ export function AddLoanDialog({
     const loan = privateLedger.ledger.loans.find(
       (row) => row.accountId === accountId,
     );
+    // Each usePrivateLedger() instance decrypts on its own. Wait until this
+    // dialog's ledger is ready so edit does not lock in an empty form.
+    if (!loan && privateLedger.loading) return;
     setForm(formFromLedger(account, loan));
     setStep(1);
     setPendingFileHash(null);
-  }, [open, accountId]);
+  }, [open, accountId, privateLedger.ledger, privateLedger.loading]);
 
   function stepError(current: LoanFormStep): string | null {
     if (current === 1) {
@@ -320,7 +329,8 @@ export function AddLoanDialog({
         ...fill,
         name: fill.name || prev.name,
         vehicleLabel: fill.vehicleLabel || prev.vehicleLabel,
-        matchMerchantClean: fill.matchMerchantClean || prev.matchMerchantClean,
+        txnDescriptionLookup:
+          fill.txnDescriptionLookup || prev.txnDescriptionLookup,
       }));
       setPendingFileHash(result.fileHash);
       toast.success("Document scanned · review the fields", {
@@ -423,7 +433,8 @@ export function AddLoanDialog({
         loanType: form.loanType,
         rateType: form.rateType,
         vehicleLabel: form.vehicleLabel.trim() || null,
-        matchMerchantClean: form.matchMerchantClean.trim() || null,
+        txnDescriptionLookup: form.txnDescriptionLookup.trim() || null,
+        matchMerchantClean: form.txnDescriptionLookup.trim() || null,
         matchAmount: paymentAmount,
         expectedRevision: existingLoan?.revision ?? null,
       });
@@ -772,20 +783,20 @@ export function AddLoanDialog({
                 </Field>
               </div>
               <Field
-                label="PAD merchant (optional)"
-                htmlFor="loan-merchant"
+                label="Transaction description lookup (optional)"
+                htmlFor="loan-txn-description"
                 info={{
-                  title: "PAD merchant",
-                  body: "Name on the auto-debit (PAD) in your chequing account. We use it to match real payments to this loan. Leave blank to use the loan name.",
+                  title: "Transaction description lookup",
+                  body: "Phrase from the bank transaction description used to attach payments. Merchant names are ignored.",
                 }}
               >
                 <Input
-                  id="loan-merchant"
-                  value={form.matchMerchantClean}
+                  id="loan-txn-description"
+                  value={form.txnDescriptionLookup}
                   onChange={(e) =>
-                    setField("matchMerchantClean", e.target.value)
+                    setField("txnDescriptionLookup", e.target.value)
                   }
-                  placeholder="Defaults to name"
+                  placeholder="e.g. CIBC CAR LOAN"
                   disabled={busy}
                 />
               </Field>

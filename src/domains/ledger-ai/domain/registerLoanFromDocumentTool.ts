@@ -31,6 +31,7 @@ export const registerLoanOverridesSchema = z
       .string()
       .regex(/^\d{4}-\d{2}-\d{2}$/)
       .optional(),
+    txnDescriptionLookup: z.string().nullable().optional(),
     matchMerchantClean: z.string().nullable().optional(),
   })
   .describe("Values the user gave that beat what the document says");

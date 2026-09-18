@@ -44,6 +44,7 @@ export type DashboardLoanSummary = {
   paidInterest: number;
   paidPrincipal: number;
   matchMerchantClean: string;
+  txnDescriptionLookup: string;
   payments: DashboardLoanPayment[];
 };
 

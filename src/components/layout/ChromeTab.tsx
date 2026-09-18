@@ -27,15 +27,12 @@ export function ChromeTabStrip({
   children: ReactNode;
 }) {
   const scrollerRef = useRef<HTMLDivElement>(null);
-  const [overflow, setOverflow] = useState(false);
   const [canLeft, setCanLeft] = useState(false);
   const [canRight, setCanRight] = useState(false);
 
   const syncOverflow = useCallback(() => {
     const el = scrollerRef.current;
     if (!el) return;
-    const over = el.scrollWidth > el.clientWidth + 1;
-    setOverflow(over);
     setCanLeft(el.scrollLeft > 1);
     setCanRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 1);
   }, []);
@@ -68,7 +65,7 @@ export function ChromeTabStrip({
 
   return (
     <div className="flex min-w-0 items-end gap-0.5 px-0.5 pt-0.5">
-      {overflow ? (
+      {canLeft ? (
         <Arrows
           variant="ghost"
           shape="tower"
@@ -76,7 +73,6 @@ export function ChromeTabStrip({
           direction="left"
           aria-label="Scroll tabs left"
           className="mb-0.5 h-7 max-md:h-11 max-md:w-8"
-          disabled={!canLeft}
           onClick={() => scrollByPage(-1)}
         />
       ) : null}
@@ -94,7 +90,7 @@ export function ChromeTabStrip({
           {trailing}
         </div>
       ) : null}
-      {overflow ? (
+      {canRight ? (
         <Arrows
           variant="ghost"
           shape="tower"
@@ -102,7 +98,6 @@ export function ChromeTabStrip({
           direction="right"
           aria-label="Scroll tabs right"
           className="mb-0.5 h-7 max-md:h-11 max-md:w-8"
-          disabled={!canRight}
           onClick={() => scrollByPage(1)}
         />
       ) : null}

@@ -11,9 +11,13 @@
   /* Extra ink on the tail's lower diagonal (that edge reads thin at 45deg). */
   --tail-bottom-extra: 1.5px;
   position: relative;
-  max-width: 100%;
+  max-width: 85%;
   margin-top: 3px;
   margin-bottom: 5px;
+}
+
+.assistant [data-slot="bubble"][data-variant="piggy"] {
+  margin-left: 14px;
 }
 
 /* Bubble body: the rounded box with fill, outline, and text. */

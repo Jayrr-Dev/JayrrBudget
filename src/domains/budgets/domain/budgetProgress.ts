@@ -68,6 +68,49 @@ export function budgetProgressTone(
   return "ok";
 }
 
+/** Remaining ratio 1 = full budget left (blue); 0 = depleted (red). */
+const RING_COLOR_STOPS: ReadonlyArray<{ at: number; hex: string }> = [
+  { at: 1, hex: "#38bdf8" }, // sky-400 — full remaining
+  { at: 0.8, hex: "#488f31" },
+  { at: 0.6, hex: "#89bf77" },
+  { at: 0.4, hex: "#fff18f" },
+  { at: 0.2, hex: "#f59b56" },
+  { at: 0, hex: "#de425b" },
+];
+
+function hexToRgb(hex: string): [number, number, number] {
+  const raw = hex.replace("#", "");
+  return [
+    Number.parseInt(raw.slice(0, 2), 16),
+    Number.parseInt(raw.slice(2, 4), 16),
+    Number.parseInt(raw.slice(4, 6), 16),
+  ];
+}
+
+function mixHex(a: string, b: string, t: number): string {
+  const [ar, ag, ab] = hexToRgb(a);
+  const [br, bg, bb] = hexToRgb(b);
+  const r = Math.round(ar + (br - ar) * t);
+  const g = Math.round(ag + (bg - ag) * t);
+  const bl = Math.round(ab + (bb - ab) * t);
+  return `#${[r, g, bl].map((n) => n.toString(16).padStart(2, "0")).join("")}`;
+}
+
+/** Ring stroke for remaining ratio (1 = full left, 0 = empty/over). */
+export function budgetProgressRingColor(remainingRatio: number): string {
+  const t = Math.min(1, Math.max(0, remainingRatio));
+  for (let i = 0; i < RING_COLOR_STOPS.length - 1; i++) {
+    const high = RING_COLOR_STOPS[i]!;
+    const low = RING_COLOR_STOPS[i + 1]!;
+    if (t <= low.at) continue;
+    if (t >= high.at) return high.hex;
+    const span = high.at - low.at;
+    const local = span === 0 ? 0 : (t - low.at) / span;
+    return mixHex(low.hex, high.hex, local);
+  }
+  return RING_COLOR_STOPS[RING_COLOR_STOPS.length - 1]!.hex;
+}
+
 export function transactionMatchesBudget(
   line: BudgetSpendLine,
   budget: Pick<BudgetCap, "classLookup" | "descriptionLookup">,

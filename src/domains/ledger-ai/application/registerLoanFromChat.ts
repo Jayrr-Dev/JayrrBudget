@@ -138,10 +138,12 @@ export async function registerLoanFromChat(options: {
     const firstPaymentDate = String(terms.firstPaymentDate);
     const vehicleLabel =
       terms.vehicleLabel == null ? null : String(terms.vehicleLabel).trim() || null;
-    const matchMerchantClean =
-      terms.matchMerchantClean == null
-        ? null
-        : String(terms.matchMerchantClean).trim() || null;
+    const txnDescriptionLookup =
+      terms.txnDescriptionLookup == null
+        ? terms.matchMerchantClean == null
+          ? null
+          : String(terms.matchMerchantClean).trim() || null
+        : String(terms.txnDescriptionLookup).trim() || null;
 
     const write = {
       client: options.convex,
@@ -180,7 +182,8 @@ export async function registerLoanFromChat(options: {
       loanType,
       rateType,
       vehicleLabel,
-      matchMerchantClean,
+      txnDescriptionLookup,
+      matchMerchantClean: txnDescriptionLookup,
       matchAmount: paymentAmount,
       expectedRevision: null,
     });

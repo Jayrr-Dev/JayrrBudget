@@ -67,6 +67,7 @@ export default function OverviewPage() {
             accounts={data?.accounts ?? []}
             transactions={data?.transactions}
             loading={isInitialLoading}
+            showBudgets
           />
           <section className="space-y-4">
             <div>

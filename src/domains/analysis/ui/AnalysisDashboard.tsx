@@ -1,5 +1,11 @@
 "use client";
 
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 import { Arrows } from "@/components/ui/arrows";
 import { badgeVariants } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -80,7 +86,10 @@ import {
   formatMoney,
   formatMoneyParts,
 } from "@/domains/dashboard/domain/money";
-import { MoneyText } from "@/domains/dashboard/ui/MoneyText";
+import {
+  FitMoneyScale,
+  MoneyText,
+} from "@/domains/dashboard/ui/MoneyText";
 import { MerchantLabel } from "@/domains/merchants/ui/MerchantLabel";
 import { keepTxnPeekPopoverOpen } from "@/domains/merchants/ui/MerchantTxnsPopover";
 import { MoveMerchantDialog } from "@/domains/merchants/ui/MoveMerchantDialog";
@@ -104,7 +113,6 @@ import { IconInfoCircle } from "@tabler/icons-react";
 import { useQuery } from "convex/react";
 import { ChevronDownIcon, PlusIcon } from "lucide-react";
 import {
-  Fragment,
   useCallback,
   useEffect,
   useMemo,
@@ -1470,8 +1478,12 @@ function seriesGroupsFromBuckets(
   const claimed = new Set<string>();
   const groups: SeriesLegendGroup[] = [];
   for (const bucket of buckets) {
+    // Other is reserved for null/blank subcategories — never claim that
+    // label into a real section group.
+    if (bucket.label === "Other") continue;
     const names = new Set(bucket.names);
     const items = series.filter((item) => {
+      if (item.label === "Other") return false;
       if (claimed.has(item.key) || !names.has(item.label)) return false;
       claimed.add(item.key);
       return true;
@@ -1561,11 +1573,67 @@ function ChartWithSeriesList({
 
   return (
     <div className="grid min-w-0 items-start gap-4 md:grid-cols-4">
-      <aside className="min-w-0 pb-1 md:col-span-1 md:sticky md:top-4 md:max-h-[min(72vh,44rem)] md:overflow-y-auto md:pr-1 md:pb-2">
+      <aside className="min-w-0 pb-1 md:col-span-1 md:pr-1 md:pb-2">
         {list}
       </aside>
       <div className="min-w-0 space-y-3 md:col-span-3">{children}</div>
     </div>
+  );
+}
+
+const SERIES_LEGEND_CHIP_CLASS = cn(
+  badgeVariants({ variant: "outline" }),
+  "h-7 min-h-7 min-w-0 max-w-full gap-1 rounded-sm px-1.5 text-xs font-normal shadow-none sm:h-auto sm:min-h-0 sm:gap-1.5 sm:px-2 sm:text-sm hover:bg-muted data-[state=off]:opacity-40 data-[state=on]:bg-transparent data-[state=on]:text-foreground",
+);
+
+function SeriesLegendChips({
+  items,
+  value,
+  onValueChange,
+  colorByKey,
+  allKeys,
+}: {
+  items: AnalysisCategorySeries[];
+  value: string[];
+  onValueChange: (keys: string[]) => void;
+  colorByKey: Map<string, string | undefined>;
+  allKeys: string[];
+}) {
+  const itemKeys = items.map((item) => item.key);
+  return (
+    <ToggleGroup
+      type="multiple"
+      value={value.filter((key) => itemKeys.includes(key))}
+      onValueChange={(next) =>
+        onValueChange(
+          nextVisibleKeySet(allKeys, value, [
+            ...value.filter((key) => !itemKeys.includes(key)),
+            ...next,
+          ]),
+        )
+      }
+      spacing={1}
+      aria-label="Filter series"
+      className="flex h-auto w-full max-w-full flex-wrap items-start justify-start gap-1 overflow-visible bg-transparent py-0.5"
+    >
+      {items.map((item) => (
+        <ToggleGroupItem
+          key={item.key}
+          value={item.key}
+          size="sm"
+          aria-label={`Toggle ${item.label}`}
+          className={SERIES_LEGEND_CHIP_CLASS}
+        >
+          <span
+            className="size-1.5 shrink-0 rounded-[2px] sm:size-2"
+            style={{
+              backgroundColor: colorByKey.get(item.key),
+            }}
+          />
+          <span className="truncate text-foreground">{item.label}</span>
+        </ToggleGroupItem>
+      ))}
+    </ToggleGroup>
   );
 }
 
@@ -1582,60 +1650,83 @@ function SeriesLegend({
   colors?: string[];
   groups?: SeriesLegendGroup[];
 }) {
+  const isMobile = useIsMobile();
+  const sections =
+    groups && groups.length > 0 ? groups : [{ label: "", series }];
+  const labeledSections = sections.filter(
+    (section) => section.label.length > 0,
+  );
+  const defaultOpen = useMemo(() => {
+    const withSelected = labeledSections
+      .filter((section) =>
+        section.series.some((item) => value.includes(item.key)),
+      )
+      .map((section) => section.label);
+    if (withSelected.length > 0) return withSelected;
+    const first = labeledSections[0]?.label;
+    return first ? [first] : [];
+    // Initial open only — avoid snapping shut while toggling chips.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount defaults
+  }, []);
+
   if (series.length === 0) return null;
+
   const colorByKey = new Map(
     series.map((item, index) => [item.key, colors[index % colors.length]]),
   );
-  const sections =
-    groups && groups.length > 0 ? groups : [{ label: "", series }];
+  const allKeys = series.map((item) => item.key);
+  const useAccordion = isMobile && labeledSections.length > 0;
+
+  if (useAccordion) {
+    return (
+      <Accordion
+        type="multiple"
+        defaultValue={defaultOpen}
+        className="w-full gap-0"
+      >
+        {labeledSections.map((section) => (
+          <AccordionItem
+            key={section.label}
+            value={section.label}
+            className="border-border/70"
+          >
+            <AccordionTrigger className="py-2 text-xs text-muted-foreground hover:no-underline">
+              {section.label}
+            </AccordionTrigger>
+            <AccordionContent className="pb-2">
+              <SeriesLegendChips
+                items={section.series}
+                value={value}
+                onValueChange={onValueChange}
+                colorByKey={colorByKey}
+                allKeys={allKeys}
+              />
+            </AccordionContent>
+          </AccordionItem>
+        ))}
+      </Accordion>
+    );
+  }
 
   return (
-    <ToggleGroup
-      type="multiple"
-      value={value}
-      onValueChange={(next) =>
-        onValueChange(
-          nextVisibleKeySet(
-            series.map((item) => item.key),
-            value,
-            next,
-          ),
-        )
-      }
-      spacing={1}
-      aria-label="Filter series"
-      className="flex h-auto w-full max-w-full flex-wrap items-start justify-start gap-1 overflow-visible bg-transparent py-1"
-    >
+    <div className="flex w-full flex-col gap-2 py-1">
       {sections.map((section) => (
-        <Fragment key={section.label || "all"}>
+        <div key={section.label || "all"} className="min-w-0 space-y-1">
           {section.label.length > 0 ? (
-            <span className="text-muted-foreground mt-2 basis-full text-xs font-medium first:mt-0">
+            <span className="text-muted-foreground text-xs font-medium">
               {section.label}
             </span>
           ) : null}
-          {section.series.map((item) => (
-            <ToggleGroupItem
-              key={item.key}
-              value={item.key}
-              size="sm"
-              aria-label={`Toggle ${item.label}`}
-              className={cn(
-                badgeVariants({ variant: "outline" }),
-                "min-h-11 min-w-0 max-w-full shrink rounded-sm px-3 font-normal shadow-none sm:min-h-0 sm:px-2 hover:bg-muted data-[state=off]:opacity-40 data-[state=on]:bg-transparent data-[state=on]:text-foreground",
-              )}
-            >
-              <span
-                className="size-2 shrink-0 rounded-[2px]"
-                style={{
-                  backgroundColor: colorByKey.get(item.key),
-                }}
-              />
-              <span className="truncate text-foreground">{item.label}</span>
-            </ToggleGroupItem>
-          ))}
-        </Fragment>
+          <SeriesLegendChips
+            items={section.series}
+            value={value}
+            onValueChange={onValueChange}
+            colorByKey={colorByKey}
+            allKeys={allKeys}
+          />
+        </div>
       ))}
-    </ToggleGroup>
+    </div>
   );
 }
 
@@ -4391,23 +4482,6 @@ function seriesKeyForLabel(name: string, series: AnalysisCategorySeries[]) {
   return series.find((item) => item.label === name)?.key;
 }
 
-function RangeMetricJoin() {
-  return (
-    <span
-      aria-hidden
-      className="block h-px w-full self-center bg-[var(--border)]"
-    />
-  );
-}
-
-function HighMidLowMetrics({ children }: { children: ReactNode }) {
-  return (
-    <div className="grid grid-cols-[7.25rem_1rem_7.25rem_1rem_7.25rem] items-center">
-      {children}
-    </div>
-  );
-}
-
 /** High / mid / low spend across header range period buckets. */
 function RangeLeaderboardTable({
   title,
@@ -4447,8 +4521,15 @@ function RangeLeaderboardTable({
   const top = ranked.slice(0, 10);
 
   const grid = showTxns
-    ? "grid w-fit max-w-full grid-cols-[1.5rem_minmax(7rem,14rem)_max-content_2.75rem] items-center gap-x-4 px-3 sm:grid-cols-[1.5rem_minmax(7rem,14rem)_max-content_1.5rem]"
-    : "grid w-fit max-w-full grid-cols-[1.5rem_minmax(7rem,14rem)_max-content] items-center gap-x-4 px-3";
+    ? "grid w-full min-w-0 grid-cols-[1.5rem_minmax(5rem,0.55fr)_minmax(0,1fr)_2.75rem] items-center gap-x-3 px-3 sm:grid-cols-[1.5rem_minmax(6rem,0.45fr)_minmax(0,1fr)_1.5rem]"
+    : "grid w-full min-w-0 grid-cols-[1.5rem_minmax(5rem,0.55fr)_minmax(0,1fr)] items-center gap-x-3 px-3";
+  const metricGrid =
+    "grid min-w-0 w-full self-stretch grid-cols-3 divide-x divide-border";
+  const metricCell =
+    "flex min-w-0 items-center justify-end overflow-hidden px-2 text-right font-mono tabular-nums sm:px-3";
+  const moneyFitKey = top
+    .map((row) => `${row.high}:${row.mid}:${row.low}`)
+    .join("|");
 
   return (
     <section className="min-w-0 space-y-3 rounded-xl border border-border bg-surface-elevated p-3 sm:space-y-4 sm:p-6">
@@ -4465,59 +4546,85 @@ function RangeLeaderboardTable({
           Nothing in this range.
         </p>
       ) : (
-        <div className="w-fit max-w-full overflow-x-auto rounded-lg border border-[var(--border)]">
+        <div className="min-w-0 overflow-x-auto rounded-lg border border-[var(--border)]">
           <ScrollTopX className="rounded-lg">
-            <div
-              className={`${grid} border-b border-[var(--border)] py-2 text-xs text-[var(--muted-foreground)]`}
-            >
-              <span className="tabular-nums">#</span>
-              <span className="min-w-0 truncate text-left">{nameLabel}</span>
-              <HighMidLowMetrics>
-                <span className="w-full text-right">High</span>
-                <RangeMetricJoin />
-                <span className="w-full text-right">Mid</span>
-                <RangeMetricJoin />
-                <span className="w-full text-right">Low</span>
-              </HighMidLowMetrics>
-              {showTxns ? <span className="sr-only">Info</span> : null}
-            </div>
-            <div>
-              {top.map((row, index) => (
-                <div
-                  key={row.name}
-                  className={`${grid} not-last:border-b border-[var(--border)] py-2.5 text-sm`}
-                >
-                  <span className="text-[var(--muted-foreground)] tabular-nums">
-                    {index + 1}
+            <FitMoneyScale className="min-w-0 w-full" contentKey={moneyFitKey}>
+              <div
+                className={`${grid} border-b border-[var(--border)] py-2 text-xs text-[var(--muted-foreground)]`}
+              >
+                <span className="tabular-nums">#</span>
+                <span className="min-w-0 truncate text-left">{nameLabel}</span>
+                <div className={metricGrid}>
+                  <span className="flex items-center justify-end px-2 text-right sm:px-3">
+                    High
                   </span>
-                  <span className="min-w-0 truncate font-medium text-[var(--foreground)]">
-                    {asMerchant ? <MerchantLabel name={row.name} /> : row.name}
+                  <span className="flex items-center justify-end px-2 text-right sm:px-3">
+                    Mid
                   </span>
-                  <HighMidLowMetrics>
-                    <span className="text-right font-mono tabular-nums text-[var(--foreground)]">
-                      <MoneyText amount={row.high} currency={currency} />
-                    </span>
-                    <RangeMetricJoin />
-                    <span className="text-right font-mono tabular-nums text-[var(--muted-foreground)]">
-                      <MoneyText amount={row.mid} currency={currency} />
-                    </span>
-                    <RangeMetricJoin />
-                    <span className="text-right font-mono tabular-nums text-[var(--muted-foreground)]">
-                      <MoneyText amount={row.low} currency={currency} />
-                    </span>
-                  </HighMidLowMetrics>
-                  {showTxns ? (
-                    <RowTxnsPopover
-                      label={row.name}
-                      nameLabel={nameLabel}
-                      currency={currency}
-                      canMoveMerchant={asMerchant}
-                      transactions={transactionsForRow?.(row.name) ?? []}
-                    />
-                  ) : null}
+                  <span className="flex items-center justify-end px-2 text-right sm:px-3">
+                    Low
+                  </span>
                 </div>
-              ))}
-            </div>
+                {showTxns ? <span className="sr-only">Info</span> : null}
+              </div>
+              <div>
+                {top.map((row, index) => (
+                  <div
+                    key={row.name}
+                    className={`${grid} not-last:border-b border-[var(--border)] py-2.5 text-sm`}
+                  >
+                    <span className="text-[var(--muted-foreground)] tabular-nums">
+                      {index + 1}
+                    </span>
+                    <span className="min-w-0 truncate font-medium text-[var(--foreground)]">
+                      {asMerchant ? (
+                        <MerchantLabel name={row.name} />
+                      ) : (
+                        row.name
+                      )}
+                    </span>
+                    <div className={metricGrid}>
+                      <span
+                        className={`${metricCell} text-[var(--foreground)]`}
+                      >
+                        <MoneyText
+                          amount={row.high}
+                          currency={currency}
+                          fit
+                        />
+                      </span>
+                      <span
+                        className={`${metricCell} text-[var(--muted-foreground)]`}
+                      >
+                        <MoneyText
+                          amount={row.mid}
+                          currency={currency}
+                          fit
+                        />
+                      </span>
+                      <span
+                        className={`${metricCell} text-[var(--muted-foreground)]`}
+                      >
+                        <MoneyText
+                          amount={row.low}
+                          currency={currency}
+                          fit
+                        />
+                      </span>
+                    </div>
+                    {showTxns ? (
+                      <RowTxnsPopover
+                        label={row.name}
+                        nameLabel={nameLabel}
+                        currency={currency}
+                        canMoveMerchant={asMerchant}
+                        transactions={transactionsForRow?.(row.name) ?? []}
+                      />
+                    ) : null}
+                  </div>
+                ))}
+              </div>
+            </FitMoneyScale>
           </ScrollTopX>
         </div>
       )}
@@ -5546,7 +5653,7 @@ function SubcategoriesTab({
         <div className="space-y-6">
           <StackedRankedBarChart
             title="Subcategory breakdown"
-            info="Subcategories grouped by section. Toggle a subcategory chip to hide it. Area nests those labels inside each section."
+            info="Subcategories grouped by section. Other is only transactions with no subcategory. Toggle a chip to hide it. Area nests labels inside each section."
             rows={stacked.rows}
             series={stacked.series}
             currency={data.currency}
@@ -6095,10 +6202,6 @@ function TypesTab({
   );
 }
 
-function merchantPrimaryCategory(item: AnalysisMerchantBreakdown) {
-  return item.categories?.[0]?.name?.trim() || "Uncategorized";
-}
-
 function merchantMatchesCategory(
   item: AnalysisMerchantBreakdown,
   category: string,
@@ -6175,26 +6278,6 @@ function MerchantDrilldown({
     [breakdowns, categoryFilter],
   );
 
-  const merchantGroups = useMemo(() => {
-    if (categoryFilter !== "all") {
-      return [{ name: categoryFilter, items: visibleBreakdowns }];
-    }
-    const byCategory = new Map<string, AnalysisMerchantBreakdown[]>();
-    for (const item of breakdowns) {
-      const key = merchantPrimaryCategory(item);
-      const list = byCategory.get(key) ?? [];
-      list.push(item);
-      byCategory.set(key, list);
-    }
-    const order = categoryFilters.map((item) => item.name);
-    return order
-      .filter((name) => (byCategory.get(name)?.length ?? 0) > 0)
-      .map((name) => ({
-        name,
-        items: byCategory.get(name) ?? [],
-      }));
-  }, [breakdowns, categoryFilter, categoryFilters, visibleBreakdowns]);
-
   const breakdown: AnalysisMerchantBreakdown | undefined =
     breakdowns.find((item) => item.merchant === selected) ?? breakdowns[0];
 
@@ -6219,110 +6302,84 @@ function MerchantDrilldown({
         title="Merchant detail"
         info="Filter by category, then pick a Merchant clean name. Subcategories come from transaction labels."
       />
-      <div className="space-y-4">
-        <div
-          role="group"
-          aria-label="Filter merchants by category"
-          className="flex flex-wrap items-center gap-1.5"
+      <div
+        role="group"
+        aria-label="Filter merchants by category"
+        className="flex flex-wrap items-center gap-1"
+      >
+        <Button
+          type="button"
+          size="sm"
+          variant={categoryFilter === "all" ? "default" : "outline"}
+          onClick={() => selectCategory("all")}
         >
+          All
+          <span className="ml-1 tabular-nums opacity-70">
+            {breakdowns.length}
+          </span>
+        </Button>
+        {categoryFilters.length > 0 ? (
+          <span
+            aria-hidden
+            className="mx-0.5 hidden h-4 w-px shrink-0 bg-[var(--border)] sm:inline-block"
+          />
+        ) : null}
+        {categoryFilters.map((item) => (
           <Button
+            key={item.name}
             type="button"
             size="sm"
-            variant={categoryFilter === "all" ? "default" : "outline"}
-            onClick={() => selectCategory("all")}
+            variant={categoryFilter === item.name ? "default" : "outline"}
+            onClick={() => selectCategory(item.name)}
           >
-            All
-            <span className="ml-1 tabular-nums opacity-70">
-              {breakdowns.length}
-            </span>
+            {item.name}
+            <span className="ml-1 tabular-nums opacity-70">{item.count}</span>
           </Button>
-          {categoryFilters.length > 0 ? (
-            <span
-              aria-hidden
-              className="mx-0.5 hidden h-4 w-px shrink-0 bg-[var(--border)] sm:inline-block"
-            />
-          ) : null}
-          {categoryFilters.map((item) => (
-            <Button
-              key={item.name}
-              type="button"
-              size="sm"
-              variant={categoryFilter === item.name ? "default" : "outline"}
-              onClick={() => selectCategory(item.name)}
-            >
-              {item.name}
-              <span className="ml-1 tabular-nums opacity-70">{item.count}</span>
-            </Button>
-          ))}
-        </div>
-
-        <div className="grid gap-4 md:grid-cols-4 md:items-start">
-          <aside className="min-w-0 md:col-span-1 md:sticky md:top-4 md:max-h-[min(70vh,42rem)] md:overflow-y-auto md:pr-1">
-            <div className="max-h-[22rem] space-y-4 overflow-y-auto pr-1 md:max-h-none md:overflow-visible md:pr-0">
-              {merchantGroups.map((group) => (
-                <div key={group.name} className="space-y-2">
-                  {categoryFilter === "all" ? (
-                    <div className="flex items-center gap-2">
-                      <span className="shrink-0 text-xs font-medium tracking-wide text-[var(--muted-foreground)]">
-                        {group.name}
-                      </span>
-                      <div className="h-px min-w-8 flex-1 bg-[var(--border)]" />
-                      <span className="shrink-0 text-xs tabular-nums text-[var(--muted-foreground)]">
-                        {group.items.length}
-                      </span>
-                    </div>
-                  ) : null}
-                  <div className="flex flex-wrap gap-1 md:flex-col md:flex-nowrap">
-                    {group.items.map((item) => (
-                      <Button
-                        key={item.merchant}
-                        type="button"
-                        size="sm"
-                        variant={
-                          item.merchant === breakdown.merchant
-                            ? "default"
-                            : "outline"
-                        }
-                        className="max-w-full md:w-full md:justify-start"
-                        onClick={() => onSelect(item.merchant)}
-                      >
-                        <MerchantLabel name={item.merchant} />
-                      </Button>
-                    ))}
-                  </div>
-                </div>
-              ))}
-              {visibleBreakdowns.length === 0 ? (
-                <p className="text-sm text-[var(--muted-foreground)]">
-                  No merchants in this category.
-                </p>
-              ) : null}
-            </div>
-          </aside>
-
-          <div className="min-w-0 space-y-4 md:col-span-3">
-            <StackedMixChart
-              title={`${breakdown.merchant} subcategory mix`}
-              info={`How ${breakdown.merchant} splits by subcategory over ${ANALYSIS_PERIOD_META[period].nounPlural}. ${formatMoney(breakdown.spend, data.currency)} in this range.`}
-              series={breakdown.typeSeries}
-              monthly={breakdown.typeMonthly}
-              currency={data.currency}
-              period={period}
-              onPeriodChange={onPeriodChange}
-              other={breakdown.other}
-              otherByPeriod={breakdown.otherByPeriod}
-            />
-            <RankedBarChart
-              title={`${breakdown.merchant} subcategories`}
-              info="Subcategory labels inside this Merchant clean name."
-              rows={breakdown.types}
-              currency={data.currency}
-              color="oklch(0.52 0.1 155)"
-              labelWidth={160}
-            />
-          </div>
-        </div>
+        ))}
       </div>
+      <div
+        role="group"
+        aria-label="Pick merchant"
+        className="flex flex-wrap gap-1"
+      >
+        {visibleBreakdowns.map((item) => (
+          <Button
+            key={item.merchant}
+            type="button"
+            size="sm"
+            variant={
+              item.merchant === breakdown.merchant ? "default" : "outline"
+            }
+            onClick={() => onSelect(item.merchant)}
+          >
+            <MerchantLabel name={item.merchant} />
+          </Button>
+        ))}
+        {visibleBreakdowns.length === 0 ? (
+          <p className="text-sm text-[var(--muted-foreground)]">
+            No merchants in this category.
+          </p>
+        ) : null}
+      </div>
+      <StackedMixChart
+        title={`${breakdown.merchant} subcategory mix`}
+        info={`How ${breakdown.merchant} splits by subcategory over ${ANALYSIS_PERIOD_META[period].nounPlural}. ${formatMoney(breakdown.spend, data.currency)} in this range.`}
+        series={breakdown.typeSeries}
+        monthly={breakdown.typeMonthly}
+        currency={data.currency}
+        period={period}
+        onPeriodChange={onPeriodChange}
+        other={breakdown.other}
+        otherByPeriod={breakdown.otherByPeriod}
+      />
+      <RankedBarChart
+        title={`${breakdown.merchant} subcategories`}
+        info="Subcategory labels inside this Merchant clean name."
+        rows={breakdown.types}
+        currency={data.currency}
+        color="oklch(0.52 0.1 155)"
+        labelWidth={160}
+      />
     </section>
   );
 }

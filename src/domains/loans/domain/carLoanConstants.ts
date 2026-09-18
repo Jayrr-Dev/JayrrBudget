@@ -13,6 +13,7 @@ export const CIBC_CAR_LOAN_TERMS = {
   firstPaymentDate: "2025-06-16",
   maturityDate: "2031-11-24",
   matchMerchantClean: CIBC_CAR_LOAN_MERCHANT,
+  txnDescriptionLookup: CIBC_CAR_LOAN_MERCHANT,
   matchAmount: 294.8,
   vehicleLabel: "2021 Lexus IS",
   loanType: "auto",

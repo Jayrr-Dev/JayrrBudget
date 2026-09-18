@@ -64,7 +64,16 @@ function namesMatching(
   names: string[],
   current: string | null | undefined,
 ): string[] {
-  const list = [...names];
+  const seen = new Set<string>();
+  const list: string[] = [];
+  for (const name of names) {
+    const trimmed = name.trim();
+    if (!trimmed) continue;
+    const key = trimmed.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    list.push(trimmed);
+  }
   const cur = current?.trim();
   if (cur && !list.some((name) => name.toLowerCase() === cur.toLowerCase())) {
     list.unshift(cur);

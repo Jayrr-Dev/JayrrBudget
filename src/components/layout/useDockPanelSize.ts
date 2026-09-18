@@ -8,7 +8,8 @@ const MIN_WIDTH = 20 * REM;
 const MAX_WIDTH = 56 * REM;
 const MIN_BODY = 8 * REM;
 /** Room for headers, footers, the fab pill, and screen margins. */
-const CHROME_HEIGHT = 12 * REM;
+export const DOCK_PANEL_CHROME_HEIGHT = 12 * REM;
+const CHROME_HEIGHT = DOCK_PANEL_CHROME_HEIGHT;
 
 export const DOCK_PANEL_DEFAULT_WIDTH = 24 * REM;
 
@@ -23,9 +24,12 @@ export type DockPanelAnchor = "bottom-right" | "top-right";
 
 export type DockResizeAxis = "x" | "y" | "both";
 
-function clampSize(size: DockPanelSize): DockPanelSize {
+function clampSize(
+  size: DockPanelSize,
+  chromeHeight = CHROME_HEIGHT,
+): DockPanelSize {
   const maxWidth = Math.min(MAX_WIDTH, window.innerWidth - 1.5 * REM);
-  const maxBody = Math.max(MIN_BODY, window.innerHeight - CHROME_HEIGHT);
+  const maxBody = Math.max(MIN_BODY, window.innerHeight - chromeHeight);
   return {
     width: Math.round(Math.min(maxWidth, Math.max(MIN_WIDTH, size.width))),
     bodyHeight: Math.round(
@@ -34,7 +38,10 @@ function clampSize(size: DockPanelSize): DockPanelSize {
   };
 }
 
-function readStoredSize(storageKey: string): DockPanelSize | undefined {
+function readStoredSize(
+  storageKey: string,
+  chromeHeight?: number,
+): DockPanelSize | undefined {
   try {
     const raw = window.localStorage.getItem(storageKey);
     if (!raw) return undefined;
@@ -45,7 +52,7 @@ function readStoredSize(storageKey: string): DockPanelSize | undefined {
       typeof (parsed as DockPanelSize).width === "number" &&
       typeof (parsed as DockPanelSize).bodyHeight === "number"
     ) {
-      return clampSize(parsed as DockPanelSize);
+      return clampSize(parsed as DockPanelSize, chromeHeight);
     }
   } catch {
     // Ignore unreadable storage; fall back to the default size.
@@ -77,22 +84,26 @@ export function useDockPanelSize({
   storageKey,
   defaultSize,
   anchor,
+  /** Extra vertical chrome beyond the shared dock reserve (tabs, composers, etc.). */
+  chromeHeight = CHROME_HEIGHT,
 }: {
   storageKey: string;
   defaultSize: DockPanelSize;
   anchor: DockPanelAnchor;
+  chromeHeight?: number;
 }) {
   const [size, setSize] = useState<DockPanelSize>(defaultSize);
   const [resizing, setResizing] = useState(false);
   const drag = useRef<DragState | null>(null);
 
   useEffect(() => {
-    const stored = readStoredSize(storageKey);
+    const stored = readStoredSize(storageKey, chromeHeight);
     if (stored) setSize(stored);
-    const onResize = () => setSize((current) => clampSize(current));
+    const onResize = () =>
+      setSize((current) => clampSize(current, chromeHeight));
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
-  }, [storageKey]);
+  }, [chromeHeight, storageKey]);
 
   const beginDrag = useCallback(
     (event: ReactPointerEvent<HTMLElement>, axis: DockResizeAxis) => {
@@ -118,19 +129,22 @@ export function useDockPanelSize({
       const dy = event.clientY - current.startY;
       const heightDelta = anchor === "bottom-right" ? -dy : dy;
       setSize(
-        clampSize({
-          width:
-            current.axis === "y"
-              ? current.origin.width
-              : current.origin.width - dx,
-          bodyHeight:
-            current.axis === "x"
-              ? current.origin.bodyHeight
-              : current.origin.bodyHeight + heightDelta,
-        }),
+        clampSize(
+          {
+            width:
+              current.axis === "y"
+                ? current.origin.width
+                : current.origin.width - dx,
+            bodyHeight:
+              current.axis === "x"
+                ? current.origin.bodyHeight
+                : current.origin.bodyHeight + heightDelta,
+          },
+          chromeHeight,
+        ),
       );
     },
-    [anchor],
+    [anchor, chromeHeight],
   );
 
   const onPointerUp = useCallback(

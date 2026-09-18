@@ -56,6 +56,7 @@ export const loanTerms = sqliteTable("loan_terms", {
   firstPaymentDate: text("first_payment_date").notNull(),
   maturityDate: text("maturity_date").notNull(),
   matchMerchantClean: text("match_merchant_clean").notNull(),
+  txnDescriptionLookup: text("txn_description_lookup"),
   matchAmount: real("match_amount").notNull(),
   principalOverride: real("principal_override"),
   overrideAsOf: text("override_as_of"),

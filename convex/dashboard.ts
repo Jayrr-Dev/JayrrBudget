@@ -38,9 +38,10 @@ function mapLoanTerms(row: {
   paymentFrequency: string;
   paymentCount: number;
   firstPaymentDate: string;
-  maturityDate: string;
-  matchMerchantClean: string;
-  matchAmount: number;
+    maturityDate: string;
+    matchMerchantClean: string;
+    txnDescriptionLookup?: string | null;
+    matchAmount: number;
   principalOverride: number | null;
   overrideAsOf: string | null;
   loanType?: string;
@@ -58,6 +59,8 @@ function mapLoanTerms(row: {
     firstPaymentDate: row.firstPaymentDate,
     maturityDate: row.maturityDate,
     matchMerchantClean: row.matchMerchantClean,
+    txnDescriptionLookup:
+      row.txnDescriptionLookup?.trim() || row.matchMerchantClean,
     matchAmount: row.matchAmount,
     principalOverride: row.principalOverride,
     overrideAsOf: row.overrideAsOf,
@@ -307,6 +310,7 @@ export const createCustomLoan = mutation({
     paymentCount: v.number(),
     firstPaymentDate: v.string(),
     matchMerchantClean: v.optional(v.union(v.string(), v.null())),
+    txnDescriptionLookup: v.optional(v.union(v.string(), v.null())),
   },
   handler: async () => {
     throw new Error(

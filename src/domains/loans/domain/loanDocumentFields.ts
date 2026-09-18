@@ -61,8 +61,15 @@ export const loanDocumentFieldsSchema = z.object({
   matchMerchantClean: z
     .string()
     .nullable()
+    .optional()
     .describe(
-      "PAD / auto-debit merchant name as it might appear on a bank statement. Null if unknown.",
+      "Deprecated. Same as txnDescriptionLookup when the model still emits a merchant-style label.",
+    ),
+  txnDescriptionLookup: z
+    .string()
+    .nullable()
+    .describe(
+      "Phrase from a bank transaction description that identifies this loan's PAD payments. Null if unknown.",
     ),
   institutionName: z
     .string()
@@ -83,7 +90,7 @@ export type LoanFormFill = {
   paymentFrequency: PaymentFrequency;
   paymentCount: string;
   firstPaymentDate: string;
-  matchMerchantClean: string;
+  txnDescriptionLookup: string;
 };
 
 function numOrEmpty(value: number | null | undefined) {
@@ -118,6 +125,9 @@ export function loanFieldsToFormFill(
       fields.paymentCount != null ? Math.floor(fields.paymentCount) : null,
     ),
     firstPaymentDate: fields.firstPaymentDate?.trim() || "",
-    matchMerchantClean: fields.matchMerchantClean?.trim() || "",
+    txnDescriptionLookup:
+      fields.txnDescriptionLookup?.trim() ||
+      fields.matchMerchantClean?.trim() ||
+      "",
   };
 }

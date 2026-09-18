@@ -177,6 +177,8 @@ export default defineSchema({
     firstPaymentDate: v.string(),
     maturityDate: v.string(),
     matchMerchantClean: v.string(),
+    /** Substring on the bank transaction description used to attach PAD payments. */
+    txnDescriptionLookup: v.optional(v.union(v.string(), v.null())),
     matchAmount: v.number(),
     principalOverride: v.union(v.number(), v.null()),
     overrideAsOf: v.union(v.string(), v.null()),
@@ -270,6 +272,7 @@ export default defineSchema({
     paymentCount: v.union(v.number(), v.null()),
     firstPaymentDate: v.union(v.string(), v.null()),
     matchMerchantClean: v.union(v.string(), v.null()),
+    txnDescriptionLookup: v.optional(v.union(v.string(), v.null())),
     institutionName: v.union(v.string(), v.null()),
     error: v.union(v.string(), v.null()),
     createdAt: v.number(),

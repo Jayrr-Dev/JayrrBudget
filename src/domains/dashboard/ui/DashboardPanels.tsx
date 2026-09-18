@@ -140,7 +140,7 @@ export function DashboardToolbar({
   onImported?: () => Promise<void> | void;
 } = {}) {
   return (
-    <div className="flex flex-wrap items-start justify-end gap-2">
+    <div className="flex shrink-0 flex-nowrap items-center justify-end gap-2">
       <StatementUpload
         onImported={async () => {
           await onImported?.();

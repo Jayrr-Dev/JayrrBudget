@@ -628,7 +628,11 @@ export function StatementUpload({ onImported }: Props) {
   ).length;
 
   const isMobile = useIsMobile();
-  const triggerLabel = busy ? "Uploading…" : "Upload statement";
+  const triggerLabel = busy
+    ? "Uploading…"
+    : isMobile
+      ? "Upload"
+      : "Upload statement";
 
   // Mobile: no footer Upload — pick from the drop zone, then start once
   // duplicate checks finish. Idle-only so failed rows do not auto-retry.
@@ -644,7 +648,7 @@ export function StatementUpload({ onImported }: Props) {
         <span
           role="button"
           tabIndex={0}
-          className="inline-flex size-5 shrink-0 items-center justify-center rounded-full max-md:size-11 text-accent hover:text-primary"
+          className="inline-flex size-5 shrink-0 items-center justify-center rounded-full text-accent hover:text-primary"
           aria-label="How statement upload works"
           onClick={(event) => {
             event.stopPropagation();
@@ -687,6 +691,8 @@ export function StatementUpload({ onImported }: Props) {
       type="button"
       variant="outline"
       disabled={busy}
+      className="gap-1 px-3 max-md:px-2.5"
+      aria-label={busy ? "Uploading" : "Upload statement"}
       onClick={() => setDialogOpen(true)}
     >
       {triggerLabel}
@@ -697,7 +703,7 @@ export function StatementUpload({ onImported }: Props) {
   return (
     <div className="flex flex-col items-start gap-1.5">
       {isMobile ? (
-        <div className="flex items-center gap-2">
+        <div className="flex flex-nowrap items-center gap-2">
           {uploadButton}
           <DropdownMenu>
             <DropdownMenuTrigger

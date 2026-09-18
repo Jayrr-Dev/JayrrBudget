@@ -220,6 +220,27 @@ function withAutoWidth(
   return { ...meta, width };
 }
 
+/** Floor width so `w-full table-fixed` scrolls instead of crushing grow cols to 0. */
+function tableMinWidthCss(
+  leafMetas: Array<{ id: string; meta: ColumnMeta | undefined }>,
+  autoWidths: Map<string, string>,
+): string | undefined {
+  const parts: string[] = [];
+  for (const leaf of leafMetas) {
+    const meta = withAutoWidth(leaf.meta, leaf.id, autoWidths);
+    if (meta?.width) {
+      parts.push(meta.width);
+      continue;
+    }
+    if (meta?.grow) {
+      parts.push("12rem");
+    }
+  }
+  if (parts.length === 0) return undefined;
+  if (parts.length === 1) return parts[0];
+  return `calc(${parts.join(" + ")})`;
+}
+
 function HeaderLabel({
   description,
   children,
@@ -582,6 +603,17 @@ export function DataTable<TData extends RowData>({
     () => computeAutoWidths(columns, data, new Set(filtersByColumnId.keys())),
     [columns, data, filtersByColumnId],
   );
+
+  const desktopTableMinWidth = useMemo(() => {
+    if (!fillWidth) return undefined;
+    return tableMinWidthCss(
+      table.getVisibleLeafColumns().map((column) => ({
+        id: column.id,
+        meta: column.columnDef.meta as ColumnMeta | undefined,
+      })),
+      autoWidths,
+    );
+  }, [autoWidths, columnVisibility, fillWidth, table]);
 
   const activeFilterValue = (columnId: string) => {
     const hit = columnFilters.find((filter) => filter.id === columnId);
@@ -1149,6 +1181,11 @@ export function DataTable<TData extends RowData>({
           <Table
             variant={variant}
             className={fillWidth ? "w-full table-fixed" : "w-max table-fixed"}
+            style={
+              desktopTableMinWidth
+                ? { minWidth: desktopTableMinWidth }
+                : undefined
+            }
           >
             <colgroup>
               {table.getVisibleLeafColumns().map((column) => {
@@ -1369,7 +1406,6 @@ export function DataTable<TData extends RowData>({
                         cell.column.id,
                         autoWidths,
                       );
-                      const width = cellMeta?.width;
                       const inventBand = cellMeta?.band === "invent";
                       const isActionsCol = cell.column.id === "actions";
                       const wrap = cellMeta?.wrap === true;
@@ -1387,9 +1423,8 @@ export function DataTable<TData extends RowData>({
                           style={columnSizeStyle(cellMeta)}
                           className={[
                             wrap
-                              ? "whitespace-normal align-top wrap-break-word"
+                              ? "overflow-hidden whitespace-normal align-top wrap-break-word"
                               : "overflow-hidden text-ellipsis whitespace-nowrap align-middle",
-                            width && !wrap ? "overflow-hidden" : "",
                             isActionsCol ? "w-10 max-w-10 px-0" : "",
                             inventBand
                               ? "border-l border-[var(--border)] bg-[var(--muted)]/20"

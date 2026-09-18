@@ -19,6 +19,7 @@ import {
   periodLabel,
   periodsBetween,
 } from "./periods";
+import { SEED_CATEGORY_PATHS } from "./seedCategoryPaths";
 import { classifySpread, SPREAD_DEFINITIONS, type SpreadName } from "./spreads";
 import { splitTags } from "./tags";
 import { typeLabelsFromTxnCode } from "./txnCodes";
@@ -487,7 +488,58 @@ function spendTypeLabel(typeName: string | null, category: string) {
       return aliased;
     }
   }
-  return "Unspecified";
+  // Null / blank / category-echo subcategory → Other bucket.
+  return OTHER;
+}
+
+const SECTION_BY_SUBCATEGORY = (() => {
+  const map = new Map<string, string>();
+  for (const path of SEED_CATEGORY_PATHS) {
+    if (!path.subcategory) continue;
+    const key = typeKey(path.subcategory);
+    if (!map.has(key)) map.set(key, path.section);
+  }
+  return map;
+})();
+
+const SECTION_BY_CATEGORY = (() => {
+  const map = new Map<string, string>();
+  for (const path of SEED_CATEGORY_PATHS) {
+    const key = typeKey(path.category);
+    if (!map.has(key)) map.set(key, path.section);
+  }
+  return map;
+})();
+
+function sectionFromSeed(
+  subcategory: string | null | undefined,
+  category: string | null | undefined,
+) {
+  const sub = subcategory?.trim();
+  if (sub) {
+    const fromSub = SECTION_BY_SUBCATEGORY.get(typeKey(sub));
+    if (fromSub) return fromSub;
+  }
+  const cat = category?.trim();
+  if (cat) {
+    const fromCat = SECTION_BY_CATEGORY.get(typeKey(cat));
+    if (fromCat) return fromCat;
+  }
+  return null;
+}
+
+/** Prefer seed section when stored section is missing or the catch-all Other. */
+function resolveAnalysisSection(
+  sectionName: string | null | undefined,
+  categoryName: string | null | undefined,
+  subcategoryName: string | null | undefined,
+) {
+  const trimmed = sectionName?.trim() || "";
+  const fromSeed = sectionFromSeed(subcategoryName, categoryName);
+  if (!trimmed || trimmed === OTHER || trimmed === UNCATEGORIZED) {
+    return fromSeed ?? (trimmed || UNCATEGORIZED);
+  }
+  return trimmed;
 }
 
 function nestedAdd(
@@ -1118,7 +1170,14 @@ export function computeAnalysis(args: {
       if (dayLabel) addRank(dayOfMonthSpend, dayLabel, abs);
       addRank(accountSpend, row.accountName?.trim() || "Unknown account", abs);
       const type = spendTypeLabel(row.typeName, category);
-      const section = row.sectionName?.trim() || "Uncategorized";
+      const section =
+        type === OTHER
+          ? OTHER
+          : resolveAnalysisSection(
+              row.sectionName,
+              row.categoryName,
+              row.typeName,
+            );
       addRank(sectionSpend, section, abs);
       addMonthSpend(sectionMonthSpend, section, month, abs);
       addRank(subcategorySpend, type, abs);
@@ -1220,7 +1279,14 @@ export function computeAnalysis(args: {
       refunds += abs;
       addCategory(category, month, -abs);
       const type = spendTypeLabel(row.typeName, category);
-      const section = row.sectionName?.trim() || "Uncategorized";
+      const section =
+        type === OTHER
+          ? OTHER
+          : resolveAnalysisSection(
+              row.sectionName,
+              row.categoryName,
+              row.typeName,
+            );
       const cleanMerchant = merchantCleanLabel({
         merchantClean: row.merchantClean,
         description: row.description,

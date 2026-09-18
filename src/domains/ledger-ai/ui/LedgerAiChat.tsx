@@ -3,6 +3,7 @@
 import { ChromeTab, ChromeTabStrip } from "@/components/layout/ChromeTab";
 import { DockPanelResizeGrip } from "@/components/layout/DockPanelResizeGrip";
 import {
+  DOCK_PANEL_CHROME_HEIGHT,
   DOCK_PANEL_DEFAULT_WIDTH,
   useDockPanelSize,
   type DockPanelAnchor,
@@ -127,13 +128,15 @@ import {
 import { usePiggyHistory } from "./usePiggyHistory";
 
 const MAX_PIGGY_TABS = 8;
+/** Tab strip + composer; subtracted from the viewport when clamping transcript height. */
+const PIGGY_PANEL_CHROME_PX = 7 * 16;
 const PIGGY_PANEL_DEFAULT_SIZE: DockPanelSize = {
   width: DOCK_PANEL_DEFAULT_WIDTH,
   bodyHeight: 21.3 * 16,
 };
 /** Same shell as the fab's docked panels, so the chat hugs the right edge under the pill. */
 const LEDGER_AI_DOCK_PANEL =
-  "pointer-events-auto max-w-[calc(100vw-1.5rem)] overflow-hidden rounded-xl border border-border bg-background shadow-lg ring-1 ring-border/40 max-md:w-[calc(100vw-1.5rem)]";
+  "pointer-events-auto flex max-h-[min(70dvh,calc(100dvh-5rem))] max-w-[calc(100vw-1.5rem)] flex-col overflow-hidden rounded-xl border border-border bg-background shadow-lg ring-1 ring-border/40 max-md:w-[calc(100vw-1.5rem)]";
 type PiggyTab = {
   id: string;
   name: string;
@@ -398,7 +401,7 @@ function PiggyChatPaneSession({
 
   return (
     <div
-      className="relative flex flex-col"
+      className="relative flex min-h-0 flex-1 flex-col overflow-hidden"
       hidden={!active}
       onDragOver={onDragOver}
       onDragEnter={onDragOver}
@@ -415,7 +418,7 @@ function PiggyChatPaneSession({
         </div>
       ) : null}
       {blocked ? (
-        <p className="border-b border-border bg-warning-subtle px-3 py-2 text-xs text-warning">
+        <p className="shrink-0 border-b border-border bg-warning-subtle px-3 py-2 text-xs text-warning">
           Turn on Cloud Processing in Modules before sending budget data to
           Piggy.
         </p>
@@ -423,7 +426,8 @@ function PiggyChatPaneSession({
 
       <PiggyTranscript
         ariaLabel={`${tabName} conversation`}
-        style={{ height: transcriptHeight }}
+        className="min-h-0"
+        style={{ flex: `1 1 ${transcriptHeight}px` }}
         onClearChat={clearChat}
         canClearChat={messages.length > 0 || !!error}
       >
@@ -630,7 +634,7 @@ function PiggyChatPaneSession({
         ) : null}
       </PiggyTranscript>
 
-      <div className="border-t border-border bg-surface">
+      <div className="relative z-20 shrink-0 border-t border-border bg-background">
         <PiggyPendingDocuments
           files={pendingFiles}
           disabled={attaching}
@@ -709,9 +713,9 @@ function PiggyChatPaneSession({
                       : `Ask ${tabName}…`
               }
               disabled={blocked}
-              className="h-8"
+              className="h-8 max-md:min-h-8"
             />
-            <InputGroupAddon align="inline-end" className="self-center">
+            <InputGroupAddon align="inline-end" className="self-center py-0">
               {busy ? (
                 <InputGroupButton
                   type="button"
@@ -719,7 +723,7 @@ function PiggyChatPaneSession({
                   variant="default"
                   onClick={() => void stop()}
                   aria-label="Stop Piggy"
-                  className="size-6 rounded-full"
+                  className="size-6 max-md:size-6 max-md:h-6 max-md:w-6 rounded-full"
                 >
                   <Square className="size-3 fill-current" />
                 </InputGroupButton>
@@ -734,7 +738,7 @@ function PiggyChatPaneSession({
                     (!input.trim() && pendingFiles.length === 0)
                   }
                   aria-label="Send"
-                  className="size-6 rounded-full"
+                  className="size-6 max-md:size-6 max-md:h-6 max-md:w-6 rounded-full"
                 >
                   <SendHorizonal className="size-3.5" />
                 </InputGroupButton>
@@ -811,6 +815,7 @@ function LedgerAiChatSession({
     storageKey: "piggy-chat-panel-size",
     defaultSize: PIGGY_PANEL_DEFAULT_SIZE,
     anchor,
+    chromeHeight: DOCK_PANEL_CHROME_HEIGHT + PIGGY_PANEL_CHROME_PX,
   });
   useEffect(() => {
     saveIndex({ tabs, activeId });
@@ -910,7 +915,7 @@ function LedgerAiChatSession({
       style={{ width: panelSize.size.width }}
     >
       <DockPanelResizeGrip label="Piggy panel" resize={panelSize} />
-      <div className="relative border-b border-border bg-muted/25">
+      <div className="relative shrink-0 border-b border-border bg-muted/25">
         <ChromeTabStrip ariaLabel="Piggy chats">
           {tabs.map((tab) => (
             <ChromeTab
@@ -949,7 +954,7 @@ function LedgerAiChatSession({
       </p>
 
       {historyError && (
-        <p role="status" className="px-3 py-2 text-xs text-warning">
+        <p role="status" className="shrink-0 px-3 py-2 text-xs text-warning">
           {historyError}
         </p>
       )}

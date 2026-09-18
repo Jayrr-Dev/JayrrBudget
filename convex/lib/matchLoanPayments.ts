@@ -8,77 +8,55 @@ export type PadCandidateRow = {
   description: string;
 };
 
-function merchantAliases(matchMerchantClean: string): Set<string> {
-  const needle = matchMerchantClean.trim().toLowerCase();
-  const aliases = new Set<string>([needle]);
+function descriptionAliases(txnDescriptionLookup: string): string[] {
+  const needle = txnDescriptionLookup.trim().toLowerCase();
+  if (!needle) return [];
+  const aliases = [needle];
   // Legacy CIBC statement labels for the seeded car loan.
   if (needle.includes("cibc") && needle.includes("loan")) {
-    aliases.add("cibc loans");
-    aliases.add("cibc car loan");
+    aliases.push("cibc loans", "cibc car loan");
   }
   return aliases;
 }
 
-/** True when a ledger row matches this loan's PAD amount + merchant. */
+/** True when a ledger row matches this loan's payment amount + description lookup. */
 export function isLoanPadCandidate(
   row: {
     amount: number;
-    merchantClean: string | null;
     description: string;
   },
   matchAmount: number,
-  matchMerchantClean: string,
+  txnDescriptionLookup: string,
 ): boolean {
   if (Math.abs(Math.abs(row.amount) - matchAmount) > 0.02) return false;
 
-  const aliases = merchantAliases(matchMerchantClean);
-  if (aliases.size === 0 || [...aliases].every((a) => !a)) return false;
-
-  const merchant = (row.merchantClean ?? "").trim().toLowerCase();
-  if (merchant && [...aliases].some((a) => a && (merchant === a || merchant.includes(a)))) {
-    return true;
-  }
+  const aliases = descriptionAliases(txnDescriptionLookup);
+  if (aliases.length === 0) return false;
 
   const desc = row.description.toLowerCase();
-  if ([...aliases].some((a) => a && desc.includes(a))) {
-    return true;
-  }
-
-  // Loose PAD wording only when description also mentions the terms merchant.
-  const needle = matchMerchantClean.trim().toLowerCase();
-  const firstToken = needle.split(/\s+/).find((t) => t.length >= 3);
-  if (
-    firstToken &&
-    desc.includes(firstToken) &&
-    (/preauthorized\s+debit/i.test(desc) ||
-      /pre-?authorized\s+debit/i.test(desc) ||
-      /loan/i.test(desc))
-  ) {
-    return true;
-  }
-
-  return false;
+  return aliases.some((alias) => desc.includes(alias));
 }
 
 /** @deprecated Prefer isLoanPadCandidate with explicit terms. */
 export function isCarLoanPadCandidate(row: {
   amount: number;
-  merchantClean: string | null;
   description: string;
   matchAmount?: number;
+  txnDescriptionLookup?: string;
   matchMerchantClean?: string;
 }): boolean {
-  if (row.matchAmount == null || !row.matchMerchantClean) return false;
-  return isLoanPadCandidate(row, row.matchAmount, row.matchMerchantClean);
+  const lookup = row.txnDescriptionLookup ?? row.matchMerchantClean;
+  if (row.matchAmount == null || !lookup) return false;
+  return isLoanPadCandidate(row, row.matchAmount, lookup);
 }
 
 export function toMatchedPads(
   rows: PadCandidateRow[],
   matchAmount: number,
-  matchMerchantClean: string,
+  txnDescriptionLookup: string,
 ): MatchedPad[] {
   return rows
-    .filter((row) => isLoanPadCandidate(row, matchAmount, matchMerchantClean))
+    .filter((row) => isLoanPadCandidate(row, matchAmount, txnDescriptionLookup))
     .map((row) => ({
       transactionId: row.transactionId,
       postedDate: row.posted.slice(0, 10),

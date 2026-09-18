@@ -348,6 +348,7 @@ export async function saveEncryptedLoan(
     rateType?: string | null;
     vehicleLabel?: string | null;
     matchMerchantClean?: string | null;
+    txnDescriptionLookup?: string | null;
     matchAmount?: number | null;
     expectedRevision?: number | null;
   },

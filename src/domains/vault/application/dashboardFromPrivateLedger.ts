@@ -29,6 +29,18 @@ function todayIso() {
   return new Date().toISOString().slice(0, 10);
 }
 
+function trimmedText(value: string | null | undefined) {
+  if (value == null) return "";
+  return value.trim();
+}
+
+/** PAD match string: transaction description lookup, else legacy merchant field. */
+function loanPadLookup(loan: PrivateLoanTerms) {
+  const fromDescription = trimmedText(loan.txnDescriptionLookup);
+  if (fromDescription !== "") return fromDescription;
+  return trimmedText(loan.matchMerchantClean);
+}
+
 function loanSummaryFor(
   loan: PrivateLoanTerms,
   txs: PrivateTransaction[],
@@ -39,7 +51,7 @@ function loanSummaryFor(
   const loanType = normalizeLoanType(loan.loanType);
   const rateType = normalizeRateType(loan.rateType);
   const matchAmount = loan.matchAmount ?? loan.paymentAmount;
-  const matchMerchantClean = loan.matchMerchantClean?.trim() || "";
+  const txnDescriptionLookup = loanPadLookup(loan);
   const pads = toMatchedPads(
     txs.map((tx) => ({
       transactionId: tx.recordId,
@@ -49,7 +61,7 @@ function loanSummaryFor(
       description: tx.description,
     })),
     matchAmount,
-    matchMerchantClean,
+    txnDescriptionLookup,
   );
   const scheduledDates = buildScheduledDates(
     loan.firstPaymentDate,
@@ -88,7 +100,8 @@ function loanSummaryFor(
     vehicleLabel: loan.vehicleLabel ?? null,
     paidInterest: result.paidInterest,
     paidPrincipal: result.paidPrincipal,
-    matchMerchantClean,
+    matchMerchantClean: txnDescriptionLookup,
+    txnDescriptionLookup,
     payments: result.schedule.filter((step) => step.applied),
   };
 }
@@ -190,7 +203,7 @@ export function dashboardFromPrivateLedger(
       toDashboardAccount(
         {
           accountId: loan.accountId,
-          name: loan.matchMerchantClean?.trim() || "Loan",
+          name: loanPadLookup(loan) || "Loan",
           label: null,
           officialName: null,
           mask: null,

@@ -60,6 +60,7 @@ import { usePrivateLedger } from "@/domains/vault/ui/usePrivateLedger";
 import { cn } from "@/lib/utils";
 import { logAiUsageFromMessageMetadata } from "@/shared/debug/aiUsageDebug";
 import { errorMessage } from "@/shared/lib/error-message";
+import { toastIfOffline } from "@/shared/offline/offlineWriteGuard";
 import { useChat } from "@ai-sdk/react";
 import {
   DefaultChatTransport,
@@ -80,7 +81,6 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
-import { toastIfOffline } from "@/shared/offline/offlineWriteGuard";
 
 /** How long Piggy's say_bubble line stays before idle greetings resume. */
 const BUBBLE_HOLD_MS = 12000;
@@ -667,7 +667,7 @@ function CanvasAiChatSession({
       </PiggyTranscript>
 
       <form
-        className="border-t border-border bg-surface p-2"
+        className="relative z-20 border-t border-border bg-background p-2"
         onSubmit={(event) => {
           event.preventDefault();
           submit(input);

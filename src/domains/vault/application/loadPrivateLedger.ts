@@ -323,6 +323,10 @@ function asLoan(
     paymentCount,
     matchMerchantClean:
       row.matchMerchantClean == null ? null : String(row.matchMerchantClean),
+    txnDescriptionLookup:
+      row.txnDescriptionLookup == null
+        ? null
+        : String(row.txnDescriptionLookup),
     matchAmount: row.matchAmount == null ? null : Number(row.matchAmount),
     paymentFrequency:
       row.paymentFrequency == null ? null : String(row.paymentFrequency),

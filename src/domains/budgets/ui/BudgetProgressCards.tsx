@@ -1,8 +1,7 @@
 import { BUDGET_CYCLE_LABELS } from "@/domains/budgets/domain/budgetCycle";
 import {
-  budgetProgressTone,
+  budgetProgressRingColor,
   type BudgetProgressItem,
-  type BudgetProgressTone,
 } from "@/domains/budgets/domain/budgetProgress";
 import { formatCompactDisplayDate } from "@/shared/lib/format-date";
 import { cn } from "cn";
@@ -11,12 +10,6 @@ const RING_SIZE = 112;
 const RING_STROKE = 14;
 const RING_RADIUS = (RING_SIZE - RING_STROKE) / 2;
 const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
-
-const TONE_RING: Record<BudgetProgressTone, string> = {
-  ok: "text-sky-400",
-  warn: "text-warning",
-  over: "text-danger",
-};
 
 const money = new Intl.NumberFormat(undefined, {
   style: "currency",
@@ -31,13 +24,9 @@ function remainingRatio(item: BudgetProgressItem) {
 
 function BudgetProgressCard({ item }: { item: BudgetProgressItem }) {
   const percent = Math.max(0, item.percent);
-  const tone = budgetProgressTone(
-    percent,
-    item.warningThreshold,
-    item.overageThreshold,
-  );
   const fill = remainingRatio(item);
   const dash = fill * RING_CIRCUMFERENCE;
+  const ringColor = budgetProgressRingColor(fill);
   const remainingLabel = money.format(item.remaining);
   const lookup = item.lookup ?? "—";
 
@@ -87,7 +76,7 @@ function BudgetProgressCard({ item }: { item: BudgetProgressItem }) {
               cy={RING_SIZE / 2}
               r={RING_RADIUS}
               fill="none"
-              className={cn("stroke-current", TONE_RING[tone])}
+              stroke={ringColor}
               strokeWidth={RING_STROKE}
               strokeLinecap="round"
               strokeDasharray={`${dash} ${RING_CIRCUMFERENCE}`}
