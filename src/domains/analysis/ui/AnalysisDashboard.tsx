@@ -1,5 +1,6 @@
 "use client";
 
+import { Arrows } from "@/components/ui/arrows";
 import { badgeVariants } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -8,6 +9,14 @@ import {
   ChartTooltipContent,
   type ChartConfig,
 } from "@/components/ui/chart";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { EmptyPrompt } from "@/components/ui/empty-prompt";
 import {
   NativeSelect,
@@ -20,6 +29,8 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { RowActionsMenu } from "@/components/ui/row-actions-menu";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { toastCompact } from "@/components/ui/sonner";
 import { PageSpinner } from "@/components/ui/spinner";
 import {
   ScrollTopX,
@@ -79,16 +90,26 @@ import {
   EditDescriptionDialog,
 } from "@/domains/transactions/ui/EditDescriptionDialog";
 import { DecryptingPage } from "@/domains/vault/ui/DecryptingStatus";
-import { useHoverPointer } from "@/hooks/use-mobile";
+import { useHoverPointer, useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
 import { downloadCsv, toCsv } from "@/shared/lib/csv";
 import {
   formatDisplayDate,
   formatShortDisplayDate,
 } from "@/shared/lib/format-date";
+import { api } from "@convex/_generated/api";
+import { taxonomyDescription } from "@convex/lib/taxonomyDescriptions";
 import { IconInfoCircle } from "@tabler/icons-react";
+import { useQuery } from "convex/react";
 import { ChevronDownIcon, PlusIcon } from "lucide-react";
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import {
   Area,
   AreaChart,
@@ -107,12 +128,16 @@ import {
   type PieLabelRenderProps,
 } from "recharts";
 
-const RANGE_OPTIONS: { value: AnalysisRange; label: string }[] = [
-  { value: "1w", label: "1W" },
-  { value: "1m", label: "1M" },
-  { value: "3m", label: "3M" },
-  { value: "6m", label: "6M" },
-  { value: "12m", label: "1Y" },
+const RANGE_OPTIONS: {
+  value: AnalysisRange;
+  label: string;
+  desktopLabel?: string;
+}[] = [
+  { value: "1w", label: "1W", desktopLabel: "Week" },
+  { value: "1m", label: "1M", desktopLabel: "Month" },
+  { value: "3m", label: "3M", desktopLabel: "3 Months" },
+  { value: "6m", label: "6M", desktopLabel: "6 Month" },
+  { value: "12m", label: "1Y", desktopLabel: "Year" },
   { value: "all", label: "All" },
 ];
 
@@ -201,15 +226,32 @@ function moneyTick(value: number, currency: string) {
 
 function InfoTip({ label, children }: { label: string; children: string }) {
   const hover = useHoverPointer();
+  const isMobile = useIsMobile();
   const trigger = (
     <button
       type="button"
-      className="inline-flex size-11 shrink-0 items-center justify-center rounded-md text-accent hover:bg-accent-subtle hover:text-accent sm:size-6"
+      className="inline-flex size-11 shrink-0 items-center justify-center rounded-md text-accent hover:text-primary sm:size-6"
       aria-label={label}
     >
       <IconInfoCircle className="size-3.5 sm:size-4" />
     </button>
   );
+
+  if (isMobile) {
+    return (
+      <Dialog>
+        <DialogTrigger asChild>{trigger}</DialogTrigger>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{label}</DialogTitle>
+            <DialogDescription className="leading-snug">
+              {children}
+            </DialogDescription>
+          </DialogHeader>
+        </DialogContent>
+      </Dialog>
+    );
+  }
 
   if (hover) {
     return (
@@ -292,13 +334,19 @@ function ChartTitle({
       type="button"
       variant="outline"
       size="xs"
+      className="hidden h-auto py-1 md:inline-flex"
       disabled={csv.rows.length === 0}
-      onClick={() =>
+      onClick={() => {
         downloadCsv(
           csv.filename ?? csvFilenameFromTitle(title),
           toCsv(csv.headers, csv.rows),
-        )
-      }
+        );
+        toastCompact.success(
+          csv.rows.length === 1
+            ? "Exported 1 row"
+            : `Exported ${csv.rows.length} rows`,
+        );
+      }}
     >
       Export CSV
     </Button>
@@ -402,6 +450,69 @@ function formatPiePercent(percent: number) {
 
 const PIE_LABEL_RADIAN = Math.PI / 180;
 const PIE_LABEL_INK = "#171717";
+/** Outside callouts (below this share go unlabeled; at/above use in-slice text). */
+const PIE_OUTSIDE_MIN_SHARE = 0.015;
+const PIE_INSIDE_MIN_SHARE = 0.08;
+const PIE_CALLOUT_BOX_H = 24;
+const PIE_CALLOUT_MIN_GAP = 26;
+const PIE_PADDING_ANGLE = 1.5;
+
+type PieCalloutSide = "left" | "right";
+
+/** Names that get outside callouts, grouped by side and sorted top → bottom. */
+function pieCalloutColumns(
+  pieRows: Array<{ name: string; spend: number }>,
+  pieTotal: number,
+): Record<PieCalloutSide, string[]> {
+  const left: { name: string; sin: number }[] = [];
+  const right: { name: string; sin: number }[] = [];
+  if (pieTotal <= 0) return { left: [], right: [] };
+
+  const n = pieRows.length;
+  const dataAngle = Math.max(0, 360 - n * PIE_PADDING_ANGLE);
+  let angleCursor = 0;
+
+  for (let i = 0; i < n; i++) {
+    const row = pieRows[i];
+    if (!row) continue;
+    const share = Number(row.spend) / pieTotal;
+    const sliceAngle = dataAngle * share;
+    const midAngle = angleCursor + sliceAngle / 2;
+    angleCursor += sliceAngle + PIE_PADDING_ANGLE;
+
+    if (share < PIE_OUTSIDE_MIN_SHARE || share >= PIE_INSIDE_MIN_SHARE) {
+      continue;
+    }
+
+    const rad = -midAngle * PIE_LABEL_RADIAN;
+    const entry = { name: String(row.name), sin: Math.sin(rad) };
+    if (Math.cos(rad) >= 0) right.push(entry);
+    else left.push(entry);
+  }
+
+  const byTop = (a: { sin: number }, b: { sin: number }) => a.sin - b.sin;
+  return {
+    left: left.sort(byTop).map((entry) => entry.name),
+    right: right.sort(byTop).map((entry) => entry.name),
+  };
+}
+
+function pieColumnY(
+  index: number,
+  count: number,
+  cy: number,
+  outerRadius: number,
+) {
+  const minY = PIE_CALLOUT_BOX_H / 2 + 4;
+  const maxY = Math.max(minY, 2 * cy - minY);
+  if (count <= 1) {
+    return Math.min(maxY, Math.max(minY, cy));
+  }
+  const needed = (count - 1) * PIE_CALLOUT_MIN_GAP;
+  const span = Math.min(needed, maxY - minY);
+  const start = cy - span / 2;
+  return start + (index * span) / (count - 1);
+}
 
 function PieCenterTotal({
   viewBox,
@@ -426,7 +537,12 @@ function PieCenterTotal({
       >
         Total
       </tspan>
-      <tspan x={cx} y={cy + 10} fill="var(--foreground)" className="type-stat">
+      <tspan
+        x={cx}
+        y={cy + 10}
+        fill="color-mix(in oklch, var(--foreground) 62%, var(--muted-foreground))"
+        className="type-stat"
+      >
         {formatMoney(total, currency)}
       </tspan>
     </text>
@@ -443,18 +559,20 @@ function PieDonutLabel({
   name = "",
   index = 0,
   fill,
-}: PieLabelRenderProps) {
+  columns,
+}: PieLabelRenderProps & {
+  columns: Record<PieCalloutSide, string[]>;
+}) {
   const share = Number(percent);
-  if (!Number.isFinite(share) || share < 0.015) return null;
+  if (!Number.isFinite(share) || share < PIE_OUTSIDE_MIN_SHARE) return null;
 
   const rad = -Number(midAngle) * PIE_LABEL_RADIAN;
   const cos = Math.cos(rad);
   const sin = Math.sin(rad);
   const sliceName = String(name);
   const label = formatPiePercent(share);
-  const inside = share >= 0.08;
-  const showName =
-    sliceName.length > 0 && (inside ? share >= 0.12 : share >= 0.04);
+  const inside = share >= PIE_INSIDE_MIN_SHARE;
+  const showNameInside = sliceName.length > 0 && share >= 0.12;
   const sliceColor =
     typeof fill === "string" && fill.length > 0
       ? fill
@@ -465,7 +583,7 @@ function PieDonutLabel({
       Number(cx) + ((Number(innerRadius) + Number(outerRadius)) / 2) * cos;
     const y =
       Number(cy) + ((Number(innerRadius) + Number(outerRadius)) / 2) * sin;
-    if (!showName) {
+    if (!showNameInside) {
       return (
         <text
           x={x}
@@ -506,21 +624,52 @@ function PieDonutLabel({
     );
   }
 
-  // Same callout marker as category mix over time: dot + leader + frosted pill.
-  const startX = Number(cx) + Number(outerRadius) * cos;
-  const startY = Number(cy) + Number(outerRadius) * sin;
-  const side: 1 | -1 = cos >= 0 ? 1 : -1;
-  const calloutLabel = showName ? `${label} ${sliceName}` : label;
+  const side: PieCalloutSide = cos >= 0 ? "right" : "left";
+  const names = columns[side];
+  const columnIndex = Math.max(0, names.indexOf(sliceName));
+  const rimX = Number(cx) + Number(outerRadius) * cos;
+  const rimY = Number(cy) + Number(outerRadius) * sin;
+  const elbowX =
+    Number(cx) + (Number(outerRadius) + 14) * (side === "right" ? 1 : -1);
+  const labelY = pieColumnY(
+    columnIndex,
+    names.length,
+    Number(cy),
+    Number(outerRadius),
+  );
+  const calloutLabel = sliceName.length > 0 ? `${sliceName} ${label}` : label;
+  const boxW = calloutBoxWidth(calloutLabel);
+  const boxX = side === "right" ? elbowX + 6 : elbowX - 6 - boxW;
 
   return (
-    <AreaCallout
-      x={startX}
-      y={startY - 7}
-      label={calloutLabel}
-      color={sliceColor}
-      side={side}
-      lift={(Number(index) % 3) * 10}
-    />
+    <g pointerEvents="none">
+      <polyline
+        points={`${rimX},${rimY} ${elbowX},${labelY} ${
+          side === "right" ? boxX : boxX + boxW
+        },${labelY}`}
+        fill="none"
+        stroke="#111"
+        strokeWidth={1}
+      />
+      <circle cx={rimX} cy={rimY} r={2.25} fill="#111" />
+      <foreignObject
+        x={boxX}
+        y={labelY - PIE_CALLOUT_BOX_H / 2}
+        width={boxW}
+        height={PIE_CALLOUT_BOX_H}
+      >
+        <div className="flex h-full min-w-0 items-center gap-1 rounded-md bg-background/80 px-1.5 text-sm leading-none font-medium whitespace-nowrap text-[#111]">
+          <span
+            aria-hidden
+            className="size-2 shrink-0 rounded-[2px] border border-black/15"
+            style={{ backgroundColor: sliceColor }}
+          />
+          <span className="min-w-0 overflow-hidden text-ellipsis">
+            {calloutLabel}
+          </span>
+        </div>
+      </foreignObject>
+    </g>
   );
 }
 
@@ -682,20 +831,36 @@ function TimeSeriesTable({
   const setKeys = onVisibleKeysChange ?? internal.setVisibleKeys;
   const filterable = columns.length > 1;
   const newestFirst = useMemo(() => [...rows].reverse(), [rows]);
+  const totals = useMemo(() => {
+    const next: Record<string, number> = {};
+    for (const column of columns) {
+      next[column.key] = rows.reduce(
+        (sum, row) => sum + Number(row[column.key] ?? 0),
+        0,
+      );
+    }
+    return next;
+  }, [columns, rows]);
 
   if (rows.length === 0) return null;
   return (
-    <div className="max-h-56 overflow-auto rounded-lg border border-[var(--border)] sm:max-h-72">
+    <ScrollArea
+      type="always"
+      className="h-56 overflow-hidden rounded-lg border border-border sm:h-72 [&>[data-slot=scroll-area-viewport]>div]:block!"
+    >
       <Table
+        variant="lined"
+        containerClassName="overflow-visible [transform:none]"
         className={cn(
-          "text-[0.7rem] sm:text-sm",
+          "border-separate! border-spacing-0 [transform:none] text-[0.7rem] sm:text-sm",
           "[&_th]:h-8 [&_th]:px-1.5 [&_th]:py-1 sm:[&_th]:h-10 sm:[&_th]:px-2 sm:[&_th]:py-0",
           "[&_td]:px-1.5 [&_td]:py-1 sm:[&_td]:p-2",
+          "[&_thead_th]:border-t-0 [&_tbody_tr:first-child_td]:border-t-0",
         )}
       >
-        <TableHeader>
+        <TableHeader className="[&_th]:sticky [&_th]:top-0 [&_th]:z-20 [&_th]:bg-surface-elevated [&_th]:shadow-[inset_0_-1px_0_var(--border)]">
           <TableRow>
-            <TableHead className="min-w-[4.25rem]">Period</TableHead>
+            <TableHead className="min-w-[4.25rem] font-mono">Period</TableHead>
             {columns.map((column) => {
               const on = !filterable || keys.includes(column.key);
               return (
@@ -729,7 +894,7 @@ function TimeSeriesTable({
         <TableBody>
           {newestFirst.map((row) => (
             <TableRow key={String(row.month ?? row.label)}>
-              <TableCell className="whitespace-nowrap font-medium">
+              <TableCell className="whitespace-nowrap font-mono font-medium">
                 {String(row.label ?? "")}
               </TableCell>
               {columns.map((column) => {
@@ -757,8 +922,36 @@ function TimeSeriesTable({
             </TableRow>
           ))}
         </TableBody>
+        <TableFooter className="border-t-0 bg-muted [&_td]:sticky [&_td]:bottom-0 [&_td]:z-20 [&_td]:border-b-0 [&_td]:bg-muted [&_td]:text-muted-foreground [&_td]:shadow-[inset_0_1px_0_var(--border)]">
+          <TableRow>
+            <TableCell className="font-mono">Total</TableCell>
+            {columns.map((column) => {
+              const on = !filterable || keys.includes(column.key);
+              const total = totals[column.key] ?? 0;
+              return (
+                <TableCell
+                  key={column.key}
+                  className={cn(
+                    "text-right font-mono text-[0.7rem] tabular-nums sm:text-sm",
+                    !on && "opacity-40",
+                  )}
+                >
+                  {valueKind === "percent" ? (
+                    formatPercent(rows.length > 0 ? total / rows.length : 0)
+                  ) : (
+                    <MoneyText
+                      amount={total}
+                      currency={currency}
+                      className="text-[0.7rem] sm:text-sm"
+                    />
+                  )}
+                </TableCell>
+              );
+            })}
+          </TableRow>
+        </TableFooter>
       </Table>
-    </div>
+    </ScrollArea>
   );
 }
 
@@ -813,125 +1006,130 @@ function TrendChart({
           ]),
         }}
       />
-      <ChartContainer
-        config={TREND_CONFIG}
-        className="aspect-[2/1] w-full"
-        initialDimension={{ width: 640, height: 280 }}
+      <ChartWithSeriesList
+        list={
+          <SeriesLegend
+            series={TREND_SERIES}
+            value={visibleKeys}
+            onValueChange={setVisibleKeys}
+            colors={TREND_LEGEND_COLORS}
+          />
+        }
       >
-        <AreaChart
-          data={chartRows}
-          margin={{ left: 8, right: 8, top: 8, bottom: 0 }}
-          accessibilityLayer
+        <ChartContainer
+          config={TREND_CONFIG}
+          className="aspect-[2/1] w-full"
+          initialDimension={{ width: 640, height: 280 }}
         >
-          <CartesianGrid vertical={false} />
-          <XAxis
-            dataKey="label"
-            tickLine={false}
-            axisLine={false}
-            tickMargin={8}
-            minTickGap={28}
-          />
-          <YAxis
-            tickLine={false}
-            axisLine={false}
-            width={52}
-            domain={isRelative ? [0, 100] : ["auto", "auto"]}
-            tickFormatter={(value) =>
-              isRelative
-                ? formatPercent(Number(value))
-                : moneyTick(Number(value), data.currency)
-            }
-          />
-          <ChartTooltip
-            offset={CHART_TOOLTIP_OFFSET}
-            allowEscapeViewBox={CHART_TOOLTIP_ESCAPE}
-            content={
-              <ChartTooltipContent
-                hideLabel={false}
-                formatter={(value, name, item) => {
-                  if (Number(value) === 0) return null;
-                  const label =
-                    TREND_CONFIG[name as keyof typeof TREND_CONFIG]?.label ??
-                    String(name);
-                  const month = (
-                    item?.payload as { month?: string } | undefined
-                  )?.month;
-                  const source = data.monthly.find(
-                    (row) => row.month === month,
-                  );
-                  const money = source
-                    ? Number(source[name as keyof typeof source] ?? 0)
-                    : Number(value);
-                  return (
-                    <div className="flex flex-1 justify-between gap-4">
-                      <span className="text-muted-foreground">{label}</span>
-                      <span className="font-mono font-medium tabular-nums">
-                        {isRelative
-                          ? `${formatPercent(Number(value))} (${formatMoney(money, data.currency)})`
-                          : formatMoney(Number(value), data.currency)}
-                      </span>
-                    </div>
-                  );
-                }}
+          <AreaChart
+            data={chartRows}
+            margin={{ left: 8, right: 8, top: 8, bottom: 0 }}
+            accessibilityLayer
+          >
+            <CartesianGrid vertical={false} />
+            <XAxis
+              dataKey="label"
+              tickLine={false}
+              axisLine={false}
+              tickMargin={8}
+              minTickGap={28}
+            />
+            <YAxis
+              tickLine={false}
+              axisLine={false}
+              width={52}
+              domain={isRelative ? [0, 100] : ["auto", "auto"]}
+              tickFormatter={(value) =>
+                isRelative
+                  ? formatPercent(Number(value))
+                  : moneyTick(Number(value), data.currency)
+              }
+            />
+            <ChartTooltip
+              offset={CHART_TOOLTIP_OFFSET}
+              allowEscapeViewBox={CHART_TOOLTIP_ESCAPE}
+              content={
+                <ChartTooltipContent
+                  hideLabel={false}
+                  formatter={(value, name, item) => {
+                    if (Number(value) === 0) return null;
+                    const label =
+                      TREND_CONFIG[name as keyof typeof TREND_CONFIG]?.label ??
+                      String(name);
+                    const month = (
+                      item?.payload as { month?: string } | undefined
+                    )?.month;
+                    const source = data.monthly.find(
+                      (row) => row.month === month,
+                    );
+                    const money = source
+                      ? Number(source[name as keyof typeof source] ?? 0)
+                      : Number(value);
+                    return (
+                      <div className="flex flex-1 justify-between gap-4">
+                        <span className="text-muted-foreground">{label}</span>
+                        <span className="font-mono font-medium tabular-nums">
+                          {isRelative
+                            ? `${formatPercent(Number(value))} (${formatMoney(money, data.currency)})`
+                            : formatMoney(Number(value), data.currency)}
+                        </span>
+                      </div>
+                    );
+                  }}
+                />
+              }
+            />
+            {visibleKeySet.has("spend") ? (
+              <Area
+                type="monotone"
+                dataKey="spend"
+                stackId={isRelative ? "trend" : undefined}
+                stroke="var(--color-spend)"
+                fill="var(--color-spend)"
+                fillOpacity={isRelative ? 0.92 : 0.18}
+                strokeWidth={2}
+                name="spend"
               />
-            }
-          />
-          {visibleKeySet.has("spend") ? (
-            <Area
-              type="monotone"
-              dataKey="spend"
-              stackId={isRelative ? "trend" : undefined}
-              stroke="var(--color-spend)"
-              fill="var(--color-spend)"
-              fillOpacity={isRelative ? 0.92 : 0.18}
-              strokeWidth={2}
-              name="spend"
-            />
-          ) : null}
-          {visibleKeySet.has("income") ? (
-            <Area
-              type="monotone"
-              dataKey="income"
-              stackId={isRelative ? "trend" : undefined}
-              stroke="var(--color-income)"
-              fill="var(--color-income)"
-              fillOpacity={isRelative ? 0.92 : 0.12}
-              strokeWidth={2}
-              name="income"
-            />
-          ) : null}
-          {visibleKeySet.has("transfers") ? (
-            <Area
-              type="monotone"
-              dataKey="transfers"
-              stackId={isRelative ? "trend" : undefined}
-              stroke="var(--color-transfers)"
-              fill="var(--color-transfers)"
-              fillOpacity={isRelative ? 0.92 : 0.08}
-              strokeWidth={1.5}
-              strokeDasharray={isRelative ? undefined : "4 4"}
-              name="transfers"
-            />
-          ) : null}
-        </AreaChart>
-      </ChartContainer>
-      <SeriesLegend
-        series={TREND_SERIES}
-        value={visibleKeys}
-        onValueChange={setVisibleKeys}
-        colors={TREND_LEGEND_COLORS}
-      />
-      <TimeSeriesTable
-        rows={chartRows}
-        columns={TREND_SERIES.map((item) => ({
-          key: item.key,
-          label: item.label,
-        }))}
-        currency={data.currency}
-        visibleKeys={visibleKeys}
-        onVisibleKeysChange={setVisibleKeys}
-        valueKind={isRelative ? "percent" : "money"}
-      />
+            ) : null}
+            {visibleKeySet.has("income") ? (
+              <Area
+                type="monotone"
+                dataKey="income"
+                stackId={isRelative ? "trend" : undefined}
+                stroke="var(--color-income)"
+                fill="var(--color-income)"
+                fillOpacity={isRelative ? 0.92 : 0.12}
+                strokeWidth={2}
+                name="income"
+              />
+            ) : null}
+            {visibleKeySet.has("transfers") ? (
+              <Area
+                type="monotone"
+                dataKey="transfers"
+                stackId={isRelative ? "trend" : undefined}
+                stroke="var(--color-transfers)"
+                fill="var(--color-transfers)"
+                fillOpacity={isRelative ? 0.92 : 0.08}
+                strokeWidth={1.5}
+                strokeDasharray={isRelative ? undefined : "4 4"}
+                name="transfers"
+              />
+            ) : null}
+          </AreaChart>
+        </ChartContainer>
+        <TimeSeriesTable
+          rows={chartRows}
+          columns={TREND_SERIES.map((item) => ({
+            key: item.key,
+            label: item.label,
+          }))}
+          currency={data.currency}
+          visibleKeys={visibleKeys}
+          onVisibleKeysChange={setVisibleKeys}
+          valueKind={isRelative ? "percent" : "money"}
+        />
+      </ChartWithSeriesList>
     </section>
   );
 }
@@ -1077,7 +1275,7 @@ function MixTooltip({
 
   return (
     <div
-      className={`${interactive ? "pointer-events-auto" : "pointer-events-none"} animate-in fade-in-0 grid min-w-56 max-w-80 gap-1.5 rounded-lg border border-border/50 bg-background px-2.5 py-1.5 text-xs shadow-xl duration-200`}
+      className={`${interactive ? "pointer-events-auto" : "pointer-events-none"} animate-in fade-in-0 grid min-w-56 max-w-80 gap-1.5 rounded-lg border border-border bg-surface-elevated px-2.5 py-1.5 text-xs shadow-xl duration-200`}
     >
       <div className="font-medium">
         {String(label ?? "")}
@@ -1114,6 +1312,7 @@ function MixTooltip({
             label="Total"
             percent={totalShare}
             money={formatMoney(moneyTotal, currency)}
+            muted
             strong
             showShare={showShare}
             rule
@@ -1153,6 +1352,23 @@ function useVisibleSeries(series: AnalysisCategorySeries[]) {
   };
 }
 
+function ChartWithSeriesList({
+  list,
+  children,
+}: {
+  list: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <div className="grid min-w-0 items-start gap-4 md:grid-cols-4">
+      <aside className="min-w-0 pb-1 md:col-span-1 md:sticky md:top-4 md:max-h-[min(72vh,44rem)] md:overflow-y-auto md:pr-1 md:pb-2">
+        {list}
+      </aside>
+      <div className="min-w-0 space-y-3 md:col-span-3">{children}</div>
+    </div>
+  );
+}
+
 function SeriesLegend({
   series,
   value,
@@ -1180,7 +1396,7 @@ function SeriesLegend({
       }
       spacing={1}
       aria-label="Filter series"
-      className="flex h-auto w-full max-w-full flex-wrap items-center justify-start gap-1 bg-transparent"
+      className="flex h-auto w-full max-w-full flex-wrap items-start justify-start gap-1 overflow-visible bg-transparent py-1"
     >
       {series.map((item, index) => (
         <ToggleGroupItem
@@ -1190,7 +1406,7 @@ function SeriesLegend({
           aria-label={`Toggle ${item.label}`}
           className={cn(
             badgeVariants({ variant: "outline" }),
-            "min-h-11 min-w-11 max-w-full rounded-sm px-3 font-normal shadow-none sm:min-h-0 sm:min-w-0 sm:px-2 hover:bg-muted data-[state=off]:opacity-40 data-[state=on]:bg-transparent data-[state=on]:text-foreground",
+            "min-h-11 min-w-0 max-w-full shrink rounded-sm px-3 font-normal shadow-none sm:min-h-0 sm:px-2 hover:bg-muted data-[state=off]:opacity-40 data-[state=on]:bg-transparent data-[state=on]:text-foreground",
           )}
         >
           <span
@@ -1218,6 +1434,12 @@ function calloutBoxWidth(label: string) {
   );
 }
 
+function calloutSideFromIndex(peakIndex: number, pointCount: number): 1 | -1 {
+  if (peakIndex <= 1) return 1;
+  if (peakIndex >= Math.max(pointCount - 2, 0)) return -1;
+  return peakIndex % 2 === 0 ? 1 : -1;
+}
+
 function calloutSide(
   x: number,
   itemIndex: number,
@@ -1226,12 +1448,97 @@ function calloutSide(
   pointCount: number,
 ): 1 | -1 {
   const approxWidth = calloutBoxWidth(label);
-  const preferred: 1 | -1 = itemIndex % 2 === 0 ? 1 : -1;
-  // Area LabelList has no parentViewBox; first points sit just right of the Y-axis.
+  const preferred = calloutSideFromIndex(peakIndex, pointCount);
   if (peakIndex <= 1 || x < approxWidth + 72) return 1;
   if (peakIndex >= Math.max(pointCount - 2, 0)) return -1;
   if (preferred === -1 && x < approxWidth + 96) return 1;
+  if (itemIndex % 2 === 1 && preferred === 1 && x > approxWidth + 96) {
+    return -1;
+  }
   return preferred;
+}
+
+/** Prefer unique months so several series are not labeled on the same x. */
+function spreadPeakIndexes(
+  series: AnalysisCategorySeries[],
+  rows: Array<Record<string, string | number>>,
+): Map<string, number> {
+  const peaks = new Map<string, number>();
+  const claimed = new Set<number>();
+  const ranked = [...series].sort((left, right) => {
+    const leftMax = Math.max(
+      0,
+      ...rows.map((row) => Number(row[left.key] ?? 0)),
+    );
+    const rightMax = Math.max(
+      0,
+      ...rows.map((row) => Number(row[right.key] ?? 0)),
+    );
+    return rightMax - leftMax;
+  });
+
+  for (const item of ranked) {
+    const rankedMonths = rows
+      .map((row, index) => ({
+        index,
+        value: Number(row[item.key] ?? 0),
+      }))
+      .filter((entry) => entry.value > 0)
+      .sort((left, right) => right.value - left.value);
+    const free = rankedMonths.find((entry) => !claimed.has(entry.index));
+    const chosen = free ?? rankedMonths[0];
+    const index = chosen?.index ?? 0;
+    peaks.set(item.key, index);
+    claimed.add(index);
+  }
+  return peaks;
+}
+
+function layoutAreaCallouts(
+  series: AnalysisCategorySeries[],
+  peakIndexByKey: Map<string, number>,
+  pointCount: number,
+): Map<string, { side: 1 | -1; lift: number }> {
+  const next = new Map<string, { side: 1 | -1; lift: number }>();
+  const used: Array<{ index: number; side: 1 | -1; band: number }> = [];
+  const nearby = 1;
+
+  const conflicts = (index: number, side: 1 | -1, band: number) =>
+    used.some(
+      (entry) =>
+        entry.side === side &&
+        entry.band === band &&
+        Math.abs(entry.index - index) <= nearby,
+    );
+
+  const edgeSide = (index: number): 1 | -1 | null => {
+    if (index <= 1) return 1;
+    if (index >= Math.max(pointCount - 2, 0)) return -1;
+    return null;
+  };
+
+  for (const item of series) {
+    const index = peakIndexByKey.get(item.key) ?? 0;
+    const preferred =
+      edgeSide(index) ?? calloutSideFromIndex(index, pointCount);
+    const other: 1 | -1 = preferred === 1 ? -1 : 1;
+    const forced = edgeSide(index);
+    const sides: Array<1 | -1> = forced != null ? [forced] : [preferred, other];
+    let side = preferred;
+    let band = 0;
+    found: for (let nextBand = 0; nextBand <= 8; nextBand += 1) {
+      for (const candidate of sides) {
+        if (!conflicts(index, candidate, nextBand)) {
+          side = candidate;
+          band = nextBand;
+          break found;
+        }
+      }
+    }
+    used.push({ index, side, band });
+    next.set(item.key, { side, lift: band * 28 });
+  }
+  return next;
 }
 
 function AreaCallout({
@@ -1254,11 +1561,10 @@ function AreaCallout({
   const labelX = x + side * 32;
   // Keep labels inside the SVG - peaks at 100% sit near y≈margin.top.
   const minLabelY = 12;
-  const desiredLabelY = y - 10 - lift;
-  const placeBelow = desiredLabelY < minLabelY && y < 40;
-  const labelY = placeBelow
-    ? Math.min(y + 18 + lift, y + 36)
-    : Math.max(minLabelY, desiredLabelY);
+  const maxBelow = y + 22 + lift;
+  const desiredLabelY = y - 12 - lift;
+  const placeBelow = desiredLabelY < minLabelY;
+  const labelY = placeBelow ? maxBelow : desiredLabelY;
   const padX = 4;
   const boxH = 22;
   const boxW = calloutBoxWidth(label);
@@ -1320,62 +1626,87 @@ function OtherBreakdownTable({
           is of this pile.
         </p>
       </div>
-      <div className="max-h-72 overflow-auto rounded-lg border border-[var(--border)]">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Name</TableHead>
-              <TableHead className="text-right">Spend</TableHead>
-              <TableHead className="text-right">Share</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {items.map((item) => {
-              const on = visibleSet.has(item.name);
-              return (
-                <TableRow key={item.name} className={cn(!on && "opacity-40")}>
-                  <TableCell className="max-w-[18rem] truncate font-medium">
-                    <button
-                      type="button"
-                      aria-pressed={on}
-                      aria-label={`Toggle ${item.name}`}
-                      onClick={() =>
-                        setVisibleKeys(
-                          nextVisibleKeys(allKeys, visibleKeys, item.name),
-                        )
-                      }
-                      className={cn(
-                        "block max-w-full truncate text-left font-medium hover:bg-muted",
-                        !on && "line-through",
-                      )}
-                      title={item.name}
-                    >
-                      {item.name}
-                    </button>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <MoneyText amount={item.spend} currency={currency} />
-                  </TableCell>
-                  <TableCell className="text-right font-mono tabular-nums text-[var(--muted-foreground)]">
-                    {on ? formatShare(item.spend, total) : "-"}
-                  </TableCell>
-                </TableRow>
-              );
-            })}
-          </TableBody>
-          <TableFooter>
-            <TableRow>
-              <TableCell>Other total</TableCell>
-              <TableCell className="text-right">
-                <MoneyText amount={total} currency={currency} />
-              </TableCell>
-              <TableCell className="text-right font-mono tabular-nums">
-                100.0%
-              </TableCell>
-            </TableRow>
-          </TableFooter>
-        </Table>
-      </div>
+      <Table
+        variant="lined"
+        containerClassName="max-h-72 overflow-auto rounded-lg border border-border [transform:none]"
+        className={cn(
+          "border-separate! border-spacing-0 [transform:none] text-[0.7rem] sm:text-sm",
+          "[&_th]:h-8 [&_th]:px-1.5 [&_th]:py-1 sm:[&_th]:h-10 sm:[&_th]:px-2 sm:[&_th]:py-0",
+          "[&_td]:px-1.5 [&_td]:py-1 sm:[&_td]:p-2",
+          "[&_thead_th]:border-t-0 [&_tbody_tr:first-child_td]:border-t-0",
+        )}
+      >
+        <TableHeader className="[&_th]:sticky [&_th]:top-0 [&_th]:z-20 [&_th]:bg-surface-elevated [&_th]:shadow-[inset_0_-1px_0_var(--border)]">
+          <TableRow>
+            <TableHead className="font-mono">Name</TableHead>
+            <TableHead className="text-right font-mono">Spend</TableHead>
+            <TableHead className="text-right font-mono">Share</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {items.map((item) => {
+            const on = visibleSet.has(item.name);
+            return (
+              <TableRow key={item.name}>
+                <TableCell className="max-w-[18rem] truncate font-mono font-medium">
+                  <button
+                    type="button"
+                    aria-pressed={on}
+                    aria-label={`Toggle ${item.name}`}
+                    onClick={() =>
+                      setVisibleKeys(
+                        nextVisibleKeys(allKeys, visibleKeys, item.name),
+                      )
+                    }
+                    className={cn(
+                      "block max-w-full truncate text-left font-medium hover:bg-muted",
+                      !on && "opacity-40 line-through",
+                    )}
+                    title={item.name}
+                  >
+                    {item.name}
+                  </button>
+                </TableCell>
+                <TableCell
+                  className={cn(
+                    "text-right font-mono text-[0.7rem] tabular-nums sm:text-sm",
+                    !on && "opacity-40",
+                  )}
+                >
+                  <MoneyText
+                    amount={item.spend}
+                    currency={currency}
+                    className="w-auto text-[0.7rem] sm:text-sm"
+                  />
+                </TableCell>
+                <TableCell
+                  className={cn(
+                    "text-right font-mono text-[0.7rem] tabular-nums text-muted-foreground sm:text-sm",
+                    !on && "opacity-40",
+                  )}
+                >
+                  {on ? formatShare(item.spend, total) : "-"}
+                </TableCell>
+              </TableRow>
+            );
+          })}
+        </TableBody>
+        <TableFooter className="border-t-0 bg-muted [&_td]:sticky [&_td]:bottom-0 [&_td]:z-20 [&_td]:border-b-0 [&_td]:bg-muted [&_td]:text-muted-foreground [&_td]:shadow-[inset_0_1px_0_var(--border)]">
+          <TableRow>
+            <TableCell className="font-mono">Total</TableCell>
+            <TableCell className="text-right font-mono text-[0.7rem] tabular-nums sm:text-sm">
+              <MoneyText
+                amount={total}
+                currency={currency}
+                className="w-auto text-[0.7rem] sm:text-sm"
+              />
+            </TableCell>
+            <TableCell className="text-right font-mono text-[0.7rem] tabular-nums sm:text-sm">
+              100.0%
+            </TableCell>
+          </TableRow>
+        </TableFooter>
+      </Table>
     </div>
   );
 }
@@ -1467,22 +1798,14 @@ function StackedMixChart({
     });
     return next;
   }, [series]);
-  const peakIndexByKey = useMemo(() => {
-    const peaks = new Map<string, number>();
-    for (const item of visibleSeries) {
-      let peakIndex = 0;
-      let peakValue = -1;
-      chartRows.forEach((row, index) => {
-        const value = Number(row[item.key] ?? 0);
-        if (value > peakValue) {
-          peakValue = value;
-          peakIndex = index;
-        }
-      });
-      peaks.set(item.key, peakIndex);
-    }
-    return peaks;
-  }, [chartRows, visibleSeries]);
+  const peakIndexByKey = useMemo(
+    () => spreadPeakIndexes(visibleSeries, chartRows),
+    [chartRows, visibleSeries],
+  );
+  const calloutLayoutByKey = useMemo(
+    () => layoutAreaCallouts(visibleSeries, peakIndexByKey, chartRows.length),
+    [visibleSeries, peakIndexByKey, chartRows.length],
+  );
   const lastKey = visibleSeries[visibleSeries.length - 1]?.key ?? "";
 
   if (series.length === 0) return null;
@@ -1551,174 +1874,184 @@ function StackedMixChart({
           ]),
         }}
       />
-      <SeriesLegend
-        series={series}
-        value={visibleKeys}
-        onValueChange={setVisibleKeys}
-      />
-      <div ref={chartShellRef}>
-        <ChartContainer
-          config={config}
-          className={
-            isArea
-              ? "aspect-[5/2] w-full overflow-visible"
-              : "aspect-[2/1] w-full overflow-visible"
-          }
-          initialDimension={{ width: 640, height: isArea ? 320 : 280 }}
-        >
-          {isArea ? (
-            <AreaChart
-              data={chartRows}
-              margin={{ left: 8, right: 48, top: 44, bottom: 0 }}
-              accessibilityLayer
-              onClick={(state) => {
-                if (state?.activeTooltipIndex != null) markTooltipOpen();
-              }}
-            >
-              <CartesianGrid vertical={false} />
-              <XAxis
-                dataKey="label"
-                tickLine={false}
-                axisLine={false}
-                tickMargin={8}
-                minTickGap={28}
-              />
-              <YAxis
-                tickLine={false}
-                axisLine={false}
-                width={72}
-                tickMargin={6}
-                domain={isRelative ? [0, 100] : ["auto", "auto"]}
-                tickFormatter={(value) =>
-                  isRelative
-                    ? formatPercent(Number(value))
-                    : moneyTick(Number(value), currency)
-                }
-              />
-              {mixTooltip}
-              {visibleSeries.map((item) => (
-                <Area
-                  key={item.key}
-                  type="monotone"
-                  dataKey={item.key}
-                  stackId={stackAreas ? "spend" : undefined}
-                  stroke="var(--foreground)"
-                  strokeOpacity={0.72}
-                  fill={`var(--color-${item.key})`}
-                  fillOpacity={stackAreas ? 0.52 : 0.28}
-                  strokeWidth={1.75}
-                  name={item.label}
-                  dot={false}
-                  activeDot={{
-                    r: 4,
-                    fill: `oklch(from var(--color-${item.key}) 0.42 calc(c * 1.4) h)`,
-                    stroke: `oklch(from var(--color-${item.key}) 0.3 calc(c * 1.25) h)`,
-                    strokeWidth: 1,
-                  }}
-                >
-                  <LabelList
+      <ChartWithSeriesList
+        list={
+          <SeriesLegend
+            series={series}
+            value={visibleKeys}
+            onValueChange={setVisibleKeys}
+          />
+        }
+      >
+        <div ref={chartShellRef}>
+          <ChartContainer
+            config={config}
+            className={
+              isArea
+                ? "aspect-[5/2] w-full overflow-visible"
+                : "aspect-[2/1] w-full overflow-visible"
+            }
+            initialDimension={{ width: 640, height: isArea ? 320 : 280 }}
+          >
+            {isArea ? (
+              <AreaChart
+                data={chartRows}
+                margin={{ left: 12, right: 48, top: 44, bottom: 0 }}
+                accessibilityLayer
+                onClick={(state) => {
+                  if (state?.activeTooltipIndex != null) markTooltipOpen();
+                }}
+              >
+                <CartesianGrid vertical={false} />
+                <XAxis
+                  dataKey="label"
+                  tickLine={false}
+                  axisLine={false}
+                  tickMargin={8}
+                  minTickGap={28}
+                />
+                <YAxis
+                  tickLine={false}
+                  axisLine={false}
+                  width={88}
+                  tickMargin={6}
+                  domain={isRelative ? [0, 100] : ["auto", "auto"]}
+                  tickFormatter={(value) =>
+                    isRelative
+                      ? formatPercent(Number(value))
+                      : moneyTick(Number(value), currency)
+                  }
+                />
+                {mixTooltip}
+                {visibleSeries.map((item) => (
+                  <Area
+                    key={item.key}
+                    type="monotone"
                     dataKey={item.key}
-                    content={(props) => {
-                      const peakIndex = peakIndexByKey.get(item.key) ?? -1;
-                      if (props.index !== peakIndex) return null;
-                      const row = chartRows[peakIndex];
-                      const value = Number(row?.[item.key] ?? 0);
-                      const peakBaseline = stackAreas
-                        ? visibleSeries.reduce(
-                            (sum, entry) => sum + Number(row?.[entry.key] ?? 0),
-                            0,
-                          )
-                        : Math.max(
-                            ...visibleSeries.map((entry) =>
-                              Number(row?.[entry.key] ?? 0),
-                            ),
-                            0,
-                          );
-                      if (
-                        value <= 0 ||
-                        peakBaseline <= 0 ||
-                        value / peakBaseline < 0.05
-                      ) {
-                        return null;
-                      }
-                      const x = Number(props.x ?? 0);
-                      const y = Number(props.y ?? 0);
-                      if (!Number.isFinite(x) || !Number.isFinite(y))
-                        return null;
-                      const itemIndex = visibleSeries.findIndex(
-                        (entry) => entry.key === item.key,
-                      );
-                      return (
-                        <AreaCallout
-                          x={x}
-                          y={y}
-                          label={item.label}
-                          color={`var(--color-${item.key})`}
-                          side={calloutSide(
+                    stackId={stackAreas ? "spend" : undefined}
+                    stroke="var(--foreground)"
+                    strokeOpacity={0.72}
+                    fill={`var(--color-${item.key})`}
+                    fillOpacity={stackAreas ? 0.52 : 0.28}
+                    strokeWidth={1.75}
+                    name={item.label}
+                    dot={false}
+                    activeDot={{
+                      r: 4,
+                      fill: `oklch(from var(--color-${item.key}) 0.42 calc(c * 1.4) h)`,
+                      stroke: `oklch(from var(--color-${item.key}) 0.3 calc(c * 1.25) h)`,
+                      strokeWidth: 1,
+                    }}
+                  >
+                    <LabelList
+                      dataKey={item.key}
+                      content={(props) => {
+                        const peakIndex = peakIndexByKey.get(item.key) ?? -1;
+                        if (props.index !== peakIndex) return null;
+                        const row = chartRows[peakIndex];
+                        const value = Number(row?.[item.key] ?? 0);
+                        const peakBaseline = stackAreas
+                          ? visibleSeries.reduce(
+                              (sum, entry) =>
+                                sum + Number(row?.[entry.key] ?? 0),
+                              0,
+                            )
+                          : Math.max(
+                              ...visibleSeries.map((entry) =>
+                                Number(row?.[entry.key] ?? 0),
+                              ),
+                              0,
+                            );
+                        if (
+                          value <= 0 ||
+                          peakBaseline <= 0 ||
+                          value / peakBaseline < 0.05
+                        ) {
+                          return null;
+                        }
+                        const x = Number(props.x ?? 0);
+                        const y = Number(props.y ?? 0);
+                        if (!Number.isFinite(x) || !Number.isFinite(y))
+                          return null;
+                        const itemIndex = visibleSeries.findIndex(
+                          (entry) => entry.key === item.key,
+                        );
+                        const layout = calloutLayoutByKey.get(item.key);
+                        const side =
+                          layout?.side ??
+                          calloutSide(
                             x,
                             itemIndex,
                             item.label,
                             peakIndex,
                             chartRows.length,
-                          )}
-                          lift={(itemIndex % 3) * 12}
-                        />
-                      );
-                    }}
-                  />
-                </Area>
-              ))}
-            </AreaChart>
-          ) : (
-            <BarChart
-              data={monthly}
-              margin={{ left: 8, right: 8, top: 8, bottom: 0 }}
-              accessibilityLayer
-              onClick={(state) => {
-                if (state?.activeTooltipIndex != null) markTooltipOpen();
-              }}
-            >
-              <CartesianGrid vertical={false} />
-              <XAxis
-                dataKey="label"
-                tickLine={false}
-                axisLine={false}
-                tickMargin={8}
-                minTickGap={28}
-              />
-              <YAxis
-                tickLine={false}
-                axisLine={false}
-                width={52}
-                tickFormatter={(value) => moneyTick(Number(value), currency)}
-              />
-              {mixTooltip}
-              {visibleSeries.map((item) => (
-                <Bar
-                  key={item.key}
-                  dataKey={item.key}
-                  stackId="spend"
-                  fill={`var(--color-${item.key})`}
-                  radius={item.key === lastKey ? [3, 3, 0, 0] : 0}
-                  name={item.label}
+                          );
+                        return (
+                          <AreaCallout
+                            x={x}
+                            y={y}
+                            label={item.label}
+                            color={`var(--color-${item.key})`}
+                            side={x < 96 ? 1 : side}
+                            lift={layout?.lift ?? (itemIndex % 3) * 12}
+                          />
+                        );
+                      }}
+                    />
+                  </Area>
+                ))}
+              </AreaChart>
+            ) : (
+              <BarChart
+                data={monthly}
+                margin={{ left: 8, right: 8, top: 8, bottom: 0 }}
+                accessibilityLayer
+                onClick={(state) => {
+                  if (state?.activeTooltipIndex != null) markTooltipOpen();
+                }}
+              >
+                <CartesianGrid vertical={false} />
+                <XAxis
+                  dataKey="label"
+                  tickLine={false}
+                  axisLine={false}
+                  tickMargin={8}
+                  minTickGap={28}
                 />
-              ))}
-            </BarChart>
-          )}
-        </ChartContainer>
-      </div>
-      <TimeSeriesTable
-        rows={chartRows}
-        columns={series.map((item) => ({
-          key: item.key,
-          label: item.label,
-        }))}
-        currency={currency}
-        visibleKeys={visibleKeys}
-        onVisibleKeysChange={setVisibleKeys}
-        valueKind={isRelative ? "percent" : "money"}
-      />
-      <OtherBreakdownTable items={other} currency={currency} />
+                <YAxis
+                  tickLine={false}
+                  axisLine={false}
+                  width={52}
+                  tickFormatter={(value) => moneyTick(Number(value), currency)}
+                />
+                {mixTooltip}
+                {visibleSeries.map((item) => (
+                  <Bar
+                    key={item.key}
+                    dataKey={item.key}
+                    stackId="spend"
+                    fill={`var(--color-${item.key})`}
+                    radius={item.key === lastKey ? [3, 3, 0, 0] : 0}
+                    name={item.label}
+                  />
+                ))}
+              </BarChart>
+            )}
+          </ChartContainer>
+        </div>
+        <TimeSeriesTable
+          rows={chartRows}
+          columns={series.map((item) => ({
+            key: item.key,
+            label: item.label,
+          }))}
+          currency={currency}
+          visibleKeys={visibleKeys}
+          onVisibleKeysChange={setVisibleKeys}
+          valueKind={isRelative ? "percent" : "money"}
+        />
+        <OtherBreakdownTable items={other} currency={currency} />
+      </ChartWithSeriesList>
     </section>
   );
 }
@@ -1819,7 +2152,7 @@ function StackedRankedBarChart({
   const lastKey = visibleSeries[visibleSeries.length - 1]?.key ?? "";
   const isPie = showViewToggle && view === "pie";
   const isArea = showViewToggle && view === "area";
-  const pieRows = useMemo(
+  const visibleRows = useMemo(
     () =>
       rows
         .map((row) => ({
@@ -1833,9 +2166,25 @@ function StackedRankedBarChart({
         .filter((row) => row.spend > 0),
     [rows, visibleSeries],
   );
+  const pieRows = visibleRows;
   const pieTotal = pieRows.reduce((sum, row) => sum + Number(row.spend), 0);
+  const pieCalloutColumnsBySide = useMemo(
+    () =>
+      pieCalloutColumns(
+        pieRows.map((row) => ({
+          name: String(row.name),
+          spend: Number(row.spend),
+        })),
+        pieTotal,
+      ),
+    [pieRows, pieTotal],
+  );
 
   if (rows.length === 0 || series.length === 0) return null;
+
+  const compactBars = visibleRows.length > 16;
+  const barRowRem = compactBars ? 1.5 : 2.4;
+  const barRowPx = compactBars ? 24 : 38;
 
   return (
     <section className="min-w-0 space-y-3 rounded-xl border border-border bg-surface-elevated p-3 sm:space-y-4 sm:p-6">
@@ -1861,192 +2210,207 @@ function StackedRankedBarChart({
           ]),
         }}
       />
-      {isPie ? (
-        <ChartContainer
-          config={config}
-          className="mx-auto aspect-square w-full max-w-4xl"
-          initialDimension={{ width: 800, height: 640 }}
-        >
-          <PieChart
-            accessibilityLayer
-            margin={{ top: 16, right: 96, bottom: 16, left: 96 }}
+      <ChartWithSeriesList
+        list={
+          <SeriesLegend
+            series={series}
+            value={visibleKeys}
+            onValueChange={setVisibleKeys}
+          />
+        }
+      >
+        {isPie ? (
+          <ChartContainer
+            config={config}
+            className="mx-auto aspect-auto h-[448px] w-full max-w-6xl"
+            initialDimension={{ width: 960, height: 448 }}
           >
-            <ChartTooltip
-              offset={CHART_TOOLTIP_OFFSET}
-              allowEscapeViewBox={CHART_TOOLTIP_ESCAPE}
-              wrapperStyle={{ pointerEvents: "none" }}
-              content={(props) =>
-                stackedRowTooltip(
-                  props,
-                  config,
-                  currency,
-                  otherByRow,
-                  visibleSeries,
-                  pieTotal,
-                  false,
-                )
-              }
-            />
-            <Pie
+            <PieChart
+              accessibilityLayer
+              margin={{ top: 12, right: 12, bottom: 12, left: 12 }}
+            >
+              <ChartTooltip
+                offset={CHART_TOOLTIP_OFFSET}
+                allowEscapeViewBox={CHART_TOOLTIP_ESCAPE}
+                wrapperStyle={{ pointerEvents: "none" }}
+                content={(props) =>
+                  stackedRowTooltip(
+                    props,
+                    config,
+                    currency,
+                    otherByRow,
+                    visibleSeries,
+                    pieTotal,
+                    false,
+                  )
+                }
+              />
+              <Pie
+                data={pieRows}
+                dataKey="spend"
+                nameKey="name"
+                innerRadius="42%"
+                outerRadius="78%"
+                paddingAngle={PIE_PADDING_ANGLE}
+                stroke="var(--background)"
+                strokeWidth={2}
+                isAnimationActive={false}
+                activeShape={false}
+                style={onSelect ? { cursor: "pointer" } : undefined}
+                onClick={(data) => {
+                  const name =
+                    data && typeof data === "object" && "name" in data
+                      ? String((data as { name?: string }).name ?? "")
+                      : "";
+                  if (onSelect && name) onSelect(name);
+                }}
+                label={(props) => (
+                  <PieDonutLabel {...props} columns={pieCalloutColumnsBySide} />
+                )}
+                labelLine={false}
+              >
+                <Label
+                  position="center"
+                  content={({ viewBox }) => (
+                    <PieCenterTotal
+                      viewBox={viewBox as { cx?: number; cy?: number }}
+                      total={pieTotal}
+                      currency={currency}
+                    />
+                  )}
+                />
+                {pieRows.map((row, index) => (
+                  <Cell
+                    key={String(row.name)}
+                    fill={CATEGORY_COLORS[index % CATEGORY_COLORS.length]}
+                  />
+                ))}
+              </Pie>
+            </PieChart>
+          </ChartContainer>
+        ) : isArea ? (
+          <ChartContainer
+            config={config}
+            className="mx-auto aspect-[4/3] w-full max-w-5xl [&_foreignObject]:overflow-hidden"
+            initialDimension={{ width: 800, height: 600 }}
+          >
+            <Treemap
               data={pieRows}
               dataKey="spend"
               nameKey="name"
-              innerRadius="46%"
-              outerRadius="78%"
-              paddingAngle={1.5}
               stroke="var(--background)"
-              strokeWidth={2}
+              fill="transparent"
               isAnimationActive={false}
-              activeShape={false}
               style={onSelect ? { cursor: "pointer" } : undefined}
-              onClick={(data) => {
+              onClick={(node) => {
                 const name =
-                  data && typeof data === "object" && "name" in data
-                    ? String((data as { name?: string }).name ?? "")
+                  node && typeof node === "object" && "name" in node
+                    ? String((node as { name?: string }).name ?? "")
                     : "";
                 if (onSelect && name) onSelect(name);
               }}
-              label={PieDonutLabel}
-              labelLine={false}
+              content={(props) => (
+                <AreaTreemapCell
+                  x={props.x}
+                  y={props.y}
+                  width={props.width}
+                  height={props.height}
+                  name={props.name}
+                  value={props.value}
+                  index={props.index}
+                  depth={props.depth}
+                  currency={currency}
+                  total={pieTotal}
+                />
+              )}
             >
-              <Label
-                position="center"
-                content={({ viewBox }) => (
-                  <PieCenterTotal
-                    viewBox={viewBox as { cx?: number; cy?: number }}
-                    total={pieTotal}
-                    currency={currency}
-                  />
-                )}
+              <ChartTooltip
+                offset={CHART_TOOLTIP_OFFSET}
+                allowEscapeViewBox={CHART_TOOLTIP_ESCAPE}
+                wrapperStyle={{ pointerEvents: "none" }}
+                content={(props) =>
+                  stackedRowTooltip(
+                    props,
+                    config,
+                    currency,
+                    otherByRow,
+                    visibleSeries,
+                    pieTotal,
+                    false,
+                  )
+                }
               />
-              {pieRows.map((row, index) => (
-                <Cell
-                  key={String(row.name)}
-                  fill={CATEGORY_COLORS[index % CATEGORY_COLORS.length]}
+            </Treemap>
+          </ChartContainer>
+        ) : (
+          <ChartContainer
+            config={config}
+            className="aspect-auto w-full"
+            style={{
+              ["--rows" as string]: visibleRows.length,
+              height: `calc(${barRowRem}rem * ${Math.max(visibleRows.length, 1)} + 5.5rem)`,
+            }}
+            initialDimension={{
+              width: 640,
+              height: Math.max(420, visibleRows.length * barRowPx + 48),
+            }}
+          >
+            <BarChart
+              data={visibleRows}
+              layout="vertical"
+              margin={{ left: 8, right: 16, top: 10, bottom: 24 }}
+              accessibilityLayer
+              style={onSelect ? { cursor: "pointer" } : undefined}
+            >
+              <CartesianGrid horizontal={false} />
+              <YAxis
+                dataKey="name"
+                type="category"
+                width={labelWidth}
+                interval={0}
+                tickLine={false}
+                axisLine={false}
+                tickMargin={8}
+                tick={{ fontSize: 12 }}
+              />
+              <XAxis
+                type="number"
+                tickLine={false}
+                axisLine={false}
+                tickFormatter={(value) => moneyTick(Number(value), currency)}
+              />
+              <ChartTooltip
+                offset={CHART_TOOLTIP_OFFSET}
+                allowEscapeViewBox={CHART_TOOLTIP_ESCAPE}
+                content={(props) =>
+                  stackedRowTooltip(
+                    props,
+                    config,
+                    currency,
+                    otherByRow,
+                    visibleSeries,
+                  )
+                }
+              />
+              {visibleSeries.map((item) => (
+                <Bar
+                  key={item.key}
+                  dataKey={item.key}
+                  stackId="stack"
+                  fill={`var(--color-${item.key})`}
+                  radius={item.key === lastKey ? [0, 4, 4, 0] : 0}
+                  name={item.label}
+                  onClick={(data) => {
+                    const row = data as { payload?: { name?: string } };
+                    const name = row.payload?.name;
+                    if (onSelect && typeof name === "string") onSelect(name);
+                  }}
                 />
               ))}
-            </Pie>
-          </PieChart>
-        </ChartContainer>
-      ) : isArea ? (
-        <ChartContainer
-          config={config}
-          className="mx-auto aspect-[4/3] w-full max-w-5xl [&_foreignObject]:overflow-hidden"
-          initialDimension={{ width: 800, height: 600 }}
-        >
-          <Treemap
-            data={pieRows}
-            dataKey="spend"
-            nameKey="name"
-            stroke="var(--background)"
-            fill="transparent"
-            isAnimationActive={false}
-            style={onSelect ? { cursor: "pointer" } : undefined}
-            onClick={(node) => {
-              const name =
-                node && typeof node === "object" && "name" in node
-                  ? String((node as { name?: string }).name ?? "")
-                  : "";
-              if (onSelect && name) onSelect(name);
-            }}
-            content={(props) => (
-              <AreaTreemapCell
-                x={props.x}
-                y={props.y}
-                width={props.width}
-                height={props.height}
-                name={props.name}
-                value={props.value}
-                index={props.index}
-                depth={props.depth}
-                currency={currency}
-                total={pieTotal}
-              />
-            )}
-          >
-            <ChartTooltip
-              offset={CHART_TOOLTIP_OFFSET}
-              allowEscapeViewBox={CHART_TOOLTIP_ESCAPE}
-              wrapperStyle={{ pointerEvents: "none" }}
-              content={(props) =>
-                stackedRowTooltip(
-                  props,
-                  config,
-                  currency,
-                  otherByRow,
-                  visibleSeries,
-                  pieTotal,
-                  false,
-                )
-              }
-            />
-          </Treemap>
-        </ChartContainer>
-      ) : (
-        <ChartContainer
-          config={config}
-          className="aspect-auto w-full"
-          style={{
-            ["--rows" as string]: rows.length,
-            height: `calc(2.4rem * ${Math.max(rows.length, 1)} + 4rem)`,
-          }}
-          initialDimension={{
-            width: 640,
-            height: Math.max(420, rows.length * 38),
-          }}
-        >
-          <BarChart
-            data={rows}
-            layout="vertical"
-            margin={{ left: 8, right: 16, top: 8, bottom: 0 }}
-            accessibilityLayer
-            style={onSelect ? { cursor: "pointer" } : undefined}
-          >
-            <CartesianGrid horizontal={false} />
-            <YAxis
-              dataKey="name"
-              type="category"
-              width={labelWidth}
-              tickLine={false}
-              axisLine={false}
-              tickMargin={8}
-            />
-            <XAxis
-              type="number"
-              tickLine={false}
-              axisLine={false}
-              tickFormatter={(value) => moneyTick(Number(value), currency)}
-            />
-            <ChartTooltip
-              offset={CHART_TOOLTIP_OFFSET}
-              allowEscapeViewBox={CHART_TOOLTIP_ESCAPE}
-              content={(props) =>
-                stackedRowTooltip(props, config, currency, otherByRow)
-              }
-            />
-            {visibleSeries.map((item) => (
-              <Bar
-                key={item.key}
-                dataKey={item.key}
-                stackId="stack"
-                fill={`var(--color-${item.key})`}
-                radius={item.key === lastKey ? [0, 4, 4, 0] : 0}
-                name={item.label}
-                onClick={(data) => {
-                  const row = data as { payload?: { name?: string } };
-                  const name = row.payload?.name;
-                  if (onSelect && typeof name === "string") onSelect(name);
-                }}
-              />
-            ))}
-          </BarChart>
-        </ChartContainer>
-      )}
-      <SeriesLegend
-        series={series}
-        value={visibleKeys}
-        onValueChange={setVisibleKeys}
-      />
+            </BarChart>
+          </ChartContainer>
+        )}
+      </ChartWithSeriesList>
     </section>
   );
 }
@@ -2200,7 +2564,7 @@ function TaxonomyBreakdownTable({
           })}
         </TableBody>
         <TableFooter>
-          <TableRow>
+          <TableRow className="text-muted-foreground">
             <TableCell colSpan={nestedLabel ? 2 : 1}>Total</TableCell>
             <TableCell className="text-right">
               <MoneyText amount={tableTotal} currency={currency} />
@@ -2405,7 +2769,7 @@ function WeekdayChart({ data }: { data: AnalysisData }) {
       >
         <BarChart
           data={data.weekdays}
-          margin={{ left: 8, right: 8, top: 8, bottom: 0 }}
+          margin={{ left: 12, right: 8, top: 8, bottom: 0 }}
           accessibilityLayer
         >
           <CartesianGrid vertical={false} />
@@ -2419,7 +2783,8 @@ function WeekdayChart({ data }: { data: AnalysisData }) {
           <YAxis
             tickLine={false}
             axisLine={false}
-            width={52}
+            width={88}
+            tickMargin={6}
             tickFormatter={(value) => moneyTick(Number(value), data.currency)}
           />
           <ChartTooltip
@@ -2468,7 +2833,7 @@ function DayOfMonthChart({ data }: { data: AnalysisData }) {
       >
         <BarChart
           data={rows}
-          margin={{ left: 8, right: 8, top: 8, bottom: 0 }}
+          margin={{ left: 12, right: 8, top: 8, bottom: 0 }}
           accessibilityLayer
         >
           <CartesianGrid vertical={false} />
@@ -2482,7 +2847,8 @@ function DayOfMonthChart({ data }: { data: AnalysisData }) {
           <YAxis
             tickLine={false}
             axisLine={false}
-            width={52}
+            width={88}
+            tickMargin={6}
             tickFormatter={(value) => moneyTick(Number(value), data.currency)}
           />
           <ChartTooltip
@@ -2831,39 +3197,135 @@ function CategoryDrilldown({
   );
 }
 
+const SEGMENTED_SCROLL_RATIO = 0.7;
+
 function SegmentedControl<T extends string>({
   options,
   value,
   onChange,
   ariaLabel,
 }: {
-  options: { value: T; label: string }[];
+  options: { value: T; label: string; desktopLabel?: string }[];
   value: T;
   onChange: (value: T) => void;
   ariaLabel: string;
 }) {
+  const scrollerRef = useRef<HTMLDivElement>(null);
+  const [canLeft, setCanLeft] = useState(false);
+  const [canRight, setCanRight] = useState(false);
+
+  const syncOverflow = useCallback(() => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    setCanLeft(el.scrollLeft > 1);
+    setCanRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 1);
+  }, []);
+
+  useEffect(() => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    syncOverflow();
+    const observer = new ResizeObserver(syncOverflow);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [syncOverflow, options]);
+
+  useEffect(() => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    const active = el.querySelector<HTMLElement>('[aria-pressed="true"]');
+    if (active) {
+      const left = active.offsetLeft;
+      const right = left + active.offsetWidth;
+      if (left < el.scrollLeft) {
+        el.scrollTo({ left });
+      } else if (right > el.scrollLeft + el.clientWidth) {
+        el.scrollTo({ left: right - el.clientWidth });
+      }
+    }
+    syncOverflow();
+  }, [value, syncOverflow]);
+
+  const scrollByPage = (direction: -1 | 1) => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    el.scrollBy({
+      left: direction * el.clientWidth * SEGMENTED_SCROLL_RATIO,
+      behavior: "smooth",
+    });
+  };
+
   return (
-    <div
-      role="group"
-      aria-label={ariaLabel}
-      className="inline-flex max-w-full overflow-x-auto overscroll-x-contain gap-1 rounded-md border border-[var(--border)] p-0.5 sm:flex-wrap sm:gap-0.5 sm:rounded-lg"
-    >
-      {options.map((option) => (
-        <Button
-          key={option.value}
-          type="button"
-          size="xs"
-          variant={value === option.value ? "default" : "ghost"}
-          className={cn(
-            "h-11 min-w-11 shrink-0 px-3 text-sm font-normal sm:h-6 sm:min-w-0 sm:px-2 sm:text-xs",
-            value === option.value && "pointer-events-none",
-          )}
-          aria-pressed={value === option.value}
-          onClick={() => onChange(option.value)}
+    <div className="inline-flex w-full min-w-0 max-w-full items-stretch rounded-md border border-border p-0.5 sm:w-auto sm:flex-wrap sm:gap-0.5 sm:rounded-lg">
+      {canLeft ? (
+        <Arrows
+          variant="ghost"
+          shape="tower"
+          size="sm"
+          direction="left"
+          aria-label={`Scroll ${ariaLabel} left`}
+          className="h-11 w-8 sm:hidden"
+          onClick={() => scrollByPage(-1)}
+        />
+      ) : null}
+      <div className="relative min-w-0 flex-1">
+        {canLeft ? (
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-y-0 left-0 z-10 w-10 bg-gradient-to-r from-background to-transparent sm:hidden"
+          />
+        ) : null}
+        {canRight ? (
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-y-0 right-0 z-10 w-10 bg-gradient-to-l from-background to-transparent sm:hidden"
+          />
+        ) : null}
+        <div
+          ref={scrollerRef}
+          role="group"
+          aria-label={ariaLabel}
+          onScroll={syncOverflow}
+          className="inline-flex min-w-0 w-full overflow-x-auto overscroll-x-contain touch-pan-x gap-1 scrollbar-none sm:flex-wrap sm:gap-0.5"
         >
-          {option.label}
-        </Button>
-      ))}
+          {options.map((option) => (
+            <Button
+              key={option.value}
+              type="button"
+              size="xs"
+              variant={value === option.value ? "default" : "ghost"}
+              className={cn(
+                "h-11 min-w-11 shrink-0 px-3 text-sm font-normal sm:h-6 sm:min-w-0 sm:px-2 sm:text-xs",
+                value === option.value && "pointer-events-none",
+              )}
+              aria-pressed={value === option.value}
+              onClick={() => onChange(option.value)}
+            >
+              {option.desktopLabel ? (
+                <>
+                  <span className="sm:hidden">{option.label}</span>
+                  <span className="hidden sm:inline">
+                    {option.desktopLabel}
+                  </span>
+                </>
+              ) : (
+                option.label
+              )}
+            </Button>
+          ))}
+        </div>
+      </div>
+      {canRight ? (
+        <Arrows
+          variant="ghost"
+          shape="tower"
+          size="sm"
+          direction="right"
+          aria-label={`Scroll ${ariaLabel} right`}
+          className="h-11 w-8 sm:hidden"
+          onClick={() => scrollByPage(1)}
+        />
+      ) : null}
     </div>
   );
 }
@@ -3011,140 +3473,199 @@ function rowPeeksWithVendorFallback(
   return vendorPeeks;
 }
 
+function txnPeekCountLabel(count: number) {
+  const plus = count >= 48 ? "+" : "";
+  const noun = count === 1 ? "txn" : "txns";
+  return `${count}${plus} ${noun}`;
+}
+
+function classificationBlurb(
+  catalog:
+    | {
+        sections: Array<{ name: string; description: string }>;
+        categories: Array<{ name: string; description: string }>;
+        subcategories: Array<{ name: string; description: string }>;
+      }
+    | undefined,
+  nameLabel: string,
+  name: string,
+) {
+  const facet =
+    nameLabel === "Section"
+      ? "section"
+      : nameLabel === "Category"
+        ? "category"
+        : nameLabel === "Subcategory"
+          ? "subcategory"
+          : null;
+  if (!facet) return null;
+  const rows =
+    facet === "section"
+      ? catalog?.sections
+      : facet === "category"
+        ? catalog?.categories
+        : catalog?.subcategories;
+  const match = rows?.find(
+    (row) => row.name.trim().toLowerCase() === name.trim().toLowerCase(),
+  );
+  const fromCatalog = match?.description.trim();
+  if (fromCatalog) return fromCatalog;
+  return taxonomyDescription(facet, name);
+}
+
+function TxnPeekRows({
+  transactions,
+  currency,
+  onEditDescription,
+  hideRowMenu = false,
+}: {
+  transactions: AnalysisTxnPeek[];
+  currency: string;
+  onEditDescription: (description: string) => void;
+  hideRowMenu?: boolean;
+}) {
+  if (transactions.length === 0) {
+    return (
+      <p className="px-3 py-4 text-sm text-muted-foreground">
+        No transactions in this range.
+      </p>
+    );
+  }
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full min-w-[20rem] text-sm">
+        <tbody>
+          {transactions.map((txn, index) => {
+            const isCredit = txn.amount < 0;
+            return (
+              <tr
+                key={`${txn.date}-${txn.description}-${index}`}
+                className="border-b border-border last:border-b-0"
+              >
+                {hideRowMenu ? null : (
+                  <td className="w-8 px-1 py-1 align-top">
+                    <DescriptionActionsButton
+                      description={txn.description}
+                      onEdit={onEditDescription}
+                    />
+                  </td>
+                )}
+                <td className="whitespace-nowrap px-3 py-1.5 align-top tabular-nums text-muted-foreground">
+                  {formatShortDisplayDate(txn.date)}
+                </td>
+                <td className="max-w-[12rem] px-2 py-1.5 align-top text-foreground">
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span className="block truncate">{txn.description}</span>
+                    </TooltipTrigger>
+                    <TooltipContent
+                      side="top"
+                      sideOffset={6}
+                      className="z-[60] max-w-sm text-left leading-snug"
+                    >
+                      {txn.description}
+                    </TooltipContent>
+                  </Tooltip>
+                </td>
+                <td className="whitespace-nowrap px-2 py-1.5 text-right align-top">
+                  <MoneyText
+                    amount={Math.abs(txn.amount)}
+                    currency={currency}
+                  />
+                </td>
+                <td className="px-3 py-1.5 text-right align-top">
+                  <span
+                    className={`text-xs font-medium tabular-nums ${
+                      isCredit ? "text-foreground" : "text-muted-foreground"
+                    }`}
+                    aria-label={isCredit ? "Credit" : "Debit"}
+                  >
+                    {isCredit ? "CR" : "DR"}
+                  </span>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 function RowTxnsPopover({
   label,
+  nameLabel,
   currency,
   transactions,
   canMoveMerchant = false,
 }: {
   label: string;
+  nameLabel: string;
   currency: string;
   transactions: AnalysisTxnPeek[];
   canMoveMerchant?: boolean;
 }) {
+  const catalog = useQuery(api.classifications.list, {});
+  const [open, setOpen] = useState(false);
   const [editDescription, setEditDescription] = useState<string | null>(null);
   const [moveOpen, setMoveOpen] = useState(false);
-  return (
+  const nestedOpen = editDescription != null || moveOpen;
+  const blurb = classificationBlurb(catalog, nameLabel, label);
+  const countLabel = txnPeekCountLabel(transactions.length);
+
+  const trigger = (
+    <button
+      type="button"
+      aria-label={`Transactions for ${label}`}
+      onClick={(event) => event.stopPropagation()}
+      onPointerDown={(event) => event.stopPropagation()}
+      className="inline-flex size-11 shrink-0 items-center justify-center rounded-md text-accent hover:text-primary sm:size-6"
+    >
+      <IconInfoCircle className="size-3.5" />
+    </button>
+  );
+
+  const headerActions = canMoveMerchant ? (
+    <RowActionsMenu
+      label={label}
+      size="sm"
+      actions={[
+        {
+          label: "Move",
+          onSelect: () => setMoveOpen(true),
+        },
+      ]}
+    />
+  ) : null;
+
+  const titleRow = (
+    <div className="flex min-w-0 items-baseline gap-2 text-sm font-medium">
+      <span className="min-w-0 truncate">{label}</span>
+      <span className="shrink-0 font-normal text-muted-foreground">
+        {countLabel}
+      </span>
+    </div>
+  );
+
+  const blurbRow = blurb ? (
+    <p className="mt-1 text-sm font-normal text-muted-foreground">{blurb}</p>
+  ) : null;
+
+  const list = (
+    <TxnPeekRows
+      transactions={transactions}
+      currency={currency}
+      onEditDescription={setEditDescription}
+    />
+  );
+
+  const nestedDialogs = (
     <>
-      <Popover>
-        <PopoverTrigger asChild>
-          <button
-            type="button"
-            aria-label={`Transactions for ${label}`}
-            onClick={(event) => event.stopPropagation()}
-            onPointerDown={(event) => event.stopPropagation()}
-            className="inline-flex size-11 shrink-0 items-center justify-center rounded-md text-accent hover:bg-accent-subtle hover:text-accent"
-          >
-            <IconInfoCircle className="size-3.5" />
-          </button>
-        </PopoverTrigger>
-        <PopoverContent
-          align="end"
-          side="left"
-          className="w-[min(34rem,calc(100vw-2rem))] gap-0 overflow-hidden p-0"
-          onPointerDownOutside={(event) => {
-            keepTxnPeekPopoverOpen(event);
-          }}
-          onFocusOutside={(event) => {
-            keepTxnPeekPopoverOpen(event);
-          }}
-          onInteractOutside={(event) => {
-            keepTxnPeekPopoverOpen(event);
-          }}
-        >
-          <div className="flex items-center justify-between gap-2 border-b border-[var(--border)] px-3 py-2">
-            <div className="min-w-0 text-sm font-medium">
-              {label}
-              <span className="ml-2 font-normal text-[var(--muted-foreground)]">
-                {transactions.length}
-                {transactions.length >= 48 ? "+" : ""} txn
-                {transactions.length === 1 ? "" : "s"}
-              </span>
-            </div>
-            {canMoveMerchant ? (
-              <RowActionsMenu
-                label={label}
-                size="sm"
-                actions={[
-                  {
-                    label: "Move",
-                    onSelect: () => setMoveOpen(true),
-                  },
-                ]}
-              />
-            ) : null}
-          </div>
-          <div className="max-h-72 overflow-auto">
-            {transactions.length === 0 ? (
-              <p className="px-3 py-4 text-sm text-[var(--muted-foreground)]">
-                No transactions in this range.
-              </p>
-            ) : (
-              <table className="w-full text-sm">
-                <tbody>
-                  {transactions.map((txn, index) => {
-                    const isCredit = txn.amount < 0;
-                    return (
-                      <tr
-                        key={`${txn.date}-${txn.description}-${index}`}
-                        className="border-b border-[var(--border)] last:border-b-0"
-                      >
-                        <td className="w-8 px-1 py-1 align-top">
-                          <DescriptionActionsButton
-                            description={txn.description}
-                            onEdit={setEditDescription}
-                          />
-                        </td>
-                        <td className="whitespace-nowrap px-3 py-1.5 align-top tabular-nums text-[var(--muted-foreground)]">
-                          {formatShortDisplayDate(txn.date)}
-                        </td>
-                        <td className="max-w-[12rem] px-2 py-1.5 align-top text-[var(--foreground)]">
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <span className="block truncate">
-                                {txn.description}
-                              </span>
-                            </TooltipTrigger>
-                            <TooltipContent
-                              side="top"
-                              sideOffset={6}
-                              className="z-[60] max-w-sm text-left leading-snug"
-                            >
-                              {txn.description}
-                            </TooltipContent>
-                          </Tooltip>
-                        </td>
-                        <td className="whitespace-nowrap px-2 py-1.5 text-right align-top">
-                          <MoneyText
-                            amount={Math.abs(txn.amount)}
-                            currency={currency}
-                          />
-                        </td>
-                        <td className="px-3 py-1.5 text-right align-top">
-                          <span
-                            className={`text-xs font-medium tabular-nums ${
-                              isCredit
-                                ? "text-[var(--foreground)]"
-                                : "text-[var(--muted-foreground)]"
-                            }`}
-                            aria-label={isCredit ? "Credit" : "Debit"}
-                          >
-                            {isCredit ? "CR" : "DR"}
-                          </span>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            )}
-          </div>
-        </PopoverContent>
-      </Popover>
       <EditDescriptionDialog
         open={editDescription != null}
-        onOpenChange={(open) => {
-          if (!open) setEditDescription(null);
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen) setEditDescription(null);
         }}
         currentDescription={editDescription ?? ""}
       />
@@ -3156,6 +3677,50 @@ function RowTxnsPopover({
         />
       ) : null}
     </>
+  );
+
+  return (
+    <>
+      <Dialog
+        open={open}
+        onOpenChange={(next) => {
+          if (!next && nestedOpen) return;
+          setOpen(next);
+        }}
+      >
+        <DialogTrigger asChild>{trigger}</DialogTrigger>
+        <DialogContent
+          className="flex max-h-[calc(100dvh-2rem)] w-full max-w-[calc(100%-1.5rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-lg"
+          minimizeLabel={label}
+          onInteractOutside={(event) => {
+            keepTxnPeekPopoverOpen(event);
+          }}
+        >
+          <DialogHeader className="flex flex-row items-start justify-between gap-2 border-b border-border px-3 py-2">
+            <div className="min-w-0">
+              <DialogTitle className="text-sm">{titleRow}</DialogTitle>
+              {blurbRow}
+              <DialogDescription className="sr-only">
+                Recent transactions for {label} in this range.
+              </DialogDescription>
+            </div>
+            {headerActions}
+          </DialogHeader>
+          <div className="min-h-0 flex-1 overflow-auto">{list}</div>
+        </DialogContent>
+      </Dialog>
+      {nestedDialogs}
+    </>
+  );
+}
+
+function addVendorToStoreSheet(
+  addRow: ReturnType<typeof useScratchNoteActions>["addRow"],
+  input: Parameters<ReturnType<typeof useScratchNoteActions>["addRow"]>[0],
+) {
+  toastCompact.success(`Added ${input.name} to store sheet`);
+  void addRow(input).catch(() =>
+    toastCompact.error("Could not add to store sheet"),
   );
 }
 
@@ -3193,12 +3758,12 @@ function LeaderboardTable({
   const asMerchant = isMerchantNameLabel(nameLabel);
   const gridCols = canExpand
     ? showTxns
-      ? "grid-cols-[1.75rem_minmax(0,1fr)_9rem_4rem_3.75rem_1rem_1.25rem]"
+      ? "grid-cols-[1.75rem_minmax(0,1fr)_9rem_4rem_3.75rem_1rem_2.75rem] sm:grid-cols-[1.75rem_minmax(0,1fr)_9rem_4rem_3.75rem_1rem_1.5rem]"
       : "grid-cols-[1.75rem_minmax(0,1fr)_9rem_4rem_3.75rem_1rem]"
     : showTxns
-      ? "grid-cols-[1.75rem_minmax(0,1fr)_9rem_4rem_3.75rem_1.25rem]"
+      ? "grid-cols-[1.75rem_minmax(0,1fr)_9rem_4rem_3.75rem_2.75rem] sm:grid-cols-[1.75rem_minmax(0,1fr)_9rem_4rem_3.75rem_1.5rem]"
       : "grid-cols-[1.75rem_minmax(0,1fr)_9rem_4rem_3.75rem]";
-  const grid = `grid min-w-[36rem] w-full items-center gap-x-3 px-3 ${gridCols}`;
+  const grid = `grid min-w-0 w-full items-center gap-x-3 px-3 ${gridCols}`;
   const rankCol = "flex h-5 w-full items-center justify-center";
 
   return (
@@ -3223,7 +3788,7 @@ function LeaderboardTable({
           Nothing in this range.
         </p>
       ) : (
-        <div className="overflow-x-auto overscroll-x-contain rounded-lg border border-[var(--border)]">
+        <div className="min-w-0 overflow-x-auto overscroll-x-contain rounded-lg border border-[var(--border)]">
           <div
             className={`${grid} border-b border-[var(--border)] py-2 text-xs text-[var(--muted-foreground)]`}
           >
@@ -3242,6 +3807,7 @@ function LeaderboardTable({
               const txnCell = showTxns ? (
                 <RowTxnsPopover
                   label={row.name}
+                  nameLabel={nameLabel}
                   currency={currency}
                   canMoveMerchant={asMerchant}
                   transactions={rowPeeksWithVendorFallback(
@@ -3334,7 +3900,7 @@ function LeaderboardTable({
                                   className={`${rankCol} rounded text-accent hover:bg-accent-subtle hover:text-accent`}
                                   onClick={(event) => {
                                     event.stopPropagation();
-                                    void addRow({
+                                    addVendorToStoreSheet(addRow, {
                                       name: vendor.name,
                                       spend: vendor.spend,
                                       count: vendor.count ?? 0,
@@ -3377,6 +3943,7 @@ function LeaderboardTable({
                             {showTxns ? (
                               <RowTxnsPopover
                                 label={vendor.name}
+                                nameLabel="Merchant"
                                 currency={currency}
                                 canMoveMerchant
                                 transactions={
@@ -3509,7 +4076,7 @@ function RangeLeaderboardTable({
   const top = ranked.slice(0, 10);
 
   const grid = showTxns
-    ? "grid w-fit max-w-full grid-cols-[1.5rem_minmax(7rem,14rem)_7.25rem_7.25rem_7.25rem_1.25rem] items-center gap-x-4 px-3"
+    ? "grid w-fit max-w-full grid-cols-[1.5rem_minmax(7rem,14rem)_7.25rem_7.25rem_7.25rem_2.75rem] items-center gap-x-4 px-3 sm:grid-cols-[1.5rem_minmax(7rem,14rem)_7.25rem_7.25rem_7.25rem_1.5rem]"
     : "grid w-fit max-w-full grid-cols-[1.5rem_minmax(7rem,14rem)_7.25rem_7.25rem_7.25rem] items-center gap-x-4 px-3";
 
   return (
@@ -3563,6 +4130,7 @@ function RangeLeaderboardTable({
                   {showTxns ? (
                     <RowTxnsPopover
                       label={row.name}
+                      nameLabel={nameLabel}
                       currency={currency}
                       canMoveMerchant={asMerchant}
                       transactions={transactionsForRow?.(row.name) ?? []}
@@ -3621,12 +4189,12 @@ function AverageLeaderboardTable({
   const asMerchant = isMerchantNameLabel(nameLabel);
   const gridCols = canExpand
     ? showTxns
-      ? "grid-cols-[1.15rem_minmax(0,1fr)_6.5rem_4rem_1rem_1.25rem]"
+      ? "grid-cols-[1.15rem_minmax(0,1fr)_6.5rem_4rem_1rem_2.75rem] sm:grid-cols-[1.15rem_minmax(0,1fr)_6.5rem_4rem_1rem_1.5rem]"
       : "grid-cols-[1.15rem_minmax(0,1fr)_6.5rem_4rem_1rem]"
     : showTxns
-      ? "grid-cols-[1.15rem_minmax(0,1fr)_6.5rem_4rem_1.25rem]"
+      ? "grid-cols-[1.15rem_minmax(0,1fr)_6.5rem_4rem_2.75rem] sm:grid-cols-[1.15rem_minmax(0,1fr)_6.5rem_4rem_1.5rem]"
       : "grid-cols-[1.15rem_minmax(0,1fr)_6.5rem_4rem]";
-  const grid = `grid min-w-[30rem] w-full items-center gap-x-2 px-2 sm:gap-x-3 sm:px-3 ${gridCols}`;
+  const grid = `grid min-w-0 w-full items-center gap-x-2 px-2 sm:gap-x-3 sm:px-3 ${gridCols}`;
   const rankCol = "flex h-5 w-full items-center justify-center text-xs";
 
   return (
@@ -3648,7 +4216,7 @@ function AverageLeaderboardTable({
           Nothing in this range.
         </p>
       ) : (
-        <div className="overflow-x-auto overscroll-x-contain rounded-lg border border-[var(--border)]">
+        <div className="min-w-0 overflow-x-auto overscroll-x-contain rounded-lg border border-[var(--border)]">
           <div
             className={`${grid} border-b border-[var(--border)] py-2 text-xs text-[var(--muted-foreground)]`}
           >
@@ -3723,6 +4291,7 @@ function AverageLeaderboardTable({
                     {showTxns ? (
                       <RowTxnsPopover
                         label={row.name}
+                        nameLabel={nameLabel}
                         currency={currency}
                         canMoveMerchant={asMerchant}
                         transactions={rowPeeksWithVendorFallback(
@@ -3764,7 +4333,7 @@ function AverageLeaderboardTable({
                                   className={`${rankCol} rounded text-accent hover:bg-accent-subtle hover:text-accent`}
                                   onClick={(event) => {
                                     event.stopPropagation();
-                                    void addRow({
+                                    addVendorToStoreSheet(addRow, {
                                       name: vendor.name,
                                       spend: vendor.spend / divisor,
                                       count: vendor.count ?? 0,
@@ -3804,6 +4373,7 @@ function AverageLeaderboardTable({
                             {showTxns ? (
                               <RowTxnsPopover
                                 label={vendor.name}
+                                nameLabel="Merchant"
                                 currency={currency}
                                 canMoveMerchant
                                 transactions={
@@ -5271,65 +5841,74 @@ function MerchantDrilldown({
             </Button>
           ))}
         </div>
-        <div className="max-h-[22rem] space-y-4 overflow-y-auto pr-1">
-          {merchantGroups.map((group) => (
-            <div key={group.name} className="space-y-2">
-              {categoryFilter === "all" ? (
-                <div className="flex items-center gap-2">
-                  <span className="shrink-0 text-xs font-medium tracking-wide text-[var(--muted-foreground)]">
-                    {group.name}
-                  </span>
-                  <div className="h-px min-w-8 flex-1 bg-[var(--border)]" />
-                  <span className="shrink-0 text-xs tabular-nums text-[var(--muted-foreground)]">
-                    {group.items.length}
-                  </span>
+
+        <div className="grid gap-4 md:grid-cols-4 md:items-start">
+          <aside className="min-w-0 md:col-span-1 md:sticky md:top-4 md:max-h-[min(70vh,42rem)] md:overflow-y-auto md:pr-1">
+            <div className="max-h-[22rem] space-y-4 overflow-y-auto pr-1 md:max-h-none md:overflow-visible md:pr-0">
+              {merchantGroups.map((group) => (
+                <div key={group.name} className="space-y-2">
+                  {categoryFilter === "all" ? (
+                    <div className="flex items-center gap-2">
+                      <span className="shrink-0 text-xs font-medium tracking-wide text-[var(--muted-foreground)]">
+                        {group.name}
+                      </span>
+                      <div className="h-px min-w-8 flex-1 bg-[var(--border)]" />
+                      <span className="shrink-0 text-xs tabular-nums text-[var(--muted-foreground)]">
+                        {group.items.length}
+                      </span>
+                    </div>
+                  ) : null}
+                  <div className="flex flex-wrap gap-1 md:flex-col md:flex-nowrap">
+                    {group.items.map((item) => (
+                      <Button
+                        key={item.merchant}
+                        type="button"
+                        size="sm"
+                        variant={
+                          item.merchant === breakdown.merchant
+                            ? "default"
+                            : "outline"
+                        }
+                        className="max-w-full md:w-full md:justify-start"
+                        onClick={() => onSelect(item.merchant)}
+                      >
+                        <MerchantLabel name={item.merchant} />
+                      </Button>
+                    ))}
+                  </div>
                 </div>
+              ))}
+              {visibleBreakdowns.length === 0 ? (
+                <p className="text-sm text-[var(--muted-foreground)]">
+                  No merchants in this category.
+                </p>
               ) : null}
-              <div className="flex flex-wrap gap-1">
-                {group.items.map((item) => (
-                  <Button
-                    key={item.merchant}
-                    type="button"
-                    size="sm"
-                    variant={
-                      item.merchant === breakdown.merchant
-                        ? "default"
-                        : "outline"
-                    }
-                    onClick={() => onSelect(item.merchant)}
-                  >
-                    <MerchantLabel name={item.merchant} />
-                  </Button>
-                ))}
-              </div>
             </div>
-          ))}
-          {visibleBreakdowns.length === 0 ? (
-            <p className="text-sm text-[var(--muted-foreground)]">
-              No merchants in this category.
-            </p>
-          ) : null}
+          </aside>
+
+          <div className="min-w-0 space-y-4 md:col-span-3">
+            <StackedMixChart
+              title={`${breakdown.merchant} subcategory mix`}
+              info={`How ${breakdown.merchant} splits by subcategory over ${ANALYSIS_PERIOD_META[period].nounPlural}. ${formatMoney(breakdown.spend, data.currency)} in this range.`}
+              series={breakdown.typeSeries}
+              monthly={breakdown.typeMonthly}
+              currency={data.currency}
+              period={period}
+              onPeriodChange={onPeriodChange}
+              other={breakdown.other}
+              otherByPeriod={breakdown.otherByPeriod}
+            />
+            <RankedBarChart
+              title={`${breakdown.merchant} subcategories`}
+              info="Subcategory labels inside this Merchant clean name."
+              rows={breakdown.types}
+              currency={data.currency}
+              color="oklch(0.52 0.1 155)"
+              labelWidth={160}
+            />
+          </div>
         </div>
       </div>
-      <StackedMixChart
-        title={`${breakdown.merchant} subcategory mix`}
-        info={`How ${breakdown.merchant} splits by subcategory over ${ANALYSIS_PERIOD_META[period].nounPlural}. ${formatMoney(breakdown.spend, data.currency)} in this range.`}
-        series={breakdown.typeSeries}
-        monthly={breakdown.typeMonthly}
-        currency={data.currency}
-        period={period}
-        onPeriodChange={onPeriodChange}
-        other={breakdown.other}
-        otherByPeriod={breakdown.otherByPeriod}
-      />
-      <RankedBarChart
-        title={`${breakdown.merchant} subcategories`}
-        info="Subcategory labels inside this Merchant clean name."
-        rows={breakdown.types}
-        currency={data.currency}
-        color="oklch(0.52 0.1 155)"
-        labelWidth={160}
-      />
     </section>
   );
 }
@@ -5860,8 +6439,10 @@ function PatternsTab({ data }: { data: AnalysisData }) {
         />
       </div>
 
-      <WeekdayChart data={data} />
-      <DayOfMonthChart data={data} />
+      <div className="grid gap-6 lg:grid-cols-2">
+        <WeekdayChart data={data} />
+        <DayOfMonthChart data={data} />
+      </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
         <RankedBarChart
@@ -5995,9 +6576,8 @@ export function AnalysisDashboard() {
       <div className="space-y-3">
         <header className="flex flex-col gap-2 border-b border-[var(--border)] pb-2 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:pb-6">
           <div className="space-y-1">
-            <p className="type-kicker hidden sm:block">Finance</p>
             <div className="flex items-center gap-1">
-              <h1 className="type-page text-xl sm:text-[1.25rem]">Analysis</h1>
+              <h1 className="type-kicker text-[20px]">Analysis</h1>
               <InfoTip label="Analysis info">
                 {data
                   ? `Covers ${formatDisplayDate(data.earliestDate)} to ${formatDisplayDate(data.latestDate)}. Spend = purchases and money sent out, minus refunds. Moving money between your own accounts (like paying a card from chequing) is not counted as spend.`
@@ -6008,8 +6588,8 @@ export function AnalysisDashboard() {
               Charts and breakdowns of spending over time.
             </p>
           </div>
-          <div className="flex min-w-0 flex-wrap items-end justify-start gap-x-3 gap-y-2 sm:justify-end">
-            <div className="flex max-w-full flex-col items-start gap-1 sm:items-center sm:gap-0.5">
+          <div className="flex w-full min-w-0 items-stretch justify-start gap-x-3 gap-y-2 sm:w-auto sm:flex-wrap sm:items-end sm:justify-end">
+            <div className="flex min-w-0 flex-1 flex-col items-stretch gap-1 sm:flex-none sm:items-center sm:gap-0.5">
               <span className="type-caption">Range</span>
               <SegmentedControl
                 ariaLabel="Range"
@@ -6018,7 +6598,7 @@ export function AnalysisDashboard() {
                 onChange={setRange}
               />
             </div>
-            <div className="flex max-w-full flex-col items-start gap-1 sm:items-center sm:gap-0.5">
+            <div className="flex min-w-[8.25rem] flex-1 flex-col items-stretch gap-1 sm:min-w-0 sm:flex-none sm:items-center sm:gap-0.5">
               <label htmlFor="analysis-period" className="type-caption">
                 Period
               </label>
@@ -6029,7 +6609,7 @@ export function AnalysisDashboard() {
                 onChange={(event) =>
                   setPeriod(parseAnalysisPeriod(event.target.value))
                 }
-                className="[&_select]:h-11 sm:[&_select]:h-6 [&_select]:rounded-md [&_select]:py-0 [&_select]:pr-7 [&_select]:pl-2 [&_select]:text-base sm:[&_select]:text-xs [&_[data-slot=native-select-icon]]:right-2 [&_[data-slot=native-select-icon]]:size-3.5"
+                className="h-full min-h-0 w-full flex-1 sm:h-auto sm:w-fit sm:flex-none [&_select]:h-full [&_select]:min-h-[calc(2.75rem+0.25rem+2px)] sm:[&_select]:h-6 sm:[&_select]:min-h-0 [&_select]:rounded-md [&_select]:py-0 [&_select]:pr-7 [&_select]:pl-2 [&_select]:text-base sm:[&_select]:text-xs [&_[data-slot=native-select-icon]]:right-2 [&_[data-slot=native-select-icon]]:size-3.5"
               >
                 {ANALYSIS_PERIOD_OPTIONS.map((option) => (
                   <NativeSelectOption key={option.value} value={option.value}>

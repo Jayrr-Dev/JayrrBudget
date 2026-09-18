@@ -5,13 +5,14 @@ import { Separator } from "@/components/ui/separator";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
 import { motion } from "motion/react";
-import { Dialog as DialogPrimitive } from "radix-ui";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { Dialog as DialogPrimitive } from "radix-ui";
 import React, {
   createContext,
   useContext,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
 } from "react";
@@ -174,6 +175,54 @@ export const DesktopSidebar = ({
   );
 };
 
+function MobileBrandMark({ title }: { title: string }) {
+  const slotRef = useRef<HTMLDivElement>(null);
+  const measureRef = useRef<HTMLSpanElement>(null);
+  const [showName, setShowName] = useState(true);
+
+  useLayoutEffect(() => {
+    const slot = slotRef.current;
+    const measure = measureRef.current;
+    if (!slot || !measure) return;
+
+    const sync = () => {
+      setShowName(measure.scrollWidth <= slot.clientWidth + 1);
+    };
+
+    sync();
+    const observer = new ResizeObserver(sync);
+    observer.observe(slot);
+    observer.observe(measure);
+    return () => observer.disconnect();
+  }, [title]);
+
+  return (
+    <div className="flex min-w-0 flex-1 items-center gap-2" title={title}>
+      <img
+        src="/icon.svg?v=public"
+        alt={showName ? "" : title}
+        width={28}
+        height={28}
+        className="size-7 shrink-0"
+      />
+      <div ref={slotRef} className="relative min-h-5 min-w-0 flex-1">
+        <span
+          ref={measureRef}
+          aria-hidden
+          className="invisible absolute top-0 left-0 whitespace-nowrap text-sm font-semibold"
+        >
+          {title}
+        </span>
+        {showName ? (
+          <p className="text-sm font-semibold whitespace-nowrap text-[var(--foreground)]">
+            {title}
+          </p>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 export const MobileSidebar = ({
   className,
   children,
@@ -196,18 +245,18 @@ export const MobileSidebar = ({
 
   const drawer = (
     <DialogPrimitive.Portal>
-        <DialogPrimitive.Overlay
-          className="fixed inset-0 z-[90] bg-black/30 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 motion-reduce:animate-none md:hidden"
-        />
-        <DialogPrimitive.Content
-          aria-describedby={undefined}
-          className={cn(
-            "fixed inset-y-0 left-0 z-[100] flex w-[min(100%,20rem)] flex-col justify-between overflow-y-auto overscroll-contain border-r border-[var(--sidebar-border)] bg-[var(--surface)] p-6 pt-[max(1.5rem,env(safe-area-inset-top))] pb-[max(1.5rem,env(safe-area-inset-bottom))] pl-[max(1.5rem,env(safe-area-inset-left))] shadow-xl outline-none duration-300 data-[state=open]:animate-in data-[state=open]:slide-in-from-left data-[state=closed]:animate-out data-[state=closed]:slide-out-to-left motion-reduce:animate-none md:hidden",
-            className,
-          )}
-        >
-          <DialogPrimitive.Title className="sr-only">Navigation menu</DialogPrimitive.Title>
-          <DialogPrimitive.Close asChild>
+      <DialogPrimitive.Overlay className="fixed inset-0 z-[90] bg-black/30 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 motion-reduce:animate-none md:hidden" />
+      <DialogPrimitive.Content
+        aria-describedby={undefined}
+        className={cn(
+          "fixed inset-y-0 left-0 z-[100] flex w-[min(100%,20rem)] flex-col justify-between overflow-y-auto overscroll-contain border-r border-[var(--sidebar-border)] bg-[var(--surface)] p-6 pt-[max(1.5rem,env(safe-area-inset-top))] pb-[max(1.5rem,env(safe-area-inset-bottom))] pl-[max(1.5rem,env(safe-area-inset-left))] shadow-xl outline-none duration-300 data-[state=open]:animate-in data-[state=open]:slide-in-from-left data-[state=closed]:animate-out data-[state=closed]:slide-out-to-left motion-reduce:animate-none md:hidden",
+          className,
+        )}
+      >
+        <DialogPrimitive.Title className="sr-only">
+          Navigation menu
+        </DialogPrimitive.Title>
+        <DialogPrimitive.Close asChild>
           <button
             type="button"
             aria-label="Close menu"
@@ -215,50 +264,39 @@ export const MobileSidebar = ({
           >
             <PiggyIcon name="close" />
           </button>
-          </DialogPrimitive.Close>
-          {children}
-        </DialogPrimitive.Content>
+        </DialogPrimitive.Close>
+        {children}
+      </DialogPrimitive.Content>
     </DialogPrimitive.Portal>
   );
 
   return (
     <DialogPrimitive.Root open={isMobile && open} onOpenChange={setOpen}>
-    <div
-      className="relative z-40 flex w-full shrink-0 items-center justify-between border-b border-[var(--sidebar-border)] bg-[var(--surface)] px-4 py-2 md:hidden"
-      {...props}
-    >
-      <div className="flex min-w-0 items-center gap-2">
-        <img
-          src="/icon.svg?v=public"
-          alt=""
-          width={28}
-          height={28}
-          className="size-7 shrink-0"
-        />
-        <p className="min-w-0 truncate text-sm font-semibold text-[var(--foreground)]">
-          {title}
-        </p>
+      <div
+        className="relative z-40 flex w-full shrink-0 items-center justify-between border-b border-[var(--sidebar-border)] bg-[var(--surface)] px-4 py-2 md:hidden"
+        {...props}
+      >
+        <MobileBrandMark title={title} />
+        <div className="flex h-11 shrink-0 items-center">
+          {headerActions}
+          {headerActions ? (
+            <Separator
+              orientation="vertical"
+              className="mx-1.5 h-4 self-center bg-[var(--sidebar-border)] data-vertical:h-4 data-vertical:self-center"
+            />
+          ) : null}
+          <DialogPrimitive.Trigger asChild>
+            <button
+              type="button"
+              aria-label={open ? "Close menu" : "Open menu"}
+              className="flex size-11 items-center justify-center rounded-lg text-[var(--sidebar-foreground)] hover:bg-[var(--sidebar-accent)]"
+            >
+              <PiggyIcon name="menu" />
+            </button>
+          </DialogPrimitive.Trigger>
+        </div>
+        {isMobile ? drawer : null}
       </div>
-      <div className="flex h-11 shrink-0 items-center">
-        {headerActions}
-        {headerActions ? (
-          <Separator
-            orientation="vertical"
-            className="mx-1.5 h-5 self-center bg-[var(--sidebar-border)]"
-          />
-        ) : null}
-        <DialogPrimitive.Trigger asChild>
-        <button
-          type="button"
-          aria-label={open ? "Close menu" : "Open menu"}
-          className="flex size-11 items-center justify-center rounded-lg text-[var(--sidebar-foreground)] hover:bg-[var(--sidebar-accent)]"
-        >
-          <PiggyIcon name="menu" />
-        </button>
-        </DialogPrimitive.Trigger>
-      </div>
-      {isMobile ? drawer : null}
-    </div>
     </DialogPrimitive.Root>
   );
 };

@@ -89,7 +89,7 @@ export function TransactionRowActions({
     <>
       <RowActionsMenu
         label={transaction.name}
-        size="sm"
+        size="md"
         actions={[
           {
             label: rerun.isPending ? "Re-running..." : "Re-run",

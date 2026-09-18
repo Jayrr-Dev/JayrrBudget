@@ -5,7 +5,7 @@ import {
 import { resolveBankDirection } from "@/domains/transactions/domain/debitCredit";
 import { cn } from "@/lib/utils";
 
-/** Credit = income green + plus; debit = spend tone. Matches account ledger. */
+/** Credit = income green; debit = spend tone. Color carries the sign. */
 export function flowMoneyProps(txn: {
   amount: number;
   bankDirection?: string | null;
@@ -16,7 +16,7 @@ export function flowMoneyProps(txn: {
   const flow = resolveBankDirection(txn);
   if (flow === "credit") {
     return {
-      signMark: "plus",
+      signMark: "auto",
       className: "text-[var(--income)]",
     };
   }
@@ -33,10 +33,12 @@ function MoneyGrid({
   parts,
   className,
   signMark,
+  align = "right",
 }: {
   parts: MoneyParts;
   className?: string;
   signMark?: "minus" | "plus" | "auto";
+  align?: "left" | "right";
 }) {
   const mark =
     signMark === "plus"
@@ -48,14 +50,22 @@ function MoneyGrid({
           : "";
   return (
     <span
+      data-slot="money-grid"
       className={cn(
-        "inline-grid w-full min-w-0 grid-cols-[max-content_max-content_minmax(0,1fr)] items-baseline gap-x-1.5 font-mono tabular-nums",
+        "inline-grid min-w-0 items-baseline gap-x-1.5 font-mono tabular-nums",
+        align === "right"
+          ? "w-full grid-cols-[max-content_max-content_minmax(0,1fr)]"
+          : "w-auto grid-cols-[max-content_max-content_max-content]",
         className,
       )}
     >
       <span className="min-w-max text-left">{parts.symbol}</span>
       <span className="w-[1ch] text-center">{mark}</span>
-      <span className="min-w-[7ch] text-right">{parts.number}</span>
+      <span
+        className={align === "right" ? "min-w-[7ch] text-right" : "text-left"}
+      >
+        {parts.number}
+      </span>
     </span>
   );
 }
@@ -116,6 +126,7 @@ export function MoneyText({
     <MoneyGrid
       parts={parts}
       signMark={signMark}
+      align={align}
       className={cn(align === "right" ? "ml-auto" : null, className)}
     />
   );

@@ -21,7 +21,7 @@ function PiggyPingsTitleInfo() {
       <PopoverTrigger asChild>
         <button
           type="button"
-          className="inline-flex size-11 sm:size-6 shrink-0 items-center justify-center rounded-full text-accent hover:bg-accent-subtle hover:text-accent"
+          className="inline-flex size-11 sm:size-6 shrink-0 items-center justify-center rounded-full text-accent hover:text-primary"
           aria-label="About Piggy Pings"
         >
           <Info className="size-3.5" />
@@ -62,7 +62,7 @@ export default function PiggyPingsPage() {
     <div className="space-y-8">
       <header className="flex flex-wrap items-center justify-between gap-4 border-b border-border pb-6">
         <div>
-          <h1 className="type-page flex items-center gap-2">
+          <h1 className="type-kicker text-[20px] flex items-center gap-2">
             Piggy Pings
             <PiggyPingsTitleInfo />
           </h1>

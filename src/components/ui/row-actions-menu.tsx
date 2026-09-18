@@ -16,8 +16,13 @@ export type RowActionsMenuItem = {
 };
 
 const TRIGGER_SIZE_CLASS = {
-  sm: "size-6 max-md:size-11",
-  md: "size-7 max-md:size-11",
+  sm: "size-7 max-md:size-11",
+  md: "size-8 max-md:size-11",
+} as const;
+
+const TRIGGER_ICON_CLASS = {
+  sm: "size-5 max-md:size-6",
+  md: "size-5 max-md:size-6",
 } as const;
 
 export function RowActionsMenu({
@@ -37,7 +42,7 @@ export function RowActionsMenu({
         onClick={(event) => event.stopPropagation()}
         onPointerDown={(event) => event.stopPropagation()}
       >
-        <Icon icon="basil:menu-outline" className="size-4" />
+        <Icon icon="basil:menu-outline" className={TRIGGER_ICON_CLASS[size]} />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-auto min-w-36">
         {actions.map((action) => (

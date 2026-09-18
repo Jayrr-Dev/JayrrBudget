@@ -1,8 +1,5 @@
 "use client";
 
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Info } from "lucide-react";
-import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Combobox,
@@ -26,11 +23,15 @@ import {
   PopoverTitle,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { toastCompact } from "@/components/ui/sonner";
 import { formatMoney } from "@/domains/dashboard/domain/money";
 import type { DashboardTransaction } from "@/domains/dashboard/domain/types";
 import { queryKeys } from "@/domains/dashboard/queries/query-keys";
 import { formatShortDisplayDate } from "@/shared/lib/format-date";
 import { assertOnlineForWrite } from "@/shared/offline/offlineWriteGuard";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { Info } from "lucide-react";
+import { useMemo, useState } from "react";
 
 type TagByDateRangeResponse =
   | {
@@ -88,10 +89,7 @@ function buildExcludeOptions(
     if (txn.date < startDate || txn.date > endDate) continue;
     if (byId.has(txn.transactionId)) continue;
     const date = formatShortDisplayDate(txn.date);
-    const amount = formatMoney(
-      txn.amount,
-      txn.isoCurrencyCode ?? "CAD",
-    );
+    const amount = formatMoney(txn.amount, txn.isoCurrencyCode ?? "CAD");
     byId.set(txn.transactionId, {
       value: txn.transactionId,
       date,
@@ -136,7 +134,6 @@ export function CreateTagButton({
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [excludeIds, setExcludeIds] = useState<string[]>([]);
-  const [message, setMessage] = useState<string | null>(null);
   const [sortColumn, setSortColumn] = useState<ExcludeSortKey>("Date");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
 
@@ -166,28 +163,25 @@ export function CreateTagButton({
   const mutation = useMutation({
     mutationFn: postTagByDateRange,
     onSuccess: async (result) => {
-      setMessage(
-        `Tagged ${result.updated} of ${result.matched} rows with “${result.tag}”.`,
+      toastCompact.success(
+        `Tagged ${result.updated} of ${result.matched} with “${result.tag}”`,
       );
       await queryClient.invalidateQueries({ queryKey: queryKeys.dashboard });
       setTag("");
       setStartDate("");
       setEndDate("");
       setExcludeIds([]);
+      setOpen(false);
     },
     onError: (error) => {
-      setMessage(error instanceof Error ? error.message : "Failed");
+      toastCompact.error(
+        error instanceof Error ? error.message : "Could not apply tag",
+      );
     },
   });
 
   return (
-    <Popover
-      open={open}
-      onOpenChange={(next) => {
-        setOpen(next);
-        if (!next) setMessage(null);
-      }}
-    >
+    <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button type="button" variant="outline">
           Create Tag
@@ -206,7 +200,7 @@ export function CreateTagButton({
               <PopoverTrigger asChild>
                 <button
                   type="button"
-                  className="inline-flex size-6 shrink-0 items-center justify-center rounded-full max-md:size-11 text-accent hover:bg-accent-subtle hover:text-accent"
+                  className="inline-flex size-6 shrink-0 items-center justify-center rounded-full max-md:size-11 text-accent hover:text-primary"
                   aria-label="About Create Tag"
                 >
                   <Info className="size-3.5" />
@@ -283,10 +277,7 @@ export function CreateTagButton({
               isItemEqualToValue={(a, b) => a.value === b.value}
               disabled={mutation.isPending || excludeOptions.length === 0}
             >
-              <ComboboxChips
-                ref={excludeAnchor}
-                className="w-full min-w-0"
-              >
+              <ComboboxChips ref={excludeAnchor} className="w-full min-w-0">
                 <ComboboxValue>
                   {selectedExclude.map((item) => (
                     <ComboboxChip
@@ -349,9 +340,6 @@ export function CreateTagButton({
               </ComboboxContent>
             </Combobox>
           </div>
-          {message ? (
-            <p className="text-xs text-[var(--muted-foreground)]">{message}</p>
-          ) : null}
           <Button
             type="button"
             size="sm"

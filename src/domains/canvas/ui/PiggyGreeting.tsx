@@ -1,5 +1,6 @@
 "use client";
 
+import { cn } from "@/lib/utils";
 import { useEffect, useRef, useState } from "react";
 import styles from "./PiggyGreeting.module.css";
 
@@ -220,7 +221,7 @@ export function PiggyGreeting({
   }, [paused, message]);
 
   return (
-    <span className={styles.slot} aria-hidden="true">
+    <span className={cn(styles.slot, "hidden md:block")} aria-hidden="true">
       <span className={styles.line}>
         {renderLine(shown, message)}
         <span className={styles.caret} />

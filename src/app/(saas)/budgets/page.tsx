@@ -17,7 +17,7 @@ function BudgetsTitleInfo() {
       <PopoverTrigger asChild>
         <button
           type="button"
-          className="inline-flex size-11 sm:size-6 shrink-0 items-center justify-center rounded-full text-accent hover:bg-accent-subtle hover:text-accent"
+          className="inline-flex size-11 sm:size-6 shrink-0 items-center justify-center rounded-full text-accent hover:text-primary"
           aria-label="About Budgets"
         >
           <Info className="size-3.5" />
@@ -35,7 +35,9 @@ function BudgetsTitleInfo() {
             Spend caps you set, or ones Piggy creates in chat.
           </PopoverDescription>
           <ul className="mt-1.5 list-disc space-y-1 pl-4 text-muted-foreground">
-            <li>Amount is the cap</li>
+            <li>Amount is the cap for the current cycle slice</li>
+            <li>Cycle is daily, weekly, bi-weekly, monthly, or yearly</li>
+            <li>Start date is when that slice starts repeating</li>
             <li>Class lookup matches a section, category, or subcategory</li>
             <li>Description lookup matches a merchant or description later</li>
             <li>Warning and overage are percents of that cap</li>
@@ -50,13 +52,13 @@ export default function BudgetsPage() {
   return (
     <div className="space-y-8">
       <header className="border-b border-[var(--border)] pb-6">
-        <h1 className="type-page flex items-center gap-2">
+        <h1 className="type-kicker text-[20px] flex items-center gap-2">
           Budgets
           <BudgetsTitleInfo />
         </h1>
         <p className="sr-only">
-          Spend caps you set, or ones Piggy creates in chat. Amount is the
-          cap. Warning and overage are percents of that cap.
+          Spend caps you set, or ones Piggy creates in chat. Amount is the cap
+          for the current cycle slice from the start date.
         </p>
       </header>
       <BudgetsManager />

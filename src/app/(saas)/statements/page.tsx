@@ -31,12 +31,7 @@ export default function StatementsPage() {
     <div className="space-y-8">
       <header className="flex flex-col gap-4 border-b border-[var(--border)] pb-6 sm:flex-row sm:items-end sm:justify-between">
         <div className="space-y-2">
-          <p className="type-kicker">
-            Statements
-          </p>
-          <h1 className="type-page">
-            Statement imports
-          </h1>
+          <h1 className="type-kicker text-[20px]">Statement imports</h1>
           <p className="type-lead max-w-xl">
             Upload bank PDFs, set upload rules, and check what got imported.
           </p>
@@ -77,7 +72,7 @@ export default function StatementsPage() {
             <PopoverTrigger asChild>
               <button
                 type="button"
-                className="inline-flex size-6 shrink-0 items-center justify-center rounded-full text-accent hover:bg-accent-subtle hover:text-accent"
+                className="inline-flex size-6 shrink-0 items-center justify-center rounded-full text-accent hover:text-primary"
                 aria-label="About parse logs"
               >
                 <Info className="size-3.5" />

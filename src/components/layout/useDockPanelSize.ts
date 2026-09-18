@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 const REM = 16;
 const MIN_WIDTH = 20 * REM;
@@ -21,12 +21,16 @@ export type DockPanelSize = {
 /** Which screen corner the panel hugs; the grip sits on the opposite corner. */
 export type DockPanelAnchor = "bottom-right" | "top-right";
 
+export type DockResizeAxis = "x" | "y" | "both";
+
 function clampSize(size: DockPanelSize): DockPanelSize {
   const maxWidth = Math.min(MAX_WIDTH, window.innerWidth - 1.5 * REM);
   const maxBody = Math.max(MIN_BODY, window.innerHeight - CHROME_HEIGHT);
   return {
     width: Math.round(Math.min(maxWidth, Math.max(MIN_WIDTH, size.width))),
-    bodyHeight: Math.round(Math.min(maxBody, Math.max(MIN_BODY, size.bodyHeight))),
+    bodyHeight: Math.round(
+      Math.min(maxBody, Math.max(MIN_BODY, size.bodyHeight)),
+    ),
   };
 }
 
@@ -58,9 +62,16 @@ function writeStoredSize(storageKey: string, size: DockPanelSize | undefined) {
   }
 }
 
+type DragState = {
+  startX: number;
+  startY: number;
+  origin: DockPanelSize;
+  axis: DockResizeAxis;
+};
+
 /**
  * Drag-to-resize state for a fab-docked panel, remembered per browser.
- * Width grows as the grip moves left; height grows away from the anchored edge.
+ * Width grows as the left edge moves left; height grows away from the anchored edge.
  */
 export function useDockPanelSize({
   storageKey,
@@ -73,7 +84,7 @@ export function useDockPanelSize({
 }) {
   const [size, setSize] = useState<DockPanelSize>(defaultSize);
   const [resizing, setResizing] = useState(false);
-  const drag = useRef<{ startX: number; startY: number; origin: DockPanelSize } | null>(null);
+  const drag = useRef<DragState | null>(null);
 
   useEffect(() => {
     const stored = readStoredSize(storageKey);
@@ -83,12 +94,17 @@ export function useDockPanelSize({
     return () => window.removeEventListener("resize", onResize);
   }, [storageKey]);
 
-  const onPointerDown = useCallback(
-    (event: ReactPointerEvent<HTMLElement>) => {
+  const beginDrag = useCallback(
+    (event: ReactPointerEvent<HTMLElement>, axis: DockResizeAxis) => {
       if (event.button !== 0) return;
       event.preventDefault();
       event.currentTarget.setPointerCapture(event.pointerId);
-      drag.current = { startX: event.clientX, startY: event.clientY, origin: size };
+      drag.current = {
+        startX: event.clientX,
+        startY: event.clientY,
+        origin: size,
+        axis,
+      };
       setResizing(true);
     },
     [size],
@@ -103,8 +119,14 @@ export function useDockPanelSize({
       const heightDelta = anchor === "bottom-right" ? -dy : dy;
       setSize(
         clampSize({
-          width: current.origin.width - dx,
-          bodyHeight: current.origin.bodyHeight + heightDelta,
+          width:
+            current.axis === "y"
+              ? current.origin.width
+              : current.origin.width - dx,
+          bodyHeight:
+            current.axis === "x"
+              ? current.origin.bodyHeight
+              : current.origin.bodyHeight + heightDelta,
         }),
       );
     },
@@ -130,16 +152,23 @@ export function useDockPanelSize({
     writeStoredSize(storageKey, undefined);
   }, [defaultSize, storageKey]);
 
-  return {
-    size,
-    resizing,
-    anchor,
-    gripProps: {
-      onPointerDown,
+  const handleProps = useCallback(
+    (axis: DockResizeAxis) => ({
+      onPointerDown: (event: ReactPointerEvent<HTMLElement>) =>
+        beginDrag(event, axis),
       onPointerMove,
       onPointerUp,
       onPointerCancel: onPointerUp,
       onDoubleClick: reset,
-    },
+    }),
+    [beginDrag, onPointerMove, onPointerUp, reset],
+  );
+
+  return {
+    size,
+    resizing,
+    anchor,
+    gripProps: handleProps("both"),
+    edgeProps: handleProps,
   };
 }

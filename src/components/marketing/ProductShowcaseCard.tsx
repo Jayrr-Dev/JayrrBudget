@@ -264,7 +264,7 @@ export function ProductShowcaseCard() {
                     <button
                       type="button"
                       aria-label={slide.info.title}
-                      className="mt-0.5 inline-flex size-6 shrink-0 items-center justify-center rounded-full text-accent hover:bg-accent-subtle hover:text-accent"
+                      className="mt-0.5 inline-flex size-6 shrink-0 items-center justify-center rounded-full text-accent hover:text-primary"
                     >
                       <Info className="size-3.5" />
                     </button>

@@ -403,7 +403,7 @@ export function AddLoanDialog({ open, onOpenChange }: AddLoanDialogProps) {
                 <PopoverTrigger asChild>
                   <button
                     type="button"
-                    className="inline-flex size-6 shrink-0 items-center justify-center rounded-full text-accent hover:bg-accent-subtle hover:text-accent"
+                    className="inline-flex size-6 shrink-0 items-center justify-center rounded-full text-accent hover:text-primary"
                     aria-label="Register Lending Account info"
                   >
                     <Info className="size-3.5" />
@@ -746,7 +746,7 @@ function Field({
             <PopoverTrigger asChild>
               <button
                 type="button"
-                className="inline-flex size-5 shrink-0 items-center justify-center rounded-full text-accent hover:bg-accent-subtle hover:text-accent"
+                className="inline-flex size-5 shrink-0 items-center justify-center rounded-full text-accent hover:text-primary"
                 aria-label={`${info.title} info`}
               >
                 <Info className="size-3.5" />

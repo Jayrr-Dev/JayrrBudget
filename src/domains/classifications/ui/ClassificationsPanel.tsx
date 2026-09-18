@@ -1,6 +1,7 @@
 "use client";
 
 import { Badge } from "@/components/ui/badge";
+import { BulkActionsMenu } from "@/components/ui/bulk-actions-menu";
 import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
 import { DataTable } from "@/components/ui/data-table";
@@ -13,9 +14,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { PageSpinner } from "@/components/ui/spinner";
 import { EmptyPrompt } from "@/components/ui/empty-prompt";
-import { RowActionsMenu } from "@/components/ui/row-actions-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -26,6 +25,9 @@ import {
   PopoverTitle,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import type { RowActionsMenuItem } from "@/components/ui/row-actions-menu";
+import { RowActionsMenu } from "@/components/ui/row-actions-menu";
+import { PageSpinner } from "@/components/ui/spinner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { errorMessage } from "@/shared/lib/error-message";
@@ -40,7 +42,7 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 
 type Scope = "shared" | "user";
-type Tab = "sections" | "categories" | "subcategories" | "tags";
+type Tab = "sections" | "categories" | "subcategories";
 
 type SectionRow = {
   id: string;
@@ -88,7 +90,6 @@ const subcategoryHelper = createColumnHelper<
   DataTableFeatures,
   SubcategoryRow
 >();
-const tagHelper = createColumnHelper<DataTableFeatures, SectionRow>();
 
 const selectClassName =
   "h-8 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30";
@@ -151,7 +152,7 @@ function TitleInfo({ isAdmin }: { isAdmin: boolean }) {
       <PopoverTrigger asChild>
         <button
           type="button"
-          className="inline-flex size-6 shrink-0 items-center justify-center rounded-full max-md:size-11 text-accent hover:bg-accent-subtle hover:text-accent"
+          className="inline-flex size-6 shrink-0 items-center justify-center rounded-full max-md:size-11 text-accent hover:text-primary"
           aria-label="About classifications"
         >
           <Info className="size-3.5" />
@@ -180,7 +181,6 @@ function TitleInfo({ isAdmin }: { isAdmin: boolean }) {
             <li>
               Subcategory is the specific flavor (Supermarket, Bars, Audiobooks)
             </li>
-            <li>Tag is an extra sticker that can sit on many kinds of spend</li>
             <li>Shared is the catalog every new user starts with</li>
             <li>User is any label you added that is not in shared</li>
             <li>
@@ -215,8 +215,7 @@ function parseTab(value: string | null): Tab | undefined {
   if (
     value === "sections" ||
     value === "categories" ||
-    value === "subcategories" ||
-    value === "tags"
+    value === "subcategories"
   ) {
     return value;
   }
@@ -240,15 +239,11 @@ export function ClassificationsPanel() {
   const deleteSubcategory = useMutation(api.classifications.deleteSubcategory);
   const promoteToShared = useMutation(api.classifications.promoteToShared);
   const removeFromShared = useMutation(api.classifications.removeFromShared);
-  const ensureUserTags = useMutation(api.classifications.ensureUserTags);
-  const createTag = useMutation(api.classifications.createTag);
-  const updateTag = useMutation(api.classifications.updateTag);
-  const deleteTag = useMutation(api.classifications.deleteTag);
 
   const [scope, setScope] = useState<Scope>(openCreate ? "user" : "shared");
   const [tab, setTab] = useState<Tab>(initialTab ?? "sections");
   const [form, setForm] = useState<FormState | null>(
-    openCreate ? emptyForm(initialTab ?? "tags") : null,
+    openCreate ? emptyForm(initialTab ?? "sections") : null,
   );
   const [saving, setSaving] = useState(false);
 
@@ -283,10 +278,6 @@ export function ClassificationsPanel() {
     );
   }
 
-  function findMineTag(name: string) {
-    return mine?.tags.find((row) => sameLabel(row.name, name));
-  }
-
   function subsForCategory(row: CategoryRow): FormSub[] {
     const names = row.subcategoryNames.length > 0 ? row.subcategoryNames : [""];
     return names.map((name) => {
@@ -297,11 +288,10 @@ export function ClassificationsPanel() {
 
   useEffect(() => {
     void repairHierarchy({});
-    void ensureUserTags({});
-  }, [repairHierarchy, ensureUserTags]);
+  }, [repairHierarchy]);
 
   async function remove(
-    kind: "section" | "category" | "subcategory" | "tag",
+    kind: "section" | "category" | "subcategory",
     id: string,
     name: string,
     fromSharedCopy = false,
@@ -317,16 +307,131 @@ export function ClassificationsPanel() {
         await deleteSection({ id: id as Id<"transactionSections"> });
       } else if (kind === "category") {
         await deleteCategory({ id: id as Id<"transactionCategories"> });
-      } else if (kind === "subcategory") {
+      } else {
         await deleteSubcategory({
           id: id as Id<"transactionSubcategories">,
         });
-      } else {
-        await deleteTag({ id: id as Id<"transactionTags"> });
       }
       toast.success(`Deleted ${name}`);
     } catch (error) {
       toast.error(errorMessage(error, "Delete failed"));
+    }
+  }
+
+  async function removeBulk(
+    kind: "section" | "category" | "subcategory",
+    rows: Array<{ id: string; name: string }>,
+    resolveId?: (row: { id: string; name: string }) => string | null,
+  ) {
+    if (rows.length === 0) return;
+    const ok = window.confirm(
+      `Delete ${rows.length} visible ${kind}${rows.length === 1 ? "" : "s"}? This cannot be undone.`,
+    );
+    if (!ok) return;
+    let deleted = 0;
+    for (const row of rows) {
+      const id = resolveId ? resolveId(row) : row.id;
+      if (!id) continue;
+      try {
+        if (kind === "section") {
+          await deleteSection({ id: id as Id<"transactionSections"> });
+        } else if (kind === "category") {
+          await deleteCategory({ id: id as Id<"transactionCategories"> });
+        } else {
+          await deleteSubcategory({
+            id: id as Id<"transactionSubcategories">,
+          });
+        }
+        deleted += 1;
+      } catch (error) {
+        toast.error(errorMessage(error, `Could not delete ${row.name}`));
+      }
+    }
+    if (deleted > 0) {
+      toast.success(
+        deleted === 1 ? `Deleted ${rows[0]?.name}` : `Deleted ${deleted}`,
+      );
+    }
+  }
+
+  async function promoteBulk(
+    kind: "section" | "category" | "subcategory",
+    rows: Array<{ id: string; name: string }>,
+  ) {
+    if (rows.length === 0) return;
+    const ok = window.confirm(
+      `Add ${rows.length} visible label${rows.length === 1 ? "" : "s"} to the shared catalog?`,
+    );
+    if (!ok) return;
+    let added = 0;
+    for (const row of rows) {
+      try {
+        const result = await promoteToShared({
+          kind,
+          sectionId:
+            kind === "section"
+              ? (row.id as Id<"transactionSections">)
+              : undefined,
+          categoryId:
+            kind === "category"
+              ? (row.id as Id<"transactionCategories">)
+              : undefined,
+          subcategoryId:
+            kind === "subcategory"
+              ? (row.id as Id<"transactionSubcategories">)
+              : undefined,
+        });
+        if (result.added > 0) added += 1;
+      } catch (error) {
+        toast.error(errorMessage(error, `Could not share ${row.name}`));
+      }
+    }
+    if (added > 0) {
+      toast.success(
+        added === 1 ? "Added 1 to shared" : `Added ${added} to shared`,
+      );
+    }
+  }
+
+  async function unshareBulk(
+    kind: "section" | "category" | "subcategory",
+    rows: Array<{
+      name: string;
+      sectionName?: string | null;
+      categoryName?: string | null;
+    }>,
+  ) {
+    if (rows.length === 0) return;
+    const ok = window.confirm(
+      `Remove ${rows.length} visible label${rows.length === 1 ? "" : "s"} from the shared catalog?`,
+    );
+    if (!ok) return;
+    let removed = 0;
+    for (const row of rows) {
+      const section = kind === "section" ? row.name : (row.sectionName ?? "");
+      try {
+        const result = await removeFromShared({
+          kind,
+          section,
+          category:
+            kind === "category"
+              ? row.name
+              : kind === "subcategory"
+                ? (row.categoryName ?? undefined)
+                : undefined,
+          subcategory: kind === "subcategory" ? row.name : undefined,
+        });
+        if (result.removed > 0) removed += 1;
+      } catch (error) {
+        toast.error(errorMessage(error, `Could not unshare ${row.name}`));
+      }
+    }
+    if (removed > 0) {
+      toast.success(
+        removed === 1
+          ? "Removed 1 from shared"
+          : `Removed ${removed} from shared`,
+      );
     }
   }
 
@@ -517,55 +622,8 @@ export function ClassificationsPanel() {
     void remove("subcategory", mineRow.id, mineRow.name, true);
   }
 
-  async function editTag(row: SectionRow) {
-    if (isUserScope) {
-      setForm({
-        tab: "tags",
-        mode: "edit",
-        id: row.id,
-        name: row.name,
-        description: row.description,
-        parentId: "",
-        subs: [],
-      });
-      return;
-    }
-    try {
-      const mineRow =
-        findMineTag(row.name) ??
-        (await createTag({
-          name: row.name,
-          description: row.description,
-        }));
-      setForm({
-        tab: "tags",
-        mode: "edit",
-        id: mineRow.id,
-        name: mineRow.name,
-        description: mineRow.description,
-        parentId: "",
-        subs: [],
-      });
-    } catch (error) {
-      toast.error(errorMessage(error, "Could not open your copy"));
-    }
-  }
-
-  async function deleteTagCopy(row: SectionRow) {
-    if (isUserScope) {
-      void remove("tag", row.id, row.name);
-      return;
-    }
-    const mineRow = findMineTag(row.name);
-    if (!mineRow) {
-      toast.error("This starter label is not on your list yet");
-      return;
-    }
-    void remove("tag", mineRow.id, mineRow.name, true);
-  }
-
   async function promote(
-    kind: "section" | "category" | "subcategory" | "tag",
+    kind: "section" | "category" | "subcategory",
     row: { id: string; name: string },
   ) {
     const ok = window.confirm(
@@ -587,7 +645,6 @@ export function ClassificationsPanel() {
           kind === "subcategory"
             ? (row.id as Id<"transactionSubcategories">)
             : undefined,
-        tagId: kind === "tag" ? (row.id as Id<"transactionTags">) : undefined,
       });
       toast.success(
         result.added > 0
@@ -600,15 +657,14 @@ export function ClassificationsPanel() {
   }
 
   async function unshare(
-    kind: "section" | "category" | "subcategory" | "tag",
+    kind: "section" | "category" | "subcategory",
     row: {
       name: string;
       sectionName?: string | null;
       categoryName?: string | null;
     },
   ) {
-    const section =
-      kind === "section" || kind === "tag" ? row.name : (row.sectionName ?? "");
+    const section = kind === "section" ? row.name : (row.sectionName ?? "");
     const ok = window.confirm(
       `Remove "${row.name}" from the shared catalog? Existing users keep their own copy.`,
     );
@@ -640,7 +696,42 @@ export function ClassificationsPanel() {
       sectionHelper.columns([
         sectionHelper.display({
           id: "actions",
-          header: actionsHeader,
+          header: ({ table }) => {
+            const rows = table.getRowModel().rows.map((row) => row.original);
+            const actions: RowActionsMenuItem[] = [
+              isUserScope && isAdmin
+                ? {
+                    label: "Add visible to shared",
+                    onSelect: () => void promoteBulk("section", rows),
+                  }
+                : null,
+              !isUserScope && isAdmin
+                ? {
+                    label: "Remove visible from shared",
+                    onSelect: () => void unshareBulk("section", rows),
+                  }
+                : null,
+              {
+                label: "Delete visible",
+                onSelect: () =>
+                  void removeBulk(
+                    "section",
+                    rows,
+                    isUserScope
+                      ? (row) => row.id
+                      : (row) => findMineSection(row.name)?.id ?? null,
+                  ),
+                variant: "destructive",
+              },
+            ].filter((action) => action !== null);
+            return (
+              <BulkActionsMenu
+                label="visible sections"
+                actions={actions}
+                disabled={rows.length === 0}
+              />
+            );
+          },
           cell: ({ row }) => (
             <div className="flex items-center justify-center">
               <RowActions
@@ -709,7 +800,50 @@ export function ClassificationsPanel() {
       categoryHelper.columns([
         categoryHelper.display({
           id: "actions",
-          header: actionsHeader,
+          header: ({ table }) => {
+            const rows = table.getRowModel().rows.map((row) => row.original);
+            const actions: RowActionsMenuItem[] = [
+              isUserScope && isAdmin
+                ? {
+                    label: "Add visible to shared",
+                    onSelect: () => void promoteBulk("category", rows),
+                  }
+                : null,
+              !isUserScope && isAdmin
+                ? {
+                    label: "Remove visible from shared",
+                    onSelect: () => void unshareBulk("category", rows),
+                  }
+                : null,
+              {
+                label: "Delete visible",
+                onSelect: () =>
+                  void removeBulk(
+                    "category",
+                    rows,
+                    isUserScope
+                      ? (row) => row.id
+                      : (row) =>
+                          findMineCategory(
+                            (
+                              row as CategoryRow & {
+                                sectionName?: string | null;
+                              }
+                            ).sectionName ?? null,
+                            row.name,
+                          )?.id ?? null,
+                  ),
+                variant: "destructive",
+              },
+            ].filter((action) => action !== null);
+            return (
+              <BulkActionsMenu
+                label="visible categories"
+                actions={actions}
+                disabled={rows.length === 0}
+              />
+            );
+          },
           cell: ({ row }) => (
             <div className="flex items-center justify-center">
               <RowActions
@@ -790,7 +924,50 @@ export function ClassificationsPanel() {
       subcategoryHelper.columns([
         subcategoryHelper.display({
           id: "actions",
-          header: actionsHeader,
+          header: ({ table }) => {
+            const rows = table.getRowModel().rows.map((row) => row.original);
+            const actions: RowActionsMenuItem[] = [
+              isUserScope && isAdmin
+                ? {
+                    label: "Add visible to shared",
+                    onSelect: () => void promoteBulk("subcategory", rows),
+                  }
+                : null,
+              !isUserScope && isAdmin
+                ? {
+                    label: "Remove visible from shared",
+                    onSelect: () => void unshareBulk("subcategory", rows),
+                  }
+                : null,
+              {
+                label: "Delete visible",
+                onSelect: () =>
+                  void removeBulk(
+                    "subcategory",
+                    rows,
+                    isUserScope
+                      ? (row) => row.id
+                      : (row) =>
+                          findMineSubcategory(
+                            (
+                              row as SubcategoryRow & {
+                                categoryName?: string | null;
+                              }
+                            ).categoryName ?? null,
+                            row.name,
+                          )?.id ?? null,
+                  ),
+                variant: "destructive",
+              },
+            ].filter((action) => action !== null);
+            return (
+              <BulkActionsMenu
+                label="visible subcategories"
+                actions={actions}
+                disabled={rows.length === 0}
+              />
+            );
+          },
           cell: ({ row }) => (
             <div className="flex items-center justify-center">
               <RowActions
@@ -845,61 +1022,6 @@ export function ClassificationsPanel() {
           sortFn: "text",
         }),
         subcategoryHelper.accessor("description", {
-          header: "Description",
-          cell: ({ getValue }) => (
-            <span
-              className="block truncate text-sm text-[var(--muted-foreground)]"
-              title={getValue() || "-"}
-            >
-              {getValue() || "-"}
-            </span>
-          ),
-          filterFn: "includesString",
-          meta: { grow: true },
-        }),
-      ]),
-    [isAdmin, isUserScope, mine],
-  );
-
-  const tagColumns = useMemo(
-    () =>
-      tagHelper.columns([
-        tagHelper.display({
-          id: "actions",
-          header: actionsHeader,
-          cell: ({ row }) => (
-            <div className="flex items-center justify-center">
-              <RowActions
-                name={row.original.name}
-                onEdit={() => void editTag(row.original)}
-                onDelete={() => void deleteTagCopy(row.original)}
-                onPromote={
-                  isUserScope && isAdmin
-                    ? () => void promote("tag", row.original)
-                    : undefined
-                }
-                onUnshare={
-                  !isUserScope && isAdmin
-                    ? () => void unshare("tag", row.original)
-                    : undefined
-                }
-              />
-            </div>
-          ),
-          enableSorting: false,
-          enableHiding: true,
-          meta: { label: "Actions", width: "2rem" },
-        }),
-        tagHelper.accessor("name", {
-          header: "Tag",
-          cell: ({ getValue }) => (
-            <span className="font-medium">{getValue()}</span>
-          ),
-          filterFn: "includesString",
-          sortFn: "text",
-          meta: { width: "11rem" },
-        }),
-        tagHelper.accessor("description", {
           header: "Description",
           cell: ({ getValue }) => (
             <span
@@ -984,14 +1106,6 @@ export function ClassificationsPanel() {
             categoryId,
           });
         }
-      } else if (form.mode === "create") {
-        await createTag({ name, description: form.description });
-      } else if (form.id) {
-        await updateTag({
-          id: form.id as Id<"transactionTags">,
-          name,
-          description: form.description,
-        });
       }
       toast.success(form.mode === "create" ? "Created" : "Saved");
       setForm(null);
@@ -1007,9 +1121,7 @@ export function ClassificationsPanel() {
       ? "section"
       : tab === "categories"
         ? "category"
-        : tab === "subcategories"
-          ? "subcategory"
-          : "tag";
+        : "subcategory";
 
   function startCreate(nextTab: Tab = tab) {
     setScope("user");
@@ -1067,20 +1179,10 @@ export function ClassificationsPanel() {
       .map((category) => category.name),
   }));
   const userSubs = own?.subcategories ?? [];
-  const sharedTags = (catalog?.shared.tags ?? []).map((row) => {
-    const mineRow = findMineTag(row.name);
-    return {
-      id: mineRow?.id ?? row.name,
-      name: row.name,
-      description: mineRow?.description ?? row.description,
-    };
-  });
-  const userTags = own?.tags ?? [];
 
   const sections = isUserScope ? userSections : sharedSections;
   const categories = isUserScope ? userCategories : sharedCategories;
   const subcategories = isUserScope ? userSubs : sharedSubs;
-  const tags = isUserScope ? userTags : sharedTags;
 
   const sectionFilters = useMemo(
     () => [
@@ -1154,7 +1256,7 @@ export function ClassificationsPanel() {
   return (
     <div className="space-y-8">
       <header className="border-b border-[var(--border)] pb-6">
-        <h1 className="type-page flex items-center gap-2">
+        <h1 className="type-kicker text-[20px] flex items-center gap-2">
           Classifications
           <TitleInfo isAdmin={isAdmin} />
         </h1>
@@ -1195,7 +1297,6 @@ export function ClassificationsPanel() {
                 <TabsTrigger value="sections">Sections</TabsTrigger>
                 <TabsTrigger value="categories">Categories</TabsTrigger>
                 <TabsTrigger value="subcategories">Subcategories</TabsTrigger>
-                <TabsTrigger value="tags">Tags</TabsTrigger>
               </TabsList>
               {canEditOwn ? (
                 <Button
@@ -1321,41 +1422,6 @@ export function ClassificationsPanel() {
                 />
               )}
             </TabsContent>
-
-            <TabsContent value="tags" className="space-y-4">
-              {tags.length === 0 ? (
-                <EmptyPrompt
-                  className="py-10"
-                  title={
-                    isUserScope ? "No user-only tags" : "No shared tags yet"
-                  }
-                  description={
-                    isUserScope
-                      ? "Names that match shared stay under Shared."
-                      : "Add one on your User list."
-                  }
-                  action={
-                    <Button
-                      type="button"
-                      size="sm"
-                      onClick={() => startCreate("tags")}
-                    >
-                      Add tag
-                    </Button>
-                  }
-                />
-              ) : (
-                <DataTable
-                  columns={tagColumns}
-                  data={tags}
-                  searchKey="name"
-                  searchPlaceholder="Filter tags…"
-                  pageSize={25}
-                  enableColumnToggle
-                  csvFilename={`${scope}-tags.csv`}
-                />
-              )}
-            </TabsContent>
           </Tabs>
         </div>
       )}
@@ -1382,9 +1448,7 @@ export function ClassificationsPanel() {
                     ? "section"
                     : form.tab === "categories"
                       ? "category"
-                      : form.tab === "subcategories"
-                        ? "subcategory"
-                        : "tag"}
+                      : "subcategory"}
                 </DialogTitle>
                 <DialogDescription className="sr-only">
                   Name this classification and choose where it belongs.
@@ -1440,7 +1504,7 @@ export function ClassificationsPanel() {
 
                 <div
                   className={
-                    form.tab === "sections" || form.tab === "tags"
+                    form.tab === "sections"
                       ? "space-y-1.5 sm:col-span-2"
                       : "space-y-1.5"
                   }
@@ -1544,19 +1608,6 @@ export function ClassificationsPanel() {
         ) : null}
       </Dialog>
     </div>
-  );
-}
-
-function actionsHeader() {
-  return (
-    <span className="flex items-center justify-center">
-      <Icon
-        icon="mynaui:mouse-pointer-click-solid"
-        className="size-4 text-[var(--muted-foreground)]"
-        aria-hidden
-      />
-      <span className="sr-only">Actions</span>
-    </span>
   );
 }
 

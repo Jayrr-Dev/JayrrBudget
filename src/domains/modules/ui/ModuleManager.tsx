@@ -1,9 +1,9 @@
 "use client";
 
-import { PageSpinner } from "@/components/ui/spinner";
 import { Badge } from "@/components/ui/badge";
 import { DataTable } from "@/components/ui/data-table";
 import type { DataTableFeatures } from "@/components/ui/data-table-features";
+import { PageSpinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
 import type { AppModuleRecord } from "@/domains/modules/domain/types";
 import { resolveModuleIcon } from "@/domains/modules/ui/moduleIcons";
@@ -114,6 +114,7 @@ export function ModuleManager() {
       searchKey="name"
       searchPlaceholder="Filter modules…"
       pageSize={50}
+      csvFilename="modules.csv"
     />
   );
 }

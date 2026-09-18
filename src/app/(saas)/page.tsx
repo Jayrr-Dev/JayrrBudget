@@ -3,7 +3,7 @@
 import { BankAccountsDashboard } from "@/domains/dashboard/ui/BankAccountsDashboard";
 import { useDashboard } from "@/domains/dashboard/ui/DashboardPanels";
 import { TransactionsDataTable } from "@/domains/transactions/ui/TransactionsDataTable";
-import { formatDisplayDate } from "@/shared/lib/format-date";
+import { formatLongDisplayDate } from "@/shared/lib/format-date";
 
 export default function OverviewPage() {
   const dashboard = useDashboard();
@@ -14,8 +14,7 @@ export default function OverviewPage() {
     <div className="space-y-8">
       <header className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:gap-6 border-b border-[var(--border)] pb-6">
         <div className="space-y-2">
-          <p className="type-kicker">Accounts</p>
-          <h1 className="type-page">Dashboard</h1>
+          <h1 className="type-kicker text-[20px]">Dashboard</h1>
           <p className="type-lead max-w-xl">
             See balances across chequing, credit, and loan accounts.
           </p>
@@ -25,7 +24,7 @@ export default function OverviewPage() {
           <p className="type-section mt-1 min-h-7">
             {isInitialLoading
               ? "\u00a0"
-              : formatDisplayDate(data?.latestStatementDate)}
+              : formatLongDisplayDate(data?.latestStatementDate)}
           </p>
         </div>
       </header>

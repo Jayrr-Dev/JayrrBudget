@@ -613,6 +613,13 @@ export function StatementUpload({ onImported }: Props) {
       item.duplicateKind !== "exact" &&
       item.duplicateKind !== "queue",
   ).length;
+  const idleReadyCount = items.filter(
+    (item) =>
+      item.state === "idle" &&
+      item.dupCheck === "ready" &&
+      item.duplicateKind !== "exact" &&
+      item.duplicateKind !== "queue",
+  ).length;
   const dupCount = items.filter(
     (item) => item.duplicateKind === "exact" || item.duplicateKind === "queue",
   ).length;
@@ -623,13 +630,21 @@ export function StatementUpload({ onImported }: Props) {
   const isMobile = useIsMobile();
   const triggerLabel = busy ? "Uploading…" : "Upload statement";
 
+  // Mobile: no footer Upload — pick from the drop zone, then start once
+  // duplicate checks finish. Idle-only so failed rows do not auto-retry.
+  useEffect(() => {
+    if (!isMobile || !dialogOpen || busy || isOffline) return;
+    if (checkingCount > 0 || idleReadyCount === 0) return;
+    void startUpload();
+  }, [isMobile, dialogOpen, busy, isOffline, checkingCount, idleReadyCount]);
+
   const uploadHelp = (
     <Popover>
       <PopoverTrigger asChild>
         <span
           role="button"
           tabIndex={0}
-          className="inline-flex size-5 shrink-0 items-center justify-center rounded-full max-md:size-11 text-accent hover:bg-accent-subtle hover:text-accent"
+          className="inline-flex size-5 shrink-0 items-center justify-center rounded-full max-md:size-11 text-accent hover:text-primary"
           aria-label="How statement upload works"
           onClick={(event) => {
             event.stopPropagation();
@@ -770,7 +785,7 @@ export function StatementUpload({ onImported }: Props) {
                 <PopoverTrigger asChild>
                   <button
                     type="button"
-                    className="inline-flex size-6 shrink-0 items-center justify-center rounded-full max-md:size-11 text-accent hover:bg-accent-subtle hover:text-accent"
+                    className="inline-flex size-6 shrink-0 items-center justify-center rounded-full max-md:size-11 text-accent hover:text-primary"
                     aria-label="About statement upload"
                   >
                     <Info className="size-3.5" />
@@ -1037,7 +1052,7 @@ export function StatementUpload({ onImported }: Props) {
             ) : null}
           </div>
 
-          <DialogFooter className="items-center sm:justify-center">
+          <DialogFooter className="hidden items-center sm:justify-center md:flex">
             <Button type="button" variant="outline" onClick={onCancelClick}>
               {busy
                 ? "Cancel upload"

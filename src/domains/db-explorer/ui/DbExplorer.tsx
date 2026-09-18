@@ -227,7 +227,7 @@ export function DbExplorer() {
     <div className="flex h-full min-h-0 flex-1 flex-col gap-4 overflow-hidden">
       <header className="flex shrink-0 flex-wrap items-end justify-between gap-2 border-b border-[var(--border)] pb-3">
         <div className="space-y-0.5">
-          <h1 className="type-page">Database</h1>
+          <h1 className="type-kicker text-[20px]">Database</h1>
           <p className="type-lead">
             {encryptedLedger
               ? "Private ledger is on — money rows live in encrypted vault records, not these plaintext tables."

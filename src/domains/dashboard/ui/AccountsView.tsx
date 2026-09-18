@@ -19,7 +19,7 @@ function AccountsTitleInfo() {
       <PopoverTrigger asChild>
         <button
           type="button"
-          className="inline-flex size-6 shrink-0 items-center justify-center rounded-full max-md:size-11 text-accent hover:bg-accent-subtle hover:text-accent"
+          className="inline-flex size-6 shrink-0 items-center justify-center rounded-full max-md:size-11 text-accent hover:text-primary"
           aria-label="About accounts"
         >
           <Info className="size-3.5" />
@@ -71,7 +71,7 @@ export function AccountsView() {
   return (
     <div className="space-y-8">
       <header className="space-y-2 border-b border-[var(--border)] pb-6">
-        <h1 className="type-page flex items-center gap-2">
+        <h1 className="type-kicker text-[20px] flex items-center gap-2">
           Accounts
           <AccountsTitleInfo />
         </h1>

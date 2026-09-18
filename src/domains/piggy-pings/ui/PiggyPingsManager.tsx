@@ -22,7 +22,6 @@ import {
   CardAction,
   CardContent,
   CardDescription,
-  CardFooter,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
@@ -38,7 +37,12 @@ import {
 import { EmptyPrompt } from "@/components/ui/empty-prompt";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { PiggyIcon } from "@/components/ui/piggy-icon";
+import {
+  PIGGY_ICON_NAMES,
+  PiggyIcon,
+  isPiggyIconName,
+  type PiggyIconName,
+} from "@/components/ui/piggy-icon";
 import {
   Popover,
   PopoverContent,
@@ -82,6 +86,7 @@ type PingRow = {
   name: string;
   title: string;
   message: string;
+  icon: string;
   pingType: PingType;
   pingTypes: PingType[];
   cycle: string;
@@ -94,6 +99,11 @@ type PingRow = {
   createdAt: number;
   ownerLabel: string;
 };
+
+function pingIconName(value: string | null | undefined): PiggyIconName {
+  if (value && isPiggyIconName(value)) return value;
+  return "pings";
+}
 
 function dateLabel(value: string | null) {
   if (!value) return "Indefinite";
@@ -118,7 +128,7 @@ function CycleInfo() {
       <PopoverTrigger asChild>
         <button
           type="button"
-          className="inline-flex size-11 sm:size-5 shrink-0 items-center justify-center rounded-full text-accent hover:bg-accent-subtle hover:text-accent"
+          className="inline-flex size-11 sm:size-5 shrink-0 items-center justify-center rounded-full text-accent hover:text-primary"
           aria-label="About cycle"
           onClick={(event) => event.stopPropagation()}
         >
@@ -226,7 +236,7 @@ function CycleDateChip({
               <PopoverTrigger asChild>
                 <button
                   type="button"
-                  className="inline-flex size-11 sm:size-6 shrink-0 items-center justify-center rounded-full text-accent hover:bg-accent-subtle hover:text-accent"
+                  className="inline-flex size-11 sm:size-6 shrink-0 items-center justify-center rounded-full text-accent hover:text-primary"
                   aria-label="Cycle date info"
                 >
                   <Info className="size-3.5" />
@@ -276,30 +286,10 @@ function CycleDateChip({
   );
 }
 
-function ActiveToggle({ ping }: { ping: PingRow }) {
-  const updatePing = useMutation(api.piggyPings.update);
-
-  async function handleChange(checked: boolean) {
-    try {
-      await updatePing({ pingId: ping.id, isActive: checked });
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Update failed");
-    }
-  }
-
-  return (
-    <Switch
-      size="sm"
-      checked={ping.isActive}
-      onCheckedChange={(checked) => void handleChange(Boolean(checked))}
-      aria-label={ping.isActive ? "Deactivate ping" : "Activate ping"}
-    />
-  );
-}
-
 function PingActions({ ping }: { ping: PingRow }) {
   const remove = useMutation(api.piggyPings.remove);
   const createPing = useMutation(api.piggyPings.create);
+  const updatePing = useMutation(api.piggyPings.update);
   const [editOpen, setEditOpen] = useState(false);
   const [popupOpen, setPopupOpen] = useState(false);
   const [bannerOpen, setBannerOpen] = useState(false);
@@ -324,8 +314,16 @@ function PingActions({ ping }: { ping: PingRow }) {
       }
       toast.message(ping.title, {
         description: ping.message,
-        duration: 8000,
+        duration: Infinity,
       });
+    }
+  }
+
+  async function handleToggleActive() {
+    try {
+      await updatePing({ pingId: ping.id, isActive: !ping.isActive });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Update failed");
     }
   }
 
@@ -335,6 +333,7 @@ function PingActions({ ping }: { ping: PingRow }) {
         name: copyName(ping.name),
         title: ping.title,
         message: ping.message,
+        icon: pingIconName(ping.icon),
         pingType: pingTypeList(ping)[0] ?? ping.pingType,
         pingTypes: pingTypeList(ping),
         cycle: ping.cycle,
@@ -367,6 +366,10 @@ function PingActions({ ping }: { ping: PingRow }) {
         actions={[
           { label: "Test", onSelect: handleTest },
           { label: "Edit", onSelect: () => setEditOpen(true) },
+          {
+            label: ping.isActive ? "Deactivate" : "Activate",
+            onSelect: () => void handleToggleActive(),
+          },
           { label: "Duplicate", onSelect: () => void handleDuplicate() },
           {
             label: "Delete",
@@ -413,6 +416,73 @@ function PingActions({ ping }: { ping: PingRow }) {
   );
 }
 
+function PingIconPicker({ ping }: { ping: PingRow }) {
+  const updatePing = useMutation(api.piggyPings.update);
+  const [open, setOpen] = useState(false);
+  const current = pingIconName(ping.icon);
+
+  async function selectIcon(name: PiggyIconName) {
+    setOpen(false);
+    if (name === current) return;
+    try {
+      await updatePing({ pingId: ping.id, icon: name });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not update icon");
+    }
+  }
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-lg bg-accent-subtle transition-colors hover:bg-accent-subtle/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          aria-label={`Change icon for ${ping.name}`}
+          title="Change icon"
+        >
+          <PiggyIcon name={current} className="size-5" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        align="start"
+        side="bottom"
+        sideOffset={8}
+        className="w-auto max-w-[calc(100vw-2rem)] gap-0 p-2"
+      >
+        <PopoverHeader className="sr-only">
+          <PopoverTitle>Choose icon</PopoverTitle>
+          <PopoverDescription>
+            Pick artwork for this ping from the Piggy icon set.
+          </PopoverDescription>
+        </PopoverHeader>
+        <div className="grid grid-cols-6 gap-1 sm:grid-cols-7">
+          {PIGGY_ICON_NAMES.map((name) => {
+            const selected = name === current;
+            return (
+              <button
+                key={name}
+                type="button"
+                aria-label={name}
+                aria-pressed={selected}
+                title={name}
+                className={cn(
+                  "flex size-10 items-center justify-center rounded-lg transition-colors",
+                  selected
+                    ? "bg-primary text-primary-foreground"
+                    : "hover:bg-muted",
+                )}
+                onClick={() => void selectIcon(name)}
+              >
+                <PiggyIcon name={name} className="size-5" />
+              </button>
+            );
+          })}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 function PingCard({ ping }: { ping: PingRow }) {
   const types = pingTypeList(ping);
   const created = new Date(ping.createdAt).toLocaleString(undefined, {
@@ -425,9 +495,7 @@ function PingCard({ ping }: { ping: PingRow }) {
     <Card size="sm" className="h-full">
       <CardHeader>
         <div className="flex min-w-0 items-start gap-2.5">
-          <span className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-lg bg-accent-subtle">
-            <PiggyIcon name="pings" className="size-5" />
-          </span>
+          <PingIconPicker ping={ping} />
           <div className="min-w-0">
             <CardTitle className="truncate">{ping.name}</CardTitle>
             <CardDescription className="truncate">{ping.title}</CardDescription>
@@ -441,18 +509,23 @@ function PingCard({ ping }: { ping: PingRow }) {
         <p className="line-clamp-3 text-sm text-muted-foreground">
           {ping.message}
         </p>
-        <div className="flex flex-wrap gap-1">
-          {types.map((type) => (
-            <Badge key={type} variant="outline">
-              {type}
-            </Badge>
-          ))}
-        </div>
         <dl className="grid grid-cols-2 gap-x-3 gap-y-2 text-sm">
-          <div className="col-span-2 flex items-center gap-1.5">
-            <dt className="text-muted-foreground">Cycle</dt>
-            <CycleInfo />
+          <div>
+            <dt className="flex items-center gap-1 text-muted-foreground">
+              Cycle
+              <CycleInfo />
+            </dt>
             <dd className="min-w-0 truncate font-medium">{ping.cycle}</dd>
+          </div>
+          <div>
+            <dt className="text-muted-foreground">Ping Type(s)</dt>
+            <dd className="flex flex-wrap gap-1">
+              {types.map((type) => (
+                <Badge key={type} variant="outline">
+                  {type}
+                </Badge>
+              ))}
+            </dd>
           </div>
           <div>
             <dt className="text-muted-foreground">Start</dt>
@@ -478,10 +551,6 @@ function PingCard({ ping }: { ping: PingRow }) {
           ) : null}
         </dl>
       </CardContent>
-      <CardFooter className="justify-between gap-3">
-        <span className="text-sm text-muted-foreground">Active</span>
-        <ActiveToggle ping={ping} />
-      </CardFooter>
     </Card>
   );
 }
@@ -646,7 +715,7 @@ function PingFormDialog({
               <PopoverTrigger asChild>
                 <button
                   type="button"
-                  className="inline-flex size-11 sm:size-6 shrink-0 items-center justify-center rounded-full text-accent hover:bg-accent-subtle hover:text-accent"
+                  className="inline-flex size-11 sm:size-6 shrink-0 items-center justify-center rounded-full text-accent hover:text-primary"
                   aria-label={isEdit ? "About edit ping" : "About new ping"}
                 >
                   <Info className="size-3.5" />
@@ -656,7 +725,7 @@ function PingFormDialog({
                 align="start"
                 side="bottom"
                 sideOffset={8}
-                className="w-80 max-w-[calc(100vw-2rem)] gap-0 p-3.5"
+                className="z-[100] w-80 max-h-[min(24rem,calc(100dvh-2rem))] max-w-[calc(100vw-2rem)] gap-0 overflow-y-auto p-3.5"
               >
                 <PopoverHeader className="gap-1.5">
                   <PopoverTitle>
@@ -704,7 +773,7 @@ function PingFormDialog({
         <form
           id={formId}
           onSubmit={(e) => void onSubmit(e)}
-          className="grid min-h-0 flex-1 gap-3 overflow-y-auto pr-1"
+          className="grid min-h-0 flex-1 gap-3 overflow-y-auto p-1 -m-1"
         >
           {step === 1 ? (
             <>

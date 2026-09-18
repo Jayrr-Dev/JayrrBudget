@@ -6,6 +6,8 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import { ProvidesMinimizedDialogs } from "@/components/ui/dialog-minimize-registry";
+import { MinimizedDialogStack } from "@/components/ui/minimized-dialog-stack";
 import { PiggyIcon } from "@/components/ui/piggy-icon";
 import {
   Popover,
@@ -53,8 +55,8 @@ import {
 } from "@/domains/vault/ui/VaultLockedGate";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
-import { budgetBrandLabel } from "@/shared/lib/budget-brand";
 import { useSignOut } from "@/shared/convex/EnsureUserBootstrap";
+import { budgetBrandLabel } from "@/shared/lib/budget-brand";
 import { useConnectionState } from "@/shared/offline/useConnectionState";
 import { api } from "@convex/_generated/api";
 import { useQueryClient } from "@tanstack/react-query";
@@ -63,7 +65,12 @@ import { ChevronDown, Info } from "lucide-react";
 import { motion } from "motion/react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useLayoutEffect, useState, useSyncExternalStore } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useState,
+  useSyncExternalStore,
+} from "react";
 
 const ADMIN_MODULE_SLUGS = new Set([
   "database",
@@ -404,7 +411,7 @@ function OfflineLastViewBanner({ savedAt }: { savedAt: number | undefined }) {
             <PopoverTrigger asChild>
               <button
                 type="button"
-                className="inline-flex size-6 shrink-0 items-center justify-center rounded-full text-accent hover:bg-accent-subtle hover:text-accent"
+                className="inline-flex size-6 shrink-0 items-center justify-center rounded-full text-accent hover:text-primary"
                 aria-label="About offline view"
               >
                 <Info className="size-3.5" />
@@ -423,7 +430,9 @@ function OfflineLastViewBanner({ savedAt }: { savedAt: number | undefined }) {
                   loaded while you were online.
                 </PopoverDescription>
                 <ul className="mt-1.5 list-disc space-y-1 pl-4 text-muted-foreground">
-                  <li>You can still browse Overview, Accounts, and Transactions</li>
+                  <li>
+                    You can still browse Overview, Accounts, and Transactions
+                  </li>
                   <li>Uploads and edits wait until you are connected</li>
                 </ul>
               </PopoverHeader>
@@ -538,55 +547,60 @@ export function AppShell({
   const lastViewSavedAt = peekLastViewSavedAt();
 
   return (
-    <div
-      className={cn(
-        "fixed inset-0 flex min-h-0 w-full min-w-0 flex-col overflow-hidden bg-[var(--background)] pt-[env(safe-area-inset-top)] pr-[env(safe-area-inset-right)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] md:flex-row",
-        className,
-      )}
-    >
-      <WarmSaasQueries />
-      <TrackingUsageHeartbeat />
-      <Sidebar open={open} setOpen={setOpen} animate>
-        <SidebarBody
-          className="justify-between gap-3"
-          title={brandLabel}
-          headerActions={isMobile ? workspaceTools : undefined}
-        >
-          <div className="flex min-h-0 w-full flex-1 flex-col gap-2 overflow-hidden">
-            <Brand label={brandLabel} />
-            {modulesQuery.isPending ? (
-              <ModulesLoading />
-            ) : (
-              <ModuleNav modules={navModules} />
-            )}
-          </div>
-          <SidebarFooterLink />
-        </SidebarBody>
-      </Sidebar>
-      <main
+    <ProvidesMinimizedDialogs>
+      <div
         className={cn(
-          "flex min-h-0 min-w-0 w-full flex-1 flex-col bg-background text-foreground",
-          fullBleedDatabase || contentClassName
-            ? "overflow-hidden"
-            : "overflow-x-hidden overflow-y-auto overscroll-y-contain [-webkit-overflow-scrolling:touch]",
+          "fixed inset-0 flex min-h-0 w-full min-w-0 flex-col overflow-hidden bg-[var(--background)] pt-[env(safe-area-inset-top)] pr-[env(safe-area-inset-right)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] md:flex-row",
+          className,
         )}
       >
-        {isOffline ? <OfflineLastViewBanner savedAt={lastViewSavedAt} /> : null}
-        <div
+        <WarmSaasQueries />
+        <TrackingUsageHeartbeat />
+        <Sidebar open={open} setOpen={setOpen} animate>
+          <SidebarBody
+            className="justify-between gap-3"
+            title={brandLabel}
+            headerActions={isMobile ? workspaceTools : undefined}
+          >
+            <div className="flex min-h-0 w-full flex-1 flex-col gap-2 overflow-hidden">
+              <Brand label={brandLabel} />
+              {modulesQuery.isPending ? (
+                <ModulesLoading />
+              ) : (
+                <ModuleNav modules={navModules} />
+              )}
+            </div>
+            <SidebarFooterLink />
+          </SidebarBody>
+        </Sidebar>
+        <main
           className={cn(
-            "w-full min-w-0",
+            "flex min-h-0 min-w-0 w-full flex-1 flex-col bg-background text-foreground",
             fullBleedDatabase || contentClassName
-              ? "flex h-full min-h-0 max-w-none flex-1 flex-col"
-              : "max-w-none px-4 py-6 sm:px-8 sm:py-8",
-            fullBleedDatabase && "overflow-hidden p-2 sm:p-3",
-            vaultLocked && "flex min-h-full flex-1 flex-col",
-            contentClassName,
+              ? "overflow-hidden"
+              : "overflow-x-hidden overflow-y-auto overscroll-y-contain [-webkit-overflow-scrolling:touch]",
           )}
         >
-          <VaultLockedGate>{children}</VaultLockedGate>
-        </div>
-      </main>
-      {isMobile ? null : workspaceTools}
-    </div>
+          {isOffline ? (
+            <OfflineLastViewBanner savedAt={lastViewSavedAt} />
+          ) : null}
+          <div
+            className={cn(
+              "w-full min-w-0",
+              fullBleedDatabase || contentClassName
+                ? "flex h-full min-h-0 max-w-none flex-1 flex-col"
+                : "max-w-none px-4 py-6 sm:px-8 sm:py-8",
+              fullBleedDatabase && "overflow-hidden p-2 sm:p-3",
+              vaultLocked && "flex min-h-full flex-1 flex-col",
+              contentClassName,
+            )}
+          >
+            <VaultLockedGate>{children}</VaultLockedGate>
+          </div>
+        </main>
+        {isMobile ? null : workspaceTools}
+        <MinimizedDialogStack />
+      </div>
+    </ProvidesMinimizedDialogs>
   );
 }

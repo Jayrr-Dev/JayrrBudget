@@ -26,7 +26,7 @@ export default function ModulesPage() {
   return (
     <div className="space-y-8">
       <header className="space-y-2 border-b border-[var(--border)] pb-6">
-        <h1 className="type-page">Modules</h1>
+        <h1 className="type-kicker text-[20px]">Modules</h1>
         <p className="type-lead">Turn app features on or off for everyone.</p>
       </header>
       <FeatureFlagManager />

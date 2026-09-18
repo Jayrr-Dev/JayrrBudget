@@ -6,6 +6,41 @@ import { requireUser } from "./lib/auth";
 const PING_TYPE_ORDER = ["Toast", "Email", "Popup", "Banner"] as const;
 type PingType = (typeof PING_TYPE_ORDER)[number];
 
+const PIGGY_ICON_NAMES = [
+  "overview",
+  "accounts",
+  "transactions",
+  "merchants",
+  "classifications",
+  "analysis",
+  "statements",
+  "canvas",
+  "issues",
+  "pings",
+  "database",
+  "modules",
+  "service",
+  "users",
+  "revenue",
+  "budgets",
+  "profile",
+  "logout",
+  "sheet",
+  "notes",
+  "menu",
+  "close",
+] as const;
+type PiggyIconName = (typeof PIGGY_ICON_NAMES)[number];
+const DEFAULT_PING_ICON: PiggyIconName = "pings";
+
+function normalizePingIcon(value: string | null | undefined): PiggyIconName {
+  const trimmed = value?.trim() ?? "";
+  if ((PIGGY_ICON_NAMES as readonly string[]).includes(trimmed)) {
+    return trimmed as PiggyIconName;
+  }
+  return DEFAULT_PING_ICON;
+}
+
 const pingTypeValidator = v.union(
   v.literal("Toast"),
   v.literal("Email"),
@@ -42,6 +77,7 @@ const pingRecord = v.object({
   name: v.string(),
   title: v.string(),
   message: v.string(),
+  icon: v.string(),
   pingType: pingTypeValidator,
   pingTypes: v.array(pingTypeValidator),
   cycle: v.string(),
@@ -92,6 +128,7 @@ function toRecord(doc: Doc<"piggyPings">, owner: string) {
     name: doc.name,
     title: doc.title,
     message: doc.message,
+    icon: normalizePingIcon(doc.icon),
     pingType: primaryPingType(pingTypes),
     pingTypes,
     cycle: doc.cycle,
@@ -141,6 +178,7 @@ export const create = mutation({
     name: v.string(),
     title: v.string(),
     message: v.string(),
+    icon: v.optional(v.string()),
     pingType: v.optional(pingTypeValidator),
     pingTypes: v.optional(v.array(pingTypeValidator)),
     cycle: v.string(),
@@ -163,6 +201,7 @@ export const create = mutation({
       name: requiredText(args.name, "Name", MAX_NAME),
       title: requiredText(args.title, "Title", MAX_TITLE),
       message: requiredText(args.message, "Message", MAX_MESSAGE),
+      icon: normalizePingIcon(args.icon),
       pingType: primaryPingType(pingTypes),
       pingTypes,
       cycle: requiredText(args.cycle, "Cycle", MAX_CYCLE),
@@ -187,6 +226,7 @@ export const update = mutation({
     name: v.optional(v.string()),
     title: v.optional(v.string()),
     message: v.optional(v.string()),
+    icon: v.optional(v.string()),
     pingType: v.optional(pingTypeValidator),
     pingTypes: v.optional(v.array(pingTypeValidator)),
     cycle: v.optional(v.string()),
@@ -209,6 +249,9 @@ export const update = mutation({
     }
     if (args.message !== undefined) {
       patch.message = requiredText(args.message, "Message", MAX_MESSAGE);
+    }
+    if (args.icon !== undefined) {
+      patch.icon = normalizePingIcon(args.icon);
     }
     if (args.pingTypes !== undefined) {
       const pingTypes = normalizePingTypes(args.pingTypes);

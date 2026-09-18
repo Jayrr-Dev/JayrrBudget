@@ -467,3 +467,35 @@ body {
     cursor: not-allowed;
   }
 }
+
+/* Compact Sonner variant — toolbar / quick action acknowledgments */
+[data-sonner-toast].cn-toast-compact {
+  --width: fit-content;
+  gap: 0.5rem !important;
+  min-height: 0 !important;
+  padding-block: 0.4rem !important;
+  padding-inline: 0.75rem !important;
+}
+
+[data-sonner-toast].cn-toast-compact [data-icon] {
+  width: 0.875rem;
+  height: 0.875rem;
+}
+
+[data-sonner-toast].cn-toast-compact [data-icon] svg {
+  width: 0.875rem;
+  height: 0.875rem;
+}
+
+[data-sonner-toast].cn-toast-compact [data-title],
+.cn-toast-compact-title {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  line-height: 1.25;
+}
+
+[data-sonner-toast].cn-toast-compact [data-description],
+.cn-toast-compact-description {
+  font-size: 0.75rem;
+  line-height: 1.25;
+}

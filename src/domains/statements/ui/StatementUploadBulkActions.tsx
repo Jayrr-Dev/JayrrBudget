@@ -334,7 +334,7 @@ export function StatementUploadBulkActions({
                 <PopoverTrigger asChild>
                   <button
                     type="button"
-                    className="inline-flex size-6 shrink-0 items-center justify-center rounded-full max-md:size-11 text-accent hover:bg-accent-subtle hover:text-accent"
+                    className="inline-flex size-6 shrink-0 items-center justify-center rounded-full max-md:size-11 text-accent hover:text-primary"
                     aria-label="About categorizing visible statements"
                   >
                     <Info className="size-3.5" />
@@ -412,7 +412,7 @@ export function StatementUploadBulkActions({
                 <PopoverTrigger asChild>
                   <button
                     type="button"
-                    className="inline-flex size-6 shrink-0 items-center justify-center rounded-full max-md:size-11 text-accent hover:bg-accent-subtle hover:text-accent"
+                    className="inline-flex size-6 shrink-0 items-center justify-center rounded-full max-md:size-11 text-accent hover:text-primary"
                     aria-label="About deleting visible statements"
                   >
                     <Info className="size-3.5" />

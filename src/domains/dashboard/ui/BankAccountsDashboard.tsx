@@ -78,6 +78,77 @@ function accountSecondaryLine(account: DashboardAccount) {
   return [number, extra].filter(Boolean).join(" · ");
 }
 
+const ROW_LINK_CLASS =
+  "transition-colors hover:bg-[var(--muted)]/70 focus-visible:bg-[var(--muted)]/70 focus-visible:outline-none";
+
+function LoanAccountRow({
+  account,
+  loan,
+  href,
+}: {
+  account: DashboardAccount;
+  loan: DashboardLoanSummary;
+  href: string;
+}) {
+  const category = resolveAccountCategory(account);
+  const amount = displayBalanceAmount(account.currentBalance, category);
+  const currency = account.isoCurrencyCode ?? "CAD";
+  const typeLabel =
+    LOAN_TYPES.find((t) => t.value === loan.loanType)?.label ?? "Loan";
+  const fill = Math.min(100, Math.max(0, loan.progressPct));
+  const percentLabel = `${Math.round(fill)}% paid`;
+
+  return (
+    <Link
+      href={href}
+      className={`block px-4 py-3.5 ${ROW_LINK_CLASS}`}
+      aria-label={`Open ${account.name} details`}
+    >
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+        <div className="min-w-0">
+          <p className="truncate font-medium text-[var(--foreground)]">
+            {account.name}
+          </p>
+          <p className="truncate text-sm text-[var(--muted-foreground)]">
+            {loan.vehicleLabel ?? typeLabel} · {loan.paymentsApplied} of{" "}
+            {loan.paymentCount} payments
+          </p>
+        </div>
+        <div className="flex shrink-0 items-center justify-between gap-2 sm:justify-end">
+          <div className="sm:text-right">
+            <p className="text-base font-semibold tabular-nums tracking-tight text-[var(--foreground)]">
+              {formatMoney(amount, currency)}
+            </p>
+            <p className="text-xs text-[var(--muted-foreground)]">remaining</p>
+          </div>
+          <ChevronRight />
+        </div>
+      </div>
+      <div
+        className="mt-3 h-1.5 overflow-hidden rounded-full bg-border"
+        role="meter"
+        aria-label={`${account.name} ${percentLabel}`}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={Math.round(fill)}
+      >
+        <div
+          className="h-full rounded-full bg-accent transition-[width]"
+          style={{ width: `${fill}%` }}
+        />
+      </div>
+      <div className="mt-1.5 flex items-center justify-between gap-3 text-xs tabular-nums text-[var(--muted-foreground)]">
+        <span>{percentLabel}</span>
+        <span className="truncate">
+          {loan.nextPaymentDate
+            ? `Next payment ${formatDisplayDate(loan.nextPaymentDate)}`
+            : "Paid off"}
+        </span>
+      </div>
+    </Link>
+  );
+}
+
 function AccountRow({
   account,
   href,
@@ -85,14 +156,16 @@ function AccountRow({
   account: DashboardAccount;
   href: string;
 }) {
+  const loan = account.loanSummary;
+  if (loan) return <LoanAccountRow account={account} loan={loan} href={href} />;
+
   const category = resolveAccountCategory(account);
   const amount = displayBalanceAmount(account.currentBalance, category);
-  const loan = account.loanSummary;
 
   return (
     <Link
       href={href}
-      className="flex flex-col items-stretch justify-between gap-2 px-4 py-3.5 transition-colors sm:flex-row sm:items-center sm:gap-4 hover:bg-[var(--muted)]/70 focus-visible:bg-[var(--muted)]/70 focus-visible:outline-none"
+      className={`flex flex-col items-stretch justify-between gap-2 px-4 py-3.5 sm:flex-row sm:items-center sm:gap-4 ${ROW_LINK_CLASS}`}
       aria-label={`Open ${account.name} details`}
     >
       <div className="min-w-0">
@@ -102,14 +175,6 @@ function AccountRow({
         <p className="truncate text-sm text-[var(--muted-foreground)]">
           {accountSecondaryLine(account)}
         </p>
-        {loan ? (
-          <p className="mt-0.5 truncate text-xs text-[var(--muted-foreground)]">
-            {loan.progressPct.toFixed(0)}% paid
-            {loan.nextPaymentDate
-              ? ` · next ${loan.nextPaymentDate}`
-              : " · paid off"}
-          </p>
-        ) : null}
       </div>
       <div className="flex shrink-0 items-center justify-between gap-2 sm:justify-end">
         <p className="text-right text-base font-semibold tabular-nums tracking-tight text-[var(--foreground)]">

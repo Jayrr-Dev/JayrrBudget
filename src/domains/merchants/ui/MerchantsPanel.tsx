@@ -2,15 +2,9 @@
 
 import { DataTable } from "@/components/ui/data-table";
 import type { DataTableFeatures } from "@/components/ui/data-table-features";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { EmptyPrompt } from "@/components/ui/empty-prompt";
+import { RowActionsMenu } from "@/components/ui/row-actions-menu";
 import { PageSpinner } from "@/components/ui/spinner";
-import { DecryptingPage } from "@/domains/vault/ui/DecryptingStatus";
 import {
   peekMerchants,
   rememberMerchants,
@@ -23,6 +17,7 @@ import {
   type MerchantTxnPeek,
 } from "@/domains/merchants/ui/MerchantTxnsPopover";
 import type { PrivateTransaction } from "@/domains/vault/domain/privateLedger";
+import { DecryptingPage } from "@/domains/vault/ui/DecryptingStatus";
 import { usePrivateLedger } from "@/domains/vault/ui/usePrivateLedger";
 import { api } from "@convex/_generated/api";
 import { Icon } from "@iconify/react";
@@ -67,19 +62,6 @@ function formatWhen(ms: number) {
   });
 }
 
-function actionsHeader() {
-  return (
-    <span className="flex items-center justify-center">
-      <Icon
-        icon="mynaui:mouse-pointer-click-solid"
-        className="size-4 text-[var(--muted-foreground)]"
-        aria-hidden
-      />
-      <span className="sr-only">Actions</span>
-    </span>
-  );
-}
-
 function vaultPeeksByMerchantName(txns: PrivateTransaction[]) {
   const byName = new Map<string, MerchantTxnPeek[]>();
   for (const tx of txns) {
@@ -114,25 +96,28 @@ function MerchantsTable({
       columnHelper.columns([
         columnHelper.display({
           id: "actions",
-          header: () => actionsHeader(),
+          header: () => (
+            <span className="flex items-center justify-center">
+              <Icon
+                icon="mynaui:mouse-pointer-click-solid"
+                className="size-4 text-[var(--muted-foreground)]"
+                aria-hidden
+              />
+              <span className="sr-only">Actions</span>
+            </span>
+          ),
           cell: ({ row }) => (
             <div className="flex items-center justify-center">
-              <DropdownMenu>
-                <DropdownMenuTrigger
-                  className="inline-flex size-6 cursor-pointer max-md:size-11 items-center justify-center rounded-[min(var(--radius-md),12px)] text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]"
-                  aria-label={`Actions for ${row.original.name}`}
-                >
-                  <Icon icon="basil:menu-outline" className="size-4" />
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="w-auto min-w-36">
-                  <DropdownMenuItem
-                    className="cursor-pointer"
-                    onClick={() => setEditing(row.original)}
-                  >
-                    Edit
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+              <RowActionsMenu
+                label={row.original.name}
+                size="sm"
+                actions={[
+                  {
+                    label: "Edit",
+                    onSelect: () => setEditing(row.original),
+                  },
+                ]}
+              />
             </div>
           ),
           enableSorting: false,
@@ -150,7 +135,7 @@ function MerchantsTable({
           ),
           filterFn: "includesString",
           sortFn: "text",
-          meta: { width: "18rem", nowrap: true, grow: true },
+          meta: { width: "18rem", nowrap: true, grow: true, cardTitle: true },
         }),
         columnHelper.accessor("transactionCount", {
           header: "Txns",
@@ -184,20 +169,30 @@ function MerchantsTable({
           header: () => <span className="sr-only">Transactions</span>,
           cell: ({ row }) => (
             <div className="flex items-center justify-center">
-              <MerchantTxnsPopover
-                merchantId={row.original.id}
-                merchantName={row.original.name}
-                vaultPeeks={
-                  vaultPeeksByName
-                    ? (vaultPeeksByName.get(row.original.name) ?? [])
-                    : undefined
-                }
-              />
+              {row.original.transactionCount > 0 ? (
+                <MerchantTxnsPopover
+                  merchantId={row.original.id}
+                  merchantName={row.original.name}
+                  vaultPeeks={
+                    vaultPeeksByName
+                      ? (vaultPeeksByName.get(row.original.name) ?? [])
+                      : undefined
+                  }
+                />
+              ) : (
+                <span className="text-sm text-[var(--muted-foreground)]">
+                  -
+                </span>
+              )}
             </div>
           ),
           enableSorting: false,
           enableHiding: false,
-          meta: { label: "Transactions", width: "2.5rem" },
+          meta: {
+            label: "Transactions",
+            width: "2.5rem",
+            cardTitleAside: true,
+          },
         }),
       ]),
     [vaultPeeksByName],

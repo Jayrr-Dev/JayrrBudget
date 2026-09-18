@@ -1,7 +1,30 @@
 "use client";
 
+import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "cn";
 import * as React from "react";
+
+const tableVariants = cva(
+  [
+    "w-full caption-bottom text-sm [transform:rotateX(180deg)]",
+    "[&_th[data-sticky-col]]:sticky [&_th[data-sticky-col]]:left-0 [&_th[data-sticky-col]]:z-20 [&_th[data-sticky-col]]:bg-surface-elevated",
+    "[&_td[data-sticky-col]]:sticky [&_td[data-sticky-col]]:left-0 [&_td[data-sticky-col]]:z-10 [&_td[data-sticky-col]]:bg-surface-elevated",
+  ].join(" "),
+  {
+    variants: {
+      variant: {
+        default: "",
+        lined: [
+          "border-collapse",
+          "[&_th]:border [&_td]:border [&_th]:border-border [&_td]:border-border",
+        ].join(" "),
+      },
+    },
+    defaultVariants: {
+      variant: "default",
+    },
+  },
+);
 
 /** Puts the horizontal scrollbar above content via rotateX (un-flip children). */
 function ScrollTopX({
@@ -26,10 +49,11 @@ function ScrollTopX({
 function Table({
   className,
   containerClassName,
+  variant = "default",
   ...props
 }: React.ComponentProps<"table"> & {
   containerClassName?: string;
-}) {
+} & VariantProps<typeof tableVariants>) {
   return (
     <div
       data-slot="table-container"
@@ -40,12 +64,8 @@ function Table({
     >
       <table
         data-slot="table"
-        className={cn(
-          "w-full caption-bottom text-sm [transform:rotateX(180deg)]",
-          "[&_th[data-sticky-col]]:sticky [&_th[data-sticky-col]]:left-0 [&_th[data-sticky-col]]:z-20 [&_th[data-sticky-col]]:bg-surface-elevated",
-          "[&_td[data-sticky-col]]:sticky [&_td[data-sticky-col]]:left-0 [&_td[data-sticky-col]]:z-10 [&_td[data-sticky-col]]:bg-surface-elevated",
-          className,
-        )}
+        data-variant={variant}
+        className={cn("group/table", tableVariants({ variant }), className)}
         {...props}
       />
     </div>
@@ -56,7 +76,10 @@ function TableHeader({ className, ...props }: React.ComponentProps<"thead">) {
   return (
     <thead
       data-slot="table-header"
-      className={cn("[&_tr]:border-b", className)}
+      className={cn(
+        "[&_tr]:border-b group-data-[variant=lined]/table:[&_tr]:border-b-0",
+        className,
+      )}
       {...props}
     />
   );
@@ -90,7 +113,7 @@ function TableRow({ className, ...props }: React.ComponentProps<"tr">) {
     <tr
       data-slot="table-row"
       className={cn(
-        "border-b transition-colors hover:bg-muted/50 has-aria-expanded:bg-muted/50 data-[state=selected]:bg-primary-subtle",
+        "border-b transition-colors hover:bg-muted/50 has-aria-expanded:bg-muted/50 data-[state=selected]:bg-primary-subtle group-data-[variant=lined]/table:border-b-0",
         className,
       )}
       {...props}
@@ -147,4 +170,5 @@ export {
   TableHead,
   TableHeader,
   TableRow,
+  tableVariants,
 };

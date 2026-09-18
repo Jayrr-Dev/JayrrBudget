@@ -28,13 +28,24 @@ const budgetFields = {
     .number()
     .optional()
     .describe("Percent of amount that counts as over. Default 100"),
+  cycle: z
+    .enum(["daily", "weekly", "biweekly", "monthly", "yearly"])
+    .optional()
+    .describe(
+      "How often the cap resets. daily, weekly, biweekly, monthly, or yearly. Default monthly",
+    ),
+  startDate: z
+    .string()
+    .nullable()
+    .optional()
+    .describe("YYYY-MM-DD the cycle slice starts from. Empty or null = today"),
 };
 
 export function createBudgetTools(client: ConvexHttpClient) {
   return {
     list_budgets: tool({
       description:
-        "List this user's spend budgets (name, class, description match, amount, thresholds).",
+        "List this user's spend budgets (name, class, description match, amount, cycle, start date, thresholds).",
       inputSchema: z.object({}),
       execute: async () => {
         return await client.query(api.budgets.list, {});
@@ -43,7 +54,7 @@ export function createBudgetTools(client: ConvexHttpClient) {
 
     create_budget: tool({
       description:
-        "Create a spend budget for the signed-in user. amount is the cap. warningThreshold and overageThreshold are percents of that cap (defaults 80 and 100). Use list_taxonomy before inventing a classLookup name.",
+        "Create a spend budget for the signed-in user. amount is the cap for the current cycle slice. cycle is daily, weekly, biweekly, monthly, or yearly (default monthly). startDate is YYYY-MM-DD (default today). warningThreshold and overageThreshold are percents of that cap (defaults 80 and 100). Use list_taxonomy before inventing a classLookup name.",
       inputSchema: z.object(budgetFields),
       execute: async (input) => {
         return await client.mutation(api.budgets.create, {
@@ -54,6 +65,8 @@ export function createBudgetTools(client: ConvexHttpClient) {
           warningThreshold: input.warningThreshold,
           overageThreshold: input.overageThreshold,
           isActive: true,
+          cycle: input.cycle,
+          startDate: input.startDate ?? null,
         });
       },
     }),

@@ -66,13 +66,13 @@ export default function ProfilePage() {
   return (
     <div className="mx-auto max-w-2xl space-y-8">
       <header className="space-y-2 border-b border-[var(--border)] pb-6">
-        <h1 className="type-page flex items-center gap-2">
+        <h1 className="type-kicker text-[20px] flex items-center gap-2">
           Profile
           <Popover>
             <PopoverTrigger asChild>
               <button
                 type="button"
-                className="inline-flex size-11 sm:size-6 shrink-0 items-center justify-center rounded-full text-accent hover:bg-accent-subtle hover:text-accent"
+                className="inline-flex size-11 sm:size-6 shrink-0 items-center justify-center rounded-full text-accent hover:text-primary"
                 aria-label="About profile"
               >
                 <Info className="size-3.5" />

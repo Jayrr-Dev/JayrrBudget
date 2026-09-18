@@ -53,7 +53,7 @@ export function ProfileAvatarCard({ avatarIcon }: Props) {
           <PopoverTrigger asChild>
             <button
               type="button"
-              className="inline-flex size-6 shrink-0 items-center justify-center rounded-full text-accent hover:bg-accent-subtle hover:text-accent"
+              className="inline-flex size-6 shrink-0 items-center justify-center rounded-full text-accent hover:text-primary"
               aria-label="About avatar"
             >
               <Info className="size-3.5" />

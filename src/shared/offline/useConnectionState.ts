@@ -1,15 +1,28 @@
 "use client";
 
 import { useConvex, useConvexAuth } from "convex/react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 
 type ConvexWire = {
   isWebSocketConnected: boolean;
   hasEverConnected: boolean;
 };
 
-function readBrowserOnline() {
-  return typeof navigator === "undefined" ? true : navigator.onLine;
+function subscribeBrowserOnline(onStoreChange: () => void) {
+  window.addEventListener("online", onStoreChange);
+  window.addEventListener("offline", onStoreChange);
+  return () => {
+    window.removeEventListener("online", onStoreChange);
+    window.removeEventListener("offline", onStoreChange);
+  };
+}
+
+function getBrowserOnline() {
+  return navigator.onLine;
+}
+
+function getBrowserOnlineServer() {
+  return true;
 }
 
 /**
@@ -20,7 +33,11 @@ function readBrowserOnline() {
 export function useConnectionState() {
   const { isAuthenticated, isLoading: isAuthLoading } = useConvexAuth();
   const convex = useConvex();
-  const [browserOnline, setBrowserOnline] = useState(readBrowserOnline);
+  const browserOnline = useSyncExternalStore(
+    subscribeBrowserOnline,
+    getBrowserOnline,
+    getBrowserOnlineServer,
+  );
   const [convexWire, setConvexWire] = useState<ConvexWire | null>(() => {
     try {
       const state = convex.connectionState();
@@ -32,18 +49,6 @@ export function useConnectionState() {
       return null;
     }
   });
-
-  useEffect(() => {
-    const onOnline = () => setBrowserOnline(true);
-    const onOffline = () => setBrowserOnline(false);
-    window.addEventListener("online", onOnline);
-    window.addEventListener("offline", onOffline);
-    setBrowserOnline(readBrowserOnline());
-    return () => {
-      window.removeEventListener("online", onOnline);
-      window.removeEventListener("offline", onOffline);
-    };
-  }, []);
 
   useEffect(() => {
     if (typeof convex.subscribeToConnectionState !== "function") return;

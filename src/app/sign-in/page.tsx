@@ -245,7 +245,7 @@ export default function SignInPage() {
                           <button
                             type="button"
                             aria-label="How this password encrypts your ledger"
-                            className="inline-flex size-5 shrink-0 items-center justify-center rounded-full text-accent hover:bg-accent-subtle hover:text-accent"
+                            className="inline-flex size-5 shrink-0 items-center justify-center rounded-full text-accent hover:text-primary"
                           >
                             <Info className="size-3.5" />
                           </button>

@@ -570,6 +570,8 @@ export default defineSchema({
     name: v.string(),
     title: v.string(),
     message: v.string(),
+    /** PiggyIcon artwork key; defaults to "pings" when missing. */
+    icon: v.optional(v.string()),
     pingType: v.union(
       v.literal("Toast"),
       v.literal("Email"),
@@ -611,6 +613,10 @@ export default defineSchema({
     warningThreshold: v.number(),
     overageThreshold: v.number(),
     isActive: v.boolean(),
+    /** daily | weekly | biweekly | monthly | yearly. Missing = monthly. */
+    cycle: v.optional(v.string()),
+    /** YYYY-MM-DD. Slice repeats from this day. Missing = created day. */
+    startDate: v.optional(v.union(v.string(), v.null())),
     createdAt: v.number(),
     updatedAt: v.number(),
   }).index("by_userId", ["userId"]),

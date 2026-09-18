@@ -290,6 +290,7 @@ function StatementUploadLogsTable({ data }: { data: StatementUploadLog[] }) {
       searchPlaceholder="Filter files…"
       pageSize={10}
       enableColumnToggle
+      csvFilename="parse-logs.csv"
     />
   );
 }

@@ -1,7 +1,15 @@
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
+import { mutation, query } from "./_generated/server";
 import { requireUser } from "./lib/auth";
+
+const budgetCycle = v.union(
+  v.literal("daily"),
+  v.literal("weekly"),
+  v.literal("biweekly"),
+  v.literal("monthly"),
+  v.literal("yearly"),
+);
 
 const budgetRecord = v.object({
   id: v.id("budgets"),
@@ -12,11 +20,41 @@ const budgetRecord = v.object({
   warningThreshold: v.number(),
   overageThreshold: v.number(),
   isActive: v.boolean(),
+  cycle: budgetCycle,
+  startDate: v.string(),
   createdAt: v.number(),
   updatedAt: v.number(),
 });
 
 const optionalText = v.optional(v.union(v.string(), v.null()));
+const CYCLES = ["daily", "weekly", "biweekly", "monthly", "yearly"] as const;
+
+function ymdFromMs(ms: number) {
+  const date = new Date(ms);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function requireCycle(value: string | undefined) {
+  const key = (value?.trim().toLowerCase() || "monthly") as string;
+  if (!(CYCLES as readonly string[]).includes(key)) {
+    throw new Error(
+      "Cycle must be Daily, Weekly, Bi-Weekly, Monthly, or Yearly",
+    );
+  }
+  return key as (typeof CYCLES)[number];
+}
+
+function requireStartDate(value: string | null | undefined) {
+  const trimmed = value?.trim() ?? "";
+  if (!trimmed) return ymdFromMs(Date.now());
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+    throw new Error("Start date must be YYYY-MM-DD");
+  }
+  return trimmed;
+}
 
 const MAX_NAME = 80;
 const MAX_LOOKUP = 160;
@@ -59,6 +97,11 @@ function toRecord(doc: Doc<"budgets">) {
     warningThreshold: doc.warningThreshold,
     overageThreshold: doc.overageThreshold,
     isActive: doc.isActive,
+    cycle: requireCycle(doc.cycle),
+    startDate:
+      doc.startDate && /^\d{4}-\d{2}-\d{2}$/.test(doc.startDate.trim())
+        ? doc.startDate.trim()
+        : "",
     createdAt: doc.createdAt,
     updatedAt: doc.updatedAt,
   };
@@ -85,9 +128,7 @@ export const list = query({
       .query("budgets")
       .withIndex("by_userId", (q) => q.eq("userId", user._id))
       .collect();
-    return rows
-      .sort((a, b) => b.createdAt - a.createdAt)
-      .map(toRecord);
+    return rows.sort((a, b) => b.createdAt - a.createdAt).map(toRecord);
   },
 });
 
@@ -100,6 +141,8 @@ export const create = mutation({
     warningThreshold: v.optional(v.number()),
     overageThreshold: v.optional(v.number()),
     isActive: v.optional(v.boolean()),
+    cycle: v.optional(budgetCycle),
+    startDate: v.optional(v.union(v.string(), v.null())),
   },
   returns: budgetRecord,
   handler: async (ctx, args) => {
@@ -120,6 +163,8 @@ export const create = mutation({
         "Overage threshold",
       ),
       isActive: args.isActive !== false,
+      cycle: requireCycle(args.cycle),
+      startDate: requireStartDate(args.startDate),
       createdAt: now,
       updatedAt: now,
     });
@@ -139,6 +184,8 @@ export const update = mutation({
     warningThreshold: v.optional(v.number()),
     overageThreshold: v.optional(v.number()),
     isActive: v.optional(v.boolean()),
+    cycle: v.optional(budgetCycle),
+    startDate: v.optional(v.union(v.string(), v.null())),
   },
   returns: budgetRecord,
   handler: async (ctx, args) => {
@@ -152,7 +199,10 @@ export const update = mutation({
       patch.classLookup = optionalTrim(args.classLookup, MAX_LOOKUP);
     }
     if (args.descriptionLookup !== undefined) {
-      patch.descriptionLookup = optionalTrim(args.descriptionLookup, MAX_LOOKUP);
+      patch.descriptionLookup = optionalTrim(
+        args.descriptionLookup,
+        MAX_LOOKUP,
+      );
     }
     if (args.amount !== undefined) {
       patch.amount = requireAmount(args.amount);
@@ -170,6 +220,10 @@ export const update = mutation({
       );
     }
     if (args.isActive !== undefined) patch.isActive = args.isActive;
+    if (args.cycle !== undefined) patch.cycle = requireCycle(args.cycle);
+    if (args.startDate !== undefined) {
+      patch.startDate = requireStartDate(args.startDate);
+    }
     await ctx.db.patch(doc._id, patch);
     const next = await ctx.db.get(doc._id);
     if (!next) throw new Error("Budget not found");

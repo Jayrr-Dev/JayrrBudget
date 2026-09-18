@@ -1,19 +1,50 @@
 "use client";
 
+import { BulkActionsMenu } from "@/components/ui/bulk-actions-menu";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import type { DataTableFeatures } from "@/components/ui/data-table-features";
 import { EmptyPrompt } from "@/components/ui/empty-prompt";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  NativeSelect,
+  NativeSelectOption,
+} from "@/components/ui/native-select";
+import {
+  Popover,
+  PopoverContent,
+  PopoverDescription,
+  PopoverHeader,
+  PopoverTitle,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import type { RowActionsMenuItem } from "@/components/ui/row-actions-menu";
+import { RowActionsMenu } from "@/components/ui/row-actions-menu";
 import { PageSpinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
+import { classifyCashFlow } from "@/domains/analysis/domain/cashFlow";
+import {
+  BUDGET_CYCLE_LABELS,
+  BUDGET_CYCLES,
+  toBudgetYmd,
+  todayBudgetYmd,
+  type BudgetCycle,
+} from "@/domains/budgets/domain/budgetCycle";
+import {
+  buildBudgetProgressItems,
+  type BudgetSpendLine,
+} from "@/domains/budgets/domain/budgetProgress";
+import { BudgetProgressBars } from "@/domains/budgets/ui/BudgetProgressBars";
 import { ClassLookupCombobox } from "@/domains/budgets/ui/ClassLookupCombobox";
+import { usePrivateLedger } from "@/domains/vault/ui/usePrivateLedger";
+import { formatDisplayDate } from "@/shared/lib/format-date";
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { createColumnHelper } from "@tanstack/react-table";
 import { useMutation, useQuery } from "convex/react";
-import { useState, type FormEvent } from "react";
+import { Info } from "lucide-react";
+import { useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { toast } from "sonner";
 
 type BudgetRow = {
@@ -25,9 +56,51 @@ type BudgetRow = {
   warningThreshold: number;
   overageThreshold: number;
   isActive: boolean;
+  cycle: BudgetCycle;
+  startDate: string;
   createdAt: number;
   updatedAt: number;
 };
+
+function FieldLabel({
+  htmlFor,
+  children,
+  infoTitle,
+  infoBody,
+}: {
+  htmlFor: string;
+  children: ReactNode;
+  infoTitle: string;
+  infoBody: string;
+}) {
+  return (
+    <div className="flex items-center gap-1">
+      <Label htmlFor={htmlFor}>{children}</Label>
+      <Popover>
+        <PopoverTrigger asChild>
+          <button
+            type="button"
+            className="inline-flex size-6 shrink-0 items-center justify-center rounded-full text-accent hover:text-primary"
+            aria-label={`About ${infoTitle}`}
+          >
+            <Info className="size-3.5" />
+          </button>
+        </PopoverTrigger>
+        <PopoverContent
+          align="start"
+          side="bottom"
+          sideOffset={8}
+          className="w-72 max-w-[calc(100vw-2rem)] gap-0 p-3.5"
+        >
+          <PopoverHeader className="gap-1.5">
+            <PopoverTitle>{infoTitle}</PopoverTitle>
+            <PopoverDescription>{infoBody}</PopoverDescription>
+          </PopoverHeader>
+        </PopoverContent>
+      </Popover>
+    </div>
+  );
+}
 
 const columnHelper = createColumnHelper<DataTableFeatures, BudgetRow>();
 
@@ -58,6 +131,51 @@ function ActiveToggle({ budget }: { budget: BudgetRow }) {
   );
 }
 
+function BudgetsBulkActions({ budgets }: { budgets: BudgetRow[] }) {
+  const remove = useMutation(api.budgets.remove);
+  const [busy, setBusy] = useState(false);
+
+  async function deleteBulk() {
+    if (budgets.length === 0) return;
+    const ok = window.confirm(
+      `Delete ${budgets.length} visible budget${budgets.length === 1 ? "" : "s"}?`,
+    );
+    if (!ok) return;
+    setBusy(true);
+    try {
+      for (const budget of budgets) {
+        await remove({ budgetId: budget.id });
+      }
+      toast.success(
+        budgets.length === 1
+          ? "Budget removed"
+          : `${budgets.length} budgets removed`,
+      );
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Delete failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const actions: RowActionsMenuItem[] = [
+    {
+      label: "Delete visible",
+      onSelect: () => void deleteBulk(),
+      disabled: busy || budgets.length === 0,
+      variant: "destructive",
+    },
+  ];
+
+  return (
+    <BulkActionsMenu
+      label="visible budgets"
+      actions={actions}
+      disabled={busy || budgets.length === 0}
+    />
+  );
+}
+
 function BudgetActions({ budget }: { budget: BudgetRow }) {
   const remove = useMutation(api.budgets.remove);
 
@@ -71,18 +189,29 @@ function BudgetActions({ budget }: { budget: BudgetRow }) {
   }
 
   return (
-    <Button
-      type="button"
-      size="xs"
-      variant="destructive"
-      onClick={() => void handleDelete()}
-    >
-      Delete
-    </Button>
+    <div className="flex items-center justify-center">
+      <RowActionsMenu
+        label={budget.name}
+        size="sm"
+        actions={[
+          {
+            label: "Delete",
+            onSelect: () => void handleDelete(),
+            variant: "destructive",
+          },
+        ]}
+      />
+    </div>
   );
 }
 
 const columns = columnHelper.columns([
+  columnHelper.accessor("isActive", {
+    header: "Active",
+    cell: ({ row }) => <ActiveToggle budget={row.original} />,
+    enableSorting: false,
+    meta: { label: "Active", width: "4.25rem", keepOpaque: true },
+  }),
   columnHelper.accessor("id", {
     header: "Id",
     cell: ({ getValue }) => (
@@ -132,6 +261,24 @@ const columns = columnHelper.columns([
     ),
     meta: { width: "7rem", nowrap: true },
   }),
+  columnHelper.accessor("cycle", {
+    header: "Cycle",
+    cell: ({ getValue }) => (
+      <span className="text-sm">
+        {BUDGET_CYCLE_LABELS[getValue() as BudgetCycle] ?? String(getValue())}
+      </span>
+    ),
+    meta: { width: "7.5rem", nowrap: true },
+  }),
+  columnHelper.accessor("startDate", {
+    header: "Start",
+    cell: ({ getValue }) => (
+      <span className="text-sm font-mono">
+        {formatDisplayDate(String(getValue()))}
+      </span>
+    ),
+    meta: { width: "8.5rem", nowrap: true },
+  }),
   columnHelper.accessor("warningThreshold", {
     header: "Warn %",
     cell: ({ getValue }) => (
@@ -144,11 +291,6 @@ const columns = columnHelper.columns([
     cell: ({ getValue }) => (
       <span className="text-sm tabular-nums">{Number(getValue())}</span>
     ),
-    meta: { width: "5.5rem", nowrap: true },
-  }),
-  columnHelper.accessor("isActive", {
-    header: "Active",
-    cell: ({ row }) => <ActiveToggle budget={row.original} />,
     meta: { width: "5.5rem", nowrap: true },
   }),
   columnHelper.accessor("createdAt", {
@@ -179,9 +321,15 @@ const columns = columnHelper.columns([
   }),
   columnHelper.display({
     id: "actions",
-    header: "",
+    header: ({ table }) => (
+      <BudgetsBulkActions
+        budgets={table.getRowModel().rows.map((row) => row.original)}
+      />
+    ),
     cell: ({ row }) => <BudgetActions budget={row.original} />,
-    meta: { label: "Actions", width: "5.5rem", nowrap: true },
+    enableSorting: false,
+    enableHiding: false,
+    meta: { label: "Actions", width: "2.5rem", keepOpaque: true },
   }),
 ]);
 
@@ -192,6 +340,8 @@ function CreateBudgetForm() {
   const [classLookup, setClassLookup] = useState("");
   const [descriptionLookup, setDescriptionLookup] = useState("");
   const [amount, setAmount] = useState("");
+  const [cycle, setCycle] = useState<BudgetCycle>("monthly");
+  const [startDate, setStartDate] = useState(todayBudgetYmd);
   const [warningThreshold, setWarningThreshold] = useState("80");
   const [overageThreshold, setOverageThreshold] = useState("100");
   const [isActive, setIsActive] = useState(true);
@@ -216,11 +366,15 @@ function CreateBudgetForm() {
         warningThreshold: Number.isFinite(warn) ? warn : 80,
         overageThreshold: Number.isFinite(over) ? over : 100,
         isActive,
+        cycle,
+        startDate,
       });
       setName("");
       setClassLookup("");
       setDescriptionLookup("");
       setAmount("");
+      setCycle("monthly");
+      setStartDate(todayBudgetYmd());
       setWarningThreshold("80");
       setOverageThreshold("100");
       setIsActive(true);
@@ -290,6 +444,47 @@ function CreateBudgetForm() {
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div className="grid gap-1.5">
+            <FieldLabel
+              htmlFor="budget-cycle"
+              infoTitle="Cycle"
+              infoBody="The cap applies to this slice, then resets."
+            >
+              Cycle
+            </FieldLabel>
+            <NativeSelect
+              id="budget-cycle"
+              className="w-full"
+              value={cycle}
+              disabled={submitting}
+              onChange={(e) => setCycle(e.target.value as BudgetCycle)}
+            >
+              {BUDGET_CYCLES.map((option) => (
+                <NativeSelectOption key={option} value={option}>
+                  {BUDGET_CYCLE_LABELS[option]}
+                </NativeSelectOption>
+              ))}
+            </NativeSelect>
+          </div>
+          <div className="grid gap-1.5">
+            <FieldLabel
+              htmlFor="budget-start"
+              infoTitle="Start date"
+              infoBody="Each slice lines up from this day."
+            >
+              Start date
+            </FieldLabel>
+            <Input
+              id="budget-start"
+              type="date"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+              required
+              disabled={submitting}
+            />
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="grid gap-1.5">
             <Label htmlFor="budget-warn">Warning %</Label>
             <Input
               id="budget-warn"
@@ -336,38 +531,92 @@ function CreateBudgetForm() {
 
 export function BudgetsManager() {
   const budgets = useQuery(api.budgets.list, {});
+  const privateLedger = usePrivateLedger();
+  const rows = useMemo(() => {
+    if (!budgets) return [];
+    return budgets.map((budget) => ({
+      ...budget,
+      startDate: budget.startDate || toBudgetYmd(new Date(budget.createdAt)),
+    }));
+  }, [budgets]);
+
+  const progressItems = useMemo(() => {
+    if (!rows.length) return [];
+    const accountTypeById = new Map(
+      privateLedger.ledger.accounts.map((account) => [
+        account.accountId,
+        account.type ?? null,
+      ]),
+    );
+    const lines: BudgetSpendLine[] = [];
+    for (const txn of privateLedger.ledger.transactions) {
+      const kind = classifyCashFlow({
+        amountMinor: Math.round(txn.amount * 100),
+        description: txn.description,
+        accountType: txn.accountId
+          ? (accountTypeById.get(txn.accountId) ?? null)
+          : null,
+        sectionName: txn.sectionName ?? null,
+        categoryName: txn.categoryName ?? null,
+        typeName: txn.transactionTypeName ?? null,
+        transactionCode: txn.txnCode ?? null,
+      });
+      if (kind !== "spend") continue;
+      lines.push({
+        date: txn.date,
+        amount: txn.amount,
+        description: txn.description,
+        merchantName: txn.merchantName,
+        merchantClean: txn.merchantClean,
+        sectionName: txn.sectionName,
+        categoryName: txn.categoryName,
+        subcategoryName: txn.subcategoryName,
+        spreadName: txn.spreadName,
+        transactionTypeName: txn.transactionTypeName,
+      });
+    }
+    return buildBudgetProgressItems(rows, lines);
+  }, [rows, privateLedger.ledger]);
 
   return (
-    <div className="grid gap-4 lg:grid-cols-3">
-      <div className="lg:col-span-1">
-        <CreateBudgetForm />
-      </div>
-      <div className="min-w-0 lg:col-span-2">
-        {budgets === undefined ? (
-          <PageSpinner className="min-h-40 py-8" />
-        ) : budgets.length === 0 ? (
-          <EmptyPrompt
-            className="bg-[var(--surface)] py-10"
-            title="No budgets yet"
-            description="Add a spend cap here, or ask Piggy to create one."
-            action={
-              <Button
-                type="button"
-                size="sm"
-                onClick={() => document.getElementById("budget-name")?.focus()}
-              >
-                New budget
-              </Button>
-            }
-          />
-        ) : (
-          <DataTable
-            columns={columns}
-            data={budgets as BudgetRow[]}
-            searchKey="name"
-            searchPlaceholder="Filter budgets…"
-          />
-        )}
+    <div className="grid gap-4">
+      <BudgetProgressBars items={progressItems} />
+      <div className="grid gap-4 lg:grid-cols-3">
+        <div className="lg:col-span-1">
+          <CreateBudgetForm />
+        </div>
+        <div className="min-w-0 lg:col-span-2">
+          {budgets === undefined ? (
+            <PageSpinner className="min-h-40 py-8" />
+          ) : rows.length === 0 ? (
+            <EmptyPrompt
+              className="bg-[var(--surface)] py-10"
+              title="No budgets yet"
+              description="Add a spend cap here, or ask Piggy to create one."
+              action={
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={() =>
+                    document.getElementById("budget-name")?.focus()
+                  }
+                >
+                  New budget
+                </Button>
+              }
+            />
+          ) : (
+            <DataTable
+              columns={columns}
+              data={rows as BudgetRow[]}
+              searchKey="name"
+              searchPlaceholder="Filter budgets…"
+              csvFilename="budgets.csv"
+              initialColumnVisibility={{ id: false }}
+              rowMuted={(row) => !row.isActive}
+            />
+          )}
+        </div>
       </div>
     </div>
   );

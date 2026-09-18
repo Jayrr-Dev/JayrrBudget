@@ -1,5 +1,6 @@
 "use client";
 
+import OverviewPage from "@/app/(saas)/page";
 import { AppShell } from "@/components/layout/AppShell";
 import {
   Popover,
@@ -10,19 +11,18 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Info } from "lucide-react";
-import OverviewPage from "@/app/(saas)/page";
 
 export function OfflineFallbackView() {
   return (
     <AppShell>
       <div className="space-y-6">
-        <h1 className="type-page flex items-center gap-2">
+        <h1 className="type-kicker text-[20px] flex items-center gap-2">
           Offline
           <Popover>
             <PopoverTrigger asChild>
               <button
                 type="button"
-                className="inline-flex size-6 shrink-0 items-center justify-center rounded-full text-accent hover:bg-accent-subtle hover:text-accent"
+                className="inline-flex size-6 shrink-0 items-center justify-center rounded-full text-accent hover:text-primary"
                 aria-label="About offline last view"
               >
                 <Info className="size-3.5" />
@@ -40,7 +40,9 @@ export function OfflineFallbackView() {
                   This page opens when a navigation cannot reach the network.
                 </PopoverDescription>
                 <ul className="mt-1.5 list-disc space-y-1 pl-4 text-muted-foreground">
-                  <li>Dashboard and sidebar come from the last successful load</li>
+                  <li>
+                    Dashboard and sidebar come from the last successful load
+                  </li>
                   <li>Uploads and edits wait until you reconnect</li>
                 </ul>
               </PopoverHeader>

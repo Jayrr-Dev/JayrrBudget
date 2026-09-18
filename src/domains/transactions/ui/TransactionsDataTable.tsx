@@ -15,12 +15,15 @@ import { historyMatchLabel } from "@/domains/transactions/domain/debitCredit";
 import { TagsCell } from "@/domains/transactions/ui/TagsCell";
 import { CreateTagButton } from "@/domains/transactions/ui/TagsColumnHeader";
 import { TaxonomyCell } from "@/domains/transactions/ui/TaxonomyCell";
+import { TransactionBulkActions } from "@/domains/transactions/ui/TransactionBulkActions";
 import { TransactionRowActions } from "@/domains/transactions/ui/TransactionRowActions";
 import { DecryptingStatus } from "@/domains/vault/ui/DecryptingStatus";
 import { usePrivateLedger } from "@/domains/vault/ui/usePrivateLedger";
 import { cn } from "@/lib/utils";
-import { formatDisplayDate } from "@/shared/lib/format-date";
-import { Icon } from "@iconify/react";
+import {
+  formatDisplayDate,
+  formatLongDisplayDate,
+} from "@/shared/lib/format-date";
 import { useIsFetching, useQueryClient } from "@tanstack/react-query";
 import { createColumnHelper } from "@tanstack/react-table";
 import { useMemo } from "react";
@@ -69,15 +72,10 @@ function buildColumns(accountNameById: Map<string, string>) {
   return columnHelper.columns([
     columnHelper.display({
       id: "actions",
-      header: () => (
-        <span className="flex items-center justify-center">
-          <Icon
-            icon="mynaui:mouse-pointer-click-solid"
-            className="size-4 text-[var(--muted-foreground)]"
-            aria-hidden
-          />
-          <span className="sr-only">Actions</span>
-        </span>
+      header: ({ table }) => (
+        <TransactionBulkActions
+          transactions={table.getRowModel().rows.map((row) => row.original)}
+        />
       ),
       cell: ({ row }) => (
         <div className="flex items-center justify-center">
@@ -94,10 +92,10 @@ function buildColumns(accountNameById: Map<string, string>) {
       columns: columnHelper.columns([
         columnHelper.accessor("date", {
           header: "Posted",
-          meta: bandMeta("9.5rem", "read", "Date the bank posted this line."),
+          meta: bandMeta("14rem", "read", "Date the bank posted this line."),
           cell: ({ getValue }) => (
-            <span className="whitespace-nowrap font-mono text-xs tabular-nums">
-              {formatDisplayDate(getValue())}
+            <span className="text-base leading-snug md:text-sm">
+              {formatLongDisplayDate(getValue())}
             </span>
           ),
           filterFn: "dateWindow",
@@ -109,6 +107,7 @@ function buildColumns(accountNameById: Map<string, string>) {
             ...bandMeta("28rem", "read", "Statement line text from the PDF."),
             grow: true,
             wrap: true,
+            cardTitle: true,
           },
           cell: ({ getValue }) => (
             <span className="block text-sm font-medium leading-snug wrap-break-word">
@@ -147,7 +146,10 @@ function buildColumns(accountNameById: Map<string, string>) {
                 amount={amount}
                 currency={row.original.isoCurrencyCode ?? "CAD"}
                 signMark={flow.signMark}
-                className={cn("leading-snug", flow.className)}
+                className={cn(
+                  "text-base leading-snug md:text-sm",
+                  flow.className,
+                )}
               />
             );
           },

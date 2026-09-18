@@ -1,20 +1,23 @@
 "use client";
 
-import { createColumnHelper } from "@tanstack/react-table";
-import { useMutation, useQuery } from "convex/react";
-import { useState, type FormEvent } from "react";
-import { api } from "@convex/_generated/api";
-import type { Id } from "@convex/_generated/dataModel";
-import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
+import { BulkActionsMenu } from "@/components/ui/bulk-actions-menu";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import type { DataTableFeatures } from "@/components/ui/data-table-features";
 import { EmptyPrompt } from "@/components/ui/empty-prompt";
-import { PageSpinner } from "@/components/ui/spinner";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import type { RowActionsMenuItem } from "@/components/ui/row-actions-menu";
+import { RowActionsMenu } from "@/components/ui/row-actions-menu";
+import { PageSpinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
+import { api } from "@convex/_generated/api";
+import type { Id } from "@convex/_generated/dataModel";
+import { createColumnHelper } from "@tanstack/react-table";
+import { useMutation, useQuery } from "convex/react";
+import { useState, type FormEvent } from "react";
+import { toast } from "sonner";
 
 type IssueStatus = "open" | "resolved" | "dismissed";
 
@@ -39,6 +42,95 @@ function sourceLabel(source: IssueRow["source"]) {
   return "Submitted";
 }
 
+function IssuesBulkActions({ issues }: { issues: IssueRow[] }) {
+  const updateStatus = useMutation(api.issues.updateStatus);
+  const remove = useMutation(api.issues.remove);
+  const [busy, setBusy] = useState(false);
+
+  async function setStatusBulk(status: IssueStatus) {
+    const targets = issues.filter((issue) => issue.status !== status);
+    if (targets.length === 0) return;
+    setBusy(true);
+    try {
+      for (const issue of targets) {
+        await updateStatus({ issueId: issue.id, status });
+      }
+      toast.success(
+        status === "open"
+          ? `Reopened ${targets.length}`
+          : status === "resolved"
+            ? `Resolved ${targets.length}`
+            : `Dismissed ${targets.length}`,
+      );
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Update failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function deleteBulk() {
+    if (issues.length === 0) return;
+    const ok = window.confirm(
+      `Delete ${issues.length} visible issue${issues.length === 1 ? "" : "s"}?`,
+    );
+    if (!ok) return;
+    setBusy(true);
+    try {
+      for (const issue of issues) {
+        await remove({ issueId: issue.id });
+      }
+      toast.success(
+        issues.length === 1
+          ? "Issue removed"
+          : `${issues.length} issues removed`,
+      );
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Delete failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const actions: RowActionsMenuItem[] = [
+    issues.some((issue) => issue.status !== "open")
+      ? {
+          label: "Reopen visible",
+          onSelect: () => void setStatusBulk("open"),
+          disabled: busy,
+        }
+      : null,
+    issues.some((issue) => issue.status !== "resolved")
+      ? {
+          label: "Resolve visible",
+          onSelect: () => void setStatusBulk("resolved"),
+          disabled: busy,
+        }
+      : null,
+    issues.some((issue) => issue.status !== "dismissed")
+      ? {
+          label: "Dismiss visible",
+          onSelect: () => void setStatusBulk("dismissed"),
+          disabled: busy,
+        }
+      : null,
+    {
+      label: "Delete visible",
+      onSelect: () => void deleteBulk(),
+      disabled: busy || issues.length === 0,
+      variant: "destructive",
+    },
+  ].filter((action) => action !== null);
+
+  return (
+    <BulkActionsMenu
+      label="visible issues"
+      actions={actions}
+      disabled={busy || issues.length === 0}
+    />
+  );
+}
+
 function StatusActions({ issue }: { issue: IssueRow }) {
   const updateStatus = useMutation(api.issues.updateStatus);
   const remove = useMutation(api.issues.remove);
@@ -60,46 +152,26 @@ function StatusActions({ issue }: { issue: IssueRow }) {
     }
   }
 
+  const actions = [
+    issue.status !== "open"
+      ? { label: "Reopen", onSelect: () => void setStatus("open") }
+      : null,
+    issue.status !== "resolved"
+      ? { label: "Resolve", onSelect: () => void setStatus("resolved") }
+      : null,
+    issue.status !== "dismissed"
+      ? { label: "Dismiss", onSelect: () => void setStatus("dismissed") }
+      : null,
+    {
+      label: "Delete",
+      onSelect: () => void handleDelete(),
+      variant: "destructive" as const,
+    },
+  ].filter((action) => action !== null);
+
   return (
-    <div className="flex flex-wrap gap-1">
-      {issue.status !== "open" ? (
-        <Button
-          type="button"
-          size="xs"
-          variant="outline"
-          onClick={() => void setStatus("open")}
-        >
-          Reopen
-        </Button>
-      ) : null}
-      {issue.status !== "resolved" ? (
-        <Button
-          type="button"
-          size="xs"
-          variant="secondary"
-          onClick={() => void setStatus("resolved")}
-        >
-          Resolve
-        </Button>
-      ) : null}
-      {issue.status !== "dismissed" ? (
-        <Button
-          type="button"
-          size="xs"
-          variant="ghost"
-          onClick={() => void setStatus("dismissed")}
-        >
-          Dismiss
-        </Button>
-      ) : null}
-      <Button
-        type="button"
-        size="xs"
-        variant="destructive"
-        onClick={() => void handleDelete()}
-      >
-        Delete
-      </Button>
+    <div className="flex items-center justify-center">
+      <RowActionsMenu label={issue.message} size="sm" actions={actions} />
     </div>
   );
 }
@@ -173,9 +245,15 @@ const columns = columnHelper.columns([
   }),
   columnHelper.display({
     id: "actions",
-    header: "",
+    header: ({ table }) => (
+      <IssuesBulkActions
+        issues={table.getRowModel().rows.map((row) => row.original)}
+      />
+    ),
     cell: ({ row }) => <StatusActions issue={row.original} />,
-    meta: { label: "Actions", width: "10rem", nowrap: true },
+    enableSorting: false,
+    enableHiding: false,
+    meta: { label: "Actions", width: "2.5rem" },
   }),
 ]);
 
@@ -291,6 +369,7 @@ export function IssuesManager() {
             data={issues as IssueRow[]}
             searchKey="message"
             searchPlaceholder="Filter issues…"
+            csvFilename="issues.csv"
           />
         )}
       </div>

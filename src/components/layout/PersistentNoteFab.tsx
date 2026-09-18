@@ -14,6 +14,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { PiggyIcon } from "@/components/ui/piggy-icon";
+import { toastCompact } from "@/components/ui/sonner";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Tooltip,
@@ -347,9 +348,9 @@ function StoreSheetPanel({
           type="button"
           variant="ghost"
           size="xs"
-          className="text-[var(--muted-foreground)]"
+          className="hidden text-[var(--muted-foreground)] md:inline-flex"
           disabled={rows.length === 0}
-          onClick={() =>
+          onClick={() => {
             downloadCsv(
               storeSheetCsvFilename(activeTab?.name ?? "store-sheet"),
               toCsv(
@@ -362,8 +363,13 @@ function StoreSheetPanel({
                   row.currency,
                 ]),
               ),
-            )
-          }
+            );
+            toastCompact.success(
+              rows.length === 1
+                ? "Exported 1 row"
+                : `Exported ${rows.length} rows`,
+            );
+          }}
         >
           Export CSV
         </Button>

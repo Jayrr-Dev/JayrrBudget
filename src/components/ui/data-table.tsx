@@ -13,8 +13,6 @@ import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
@@ -27,7 +25,8 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { PiggyPageStatus } from "@/domains/ledger-ai/ui/PiggyPageStatus";
+import { toastCompact } from "@/components/ui/sonner";
+import { Spinner } from "@/components/ui/spinner";
 import {
   Table,
   TableBody,
@@ -42,9 +41,9 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { PiggyPageStatus } from "@/domains/ledger-ai/ui/PiggyPageStatus";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { downloadCsv, toCsv } from "@/shared/lib/csv";
-import { cn } from "cn";
 import {
   useTable,
   type ColumnDef,
@@ -54,12 +53,12 @@ import {
   type RowData,
   type SortingState,
 } from "@tanstack/react-table";
+import { cn } from "cn";
 import {
   ArrowDownIcon,
   ArrowUpDownIcon,
   ArrowUpIcon,
   CalendarIcon,
-  EllipsisIcon,
   ListFilterIcon,
 } from "lucide-react";
 import { useMemo, useState, type ReactNode } from "react";
@@ -72,6 +71,10 @@ type ColumnMeta = {
   band?: "read" | "invent";
   label?: string;
   description?: string;
+  /** Mobile card: render this cell as the card title (no label row). */
+  cardTitle?: boolean;
+  /** Mobile card: render this cell inline after the title, not as a row. */
+  cardTitleAside?: boolean;
   nowrap?: boolean;
   /** Allow wrapping. Default is a single clipped line. */
   wrap?: boolean;
@@ -86,6 +89,8 @@ type ColumnMeta = {
   autoWidthPadCh?: number;
   autoWidthMinCh?: number;
   autoWidthMaxCh?: number;
+  /** Stay full strength when `rowMuted` dims the rest of the row. */
+  keepOpaque?: boolean;
 };
 
 type NestedColumnDef<TData extends RowData> = ColumnDef<
@@ -254,7 +259,7 @@ interface DataTableProps<TData extends RowData> {
   /** Column header filter menus (not toolbar dropdowns). */
   filters?: DataTableFilterConfig[];
   /**
-   * When set, toolbar shows Month + date-range controls after Columns,
+   * When set, toolbar shows Month + date-range controls after the search row,
    * filtering this column via the `dateWindow` filterFn.
    */
   dateColumnId?: string;
@@ -267,11 +272,15 @@ interface DataTableProps<TData extends RowData> {
   csvFilename?: string;
   /** Stretch the table to the card width instead of hugging column mins. */
   fillWidth?: boolean;
+  /** Excel-style cell grid. Default is row rules only. */
+  variant?: "default" | "lined";
   /** When set, toolbar shows Refresh to reload table data. */
   onRefresh?: () => void | Promise<void>;
   isRefreshing?: boolean;
   isLoading?: boolean;
   loadingSlot?: ReactNode;
+  /** Dim row text (cells without `meta.keepOpaque`). */
+  rowMuted?: (row: TData) => boolean;
 }
 
 function csvColumnLabel(column: {
@@ -311,11 +320,11 @@ function TwoPanelMenu({
   }
 
   return (
-    <div className="flex h-[min(22rem,var(--available-height))] w-[min(20rem,calc(100vw-2rem))]">
+    <div className="flex max-h-[min(14rem,var(--available-height))] w-[min(20rem,calc(100vw-2rem))]">
       <div
         role="tablist"
         aria-label="Menu sections"
-        className="flex w-[7.5rem] shrink-0 flex-col gap-0.5 overflow-y-auto border-r border-border p-1"
+        className="flex w-30 shrink-0 flex-col gap-0.5 overflow-y-auto border-r border-border p-1"
       >
         {panels.map((panel) => {
           const selected = panel.id === active.id;
@@ -402,10 +411,12 @@ export function DataTable<TData extends RowData>({
   enableColumnToggle = false,
   csvFilename,
   fillWidth = true,
+  variant = "default",
   onRefresh,
   isRefreshing = false,
   isLoading = false,
   loadingSlot,
+  rowMuted,
 }: DataTableProps<TData>) {
   const [sorting, setSorting] = useState<SortingState>(initialSorting);
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
@@ -544,6 +555,9 @@ export function DataTable<TData extends RowData>({
         exportColumns.map((column) => row.getValue(column.id)),
       );
     downloadCsv(csvFilename, toCsv(headers, rows));
+    toastCompact.success(
+      rows.length === 1 ? "Exported 1 row" : `Exported ${rows.length} rows`,
+    );
   };
 
   const filtersByColumnId = useMemo(() => {
@@ -668,29 +682,6 @@ export function DataTable<TData extends RowData>({
     return sections;
   }, [hideableColumns]);
 
-  const columnSectionLabel = (
-    section: (typeof columnMenuSections)[number],
-  ) => {
-    if (section.label) return section.label;
-    const first = section.columns[0];
-    return first ? menuColumnLabel(first) : section.id;
-  };
-
-  const columnSectionCheckboxes = (
-    section: (typeof columnMenuSections)[number],
-  ) =>
-    section.columns.map((column) => (
-      <DropdownMenuCheckboxItem
-        key={column.id}
-        checked={column.getIsVisible()}
-        onCheckedChange={(checked) =>
-          handleColumnVisibilityToggle(column.id, Boolean(checked))
-        }
-      >
-        {menuColumnLabel(column)}
-      </DropdownMenuCheckboxItem>
-    ));
-
   const firstLeafColumnId = table.getVisibleLeafColumns()[0]?.id;
 
   /**
@@ -729,6 +720,27 @@ export function DataTable<TData extends RowData>({
     table.getColumn(columnId)?.toggleVisibility(false);
   };
 
+  const columnSectionLabel = (section: (typeof columnMenuSections)[number]) => {
+    if (section.label) return section.label;
+    const first = section.columns[0];
+    return first ? menuColumnLabel(first) : section.id;
+  };
+
+  const columnSectionCheckboxes = (
+    section: (typeof columnMenuSections)[number],
+  ) =>
+    section.columns.map((column) => (
+      <DropdownMenuCheckboxItem
+        key={column.id}
+        checked={column.getIsVisible()}
+        onCheckedChange={(checked) =>
+          handleColumnVisibilityToggle(column.id, Boolean(checked))
+        }
+      >
+        {menuColumnLabel(column)}
+      </DropdownMenuCheckboxItem>
+    ));
+
   const groupFilterSections = columnMenuSections.filter((section) =>
     section.columns.some((column) => Boolean(column.parent)),
   );
@@ -744,270 +756,210 @@ export function DataTable<TData extends RowData>({
     setColumnVisibility(next);
   };
 
+  const columnsToggle = enableColumnToggle ? (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        aria-label="Toggle columns"
+        render={<Button type="button" variant="outline" />}
+      >
+        Columns
+      </DropdownMenuTrigger>
+      <DropdownMenuContent
+        align="start"
+        className="w-auto min-w-0 overflow-hidden p-0"
+      >
+        <TwoPanelMenu
+          panels={columnMenuSections.map((section) => ({
+            id: section.id,
+            label: columnSectionLabel(section),
+            content: columnSectionCheckboxes(section),
+          }))}
+        />
+      </DropdownMenuContent>
+    </DropdownMenu>
+  ) : null;
+
   return (
     <div className="space-y-3 sm:space-y-4">
       {showToolbar ? (
         <div className="flex flex-col gap-2">
-          {showSearch ? (
-            <Input
-              placeholder={searchPlaceholder}
-              value={useGlobalSearch ? globalFilter : legacyFilterValue}
-              onChange={(event) => {
-                const value = event.target.value;
-                if (useGlobalSearch) {
-                  setGlobalFilter(value);
-                } else if (searchKey) {
-                  setLegacyFilterValue(value);
-                  table.getColumn(searchKey)?.setFilterValue(value);
-                }
-                setPagination((prev) => ({ ...prev, pageIndex: 0 }));
-              }}
-              className="w-full md:max-w-sm"
-              aria-label={searchPlaceholder}
-            />
-          ) : null}
-          <div className="flex flex-wrap items-center gap-2">
-            {dateColumnId ? (
-              <>
-                <DropdownMenu>
-                  <DropdownMenuTrigger
-                    aria-label="Filter by month"
-                    render={<Button type="button" variant="outline" />}
-                  >
-                    {selectedMonth ? formatMonthLabel(selectedMonth) : "Month"}
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent
-                    align="start"
-                    className="w-auto min-w-40"
-                  >
-                    <DropdownMenuRadioGroup
-                      value={selectedMonth ?? "all"}
-                      onValueChange={(value) => {
-                        patchDateWindow({
-                          months: value === "all" ? undefined : [value],
-                        });
-                      }}
-                    >
-                      <DropdownMenuLabel>Posted month</DropdownMenuLabel>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuRadioItem value="all">
-                        All months
-                      </DropdownMenuRadioItem>
-                      {monthOptions.map((month) => (
-                        <DropdownMenuRadioItem key={month} value={month}>
-                          {formatMonthLabel(month)}
-                        </DropdownMenuRadioItem>
-                      ))}
-                    </DropdownMenuRadioGroup>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      aria-label="Filter by date range"
-                    >
-                      <CalendarIcon
-                        data-icon="inline-start"
-                        className="opacity-70"
-                      />
-                      <span className="max-w-36 overflow-hidden text-ellipsis whitespace-nowrap sm:max-w-none sm:overflow-visible">
-                        {formatRangeLabel(dateWindow.from, dateWindow.to)}
-                      </span>
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent align="start" className="w-auto gap-4 p-3">
-                    <Calendar
-                      mode="range"
-                      numberOfMonths={isMobile ? 1 : 2}
-                      selected={dateRangeSelected}
-                      onSelect={(range) => {
-                        patchDateWindow({
-                          from: range?.from ? formatYmd(range.from) : undefined,
-                          to: range?.to ? formatYmd(range.to) : undefined,
-                        });
-                      }}
-                      defaultMonth={
-                        dateRangeSelected?.from ??
-                        (monthOptions[0]
-                          ? parseYmd(`${monthOptions[0]}-01`)
-                          : undefined)
-                      }
-                    />
-                    {dateWindow.from || dateWindow.to ? (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="self-start"
-                        onClick={() =>
-                          patchDateWindow({ from: undefined, to: undefined })
-                        }
-                      >
-                        Clear range
-                      </Button>
-                    ) : null}
-                  </PopoverContent>
-                </Popover>
-              </>
-            ) : null}
-            {activeFilterCount > 0 ? (
-              <Button type="button" variant="outline" onClick={clearFilters}>
-                Clear filters
-              </Button>
-            ) : null}
-
-            <div className="hidden flex-wrap items-center gap-2 md:flex">
-              {toolbar}
+          {enableColumnToggle || showSearch || csvFilename || onRefresh ? (
+            <div className="flex flex-wrap items-center gap-2">
+              {showSearch ? (
+                <Input
+                  placeholder={searchPlaceholder}
+                  value={useGlobalSearch ? globalFilter : legacyFilterValue}
+                  onChange={(event) => {
+                    const value = event.target.value;
+                    if (useGlobalSearch) {
+                      setGlobalFilter(value);
+                    } else if (searchKey) {
+                      setLegacyFilterValue(value);
+                      table.getColumn(searchKey)?.setFilterValue(value);
+                    }
+                    setPagination((prev) => ({ ...prev, pageIndex: 0 }));
+                  }}
+                  className="min-w-48 flex-1 basis-48 sm:max-w-sm"
+                  aria-label={searchPlaceholder}
+                />
+              ) : null}
               {onRefresh ? (
                 <Button
                   type="button"
                   variant="outline"
                   onClick={() => {
-                    void onRefresh();
+                    void (async () => {
+                      try {
+                        await onRefresh();
+                        toastCompact.success("Refreshed");
+                      } catch (error) {
+                        toastCompact.error(
+                          error instanceof Error
+                            ? error.message
+                            : "Refresh failed",
+                        );
+                      }
+                    })();
                   }}
                   disabled={isRefreshing}
                 >
-                  {isRefreshing ? "Refreshing…" : "Refresh"}
+                  {isRefreshing ? (
+                    <>
+                      <Spinner data-icon="inline-start" className="size-3.5" />
+                      Refreshing…
+                    </>
+                  ) : (
+                    "Refresh"
+                  )}
                 </Button>
               ) : null}
               {csvFilename ? (
                 <Button
                   type="button"
                   variant="outline"
+                  className="hidden md:inline-flex"
                   onClick={exportFilteredCsv}
                   disabled={filteredCount === 0}
                 >
                   Export CSV
                 </Button>
               ) : null}
-              {enableColumnToggle ? (
-                <DropdownMenu>
-                  <DropdownMenuTrigger
-                    aria-label="Toggle columns"
-                    render={<Button type="button" variant="outline" />}
-                  >
-                    Columns
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-auto min-w-44">
-                    {columnMenuSections.map((section, index) => {
-                      const prev = columnMenuSections[index - 1];
-                      const showSeparator =
-                        index > 0 &&
-                        (section.columns.length > 1 ||
-                          (prev?.columns.length ?? 0) > 1);
-                      return (
-                        <DropdownMenuGroup key={section.id}>
-                          {showSeparator ? <DropdownMenuSeparator /> : null}
-                          {section.label ? (
-                            <DropdownMenuLabel>
-                              {section.label}
-                            </DropdownMenuLabel>
-                          ) : null}
-                          {section.columns.map((column) => (
-                            <DropdownMenuCheckboxItem
-                              key={column.id}
-                              checked={column.getIsVisible()}
-                              onCheckedChange={(checked) =>
-                                handleColumnVisibilityToggle(
-                                  column.id,
-                                  Boolean(checked),
-                                )
-                              }
-                            >
-                              {menuColumnLabel(column)}
-                            </DropdownMenuCheckboxItem>
-                          ))}
-                        </DropdownMenuGroup>
-                      );
-                    })}
-                  </DropdownMenuContent>
-                </DropdownMenu>
+              {columnsToggle}
+              {!dateColumnId && !toolbar && activeFilterCount === 0 ? (
+                <p className="w-full text-xs text-foreground-muted sm:ml-auto sm:w-auto sm:text-sm">
+                  Showing {filteredCount} of {totalCount}
+                  {activeFilterCount > 0 ? " (filtered)" : ""}
+                </p>
               ) : null}
             </div>
-
-            {isMobile &&
-            (toolbar || onRefresh || csvFilename || enableColumnToggle) ? (
-              <DropdownMenu>
-                <DropdownMenuTrigger
-                  aria-label="More table actions"
-                  render={
-                    <Button type="button" variant="outline" size="icon" />
-                  }
-                >
-                  <EllipsisIcon className="size-4" />
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-auto min-w-44">
-                  {toolbar ? (
-                    <div className="border-b border-border p-1 [&_button]:w-full">
-                      {toolbar}
-                    </div>
-                  ) : null}
-                  {onRefresh ? (
-                    <DropdownMenuItem
-                      disabled={isRefreshing}
-                      onClick={() => {
-                        void onRefresh();
-                      }}
+          ) : null}
+          {dateColumnId || toolbar || activeFilterCount > 0 ? (
+            <div className="flex flex-wrap items-center gap-2">
+              {dateColumnId ? (
+                <>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger
+                      aria-label="Filter by month"
+                      render={<Button type="button" variant="outline" />}
                     >
-                      {isRefreshing ? "Refreshing…" : "Refresh"}
-                    </DropdownMenuItem>
-                  ) : null}
-                  {csvFilename ? (
-                    <DropdownMenuItem
-                      disabled={filteredCount === 0}
-                      onClick={exportFilteredCsv}
+                      {selectedMonth
+                        ? formatMonthLabel(selectedMonth)
+                        : "Month"}
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent
+                      align="start"
+                      className="w-auto min-w-40"
                     >
-                      Export CSV
-                    </DropdownMenuItem>
-                  ) : null}
-                  {enableColumnToggle
-                    ? columnMenuSections.map((section, index) => {
-                        const prev = columnMenuSections[index - 1];
-                        const showSeparator =
-                          index > 0 &&
-                          (section.columns.length > 1 ||
-                            (prev?.columns.length ?? 0) > 1);
-                        return (
-                          <DropdownMenuGroup key={section.id}>
-                            {showSeparator || index === 0 ? (
-                              <DropdownMenuSeparator />
-                            ) : null}
-                            {section.label ? (
-                              <DropdownMenuLabel>
-                                {section.label}
-                              </DropdownMenuLabel>
-                            ) : index === 0 ? (
-                              <DropdownMenuLabel>Columns</DropdownMenuLabel>
-                            ) : null}
-                            {section.columns.map((column) => (
-                              <DropdownMenuCheckboxItem
-                                key={column.id}
-                                checked={column.getIsVisible()}
-                                onCheckedChange={(checked) =>
-                                  handleColumnVisibilityToggle(
-                                    column.id,
-                                    Boolean(checked),
-                                  )
-                                }
-                              >
-                                {menuColumnLabel(column)}
-                              </DropdownMenuCheckboxItem>
-                            ))}
-                          </DropdownMenuGroup>
-                        );
-                      })
-                    : null}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            ) : null}
+                      <DropdownMenuRadioGroup
+                        value={selectedMonth ?? "all"}
+                        onValueChange={(value) => {
+                          patchDateWindow({
+                            months: value === "all" ? undefined : [value],
+                          });
+                        }}
+                      >
+                        <DropdownMenuLabel>Posted month</DropdownMenuLabel>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuRadioItem value="all">
+                          All months
+                        </DropdownMenuRadioItem>
+                        {monthOptions.map((month) => (
+                          <DropdownMenuRadioItem key={month} value={month}>
+                            {formatMonthLabel(month)}
+                          </DropdownMenuRadioItem>
+                        ))}
+                      </DropdownMenuRadioGroup>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        aria-label="Filter by date range"
+                      >
+                        <CalendarIcon
+                          data-icon="inline-start"
+                          className="opacity-70"
+                        />
+                        <span className="max-w-36 overflow-hidden text-ellipsis whitespace-nowrap sm:max-w-none sm:overflow-visible">
+                          {formatRangeLabel(dateWindow.from, dateWindow.to)}
+                        </span>
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent align="start" className="w-auto gap-4 p-3">
+                      <Calendar
+                        mode="range"
+                        numberOfMonths={isMobile ? 1 : 2}
+                        selected={dateRangeSelected}
+                        onSelect={(range) => {
+                          patchDateWindow({
+                            from: range?.from
+                              ? formatYmd(range.from)
+                              : undefined,
+                            to: range?.to ? formatYmd(range.to) : undefined,
+                          });
+                        }}
+                        defaultMonth={
+                          dateRangeSelected?.from ??
+                          (monthOptions[0]
+                            ? parseYmd(`${monthOptions[0]}-01`)
+                            : undefined)
+                        }
+                      />
+                      {dateWindow.from || dateWindow.to ? (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="self-start"
+                          onClick={() =>
+                            patchDateWindow({
+                              from: undefined,
+                              to: undefined,
+                            })
+                          }
+                        >
+                          Clear range
+                        </Button>
+                      ) : null}
+                    </PopoverContent>
+                  </Popover>
+                </>
+              ) : null}
+              {toolbar}
+              {activeFilterCount > 0 ? (
+                <Button type="button" variant="outline" onClick={clearFilters}>
+                  Clear filters
+                </Button>
+              ) : null}
 
-            <p className="w-full text-xs text-foreground-muted sm:ml-auto sm:w-auto sm:text-sm">
-              Showing {filteredCount} of {totalCount}
-              {activeFilterCount > 0 ? " (filtered)" : ""}
-            </p>
-          </div>
+              <p className="w-full text-xs text-foreground-muted sm:ml-auto sm:w-auto sm:text-sm">
+                Showing {filteredCount} of {totalCount}
+                {activeFilterCount > 0 ? " (filtered)" : ""}
+              </p>
+            </div>
+          ) : null}
         </div>
       ) : null}
       {groupFilterSections.length > 0 ? (
@@ -1040,6 +992,7 @@ export function DataTable<TData extends RowData>({
           {table.getRowModel().rows?.length ? (
             <ul className="space-y-4">
               {table.getRowModel().rows.map((row) => {
+                const muted = rowMuted?.(row.original) === true;
                 const visibleCells = row.getVisibleCells();
                 const actionCells = visibleCells.filter(
                   (cell) => cell.column.id === "actions",
@@ -1047,32 +1000,97 @@ export function DataTable<TData extends RowData>({
                 const dataCells = visibleCells.filter(
                   (cell) => cell.column.id !== "actions",
                 );
+                const cardMeta = (cell: (typeof dataCells)[number]) =>
+                  cell.column.columnDef.meta as ColumnMeta | undefined;
+                const titleCell = dataCells.find((cell) =>
+                  Boolean(cardMeta(cell)?.cardTitle),
+                );
+                const asideCells = titleCell
+                  ? dataCells.filter((cell) =>
+                      Boolean(cardMeta(cell)?.cardTitleAside),
+                    )
+                  : [];
+                const detailCells = dataCells.filter(
+                  (cell) =>
+                    cell.id !== titleCell?.id &&
+                    !asideCells.some((aside) => aside.id === cell.id),
+                );
+                const showHeader = Boolean(titleCell) || actionCells.length > 0;
+                const titleDim = Boolean(
+                  titleCell && muted && !cardMeta(titleCell)?.keepOpaque,
+                );
+                const titleClass = `min-w-0 text-base font-extrabold leading-snug wrap-break-word [&_*]:text-inherit [&_*]:font-inherit [&_*]:whitespace-normal ${
+                  titleDim ? "opacity-40" : ""
+                }`;
                 return (
                   <li key={row.id}>
                     <article
                       data-state={row.getIsSelected() ? "selected" : undefined}
                       className="rounded-xl border border-[var(--border)] bg-surface-elevated p-3"
                     >
-                      {actionCells.length > 0 ? (
-                        <div className="mb-2 flex justify-end gap-1">
-                          {actionCells.map((cell) => (
-                            <div key={cell.id}>
+                      {showHeader && asideCells.length > 0 && titleCell ? (
+                        <div className="mb-2 flex min-h-11 items-center gap-1">
+                          <h3 className={`${titleClass} flex-1 text-left`}>
+                            <table.FlexRender cell={titleCell} />
+                          </h3>
+                          {asideCells.map((cell) => (
+                            <div key={cell.id} className="shrink-0">
                               <table.FlexRender cell={cell} />
                             </div>
                           ))}
+                          {actionCells.length > 0 ? (
+                            <div className="ml-auto flex shrink-0 justify-end gap-1">
+                              {actionCells.map((cell) => (
+                                <div key={cell.id}>
+                                  <table.FlexRender cell={cell} />
+                                </div>
+                              ))}
+                            </div>
+                          ) : null}
+                        </div>
+                      ) : showHeader ? (
+                        <div className="relative mb-2 flex min-h-11 items-center justify-center">
+                          {titleCell ? (
+                            <h3 className={`${titleClass} px-12 text-center`}>
+                              <table.FlexRender cell={titleCell} />
+                            </h3>
+                          ) : null}
+                          {actionCells.length > 0 ? (
+                            <div className="absolute top-1/2 right-0 flex -translate-y-1/2 shrink-0 justify-end gap-1">
+                              {actionCells.map((cell) => (
+                                <div key={cell.id}>
+                                  <table.FlexRender cell={cell} />
+                                </div>
+                              ))}
+                            </div>
+                          ) : null}
                         </div>
                       ) : null}
-                      <dl className="grid grid-cols-[minmax(0,7.5rem)_minmax(0,1fr)] gap-x-3 gap-y-2">
-                        {dataCells.map((cell) => (
-                          <div key={cell.id} className="contents">
-                            <dt className="pt-0.5 text-xs font-medium text-foreground-muted">
-                              {csvColumnLabel(cell.column) ?? cell.column.id}
-                            </dt>
-                            <dd className="min-w-0 text-sm wrap-break-word [&_*]:whitespace-normal">
-                              <table.FlexRender cell={cell} />
-                            </dd>
-                          </div>
-                        ))}
+                      <dl className="grid grid-cols-[minmax(0,7.5rem)_minmax(0,1fr)] items-center gap-x-3 gap-y-2">
+                        {detailCells.map((cell) => {
+                          const cellMeta = cell.column.columnDef.meta as
+                            | ColumnMeta
+                            | undefined;
+                          const dim = muted && !cellMeta?.keepOpaque;
+                          return (
+                            <div key={cell.id} className="contents">
+                              <dt
+                                className={`text-xs font-medium text-foreground-muted ${
+                                  dim ? "opacity-40" : ""
+                                }`}
+                              >
+                                {csvColumnLabel(cell.column) ?? cell.column.id}
+                              </dt>
+                              <dd
+                                className={`min-w-0 text-sm wrap-break-word [&_*]:whitespace-normal [&_[data-slot=money-grid]]:ml-0 [&_[data-slot=money-grid]]:w-auto [&_[data-slot=money-grid]]:grid-cols-[max-content_max-content_max-content] [&_[data-slot=money-grid]>:last-child]:min-w-0 [&_[data-slot=money-grid]>:last-child]:text-left [&_[data-slot=input-group]]:w-full [&_[data-slot=input-group-control]]:px-0 ${
+                                  dim ? "opacity-40" : ""
+                                }`}
+                              >
+                                <table.FlexRender cell={cell} />
+                              </dd>
+                            </div>
+                          );
+                        })}
                       </dl>
                     </article>
                   </li>
@@ -1087,6 +1105,7 @@ export function DataTable<TData extends RowData>({
         </div>
         <div className="hidden overflow-hidden rounded-xl border border-[var(--border)] bg-surface-elevated md:block">
           <Table
+            variant={variant}
             className={
               fillWidth
                 ? "w-full min-w-max table-fixed"
@@ -1316,6 +1335,9 @@ export function DataTable<TData extends RowData>({
                       const inventBand = cellMeta?.band === "invent";
                       const isActionsCol = cell.column.id === "actions";
                       const wrap = cellMeta?.wrap === true;
+                      const dim =
+                        rowMuted?.(row.original) === true &&
+                        !cellMeta?.keepOpaque;
                       return (
                         <TableCell
                           key={cell.id}
@@ -1334,6 +1356,7 @@ export function DataTable<TData extends RowData>({
                             inventBand
                               ? "border-l border-[var(--border)] bg-[var(--muted)]/20"
                               : "",
+                            dim ? "opacity-40" : "",
                           ]
                             .filter(Boolean)
                             .join(" ")}

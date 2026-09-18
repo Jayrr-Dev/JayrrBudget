@@ -329,7 +329,7 @@ export function AccountPastTransactions({
       <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-surface-elevated">
         <Table className="min-w-[40rem] table-fixed">
           <colgroup>
-            <col className="w-[10rem]" />
+            <col className="w-[11.5rem]" />
             <col />
             <col className="w-[9.75rem]" />
             <col className="w-[9.75rem]" />
@@ -341,7 +341,6 @@ export function AccountPastTransactions({
                 column="date"
                 sortKey={sortKey}
                 sortDir={sortDir}
-                sticky
                 onSort={handleSort}
               />
               <SortHeader
@@ -382,10 +381,7 @@ export function AccountPastTransactions({
             ) : (
               rows.map((txn) => (
                 <TableRow key={txn.transactionId}>
-                  <TableCell
-                    data-sticky-col
-                    className="px-3 py-2 font-mono text-xs tabular-nums"
-                  >
+                  <TableCell className="px-3 py-2 font-mono text-xs tabular-nums">
                     {formatDisplayDate(txn.date)}
                   </TableCell>
                   <TableCell className="min-w-0 px-3 py-2">
