@@ -1,6 +1,5 @@
 "use client";
 
-import { cn } from "@/lib/utils";
 import { useEffect, useRef, useState } from "react";
 import styles from "./PiggyGreeting.module.css";
 
@@ -61,7 +60,8 @@ function nextHoldMs() {
 }
 
 function pickGreeting(current: string) {
-  let next = GREETINGS[Math.floor(Math.random() * GREETINGS.length)] ?? "Hello!";
+  let next =
+    GREETINGS[Math.floor(Math.random() * GREETINGS.length)] ?? "Hello!";
   if (next === current) {
     next = GREETINGS[Math.floor(Math.random() * GREETINGS.length)] ?? "Hello!";
   }
@@ -107,7 +107,9 @@ function renderLine(shown: string, message: string | null) {
     // Typing the stem, or cycling dots after it.
     if (stem.startsWith(shown) || shown.startsWith(stem)) {
       const text = shown.startsWith(stem) ? stem : shown;
-      const count = shown.startsWith(stem) ? Math.min(3, shown.length - stem.length) : 0;
+      const count = shown.startsWith(stem)
+        ? Math.min(3, shown.length - stem.length)
+        : 0;
       return (
         <>
           {renderMarks(text)}
@@ -156,7 +158,8 @@ export function PiggyGreeting({
     if (scripted && cyclesEllipsis && current.startsWith(stem)) {
       mode = "ellipsis";
       const trailing = current.slice(stem.length);
-      ellipsisCount = trailing.length >= 1 && trailing.length <= 3 ? trailing.length : 1;
+      ellipsisCount =
+        trailing.length >= 1 && trailing.length <= 3 ? trailing.length : 1;
     } else if (scripted && !cyclesEllipsis && current === stem) {
       // Fully shown scripted line: nothing to do until message clears.
       wasScripted.current = true;
@@ -170,13 +173,14 @@ export function PiggyGreeting({
     }
 
     // A scripted line just ended: swap back to idle chatter quickly.
-    const firstHoldMs = wasScripted.current && !scripted ? GAP_MS : nextHoldMs();
+    const firstHoldMs =
+      wasScripted.current && !scripted ? GAP_MS : nextHoldMs();
     wasScripted.current = scripted;
 
     const tick = () => {
       const current = shownRef.current;
       if (mode === "ellipsis") {
-        setShown(`${stem}${'.'.repeat(ellipsisCount)}`);
+        setShown(`${stem}${".".repeat(ellipsisCount)}`);
         ellipsisCount = ellipsisCount >= 3 ? 1 : ellipsisCount + 1;
         timer = window.setTimeout(tick, ELLIPSIS_MS);
         return;
@@ -195,7 +199,12 @@ export function PiggyGreeting({
           timer = window.setTimeout(tick, nextHoldMs());
           return;
         }
-        setShown(target.current.slice(0, Math.min(current.length, target.current.length) + 1));
+        setShown(
+          target.current.slice(
+            0,
+            Math.min(current.length, target.current.length) + 1,
+          ),
+        );
         timer = window.setTimeout(tick, TYPE_MS);
         return;
       }
@@ -215,13 +224,17 @@ export function PiggyGreeting({
     };
 
     const startDelay =
-      mode === "hold" ? firstHoldMs : mode === "ellipsis" ? ELLIPSIS_MS : TYPE_MS;
+      mode === "hold"
+        ? firstHoldMs
+        : mode === "ellipsis"
+          ? ELLIPSIS_MS
+          : TYPE_MS;
     timer = window.setTimeout(tick, startDelay);
     return () => window.clearTimeout(timer);
   }, [paused, message]);
 
   return (
-    <span className={cn(styles.slot, "hidden md:block")} aria-hidden="true">
+    <span className={styles.slot} aria-hidden="true">
       <span className={styles.line}>
         {renderLine(shown, message)}
         <span className={styles.caret} />

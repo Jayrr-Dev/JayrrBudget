@@ -2,74 +2,37 @@
 
 import { Button } from "@/components/ui/button";
 import {
-  Popover,
-  PopoverContent,
-  PopoverDescription,
-  PopoverHeader,
-  PopoverTitle,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import {
   BudgetsManager,
   CreateBudgetDialog,
 } from "@/domains/budgets/ui/BudgetsManager";
-import { Info } from "lucide-react";
+import { TitleInfo } from "@/domains/ops/ui/TitleInfo";
 import { useState } from "react";
-
-function BudgetsTitleInfo() {
-  return (
-    <Popover>
-      <PopoverTrigger asChild>
-        <button
-          type="button"
-          className="inline-flex size-11 sm:size-6 shrink-0 items-center justify-center rounded-full text-accent hover:text-primary"
-          aria-label="About Budgets"
-        >
-          <Info className="size-3.5" />
-        </button>
-      </PopoverTrigger>
-      <PopoverContent
-        align="start"
-        side="bottom"
-        sideOffset={8}
-        className="w-80 max-w-[calc(100vw-2rem)] gap-0 p-3.5"
-      >
-        <PopoverHeader className="gap-1.5">
-          <PopoverTitle>Budgets</PopoverTitle>
-          <PopoverDescription>
-            Spend caps you set, or ones Piggy creates in chat.
-          </PopoverDescription>
-          <ul className="mt-1.5 list-disc space-y-1 pl-4 text-muted-foreground">
-            <li>Amount is the cap for the current cycle slice</li>
-            <li>Cycle is daily, weekly, bi-weekly, monthly, or yearly</li>
-            <li>Start date is when that slice starts repeating</li>
-            <li>Class lookup matches a section, category, or subcategory</li>
-            <li>Description lookup matches a merchant or description later</li>
-            <li>Warning and overage are percents of that cap</li>
-          </ul>
-        </PopoverHeader>
-      </PopoverContent>
-    </Popover>
-  );
-}
 
 export default function BudgetsPage() {
   const [createOpen, setCreateOpen] = useState(false);
 
   return (
     <div className="space-y-8">
-      <header className="flex flex-col gap-4 border-b border-[var(--border)] pb-6 sm:flex-row sm:items-center sm:justify-between">
+      <header className="flex flex-wrap items-center justify-between gap-4 border-b border-border pb-6">
         <div>
-          <h1 className="type-kicker text-[20px] flex items-center gap-2">
-            Budgets
-            <BudgetsTitleInfo />
-          </h1>
+          <TitleInfo
+            title="Budgets"
+            lead="Spend caps you set, or ones Piggy creates in chat."
+            bullets={[
+              "Amount is the cap for the current cycle slice",
+              "Cycle is daily, weekly, bi-weekly, monthly, or yearly",
+              "Start date is when that slice starts repeating",
+              "Class lookup matches a section, category, or subcategory",
+              "Description lookup matches a merchant or description later",
+              "Warning and overage are percents of that cap",
+            ]}
+          />
           <p className="sr-only">
             Spend caps you set, or ones Piggy creates in chat. Amount is the cap
             for the current cycle slice from the start date.
           </p>
         </div>
-        <Button type="button" onClick={() => setCreateOpen(true)}>
+        <Button type="button" className="shrink-0" onClick={() => setCreateOpen(true)}>
           New budget
         </Button>
       </header>

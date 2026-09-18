@@ -16,6 +16,7 @@ import {
   OverviewPanel,
   useDashboard,
 } from "@/domains/dashboard/ui/DashboardPanels";
+import { TitleInfo } from "@/domains/ops/ui/TitleInfo";
 import { statementQueryKeys } from "@/domains/statements/queries/query-keys";
 import { StatementUploadLogs } from "@/domains/statements/ui/StatementUploadLogs";
 import { useQueryClient } from "@tanstack/react-query";
@@ -29,10 +30,18 @@ export default function StatementsPage() {
 
   return (
     <div className="space-y-8">
-      <header className="flex flex-col gap-4 border-b border-[var(--border)] pb-6 sm:flex-row sm:items-end sm:justify-between">
-        <div className="space-y-2">
-          <h1 className="type-kicker text-[20px]">Statement imports</h1>
-          <p className="type-lead max-w-xl">
+      <header className="flex flex-wrap items-center justify-between gap-4 border-b border-border pb-6">
+        <div>
+          <TitleInfo
+            title="Statement imports"
+            lead="Upload bank PDFs, set upload rules, and check what got imported."
+            bullets={[
+              "Upload PDFs or photos to pull ledger rows",
+              "Upload rules apply only to your own statements",
+              "Parse logs show status, counts, and OCR text",
+            ]}
+          />
+          <p className="sr-only">
             Upload bank PDFs, set upload rules, and check what got imported.
           </p>
         </div>
@@ -72,7 +81,7 @@ export default function StatementsPage() {
             <PopoverTrigger asChild>
               <button
                 type="button"
-                className="inline-flex size-6 shrink-0 items-center justify-center rounded-full text-accent hover:text-primary"
+                className="inline-flex size-11 sm:size-6 shrink-0 items-center justify-center rounded-full text-accent hover:text-primary"
                 aria-label="About parse logs"
               >
                 <Info className="size-3.5" />
