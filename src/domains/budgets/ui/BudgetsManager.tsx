@@ -28,14 +28,6 @@ import {
 } from "@/components/ui/popover";
 import type { RowActionsMenuItem } from "@/components/ui/row-actions-menu";
 import { RowActionsMenu } from "@/components/ui/row-actions-menu";
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectLabel,
-  SelectTrigger,
-} from "@/components/ui/select";
 import { PageSpinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -56,103 +48,10 @@ import { api } from "@convex/_generated/api";
 import { createColumnHelper } from "@tanstack/react-table";
 import { useMutation, useQuery } from "convex/react";
 import { Info } from "lucide-react";
-import { useMemo, useState, type FormEvent, type ReactNode } from "react";
+import { useState, type FormEvent, type ReactNode } from "react";
 import { toast } from "sonner";
 
-type ClassCatalog = {
-  sections: { name: string }[];
-  categories: { name: string }[];
-  subcategories: { name: string }[];
-};
-
 type BudgetRow = BudgetTableRow;
-
-const NO_CLASS = "__none__";
-
-function uniqueClassNames(rows: { name: string }[]): string[] {
-  const names = new Set<string>();
-  for (const row of rows) {
-    const name = row.name.trim();
-    if (!name) continue;
-    names.add(name);
-  }
-  return [...names];
-}
-
-function classLookupGroups(
-  catalog: ClassCatalog | undefined,
-  current: string | null,
-): { label: string; names: string[] }[] {
-  const buckets: Record<"Section" | "Category" | "Subcategory", string[]> = {
-    Section: [],
-    Category: [],
-    Subcategory: [],
-  };
-  if (catalog) {
-    const used = new Set<string>();
-    const claim = (
-      rows: { name: string }[],
-      label: "Section" | "Category" | "Subcategory",
-    ) => {
-      for (const name of uniqueClassNames(rows)) {
-        const key = name.toLowerCase();
-        if (used.has(key)) continue;
-        used.add(key);
-        buckets[label].push(name);
-      }
-    };
-    // Same priority as lookupTableLabel so the group matches that column.
-    claim(catalog.subcategories, "Subcategory");
-    claim(catalog.categories, "Category");
-    claim(catalog.sections, "Section");
-    for (const label of ["Section", "Category", "Subcategory"] as const) {
-      buckets[label].sort((a, b) => a.localeCompare(b));
-    }
-  }
-
-  const groups = (["Section", "Category", "Subcategory"] as const)
-    .map((label) => ({ label, names: buckets[label] }))
-    .filter((group) => group.names.length > 0);
-
-  const currentName = current?.trim() ?? "";
-  if (!currentName) return groups;
-  const known = groups.some((group) =>
-    group.names.some(
-      (name) => name.toLowerCase() === currentName.toLowerCase(),
-    ),
-  );
-  if (known) return groups;
-  return [...groups, { label: "Custom", names: [currentName] }];
-}
-
-function selectedClassValue(
-  groups: { names: string[] }[],
-  current: string | null,
-): string {
-  const currentName = current?.trim() ?? "";
-  if (!currentName) return NO_CLASS;
-  for (const group of groups) {
-    const hit = group.names.find(
-      (name) => name.toLowerCase() === currentName.toLowerCase(),
-    );
-    if (hit) return hit;
-  }
-  return currentName;
-}
-
-function lookupTableLabel(
-  catalog: ClassCatalog | undefined,
-  classLookup: string | null,
-): string {
-  const value = classLookup?.trim().toLowerCase() ?? "";
-  if (!value || !catalog) return "—";
-  const has = (rows: { name: string }[]) =>
-    rows.some((row) => row.name.trim().toLowerCase() === value);
-  if (has(catalog.subcategories)) return "Subcategory";
-  if (has(catalog.categories)) return "Category";
-  if (has(catalog.sections)) return "Section";
-  return "Custom";
-}
 
 function FieldLabel({
   htmlFor,
@@ -227,14 +126,9 @@ function ClassLookupCell({ budget }: { budget: BudgetRow }) {
   const catalog = useQuery(api.classifications.list, {});
   const updateBudget = useMutation(api.budgets.update);
   const [busy, setBusy] = useState(false);
-  const groups = useMemo(
-    () => classLookupGroups(catalog ?? undefined, budget.classLookup),
-    [catalog, budget.classLookup],
-  );
-  const selected = selectedClassValue(groups, budget.classLookup);
 
-  async function handleChange(next: string | null) {
-    const classLookup = !next || next === NO_CLASS ? null : next;
+  async function handleChange(next: string) {
+    const classLookup = next.trim() ? next.trim() : null;
     if ((budget.classLookup ?? null) === classLookup) return;
     setBusy(true);
     try {
@@ -255,38 +149,14 @@ function ClassLookupCell({ budget }: { budget: BudgetRow }) {
   }
 
   return (
-    <Select
-      value={selected}
+    <ClassLookupCombobox
+      variant="cell"
+      catalog={catalog}
+      value={budget.classLookup ?? ""}
       disabled={busy}
-      onValueChange={(next) => void handleChange(next)}
-    >
-      <SelectTrigger
-        size="sm"
-        aria-label={`Class lookup for ${budget.name}`}
-        className="h-auto w-full min-w-0 justify-between gap-1 rounded-sm border-0 bg-transparent px-0 py-0 text-sm font-normal shadow-none ring-0 hover:bg-transparent focus-visible:border-transparent focus-visible:ring-1 focus-visible:ring-ring/40 data-[size=sm]:h-auto data-[size=sm]:rounded-sm data-[size=sm]:py-0 data-[size=sm]:text-sm dark:bg-transparent dark:hover:bg-transparent [&_svg]:size-3.5 [&_svg]:opacity-40"
-      >
-        <span className="min-w-0 truncate">
-          {selected === NO_CLASS ? "—" : selected}
-        </span>
-      </SelectTrigger>
-      <SelectContent
-        align="start"
-        alignItemWithTrigger={false}
-        className="max-h-72 min-w-44 p-1"
-      >
-        <SelectItem value={NO_CLASS}>—</SelectItem>
-        {groups.map((group) => (
-          <SelectGroup key={group.label} className="p-0">
-            <SelectLabel>{group.label}</SelectLabel>
-            {group.names.map((name) => (
-              <SelectItem key={`${group.label}-${name}`} value={name}>
-                {name}
-              </SelectItem>
-            ))}
-          </SelectGroup>
-        ))}
-      </SelectContent>
-    </Select>
+      aria-label={`Class lookup for ${budget.name}`}
+      onChange={(next) => void handleChange(next)}
+    />
   );
 }
 

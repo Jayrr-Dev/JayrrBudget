@@ -13,7 +13,7 @@ import {
   ComboboxTrigger,
 } from "@/components/ui/combobox";
 import { InputGroup, InputGroupAddon } from "@/components/ui/input-group";
-import { cn } from "cn";
+import { cn } from "@/lib/utils";
 import { useMemo, useState, type SyntheticEvent } from "react";
 
 type NamedRow = { name: string };
@@ -93,6 +93,9 @@ type ClassLookupComboboxProps = {
   catalog: ClassCatalog | undefined;
   value: string;
   disabled?: boolean;
+  /** Form: bordered trigger. Cell: transparent inline trigger for tables. */
+  variant?: "form" | "cell";
+  "aria-label"?: string;
   onChange: (next: string) => void;
 };
 
@@ -101,12 +104,16 @@ export function ClassLookupCombobox({
   catalog,
   value,
   disabled,
+  variant = "form",
+  "aria-label": ariaLabel,
   onChange,
 }: ClassLookupComboboxProps) {
   const [tab, setTab] = useState<ClassTab>(() => tabForValue(catalog, value));
 
   const tabNames = useMemo(() => namesForTab(catalog, tab), [catalog, tab]);
   const items = useMemo(() => [NONE_ITEM, ...tabNames], [tabNames]);
+  const isCell = variant === "cell";
+  const emptyLabel = isCell ? "—" : "None";
 
   return (
     <Combobox
@@ -124,11 +131,23 @@ export function ClassLookupCombobox({
         onChange(next);
       }}
     >
-      <InputGroup className="w-full">
+      <InputGroup
+        className={cn(
+          "w-full",
+          isCell &&
+            "h-auto border-0 bg-transparent shadow-none has-[[data-slot=input-group-control]:focus-visible]:border-transparent has-[[data-slot=input-group-control]:focus-visible]:ring-0",
+        )}
+      >
         <ComboboxTrigger
           id={id}
+          aria-label={ariaLabel}
           disabled={disabled || catalog === undefined}
-          className="flex h-9 min-w-0 flex-1 items-center justify-between gap-2 px-3 text-left text-sm"
+          className={cn(
+            "flex min-w-0 flex-1 items-center justify-between gap-2 text-left text-sm",
+            isCell
+              ? "h-auto gap-1 rounded-sm px-0 py-0 font-normal shadow-none ring-0 hover:bg-transparent focus-visible:ring-1 focus-visible:ring-ring/40 [&_svg]:size-3.5 [&_svg]:opacity-40"
+              : "h-9 gap-2 px-3",
+          )}
         >
           <span
             className={cn(
@@ -136,16 +155,18 @@ export function ClassLookupCombobox({
               !value && "text-muted-foreground",
             )}
           >
-            {value || "None"}
+            {value || emptyLabel}
           </span>
         </ComboboxTrigger>
-        {value ? (
+        {value && !isCell ? (
           <InputGroupAddon align="inline-end">
             <ComboboxClear disabled={disabled || catalog === undefined} />
           </InputGroupAddon>
         ) : null}
       </InputGroup>
-      <ComboboxContent className="w-(--anchor-width) min-w-56">
+      <ComboboxContent
+        className={cn(isCell ? "w-56" : "w-(--anchor-width) min-w-56")}
+      >
         <ButtonGroup className="w-full px-1 pt-1">
           {CLASS_TABS.map((item) => (
             <Button
@@ -175,7 +196,7 @@ export function ClassLookupCombobox({
         <ComboboxList>
           {(item) => (
             <ComboboxItem key={item} value={item}>
-              {item === NONE_ITEM ? "None" : item}
+              {item === NONE_ITEM ? emptyLabel : item}
             </ComboboxItem>
           )}
         </ComboboxList>

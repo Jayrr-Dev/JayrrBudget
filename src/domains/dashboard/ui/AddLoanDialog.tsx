@@ -52,6 +52,7 @@ import {
   isLoanUploadAbortError,
   uploadLoanDocument,
 } from "@/domains/loans/queries/uploadLoanDocument";
+import { TxnDescriptionLookupCombobox } from "@/domains/loans/ui/TxnDescriptionLookupCombobox";
 import { isOcrDocumentFile } from "@/domains/statements/domain/ocrDocumentTypes";
 import { OcrDocumentPickerButton } from "@/domains/statements/ui/OcrDocumentPickerButton";
 import { useOcrMode } from "@/domains/statements/ui/useOcrMode";
@@ -787,16 +788,20 @@ export function AddLoanDialog({
                 htmlFor="loan-txn-description"
                 info={{
                   title: "Transaction description lookup",
-                  body: "Phrase from the bank transaction description used to attach payments. Merchant names are ignored.",
+                  body: "Phrase from a bank line used to attach PAD payments.",
+                  bullets: [
+                    "Search and pick an existing transaction",
+                    "Edit the text afterward to a shorter phrase",
+                    "Merchant names are ignored",
+                  ],
                 }}
               >
-                <Input
+                <TxnDescriptionLookupCombobox
                   id="loan-txn-description"
                   value={form.txnDescriptionLookup}
-                  onChange={(e) =>
-                    setField("txnDescriptionLookup", e.target.value)
-                  }
-                  placeholder="e.g. CIBC CAR LOAN"
+                  transactions={privateLedger.ledger.transactions}
+                  onChange={(next) => setField("txnDescriptionLookup", next)}
+                  placeholder="Search transactions…"
                   disabled={busy}
                 />
               </Field>
