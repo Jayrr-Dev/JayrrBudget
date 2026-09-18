@@ -35,7 +35,11 @@ import { AccountCategoryIcon } from "@/domains/dashboard/ui/AccountCategoryIcon"
 import { AccountPastTransactions } from "@/domains/dashboard/ui/AccountPastTransactions";
 import { AddLoanDialog } from "@/domains/dashboard/ui/AddLoanDialog";
 import { BankAccountActions } from "@/domains/dashboard/ui/BankAccountActions";
-import { MoneyText } from "@/domains/dashboard/ui/MoneyText";
+import {
+  accountClassFor,
+  balanceTone,
+} from "@/domains/dashboard/domain/moneyTone";
+import { MoneyText, moneyToneClass } from "@/domains/dashboard/ui/MoneyText";
 import { PiggyPageStatus } from "@/domains/ledger-ai/ui/PiggyPageStatus";
 import {
   LOAN_TYPES,
@@ -50,6 +54,7 @@ import { applyVaultLoanPaymentDecision } from "@/domains/vault/application/apply
 import { vaultWriteReady } from "@/domains/vault/application/saveEncryptedLedger";
 import { DecryptingStatus } from "@/domains/vault/ui/DecryptingStatus";
 import { usePrivateLedger } from "@/domains/vault/ui/usePrivateLedger";
+import { cn } from "@/lib/utils";
 import {
   formatCompactDisplayDate,
   formatDisplayDate,
@@ -160,7 +165,14 @@ function LoanAccountRow({
         </div>
         <div className="flex shrink-0 items-center justify-end gap-2">
           <div className="flex flex-col items-end text-right">
-            <p className="whitespace-nowrap text-base font-semibold tabular-nums tracking-tight text-[var(--foreground)]">
+            <p
+              className={cn(
+                "whitespace-nowrap text-base font-semibold tabular-nums tracking-tight",
+                moneyToneClass(
+                  balanceTone(account.currentBalance, "liability"),
+                ),
+              )}
+            >
               {formatMoney(amount, currency)}
             </p>
             <Badge className="mt-0.5 h-4 bg-accent px-1.5 text-[10px] font-semibold text-accent-foreground tabular-nums sm:hidden">
@@ -221,7 +233,14 @@ function AccountRow({
           </div>
         </div>
         <div className="flex shrink-0 items-center justify-end gap-2">
-          <p className="whitespace-nowrap text-right text-base font-semibold tabular-nums tracking-tight text-[var(--foreground)]">
+          <p
+            className={cn(
+              "whitespace-nowrap text-right text-base font-semibold tabular-nums tracking-tight",
+              moneyToneClass(
+                balanceTone(account.currentBalance, accountClassFor(account)),
+              ),
+            )}
+          >
             {formatMoney(amount, account.isoCurrencyCode ?? "CAD")}
           </p>
           <ChevronRight />
@@ -395,22 +414,32 @@ function LoanPaymentHistory({
                         : "Confirmed"}
                   </td>
                   <td className="px-3 py-2 text-right">
-                    <MoneyText amount={row.paymentAmount} currency={currency} />
+                    <MoneyText
+                      amount={row.paymentAmount}
+                      currency={currency}
+                      tone="neutral"
+                    />
                   </td>
                   <td className="px-3 py-2 text-right">
                     <MoneyText
                       amount={row.interestPortion}
                       currency={currency}
+                      tone="cost"
                     />
                   </td>
                   <td className="px-3 py-2 text-right">
                     <MoneyText
                       amount={row.principalPortion}
                       currency={currency}
+                      tone="neutral"
                     />
                   </td>
                   <td className="px-3 py-2 text-right font-medium">
-                    <MoneyText amount={row.balanceAfter} currency={currency} />
+                    <MoneyText
+                      amount={row.balanceAfter}
+                      currency={currency}
+                      tone={balanceTone(row.balanceAfter, "liability")}
+                    />
                   </td>
                 </tr>
               ))}
@@ -432,9 +461,13 @@ function AccountDetailView({
   onBack: () => void;
 }) {
   const category = resolveAccountCategory(account);
+  const accountClass = accountClassFor(account);
   const currency = account.isoCurrencyCode ?? "CAD";
   const number = formatAccountNumber(account, category);
   const balance = displayBalanceAmount(account.currentBalance, category);
+  const balanceClass = moneyToneClass(
+    balanceTone(account.currentBalance, accountClass),
+  );
   const available =
     account.availableBalance != null
       ? displayBalanceAmount(account.availableBalance, category)
@@ -510,7 +543,9 @@ function AccountDetailView({
               {loan ? "Principal remaining" : "Balance"}
             </p>
             <p className="type-stat mt-1 wrap-anywhere">
-              {formatMoney(balance, currency)}
+              <span className={balanceClass}>
+                {formatMoney(balance, currency)}
+              </span>
             </p>
             <div className="mt-4 divide-y divide-[var(--border)]">
               {loan ? (
@@ -633,6 +668,8 @@ function AccountDetailView({
           transactions={transactions}
           currentBalance={account.currentBalance}
           currency={currency}
+          accountType={account.type}
+          accountClass={accountClass}
         />
       )}
     </div>

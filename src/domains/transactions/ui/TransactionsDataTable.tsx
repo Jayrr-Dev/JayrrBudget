@@ -9,7 +9,8 @@ import type {
   DashboardTransaction,
 } from "@/domains/dashboard/domain/types";
 import { queryKeys } from "@/domains/dashboard/queries/query-keys";
-import { flowMoneyProps, MoneyText } from "@/domains/dashboard/ui/MoneyText";
+import { transactionTone } from "@/domains/dashboard/domain/moneyTone";
+import { MoneyText } from "@/domains/dashboard/ui/MoneyText";
 import { MerchantLabel } from "@/domains/merchants/ui/MerchantLabel";
 import { LOG_MONEY_RANGE_OPTIONS } from "@/domains/transactions/domain/amountLogRange";
 import { historyMatchLabel } from "@/domains/transactions/domain/debitCredit";
@@ -20,7 +21,6 @@ import { TransactionBulkActions } from "@/domains/transactions/ui/TransactionBul
 import { TransactionRowActions } from "@/domains/transactions/ui/TransactionRowActions";
 import { DecryptingStatus } from "@/domains/vault/ui/DecryptingStatus";
 import { usePrivateLedger } from "@/domains/vault/ui/usePrivateLedger";
-import { cn } from "@/lib/utils";
 import {
   formatDisplayDate,
   formatLongDisplayDate,
@@ -68,7 +68,10 @@ function uniqueSorted(values: Array<string | null | undefined>) {
     .map((value) => ({ value, label: value }));
 }
 
-function buildColumns(accountNameById: Map<string, string>) {
+function buildColumns(
+  accountNameById: Map<string, string>,
+  accountTypeById: Map<string, string | null>,
+) {
   // Left = paper facts (AI read from statement). Right = AI invent / labels.
   return columnHelper.columns([
     columnHelper.display({
@@ -138,17 +141,14 @@ function buildColumns(accountNameById: Map<string, string>) {
           },
           cell: ({ row, getValue }) => {
             const amount = Number(getValue());
-            const flow = flowMoneyProps({
-              amount,
-              bankDirection: row.original.bankDirection,
-            });
             return (
               <MoneyText
                 amount={amount}
                 currency={row.original.isoCurrencyCode ?? "CAD"}
-                className={cn(
-                  "text-base leading-snug md:text-sm",
-                  flow.className,
+                className="text-base leading-snug md:text-sm"
+                tone={transactionTone(
+                  row.original,
+                  accountTypeById.get(row.original.accountId),
                 )}
               />
             );
@@ -669,9 +669,15 @@ export function TransactionsDataTable({
     return map;
   }, [accounts]);
 
+  const accountTypeById = useMemo(
+    () =>
+      new Map(accounts.map((account) => [account.accountId, account.type])),
+    [accounts],
+  );
+
   const columns = useMemo(
-    () => buildColumns(accountNameById),
-    [accountNameById],
+    () => buildColumns(accountNameById, accountTypeById),
+    [accountNameById, accountTypeById],
   );
 
   const descriptionOptions = useMemo(

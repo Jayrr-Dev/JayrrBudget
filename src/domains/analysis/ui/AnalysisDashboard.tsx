@@ -86,7 +86,12 @@ import {
   formatMoney,
   formatMoneyParts,
 } from "@/domains/dashboard/domain/money";
-import { MoneyText } from "@/domains/dashboard/ui/MoneyText";
+import { signTone } from "@/domains/dashboard/domain/moneyTone";
+import {
+  MoneyText,
+  moneyToneClass,
+  type MoneyTone,
+} from "@/domains/dashboard/ui/MoneyText";
 import { MerchantLabel } from "@/domains/merchants/ui/MerchantLabel";
 import { keepTxnPeekPopoverOpen } from "@/domains/merchants/ui/MerchantTxnsPopover";
 import { MoveMerchantDialog } from "@/domains/merchants/ui/MoveMerchantDialog";
@@ -230,13 +235,15 @@ function moneyTick(value: number, currency: string) {
   return `${parts.symbol} ${parts.number}`;
 }
 
-function moneySeriesClass(key: string, amount: number) {
-  if (key === "spend") return "text-[var(--spend)]";
-  if (key === "income") return "text-[var(--income)]";
-  if (key === "net") {
-    return amount < 0 ? "text-[var(--spend)]" : "text-[var(--income)]";
-  }
-  return undefined;
+function moneyAmountTone(
+  key: string,
+  amount: number,
+  fallback?: MoneyTone,
+): MoneyTone {
+  if (key === "spend") return "cost";
+  if (key === "income") return "gain";
+  if (key === "net") return amount < 0 ? "cost" : "gain";
+  return fallback ?? signTone(amount);
 }
 
 function InfoTip({ label, children }: { label: string; children: string }) {
@@ -304,10 +311,12 @@ function Stat({
   label,
   value,
   info,
+  tone,
 }: {
   label: string;
   value: string;
   info?: string;
+  tone?: MoneyTone;
 }) {
   return (
     <div className="rounded-lg border border-border bg-surface-elevated px-2.5 py-2 sm:rounded-xl sm:px-4 sm:py-3">
@@ -318,7 +327,7 @@ function Stat({
         {info ? <InfoTip label={`${label} info`}>{info}</InfoTip> : null}
       </div>
       <p className="type-stat mt-0.5 text-[0.95rem] sm:mt-1 sm:text-lg">
-        {value}
+        {tone ? <span className={moneyToneClass(tone)}>{value}</span> : value}
       </p>
     </div>
   );
@@ -871,6 +880,7 @@ function TimeSeriesTable({
   visibleKeys,
   onVisibleKeysChange,
   valueKind = "money",
+  tone,
 }: {
   rows: Array<Record<string, string | number>>;
   columns: { key: string; label: string }[];
@@ -878,6 +888,7 @@ function TimeSeriesTable({
   visibleKeys?: string[];
   onVisibleKeysChange?: (keys: string[]) => void;
   valueKind?: "money" | "percent";
+  tone?: MoneyTone;
 }) {
   const columnSeries = useMemo(
     () => columns.map((column) => ({ key: column.key, label: column.label })),
@@ -971,12 +982,11 @@ function TimeSeriesTable({
                       <MoneyText
                         amount={Number(row[column.key] ?? 0)}
                         currency={currency}
-                        className={cn(
-                          "text-[0.7rem] sm:text-sm",
-                          moneySeriesClass(
-                            column.key,
-                            Number(row[column.key] ?? 0),
-                          ),
+                        className="text-[0.7rem] sm:text-sm"
+                        tone={moneyAmountTone(
+                          column.key,
+                          Number(row[column.key] ?? 0),
+                          tone,
                         )}
                       />
                     )}
@@ -1006,10 +1016,8 @@ function TimeSeriesTable({
                     <MoneyText
                       amount={total}
                       currency={currency}
-                      className={cn(
-                        "text-[0.7rem] sm:text-sm",
-                        moneySeriesClass(column.key, total),
-                      )}
+                      className="text-[0.7rem] sm:text-sm"
+                      tone={moneyAmountTone(column.key, total, tone)}
                     />
                   )}
                 </TableCell>
@@ -1905,9 +1913,11 @@ function AreaCallout({
 function OtherBreakdownTable({
   items,
   currency,
+  tone,
 }: {
   items?: AnalysisRankedItem[];
   currency: string;
+  tone?: MoneyTone;
 }) {
   const series = useMemo(
     () => (items ?? []).map((item) => ({ key: item.name, label: item.name })),
@@ -1984,6 +1994,7 @@ function OtherBreakdownTable({
                     amount={item.spend}
                     currency={currency}
                     className="w-auto text-[0.7rem] sm:text-sm"
+                    tone={tone}
                   />
                 </TableCell>
                 <TableCell
@@ -2006,6 +2017,7 @@ function OtherBreakdownTable({
                 amount={total}
                 currency={currency}
                 className="w-auto text-[0.7rem] sm:text-sm"
+                tone={tone}
               />
             </TableCell>
             <TableCell className="hidden text-right font-mono text-[0.7rem] tabular-nums sm:table-cell sm:text-sm">
@@ -2032,6 +2044,7 @@ function StackedMixChart({
   nestedByPeriod,
   overlapping = false,
   groups,
+  tone,
 }: {
   title: string;
   info: string;
@@ -2047,6 +2060,7 @@ function StackedMixChart({
   /** Multi-label series (tags): standard mode draws unstacked so shared rows are not double-counted. */
   overlapping?: boolean;
   groups?: SeriesLegendGroup[];
+  tone?: MoneyTone;
 }) {
   const { visibleKeys, visibleSeries, setVisibleKeys } =
     useVisibleSeries(series);
@@ -2360,8 +2374,9 @@ function StackedMixChart({
           visibleKeys={visibleKeys}
           onVisibleKeysChange={setVisibleKeys}
           valueKind={isRelative ? "percent" : "money"}
+          tone={tone}
         />
-        <OtherBreakdownTable items={other} currency={currency} />
+        <OtherBreakdownTable items={other} currency={currency} tone={tone} />
       </ChartWithSeriesList>
     </section>
   );
@@ -2825,6 +2840,7 @@ function TaxonomyBreakdownTable({
   totalSpend,
   nestedLabel,
   stacked,
+  tone,
 }: {
   title: string;
   info: string;
@@ -2834,6 +2850,7 @@ function TaxonomyBreakdownTable({
   totalSpend: number;
   nestedLabel?: string;
   stacked?: AnalysisStackedRankedBreakdown;
+  tone?: MoneyTone;
 }) {
   const asMerchant = isMerchantNameLabel(nameLabel);
   const series = useMemo(
@@ -2916,7 +2933,7 @@ function TaxonomyBreakdownTable({
                   </TableCell>
                 ) : null}
                 <TableCell className="text-right">
-                  <MoneyText amount={row.spend} currency={currency} />
+                  <MoneyText amount={row.spend} currency={currency} tone={tone} />
                 </TableCell>
                 <TableCell className="hidden text-right font-mono tabular-nums text-[var(--muted-foreground)] sm:table-cell">
                   {formatCount(row.count ?? 0)}
@@ -2932,7 +2949,7 @@ function TaxonomyBreakdownTable({
           <TableRow className="text-muted-foreground">
             <TableCell colSpan={nestedLabel ? 2 : 1}>Total</TableCell>
             <TableCell className="text-right">
-              <MoneyText amount={tableTotal} currency={currency} />
+              <MoneyText amount={tableTotal} currency={currency} tone={tone} />
             </TableCell>
             <TableCell className="hidden text-right font-mono tabular-nums sm:table-cell">
               {visibleRows.reduce((sum, row) => sum + (row.count ?? 0), 0)}
@@ -3947,9 +3964,7 @@ function TxnPeekRows({
                   <MoneyText
                     amount={Math.abs(txn.amount)}
                     currency={currency}
-                    className={
-                      isCredit ? "text-[var(--income)]" : "text-[var(--spend)]"
-                    }
+                    tone={isCredit ? "gain" : "cost"}
                   />
                 </td>
                 <td className="hidden px-3 py-1.5 text-right align-top md:table-cell">
@@ -4180,6 +4195,7 @@ function LeaderboardTable({
   vendorsByRow,
   transactionsForRow,
   transactionsForVendor,
+  tone,
 }: {
   title: string;
   info: string;
@@ -4193,6 +4209,7 @@ function LeaderboardTable({
     rowName: string,
     vendorName: string,
   ) => AnalysisTxnPeek[];
+  tone?: MoneyTone;
 }) {
   const { openName, setOpenName } = useRankedTableUi(title);
   const { addRow } = useScratchNoteActions();
@@ -4277,6 +4294,7 @@ function LeaderboardTable({
                       amount={row.spend}
                       currency={currency}
                       align="left"
+                      tone={tone}
                     />
                   </span>
                   <span className="hidden text-right font-mono text-sm tabular-nums text-[var(--muted-foreground)] sm:block">
@@ -4379,6 +4397,7 @@ function LeaderboardTable({
                                 amount={vendor.spend}
                                 currency={currency}
                                 align="left"
+                                tone={tone}
                               />
                             </span>
                             <span className="hidden text-right font-mono tabular-nums text-[var(--muted-foreground)] sm:block">
@@ -4416,7 +4435,12 @@ function LeaderboardTable({
             <span />
             <span className="min-w-0 truncate">Top {top.length}</span>
             <span className="text-left font-mono tabular-nums">
-              <MoneyText amount={topTotal} currency={currency} align="left" />
+              <MoneyText
+                amount={topTotal}
+                currency={currency}
+                align="left"
+                tone={tone}
+              />
             </span>
             <span className="hidden text-right font-mono tabular-nums sm:block">
               {topCount}
@@ -4494,6 +4518,7 @@ function RangeLeaderboardTable({
   currency,
   otherByPeriod,
   transactionsForRow,
+  tone,
 }: {
   title: string;
   info: string;
@@ -4504,6 +4529,7 @@ function RangeLeaderboardTable({
   currency: string;
   otherByPeriod?: Record<string, AnalysisRankedItem[]>;
   transactionsForRow?: (rowName: string) => AnalysisTxnPeek[];
+  tone?: MoneyTone;
 }) {
   const asMerchant = isMerchantNameLabel(nameLabel);
   const showTxns = Boolean(transactionsForRow);
@@ -4578,17 +4604,29 @@ function RangeLeaderboardTable({
                   </span>
                   <div className={metricGrid}>
                     <span className={`${metricCell} text-[var(--foreground)]`}>
-                      <MoneyText amount={row.high} currency={currency} />
+                      <MoneyText
+                        amount={row.high}
+                        currency={currency}
+                        tone={tone}
+                      />
                     </span>
                     <span
                       className={`${metricCell} text-[var(--muted-foreground)]`}
                     >
-                      <MoneyText amount={row.mid} currency={currency} />
+                      <MoneyText
+                        amount={row.mid}
+                        currency={currency}
+                        tone={tone}
+                      />
                     </span>
                     <span
                       className={`${metricCell} text-[var(--muted-foreground)]`}
                     >
-                      <MoneyText amount={row.low} currency={currency} />
+                      <MoneyText
+                        amount={row.low}
+                        currency={currency}
+                        tone={tone}
+                      />
                     </span>
                   </div>
                   {showTxns ? (
@@ -4622,6 +4660,7 @@ function AverageLeaderboardTable({
   vendorsByRow,
   transactionsForRow,
   transactionsForVendor,
+  tone,
 }: {
   title: string;
   info: string;
@@ -4636,6 +4675,7 @@ function AverageLeaderboardTable({
     rowName: string,
     vendorName: string,
   ) => AnalysisTxnPeek[];
+  tone?: MoneyTone;
 }) {
   const { openName, setOpenName, showAll, setShowAll } =
     useRankedTableUi(title);
@@ -4712,6 +4752,7 @@ function AverageLeaderboardTable({
                       amount={avgCost}
                       currency={currency}
                       showSymbol={false}
+                      tone={tone}
                     />
                   </span>
                   <span className="hidden text-right font-mono text-sm tabular-nums text-[var(--muted-foreground)] sm:block">
@@ -4829,6 +4870,7 @@ function AverageLeaderboardTable({
                                 amount={vendor.spend / divisor}
                                 currency={currency}
                                 showSymbol={false}
+                                tone={tone}
                               />
                             </span>
                             <span className="hidden text-right font-mono tabular-nums text-[var(--muted-foreground)] sm:block">
@@ -4869,6 +4911,7 @@ function AverageLeaderboardTable({
                 amount={visibleAvgCost}
                 currency={currency}
                 showSymbol={false}
+                tone={tone}
               />
             </span>
             <span className="hidden text-right font-mono tabular-nums sm:block">
@@ -4914,11 +4957,13 @@ function MainTab({
         <Stat
           label="Lifestyle spending"
           value={formatMoney(data.summary.totalSpend, data.currency)}
+          tone="cost"
           info={`${data.summary.spendCount} purchase rows, net of ${formatMoney(data.summary.refunds, data.currency)} refunds.`}
         />
         <Stat
           label="Income"
           value={formatMoney(data.summary.totalIncome, data.currency)}
+          tone="gain"
           info="Payroll, cashback, and e-transfers in. Card payment credits on the visa are not income."
         />
         <Stat
@@ -4941,11 +4986,13 @@ function MainTab({
         <Stat
           label={periodMeta.incomeRateLabel}
           value={formatMoney(data.summary.incomePerPeriod ?? 0, data.currency)}
+          tone="gain"
           info={`Income divided by ${periodMeta.nounPlural} in this range (same buckets as the ${periodMeta.label.toLowerCase()} charts).`}
         />
         <Stat
           label={periodMeta.avgLabel}
           value={formatMoney(data.summary.avgPeriodSpend, data.currency)}
+          tone="cost"
           info={`Lifestyle spend divided by ${periodMeta.nounPlural} that had spend.`}
         />
         <Stat
@@ -4955,6 +5002,7 @@ function MainTab({
               ? formatMoney(data.summary.peakSpendAmount, data.currency)
               : "-"
           }
+          tone="cost"
           info={
             data.summary.peakSpendPeriod
               ? `Highest lifestyle spend: ${data.summary.peakSpendPeriod}.`
@@ -6564,6 +6612,7 @@ function IncomeSourceDrilldown({
         onPeriodChange={onPeriodChange}
         other={breakdown.other}
         otherByPeriod={breakdown.otherByPeriod}
+        tone="gain"
       />
       <RankedBarChart
         title={`${breakdown.source} categories`}
@@ -6643,6 +6692,7 @@ function IncomeTab({
             <Stat
               label="Income"
               value={formatMoney(total, data.currency)}
+              tone="gain"
               info={`${incomeCount} inflow rows. Payroll, cashback, and e-transfers in. Card payment credits on the visa are not income.`}
             />
             <Stat
@@ -6651,6 +6701,7 @@ function IncomeTab({
                 data.summary.incomePerPeriod ?? 0,
                 data.currency,
               )}
+              tone="gain"
               info={`Income divided by ${periodMeta.nounPlural} in this range (same buckets as the ${periodMeta.label.toLowerCase()} charts).`}
             />
             <Stat
@@ -6660,6 +6711,7 @@ function IncomeTab({
                   ? formatMoney(peakIncomeAmount, data.currency)
                   : "-"
               }
+              tone="gain"
               info={
                 peakIncomePeriod
                   ? `Highest income: ${peakIncomePeriod}.`
@@ -6698,6 +6750,7 @@ function IncomeTab({
             variant="area"
             other={data.incomeSourceOther}
             otherByPeriod={data.incomeSourceOtherByPeriod}
+            tone="gain"
           />
           <StackedRankedBarChart
             title="Income by category"
@@ -6720,6 +6773,7 @@ function IncomeTab({
             variant="area"
             other={data.incomeCategoryOther}
             otherByPeriod={data.incomeCategoryOtherByPeriod}
+            tone="gain"
           />
           <IncomeSourceDrilldown
             data={data}
@@ -6737,6 +6791,7 @@ function IncomeTab({
             totalSpend={total}
             nestedLabel="Top categories"
             stacked={stacked}
+            tone="gain"
           />
           <RankedBarChart
             title="Income by account"
@@ -6762,6 +6817,7 @@ function IncomeTab({
             transactionsForVendor={(row, vendor) =>
               peeksFor(data, "income-source-category", row, vendor)
             }
+            tone="gain"
           />
           <LeaderboardTable
             title="Top income categories"
@@ -6773,6 +6829,7 @@ function IncomeTab({
             transactionsForRow={(name) =>
               peeksFor(data, "income-category", name)
             }
+            tone="gain"
           />
         </div>
       }
@@ -6791,6 +6848,7 @@ function IncomeTab({
             transactionsForVendor={(row, vendor) =>
               peeksFor(data, "income-source-category", row, vendor)
             }
+            tone="gain"
           />
           <AverageLeaderboardTable
             title="Average by category"
@@ -6803,6 +6861,7 @@ function IncomeTab({
             transactionsForRow={(name) =>
               peeksFor(data, "income-category", name)
             }
+            tone="gain"
           />
         </div>
       }
@@ -6818,6 +6877,7 @@ function IncomeTab({
             currency={data.currency}
             otherByPeriod={data.incomeSourceOtherByPeriod}
             transactionsForRow={(name) => peeksFor(data, "income-source", name)}
+            tone="gain"
           />
           <RangeLeaderboardTable
             title="High Mid Low by category"
@@ -6831,6 +6891,7 @@ function IncomeTab({
             transactionsForRow={(name) =>
               peeksFor(data, "income-category", name)
             }
+            tone="gain"
           />
         </div>
       }

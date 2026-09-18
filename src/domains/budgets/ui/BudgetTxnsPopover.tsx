@@ -149,11 +149,7 @@ export function BudgetTxnsPopover({
                         <MoneyText
                           amount={Math.abs(txn.amount)}
                           currency={txn.currency}
-                          className={
-                            isCredit
-                              ? "text-[var(--income)]"
-                              : "text-[var(--spend)]"
-                          }
+                          tone={isCredit ? "gain" : "cost"}
                         />
                       </td>
                       <td className="hidden px-3 py-1.5 text-right align-top md:table-cell">

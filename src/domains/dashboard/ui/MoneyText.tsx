@@ -2,38 +2,31 @@ import {
   formatMoneyParts,
   type MoneyParts,
 } from "@/domains/dashboard/domain/money";
-import { resolveBankDirection } from "@/domains/transactions/domain/debitCredit";
+import { signTone, type MoneyTone } from "@/domains/dashboard/domain/moneyTone";
 import { cn } from "@/lib/utils";
 
-/** Credit = income green; debit = spend tone. Color carries the sign. */
-export function flowMoneyProps(txn: {
-  amount: number;
-  bankDirection?: string | null;
-}): {
-  className: string | undefined;
-} {
-  const flow = resolveBankDirection(txn);
-  if (flow === "credit") {
-    return { className: "text-[var(--income)]" };
-  }
-  if (flow === "debit") {
-    return { className: "text-[var(--spend)]" };
-  }
-  return { className: undefined };
-}
+export type { MoneyTone } from "@/domains/dashboard/domain/moneyTone";
 
-function signToneClass(negative: boolean) {
-  return negative ? "text-[var(--income)]" : "text-[var(--spend)]";
+const TONE_CLASS: Record<MoneyTone, string> = {
+  gain: "text-[var(--income)]",
+  cost: "text-[var(--spend)]",
+  neutral: "text-[var(--foreground)]",
+};
+
+export function moneyToneClass(tone: MoneyTone) {
+  return TONE_CLASS[tone];
 }
 
 function MoneyGrid({
   parts,
   className,
   align = "right",
+  tone,
 }: {
   parts: MoneyParts;
   className?: string;
   align?: "left" | "right";
+  tone: MoneyTone;
 }) {
   return (
     <span
@@ -43,7 +36,7 @@ function MoneyGrid({
         align === "right"
           ? "w-full min-w-max grid-cols-[max-content_minmax(7ch,1fr)]"
           : "w-auto grid-cols-[max-content_max-content]",
-        signToneClass(parts.negative),
+        moneyToneClass(tone),
         className,
       )}
     >
@@ -66,6 +59,7 @@ export function MoneyText({
   className,
   align = "right",
   showSymbol = true,
+  tone,
 }: {
   amount: number | null | undefined;
   currency?: string;
@@ -73,6 +67,8 @@ export function MoneyText({
   align?: "left" | "right";
   /** When false, omit currency code/symbol (compact table cells). */
   showSymbol?: boolean;
+  /** Equity effect. Defaults to ledger sign (money in = gain, money out = cost). */
+  tone?: MoneyTone;
 }) {
   const parts = formatMoneyParts(amount, currency);
   if (!parts) {
@@ -88,13 +84,14 @@ export function MoneyText({
       </span>
     );
   }
+  const resolvedTone = tone ?? signTone(amount);
   if (!showSymbol) {
     return (
       <span
         className={cn(
           "block font-mono font-normal whitespace-nowrap",
           align === "left" ? "text-left" : "text-right",
-          signToneClass(parts.negative),
+          moneyToneClass(resolvedTone),
           className,
         )}
       >
@@ -106,6 +103,7 @@ export function MoneyText({
     <MoneyGrid
       parts={parts}
       align={align}
+      tone={resolvedTone}
       className={cn(align === "right" ? "ml-auto" : null, className)}
     />
   );

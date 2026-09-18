@@ -22,7 +22,12 @@ import {
   rememberLastViewSavedAt,
   subscribeLedgerSnapshots,
 } from "@/domains/dashboard/ui/ledgerQuerySnapshot";
-import { flowMoneyProps, MoneyText } from "@/domains/dashboard/ui/MoneyText";
+import {
+  accountClassFor,
+  balanceTone,
+  transactionTone,
+} from "@/domains/dashboard/domain/moneyTone";
+import { MoneyText, moneyToneClass } from "@/domains/dashboard/ui/MoneyText";
 import { useFeatureFlags } from "@/domains/feature-flags/ui/useFeatureFlag";
 import { MerchantLabel } from "@/domains/merchants/ui/MerchantLabel";
 import { StatementUpload } from "@/domains/statements/ui/StatementUpload";
@@ -207,7 +212,17 @@ export function AccountsPanel({
                   {[account.type, account.subtype].filter(Boolean).join(" · ")}
                 </p>
               </div>
-              <p className="font-mono text-sm">
+              <p
+                className={cn(
+                  "font-mono text-sm",
+                  moneyToneClass(
+                    balanceTone(
+                      account.currentBalance,
+                      accountClassFor(account),
+                    ),
+                  ),
+                )}
+              >
                 {formatMoney(
                   account.currentBalance,
                   account.isoCurrencyCode ?? "CAD",
@@ -223,13 +238,23 @@ export function AccountsPanel({
 
 export function TransactionsList({
   transactions,
+  accounts,
   compact = false,
   totalCount,
 }: {
   transactions: DashboardTransaction[];
+  /** Lets card payoffs and transfers read neutral instead of income/spend. */
+  accounts?: DashboardAccount[];
   compact?: boolean;
   totalCount?: number;
 }) {
+  const accountTypeById = useMemo(
+    () =>
+      accounts
+        ? new Map(accounts.map((account) => [account.accountId, account.type]))
+        : undefined,
+    [accounts],
+  );
   return (
     <section className="space-y-4 pb-4">
       <h2 className="text-xl font-semibold tracking-tight">
@@ -299,7 +324,11 @@ export function TransactionsList({
                   <MoneyText
                     amount={txn.amount}
                     currency={txn.isoCurrencyCode ?? "CAD"}
-                    className={cn("text-sm", flowMoneyProps(txn).className)}
+                    className="text-sm"
+                    tone={transactionTone(
+                      txn,
+                      accountTypeById?.get(txn.accountId),
+                    )}
                   />
                 </div>
               </li>

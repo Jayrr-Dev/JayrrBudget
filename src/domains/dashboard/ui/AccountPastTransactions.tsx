@@ -11,8 +11,13 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  balanceTone,
+  transactionTone,
+  type AccountClass,
+} from "@/domains/dashboard/domain/moneyTone";
 import type { DashboardTransaction } from "@/domains/dashboard/domain/types";
-import { flowMoneyProps, MoneyText } from "@/domains/dashboard/ui/MoneyText";
+import { MoneyText } from "@/domains/dashboard/ui/MoneyText";
 import { MerchantLabel } from "@/domains/merchants/ui/MerchantLabel";
 import { formatDisplayDate } from "@/shared/lib/format-date";
 import { isValid, parseISO, subMonths, subWeeks } from "date-fns";
@@ -180,10 +185,16 @@ export function AccountPastTransactions({
   transactions,
   currentBalance,
   currency,
+  accountType,
+  accountClass,
 }: {
   transactions: DashboardTransaction[];
   currentBalance: number | null;
   currency: string;
+  /** Stored ledger type (depository / credit / loan). Feeds transfer detection. */
+  accountType: string | null;
+  /** Asset or liability. Decides how the running balance reads. */
+  accountClass: AccountClass;
 }) {
   const [range, setRange] = useState<RangeKey>("4w");
   const [status, setStatus] = useState<StatusKey>("all");
@@ -398,13 +409,14 @@ export function AccountPastTransactions({
                     <MoneyText
                       amount={txn.amount}
                       currency={currency}
-                      {...flowMoneyProps(txn)}
+                      tone={transactionTone(txn, accountType)}
                     />
                   </TableCell>
                   <TableCell className="px-3 py-2">
                     <MoneyText
                       amount={txn.runningBalance}
                       currency={currency}
+                      tone={balanceTone(txn.runningBalance, accountClass)}
                     />
                   </TableCell>
                 </TableRow>
