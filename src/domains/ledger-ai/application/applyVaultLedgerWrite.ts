@@ -15,16 +15,16 @@ import type {
   UpdateTransactionOutput,
   UpdateTransactionsInput,
 } from "@/domains/ledger-ai/domain/vaultLedgerWriteTools";
-import type {
-  PrivateAccount,
-  PrivateTransaction,
-} from "@/domains/vault/domain/privateLedger";
 import {
   patchEncryptedTransaction,
   renameEncryptedDescriptions,
   saveEncryptedRecords,
   type VaultWriteContext,
 } from "@/domains/vault/application/saveEncryptedLedger";
+import type {
+  PrivateAccount,
+  PrivateTransaction,
+} from "@/domains/vault/domain/privateLedger";
 import { errorMessage } from "@/shared/lib/error-message";
 
 const AMOUNT_TOLERANCE = 0.005;
@@ -141,7 +141,10 @@ function pickMatch(
         const id = (row.accountId ?? "").toLowerCase();
         if (!id.includes(accountKey) && !id.endsWith(accountKey)) return false;
       }
-      if (attempt.query && !haystack(row).includes(attempt.query.toLowerCase())) {
+      if (
+        attempt.query &&
+        !haystack(row).includes(attempt.query.toLowerCase())
+      ) {
         return false;
       }
       return true;
@@ -153,7 +156,7 @@ function pickMatch(
     return { error: "No transaction matched that date, amount, and text." };
   }
   return {
-    error: `${hits.length} transactions matched. Ask the user which one.`,
+    error: `${hits.length} transactions matched. Call again with the exact date and amount the user showed; if these are the same purchase repeated, take the first. Ask the user only if they truly differ.`,
     candidates: hits.slice(0, 10).map((row) => ({
       date: row.date,
       description: row.description,
@@ -183,7 +186,8 @@ function patchFromInput(input: {
   if (input.pending !== undefined) patch.pending = input.pending;
   if (input.section !== undefined) patch.sectionName = input.section;
   if (input.category !== undefined) patch.categoryName = input.category;
-  if (input.subcategory !== undefined) patch.subcategoryName = input.subcategory;
+  if (input.subcategory !== undefined)
+    patch.subcategoryName = input.subcategory;
   if (input.spread !== undefined) patch.spreadName = input.spread;
   if (input.merchant !== undefined) {
     patch.merchantClean = input.merchant;
@@ -330,7 +334,11 @@ export async function updateVaultTransactions(options: {
       const tx = options.transactions.find((row) => row.recordId === id);
       if (!tx) continue;
       const nextPatch = { ...patch };
-      const tags = applyTags(tx, options.input.addTags, options.input.removeTags);
+      const tags = applyTags(
+        tx,
+        options.input.addTags,
+        options.input.removeTags,
+      );
       if (tags) nextPatch.tagNames = tags;
       if (Object.keys(nextPatch).length === 0) continue;
       await patchEncryptedTransaction(options.vaultWrite, tx, nextPatch);

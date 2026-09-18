@@ -15,7 +15,10 @@ export const applyBudgetEditInputSchema = z.object({
     .string()
     .optional()
     .describe("Only if you already have it from a prior tool result"),
-  date: z.string().optional().describe("YYYY-MM-DD from the row the user named"),
+  date: z
+    .string()
+    .optional()
+    .describe("YYYY-MM-DD from the row the user named"),
   amount: z.number().optional().describe("Row amount; sign is ignored"),
   query: z
     .string()
@@ -60,8 +63,8 @@ export const applyBudgetEditTool = tool({
   description: [
     "Change one of the signed-in user's transactions (category, subcategory, section, description, tags).",
     "The browser applies the edit. Never tell the user to click around in the budget.",
-    "Identify the row with date + amount + query from what they pasted. Do not ask for a transaction id.",
-    "If the receipt lists candidates, call ask_user so they pick, then call again with that date/amount/description.",
+    "Identify the row with date + amount + query from what they pasted or screenshotted. Pass all three when visible. Do not ask for a transaction id.",
+    "If the receipt lists candidates, pick the one whose date and amount match what the user showed and call again with that date/amount/description. Identical duplicates: take the first. Only ask_user when the candidates differ and the user's message does not settle it.",
   ].join(" "),
   inputSchema: applyBudgetEditInputSchema,
   outputSchema: applyBudgetEditOutputSchema,

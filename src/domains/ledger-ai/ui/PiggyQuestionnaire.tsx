@@ -53,7 +53,9 @@ export function PiggyQuestionnaire({
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    onSubmit(askUserOutputFromFormData(input, new FormData(event.currentTarget)));
+    onSubmit(
+      askUserOutputFromFormData(input, new FormData(event.currentTarget)),
+    );
   };
 
   return (
@@ -111,10 +113,10 @@ export function PiggyQuestionnaire({
                   ) : null}
                 </QuestionnaireChoice>
               ))}
-              {question.allowOther ? (
+              {question.allowOther !== false ? (
                 <QuestionnaireInput
                   aria-label="Another answer"
-                  placeholder="Something else…"
+                  placeholder="Or type your own…"
                   className="min-h-9 text-xs md:text-xs"
                 />
               ) : null}
@@ -134,7 +136,11 @@ export function PiggyQuestionnaire({
 }
 
 /** Compact recap of answers once the tool call has an output. */
-export function PiggyQuestionnaireAnswers({ output }: { output: AskUserOutput }) {
+export function PiggyQuestionnaireAnswers({
+  output,
+}: {
+  output: AskUserOutput;
+}) {
   return (
     <p className="whitespace-pre-wrap rounded-lg border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
       {summarizeAskUserAnswers(output)}

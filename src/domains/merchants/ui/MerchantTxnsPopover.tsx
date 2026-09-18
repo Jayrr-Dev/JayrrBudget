@@ -116,7 +116,9 @@ export function MerchantTxnsPopover({
     <TooltipProvider>
       <div
         className={
-          isMobile ? "min-h-0 flex-1 overflow-auto" : "max-h-72 overflow-auto"
+          isMobile
+            ? "min-h-0 flex-1 overflow-auto scrollbar-gutter-stable"
+            : "max-h-72 overflow-auto scrollbar-gutter-stable"
         }
       >
         {peeks === undefined ? (
@@ -138,7 +140,7 @@ export function MerchantTxnsPopover({
                       key={`${txn.date}-${txn.description}-${index}`}
                       className="border-b border-border last:border-b-0"
                     >
-                      <td className="w-8 px-1 py-1 align-top">
+                      <td className="w-4 px-1.5 py-1.5 align-middle">
                         <DescriptionActionsButton
                           description={txn.description}
                           onEdit={setEditDescription}
@@ -163,7 +165,7 @@ export function MerchantTxnsPopover({
                           </TooltipContent>
                         </Tooltip>
                       </td>
-                      <td className="whitespace-nowrap px-2 py-1.5 text-right align-top">
+                      <td className="w-[1%] whitespace-nowrap px-2 py-1.5 pr-3 text-right align-top">
                         <MoneyText
                           amount={Math.abs(txn.amount)}
                           currency={txn.currency}
@@ -227,22 +229,22 @@ export function MerchantTxnsPopover({
               keepTxnPeekPopoverOpen(event);
             }}
           >
-            <DialogHeader className="gap-1 border-b border-border px-3 py-2">
-              <DialogTitle className="flex min-w-0 items-baseline gap-2 text-sm">
-                <span className="min-w-0 truncate">{merchantName}</span>
-                {countLabel ? (
-                  <span className="shrink-0 font-normal text-muted-foreground">
-                    {countLabel}
-                  </span>
-                ) : null}
-              </DialogTitle>
+            <DialogHeader className="border-b border-border px-3 py-2">
+              <div className="flex items-center justify-between gap-2">
+                <DialogTitle className="flex min-w-0 items-baseline gap-2 text-sm">
+                  <span className="min-w-0 truncate">{merchantName}</span>
+                  {countLabel ? (
+                    <span className="shrink-0 font-normal text-muted-foreground">
+                      {countLabel}
+                    </span>
+                  ) : null}
+                </DialogTitle>
+                <div className="shrink-0">{headerActions}</div>
+              </div>
               <DialogDescription className="sr-only">
                 Recent transactions for {merchantName}.
               </DialogDescription>
             </DialogHeader>
-            <div className="flex justify-end border-b border-border px-2 py-1">
-              {headerActions}
-            </div>
             {list}
           </DialogContent>
         </Dialog>
@@ -279,7 +281,7 @@ export function MerchantTxnsPopover({
                 </span>
               ) : null}
             </div>
-            {headerActions}
+            <div className="shrink-0">{headerActions}</div>
           </div>
           {list}
         </PopoverContent>

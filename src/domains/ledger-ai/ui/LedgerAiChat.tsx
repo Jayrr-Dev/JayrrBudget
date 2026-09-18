@@ -47,10 +47,6 @@ import {
   IMPORT_STATEMENT_DOCUMENT_TOOL_NAME,
   type ImportStatementDocumentOutput,
 } from "@/domains/ledger-ai/domain/importStatementDocumentTool";
-import {
-  REGISTER_LOAN_FROM_DOCUMENT_TOOL_NAME,
-  type RegisterLoanFromDocumentOutput,
-} from "@/domains/ledger-ai/domain/registerLoanFromDocumentTool";
 import { earlierDocumentNote } from "@/domains/ledger-ai/domain/piggyDocuments";
 import {
   isApplyBudgetEditPart,
@@ -65,6 +61,10 @@ import {
   type PiggyUIMessage,
   type VaultLedgerWriteToolName,
 } from "@/domains/ledger-ai/domain/piggyUiMessage";
+import {
+  REGISTER_LOAN_FROM_DOCUMENT_TOOL_NAME,
+  type RegisterLoanFromDocumentOutput,
+} from "@/domains/ledger-ai/domain/registerLoanFromDocumentTool";
 import { PiggyApplyBudgetEdit } from "@/domains/ledger-ai/ui/PiggyApplyBudgetEdit";
 import { PiggyAttachment } from "@/domains/ledger-ai/ui/PiggyAttachment";
 import {
@@ -85,7 +85,6 @@ import {
   PiggyQuestionnaireAnswers,
 } from "@/domains/ledger-ai/ui/PiggyQuestionnaire";
 import { PiggyRegisterLoan } from "@/domains/ledger-ai/ui/PiggyRegisterLoan";
-import { PiggyVaultLedgerWrite } from "@/domains/ledger-ai/ui/PiggyVaultLedgerWrite";
 import {
   PiggyAssistantMessage,
   PiggyCappedText,
@@ -94,6 +93,7 @@ import {
   PiggyTranscriptItem,
   PiggyUserMessage,
 } from "@/domains/ledger-ai/ui/PiggyTranscript";
+import { PiggyVaultLedgerWrite } from "@/domains/ledger-ai/ui/PiggyVaultLedgerWrite";
 import { useScratchNote } from "@/domains/scratch-note/scratchNoteStore";
 import { OCR_DOCUMENT_ACCEPT } from "@/domains/statements/domain/ocrDocumentTypes";
 import { dashboardFromPrivateLedger } from "@/domains/vault/application/dashboardFromPrivateLedger";
@@ -106,7 +106,7 @@ import {
   DefaultChatTransport,
   lastAssistantMessageIsCompleteWithToolCalls,
 } from "ai";
-import { Info, Paperclip, PlusIcon, SendHorizonal } from "lucide-react";
+import { Info, Paperclip, PlusIcon, SendHorizonal, Square } from "lucide-react";
 import type { ComponentProps } from "react";
 import {
   useEffect,
@@ -252,6 +252,7 @@ function PiggyChatPaneSession({
   const [dragging, setDragging] = useState(false);
   const [attaching, setAttaching] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const skipAutoSend = useRef(false);
 
   const {
     messages,
@@ -267,8 +268,12 @@ function PiggyChatPaneSession({
     throttle: 250,
     transport,
     // ask_user has no server execute: once the user answers in the card,
-    // resume the model with the tool output.
-    sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
+    // resume the model with the tool output. Skip that resume when the
+    // user types a new message instead of filling the questionnaire.
+    sendAutomaticallyWhen: (options) => {
+      if (skipAutoSend.current) return false;
+      return lastAssistantMessageIsCompleteWithToolCalls(options);
+    },
     onError: (err) => {
       toast.error("Piggy stumbled", {
         description: errorMessage(err, "Chat request failed"),
@@ -321,16 +326,16 @@ function PiggyChatPaneSession({
   };
   const busy = status === "submitted" || status === "streaming";
   const lastMessage = messages.at(-1);
-  // Piggy is waiting on a questionnaire answer; hold the text box until then.
-  const awaitingAnswer =
-    !busy &&
-    lastMessage?.role === "assistant" &&
-    lastMessage.parts.some(
-      (part) => isAskUserPart(part) && part.state === "input-available",
-    );
+  const pendingAsks =
+    !busy && lastMessage?.role === "assistant"
+      ? lastMessage.parts.filter(
+          (part) => isAskUserPart(part) && part.state === "input-available",
+        )
+      : [];
+  const awaitingAnswer = pendingAsks.length > 0;
   // Ctrl+V a screenshot anywhere in the pane; text pastes fall through to the input.
   const onPaste = (event: ClipboardEvent<HTMLDivElement>) => {
-    if (busy || blocked || awaitingAnswer || attaching) return;
+    if (busy || blocked || attaching) return;
     const images = imagesFromClipboard(event.clipboardData);
     if (images.length === 0) return;
     event.preventDefault();
@@ -639,14 +644,7 @@ function PiggyChatPaneSession({
             event.preventDefault();
             const value = input.trim();
             const hasFiles = pendingFiles.length > 0;
-            if (
-              (!value && !hasFiles) ||
-              busy ||
-              blocked ||
-              awaitingAnswer ||
-              attaching
-            )
-              return;
+            if ((!value && !hasFiles) || busy || blocked || attaching) return;
             let files;
             if (hasFiles) {
               setAttaching(true);
@@ -661,10 +659,25 @@ function PiggyChatPaneSession({
               }
               setAttaching(false);
             }
+            if (pendingAsks.length > 0) {
+              skipAutoSend.current = true;
+              for (const part of pendingAsks) {
+                await addToolResult({
+                  tool: ASK_USER_TOOL_NAME,
+                  toolCallId: part.toolCallId,
+                  output: { answers: [], dismissed: true },
+                });
+              }
+            }
             void sendMessage({
               text: value || "Here is a document.",
               files,
             });
+            if (pendingAsks.length > 0) {
+              window.setTimeout(() => {
+                skipAutoSend.current = false;
+              }, 0);
+            }
             setInput("");
             setPendingFiles([]);
           }}
@@ -687,32 +700,45 @@ function PiggyChatPaneSession({
               onFocus={() => setInputFocused(true)}
               onBlur={() => setInputFocused(false)}
               placeholder={
-                awaitingAnswer
-                  ? "Answer Piggy above, or Skip all"
-                  : pendingFiles.length > 0
-                    ? "Say what to do with it, or just send"
-                    : `Ask ${tabName}…`
+                busy
+                  ? "Piggy is busy…"
+                  : awaitingAnswer
+                    ? "Type to interrupt, or answer above"
+                    : pendingFiles.length > 0
+                      ? "Say what to do with it, or just send"
+                      : `Ask ${tabName}…`
               }
-              disabled={busy || blocked || awaitingAnswer}
+              disabled={blocked}
               className="h-8"
             />
             <InputGroupAddon align="inline-end" className="self-center">
-              <InputGroupButton
-                type="submit"
-                size="icon-xs"
-                variant="default"
-                disabled={
-                  busy ||
-                  blocked ||
-                  awaitingAnswer ||
-                  attaching ||
-                  (!input.trim() && pendingFiles.length === 0)
-                }
-                aria-label="Send"
-                className="size-6 rounded-full"
-              >
-                <SendHorizonal className="size-3.5" />
-              </InputGroupButton>
+              {busy ? (
+                <InputGroupButton
+                  type="button"
+                  size="icon-xs"
+                  variant="default"
+                  onClick={() => void stop()}
+                  aria-label="Stop Piggy"
+                  className="size-6 rounded-full"
+                >
+                  <Square className="size-3 fill-current" />
+                </InputGroupButton>
+              ) : (
+                <InputGroupButton
+                  type="submit"
+                  size="icon-xs"
+                  variant="default"
+                  disabled={
+                    blocked ||
+                    attaching ||
+                    (!input.trim() && pendingFiles.length === 0)
+                  }
+                  aria-label="Send"
+                  className="size-6 rounded-full"
+                >
+                  <SendHorizonal className="size-3.5" />
+                </InputGroupButton>
+              )}
             </InputGroupAddon>
           </InputGroup>
           <Button
@@ -721,7 +747,7 @@ function PiggyChatPaneSession({
             size="icon-sm"
             aria-label="Attach a document"
             title="Attach a statement, loan document, or receipt. You can also paste a screenshot."
-            disabled={busy || blocked || awaitingAnswer || attaching}
+            disabled={busy || blocked || attaching}
             onClick={() => fileInputRef.current?.click()}
           >
             <Paperclip className="size-3.5" />

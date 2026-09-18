@@ -18,7 +18,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { RowActionsMenu } from "@/components/ui/row-actions-menu";
 import { Label } from "@/components/ui/label";
 import {
   Popover,
@@ -28,6 +27,7 @@ import {
   PopoverTitle,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { RowActionsMenu } from "@/components/ui/row-actions-menu";
 import { analysisQueryKeys } from "@/domains/analysis/queries/query-keys";
 import { queryKeys } from "@/domains/dashboard/queries/query-keys";
 import { dbExplorerQueryKeys } from "@/domains/db-explorer/queries/query-keys";
@@ -493,6 +493,7 @@ export function DescriptionActionsButton({
   return (
     <RowActionsMenu
       label={description}
+      size="xs"
       actions={[
         {
           label: "Edit",

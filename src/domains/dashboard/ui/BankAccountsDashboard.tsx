@@ -29,6 +29,7 @@ import {
   normalizeRateType,
 } from "@/domains/loans/domain/loanTypes";
 import { LoanAccountActions } from "@/domains/loans/ui/LoanAccountActions";
+import { LoanPaymentTimeline } from "@/domains/loans/ui/LoanPaymentTimeline";
 import { StatementUpload } from "@/domains/statements/ui/StatementUpload";
 import { DecryptingStatus } from "@/domains/vault/ui/DecryptingStatus";
 import { usePrivateLedger } from "@/domains/vault/ui/usePrivateLedger";
@@ -99,12 +100,12 @@ function LoanAccountRow({
   const percentLabel = `${Math.round(fill)}% paid`;
 
   return (
-    <Link
-      href={href}
-      className={`block px-4 py-3.5 ${ROW_LINK_CLASS}`}
-      aria-label={`Open ${account.name} details`}
-    >
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+    <div className={`px-4 py-3.5 ${ROW_LINK_CLASS}`}>
+      <Link
+        href={href}
+        className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-4"
+        aria-label={`Open ${account.name} details`}
+      >
         <div className="min-w-0">
           <p className="truncate font-medium text-[var(--foreground)]">
             {account.name}
@@ -123,19 +124,9 @@ function LoanAccountRow({
           </div>
           <ChevronRight />
         </div>
-      </div>
-      <div
-        className="mt-3 h-1.5 overflow-hidden rounded-full bg-border"
-        role="meter"
-        aria-label={`${account.name} ${percentLabel}`}
-        aria-valuemin={0}
-        aria-valuemax={100}
-        aria-valuenow={Math.round(fill)}
-      >
-        <div
-          className="h-full rounded-full bg-accent transition-[width]"
-          style={{ width: `${fill}%` }}
-        />
+      </Link>
+      <div className="mt-3">
+        <LoanPaymentTimeline loan={loan} compact />
       </div>
       <div className="mt-1.5 flex items-center justify-between gap-3 text-xs tabular-nums text-[var(--muted-foreground)]">
         <span>{percentLabel}</span>
@@ -145,7 +136,7 @@ function LoanAccountRow({
             : "Paid off"}
         </span>
       </div>
-    </Link>
+    </div>
   );
 }
 
@@ -446,7 +437,10 @@ function AccountDetailView({
       </div>
 
       {loan ? (
-        <LoanPaymentHistory loan={loan} currency={currency} />
+        <>
+          <LoanPaymentTimeline loan={loan} />
+          <LoanPaymentHistory loan={loan} currency={currency} />
+        </>
       ) : (
         <AccountPastTransactions
           transactions={transactions}
@@ -468,6 +462,21 @@ function SectionCardSpinner() {
 }
 
 const LOADING_SECTIONS: AccountSectionId[] = ["deposit", "credit", "lending"];
+
+function AddLendingAccountButton({ onClick }: { onClick: () => void }) {
+  return (
+    <Button
+      type="button"
+      variant="ghost"
+      size="icon-sm"
+      className="relative size-4 max-md:size-4 shrink-0 rounded-full border border-border text-accent hover:bg-accent-subtle hover:text-accent after:absolute after:-inset-3.5 after:content-['']"
+      aria-label="Register Lending Account"
+      onClick={onClick}
+    >
+      <PlusIcon className="size-2.5" />
+    </Button>
+  );
+}
 
 function ChevronRight() {
   return (
@@ -565,16 +574,7 @@ export function BankAccountsDashboard({
                 {ACCOUNT_SECTION_LABELS[id]}
               </h2>
               {id === "lending" ? (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon-sm"
-                  className="size-4 max-md:size-11 shrink-0 rounded-full border border-border text-accent hover:bg-accent-subtle hover:text-accent"
-                  aria-label="Register Lending Account"
-                  onClick={() => setAddLoanOpen(true)}
-                >
-                  <PlusIcon className="size-2.5" />
-                </Button>
+                <AddLendingAccountButton onClick={() => setAddLoanOpen(true)} />
               ) : null}
             </div>
             <SectionCardSpinner />
@@ -613,16 +613,7 @@ export function BankAccountsDashboard({
               {section.label}
             </h2>
             {section.id === "lending" ? (
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-sm"
-                className="size-4 max-md:size-11 shrink-0 rounded-full border border-border text-accent hover:bg-accent-subtle hover:text-accent"
-                aria-label="Register Lending Account"
-                onClick={() => setAddLoanOpen(true)}
-              >
-                <PlusIcon className="size-2.5" />
-              </Button>
+              <AddLendingAccountButton onClick={() => setAddLoanOpen(true)} />
             ) : null}
           </div>
           {section.accounts.length === 0 ? (

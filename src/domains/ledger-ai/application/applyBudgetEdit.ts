@@ -2,11 +2,11 @@ import type {
   ApplyBudgetEditInput,
   ApplyBudgetEditOutput,
 } from "@/domains/ledger-ai/domain/applyBudgetEditTool";
-import type { PrivateTransaction } from "@/domains/vault/domain/privateLedger";
 import {
   patchEncryptedTransaction,
   type VaultWriteContext,
 } from "@/domains/vault/application/saveEncryptedLedger";
+import type { PrivateTransaction } from "@/domains/vault/domain/privateLedger";
 
 const AMOUNT_TOLERANCE = 0.005;
 const DATE_WINDOW_DAYS = 3;
@@ -74,7 +74,9 @@ function pickVaultMatch(
   const date = input.date?.trim();
   const query = input.query?.trim() || undefined;
   if (!date && input.amount === undefined && !query) {
-    return { error: "Pass date, amount, and/or query from the row the user named." };
+    return {
+      error: "Pass date, amount, and/or query from the row the user named.",
+    };
   }
   const attempts: Array<{ start?: string; end?: string; query?: string }> = [];
   if (date) {
@@ -105,7 +107,7 @@ function pickVaultMatch(
     return { error: "No transaction matched that date, amount, and text." };
   }
   return {
-    error: `${hits.length} transactions matched. Ask the user which one.`,
+    error: `${hits.length} transactions matched. Call again with the exact date and amount the user showed; if these are the same purchase repeated, take the first. Ask the user only if they truly differ.`,
     candidates: hits.slice(0, 10).map((row) => ({
       date: row.date,
       description: row.description,
@@ -115,13 +117,12 @@ function pickVaultMatch(
 }
 
 function vaultPatch(input: ApplyBudgetEditInput) {
-  const patch: Partial<
-    Omit<PrivateTransaction, "recordId" | "revision">
-  > = {};
+  const patch: Partial<Omit<PrivateTransaction, "recordId" | "revision">> = {};
   if (input.description !== undefined) patch.description = input.description;
   if (input.section !== undefined) patch.sectionName = input.section;
   if (input.category !== undefined) patch.categoryName = input.category;
-  if (input.subcategory !== undefined) patch.subcategoryName = input.subcategory;
+  if (input.subcategory !== undefined)
+    patch.subcategoryName = input.subcategory;
   if (input.spread !== undefined) patch.spreadName = input.spread;
   if (input.merchant !== undefined) {
     patch.merchantClean = input.merchant;
@@ -158,7 +159,10 @@ export async function applyBudgetEdit(options: {
     patch.tagNames = [...tags];
   }
   if (Object.keys(patch).length === 0) {
-    return { ok: false, error: "Nothing to change. Pass category, subcategory, or another field." };
+    return {
+      ok: false,
+      error: "Nothing to change. Pass category, subcategory, or another field.",
+    };
   }
   const next = await patchEncryptedTransaction(
     options.vaultWrite,

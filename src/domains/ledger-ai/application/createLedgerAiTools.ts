@@ -22,7 +22,6 @@ import {
 import { createPiggyPingTools } from "@/domains/piggy-pings/application/createPiggyPingTools";
 import { invalidateConvexUserCache } from "@/shared/convex/cachedRead";
 import { api } from "@/shared/convex/httpClient";
-import type { Id } from "@convex/_generated/dataModel";
 import { tool } from "ai";
 import type { ConvexHttpClient } from "convex/browser";
 import { z } from "zod";
@@ -172,7 +171,7 @@ async function resolveTransaction(
     };
   }
   return {
-    error: `${candidates.length} transactions matched. Use ask_user to let the user pick one (show date, description, amount), then call again with its transactionId.`,
+    error: `${candidates.length} transactions matched. Pick the one whose date and amount match what the user showed and call again with its transactionId; if they are the same purchase repeated, take the first. Use ask_user only if they truly differ.`,
     candidates: candidates.slice(0, 10),
   };
 }
@@ -240,7 +239,8 @@ function createWorkspaceTools(
                   (item) =>
                     sameName(item.name, tabName) || sameName(item.id, tabName),
                 );
-                if (!tab) return { error: `Store sheet tab not found: ${tabName}` };
+                if (!tab)
+                  return { error: `Store sheet tab not found: ${tabName}` };
                 await client.mutation(api.scratchNotes.setReceiveTab, {
                   tabId: tab.id,
                 });
@@ -271,14 +271,17 @@ function createWorkspaceTools(
               const tab = tabName
                 ? sheet.tabs.find(
                     (item) =>
-                      sameName(item.name, tabName) || sameName(item.id, tabName),
+                      sameName(item.name, tabName) ||
+                      sameName(item.id, tabName),
                   )
                 : (sheet.tabs.find((item) => item.id === sheet.activeId) ??
                   sheet.tabs[0]);
               if (!tab) return { error: "Store sheet tab not found." };
               const target = input.rowId
                 ? tab.rows.find((item) => item.id === input.rowId)
-                : tab.rows.find((item) => sameName(item.name, input.name ?? ""));
+                : tab.rows.find((item) =>
+                    sameName(item.name, input.name ?? ""),
+                  );
               if (!target) return { error: "Store sheet row not found." };
               return afterWrite(
                 await client.mutation(api.scratchNotes.removeRow, {
@@ -530,4 +533,3 @@ export function createLedgerAiTools(
 }
 
 export type LedgerAiTools = ReturnType<typeof createLedgerAiTools>;
-

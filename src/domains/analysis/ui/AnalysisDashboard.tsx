@@ -3568,7 +3568,7 @@ function TxnPeekRows({
                     </TooltipContent>
                   </Tooltip>
                 </td>
-                <td className="whitespace-nowrap px-2 py-1.5 text-right align-top">
+                <td className="w-[1%] whitespace-nowrap px-2 py-1.5 pr-3 text-right align-top">
                   <MoneyText
                     amount={Math.abs(txn.amount)}
                     currency={currency}
@@ -3696,17 +3696,23 @@ function RowTxnsPopover({
             keepTxnPeekPopoverOpen(event);
           }}
         >
-          <DialogHeader className="flex flex-row items-start justify-between gap-2 border-b border-border px-3 py-2">
-            <div className="min-w-0">
-              <DialogTitle className="text-sm">{titleRow}</DialogTitle>
-              {blurbRow}
-              <DialogDescription className="sr-only">
-                Recent transactions for {label} in this range.
-              </DialogDescription>
+          <DialogHeader className="border-b border-border px-3 py-2">
+            <div className="flex items-center justify-between gap-2">
+              <div className="min-w-0">
+                <DialogTitle className="text-sm">{titleRow}</DialogTitle>
+                {blurbRow}
+                <DialogDescription className="sr-only">
+                  Recent transactions for {label} in this range.
+                </DialogDescription>
+              </div>
+              {headerActions ? (
+                <div className="shrink-0">{headerActions}</div>
+              ) : null}
             </div>
-            {headerActions}
           </DialogHeader>
-          <div className="min-h-0 flex-1 overflow-auto">{list}</div>
+          <div className="min-h-0 flex-1 overflow-auto scrollbar-gutter-stable">
+            {list}
+          </div>
         </DialogContent>
       </Dialog>
       {nestedDialogs}

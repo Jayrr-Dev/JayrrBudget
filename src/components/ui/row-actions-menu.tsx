@@ -16,11 +16,13 @@ export type RowActionsMenuItem = {
 };
 
 const TRIGGER_SIZE_CLASS = {
+  xs: "size-4",
   sm: "size-7 max-md:size-11",
   md: "size-8 max-md:size-11",
 } as const;
 
 const TRIGGER_ICON_CLASS = {
+  xs: "size-3.5",
   sm: "size-5 max-md:size-6",
   md: "size-5 max-md:size-6",
 } as const;

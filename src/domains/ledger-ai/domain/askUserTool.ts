@@ -30,15 +30,14 @@ const askUserQuestionSchema = z.object({
   allowOther: z
     .boolean()
     .optional()
-    .describe("Show a free-text field for an answer not in choices"),
+    .describe(
+      "Default true: a free-text field is shown so the user can type an answer not in choices. Set false only for strict yes/no questions.",
+    ),
 });
 
 export const askUserInputSchema = z.object({
   title: z.string().optional().describe("Short heading, e.g. 'Quick check'"),
-  questions: z
-    .array(askUserQuestionSchema)
-    .min(1)
-    .max(MAX_ASK_USER_QUESTIONS),
+  questions: z.array(askUserQuestionSchema).min(1).max(MAX_ASK_USER_QUESTIONS),
 });
 
 const askUserAnswerSchema = z.object({
@@ -64,8 +63,9 @@ export type AskUserAnswer = AskUserOutput["answers"][number];
 export const askUserTool = tool({
   description: [
     "Ask the signed-in user one to four short multiple-choice questions and wait for their answers.",
-    "Use it when a request is ambiguous (which category, which rows, which account), when you need a yes/no before a risky edit such as delete, or to offer a few sensible options instead of guessing.",
-    "Keep prompts short. Give 2 to 6 concrete choices per question. Set allowOther when a free-text answer makes sense.",
+    "Use it when a request is genuinely ambiguous (which account, which of several different matching rows, a category that could sit in two sections), or when you need a yes/no before a risky edit such as delete.",
+    "Do not use it to pick a subcategory that is already the obvious fit, or to ask which of the rows the user already listed they meant. Decide, act, then state the assumption.",
+    "Keep prompts short. Give 2 to 6 concrete choices per question. A free-text field is shown by default; set allowOther false only for strict yes/no. If the answer comes back in `other`, treat it as the user's pick (a taxonomy name, or a new one to create).",
     "Do not use it for questions you can answer yourself with search_transactions or list_taxonomy.",
   ].join(" "),
   inputSchema: askUserInputSchema,

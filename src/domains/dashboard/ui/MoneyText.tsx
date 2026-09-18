@@ -52,18 +52,16 @@ function MoneyGrid({
     <span
       data-slot="money-grid"
       className={cn(
-        "inline-grid min-w-0 items-baseline gap-x-1.5 font-mono tabular-nums",
+        "inline-grid items-baseline gap-x-1.5 font-mono font-normal",
         align === "right"
-          ? "w-full grid-cols-[max-content_max-content_minmax(0,1fr)]"
-          : "w-auto grid-cols-[max-content_max-content_max-content]",
+          ? "w-full min-w-max grid-cols-[max-content_1ch_minmax(7ch,1fr)]"
+          : "w-auto grid-cols-[max-content_1ch_max-content]",
         className,
       )}
     >
-      <span className="min-w-max text-left">{parts.symbol}</span>
-      <span className="w-[1ch] text-center">{mark}</span>
-      <span
-        className={align === "right" ? "min-w-[7ch] text-right" : "text-left"}
-      >
+      <span className="text-left">{parts.symbol}</span>
+      <span className="text-center">{mark}</span>
+      <span className={align === "right" ? "text-right" : "text-left"}>
         {parts.number}
       </span>
     </span>
@@ -112,7 +110,7 @@ export function MoneyText({
     return (
       <span
         className={cn(
-          "block font-mono tabular-nums",
+          "block font-mono font-normal",
           align === "left" ? "text-left" : "text-right",
           className,
         )}
