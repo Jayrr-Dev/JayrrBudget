@@ -148,9 +148,7 @@ export function TxnDescriptionLookupCombobox({
         onSort={(column) => {
           const next = column as SortKey;
           if (next === sortColumn) {
-            setSortDirection((current) =>
-              current === "asc" ? "desc" : "asc",
-            );
+            setSortDirection((current) => (current === "asc" ? "desc" : "asc"));
             return;
           }
           setSortColumn(next);
@@ -165,7 +163,7 @@ export function TxnDescriptionLookupCombobox({
         <ComboboxList>
           {(item) => (
             <ComboboxItem key={item.value} value={item}>
-              <span className="whitespace-nowrap font-mono text-sm tabular-nums">
+              <span className="overflow-hidden whitespace-nowrap font-mono text-sm tabular-nums">
                 {item.date}
               </span>
               <span className="min-w-0 truncate text-left">

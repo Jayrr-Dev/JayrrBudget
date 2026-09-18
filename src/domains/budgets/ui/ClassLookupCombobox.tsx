@@ -165,7 +165,7 @@ export function ClassLookupCombobox({
         ) : null}
       </InputGroup>
       <ComboboxContent
-        className={cn(isCell ? "w-56" : "w-(--anchor-width) min-w-56")}
+        className={cn(isCell ? "w-72" : "w-(--anchor-width) min-w-72")}
       >
         <ButtonGroup className="w-full px-1 pt-1">
           {CLASS_TABS.map((item) => (

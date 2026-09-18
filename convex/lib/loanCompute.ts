@@ -79,7 +79,7 @@ export function summaryFromAmortize(
     paidPrincipal: result.paidPrincipal,
     matchMerchantClean: terms.txnDescriptionLookup || terms.matchMerchantClean,
     txnDescriptionLookup: terms.txnDescriptionLookup || terms.matchMerchantClean,
-    payments: result.schedule.filter((s) => s.applied),
+    payments: result.schedule.filter((s) => s.applied || s.assumed),
   };
 }
 

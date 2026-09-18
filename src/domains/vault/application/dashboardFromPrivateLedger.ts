@@ -79,6 +79,10 @@ function loanSummaryFor(
     },
     todayIso(),
     matchPadsToSchedule(scheduledDates, pads, matchAmount),
+    {
+      confirmedPaymentNumbers: loan.confirmedPaymentNumbers,
+      skippedPaymentNumbers: loan.skippedPaymentNumbers,
+    },
   );
   const maturityDate =
     scheduledDates[scheduledDates.length - 1] ?? loan.firstPaymentDate;
@@ -102,7 +106,7 @@ function loanSummaryFor(
     paidPrincipal: result.paidPrincipal,
     matchMerchantClean: txnDescriptionLookup,
     txnDescriptionLookup,
-    payments: result.schedule.filter((step) => step.applied),
+    payments: result.schedule.filter((step) => step.applied || step.assumed),
   };
 }
 

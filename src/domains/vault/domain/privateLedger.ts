@@ -106,6 +106,8 @@ export type PrivateLoanTerms = {
   matchMerchantClean?: string | null;
   txnDescriptionLookup?: string | null;
   matchAmount?: number | null;
+  confirmedPaymentNumbers?: number[];
+  skippedPaymentNumbers?: number[];
 };
 
 export type PrivateStatementLog = {

@@ -3,6 +3,15 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyPrompt } from "@/components/ui/empty-prompt";
+import {
+  Popover,
+  PopoverContent,
+  PopoverDescription,
+  PopoverHeader,
+  PopoverTitle,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { RowActionsMenu } from "@/components/ui/row-actions-menu";
 import { DashboardBudgets } from "@/domains/budgets/ui/DashboardBudgets";
 import {
   ACCOUNT_SECTION_LABELS,
@@ -37,16 +46,21 @@ import { LoanAccountActions } from "@/domains/loans/ui/LoanAccountActions";
 import { LoanPaymentTimeline } from "@/domains/loans/ui/LoanPaymentTimeline";
 import { LoanTypeIcon } from "@/domains/loans/ui/LoanTypeIcon";
 import { StatementUpload } from "@/domains/statements/ui/StatementUpload";
+import { applyVaultLoanPaymentDecision } from "@/domains/vault/application/applyVaultLoanPaymentDecision";
+import { vaultWriteReady } from "@/domains/vault/application/saveEncryptedLedger";
 import { DecryptingStatus } from "@/domains/vault/ui/DecryptingStatus";
 import { usePrivateLedger } from "@/domains/vault/ui/usePrivateLedger";
 import {
   formatCompactDisplayDate,
   formatDisplayDate,
 } from "@/shared/lib/format-date";
-import { PlusIcon } from "lucide-react";
+import { toastIfOffline } from "@/shared/offline/offlineWriteGuard";
+import { useConvex } from "convex/react";
+import { Info, PlusIcon } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
+import { toast } from "sonner";
 
 export function accountDetailHref(accountId: string) {
   return `/accounts?account=${encodeURIComponent(accountId)}`;
@@ -231,31 +245,99 @@ function DetailRow({ label, value }: { label: string; value: string }) {
 }
 
 function LoanPaymentHistory({
+  accountId,
   loan,
   currency,
 }: {
+  accountId: string;
   loan: DashboardLoanSummary;
   currency: string;
 }) {
+  const client = useConvex();
+  const privateLedger = usePrivateLedger();
+  const [busyNumber, setBusyNumber] = useState<number | null>(null);
   const rows = [...loan.payments].sort(
     (a, b) => b.paymentNumber - a.paymentNumber,
   );
 
+  async function decidePayment(
+    paymentNumber: number,
+    decision: "confirm" | "remove",
+  ) {
+    if (toastIfOffline()) return;
+    const write = vaultWriteReady({
+      encryptedLedger: privateLedger.encryptedLedger,
+      userId: privateLedger.userId,
+      vaultId: privateLedger.vaultId,
+      keyId: privateLedger.keyId,
+      client,
+    });
+    if (!write) {
+      toast.error("Unlock the vault to update this payment.");
+      return;
+    }
+    if (privateLedger.loading) {
+      toast.error("Wait for the vault to finish unlocking.");
+      return;
+    }
+    setBusyNumber(paymentNumber);
+    try {
+      const next = await applyVaultLoanPaymentDecision({
+        ctx: write,
+        ledger: privateLedger.ledger,
+        accountId,
+        paymentNumber,
+        decision,
+      });
+      privateLedger.applyLedger(next);
+      privateLedger.reload();
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Could not update payment",
+      );
+    } finally {
+      setBusyNumber(null);
+    }
+  }
+
   return (
     <div className="space-y-4">
-      <h2 className="text-lg font-semibold tracking-tight">Payment history</h2>
-      <p className="text-sm text-[var(--muted-foreground)]">
-        Contract schedule from {loan.firstPaymentDate}. Linked PADs show posted
-        date; assumed rows fill gaps before import.
-      </p>
+      <h2 className="flex items-center gap-2 text-lg font-semibold tracking-tight">
+        Payment history
+        <Popover>
+          <PopoverTrigger asChild>
+            <button
+              type="button"
+              className="inline-flex size-6 shrink-0 items-center justify-center rounded-full text-accent hover:text-primary"
+              aria-label="About payment history"
+            >
+              <Info className="size-3.5" />
+            </button>
+          </PopoverTrigger>
+          <PopoverContent align="start" side="bottom" className="w-72">
+            <PopoverHeader>
+              <PopoverTitle>Payment history</PopoverTitle>
+              <PopoverDescription>
+                Assumed rows stay off the balance until you confirm them.
+              </PopoverDescription>
+              <ul className="mt-1.5 list-disc space-y-1 pl-4 text-muted-foreground">
+                <li>Matched bank transactions confirm themselves</li>
+                <li>Confirm applies the scheduled payment</li>
+                <li>Remove drops that assumed row</li>
+              </ul>
+            </PopoverHeader>
+          </PopoverContent>
+        </Popover>
+      </h2>
       <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-surface-elevated">
         <div className="overflow-x-auto overscroll-x-contain">
-          <table className="w-full min-w-[40rem] text-left text-sm">
+          <table className="w-full min-w-[46rem] text-left text-sm">
             <thead className="border-b border-[var(--border)] text-xs text-[var(--muted-foreground)]">
               <tr>
                 <th className="sticky left-0 z-10 bg-surface-elevated px-3 py-2 font-medium">
-                  #
+                  <span className="sr-only">Actions</span>
                 </th>
+                <th className="px-3 py-2 font-medium">#</th>
                 <th className="px-3 py-2 font-medium">Scheduled</th>
                 <th className="px-3 py-2 font-medium">Posted</th>
                 <th className="px-3 py-2 font-medium text-right">Payment</th>
@@ -270,7 +352,36 @@ function LoanPaymentHistory({
                   key={row.paymentNumber}
                   className="border-t border-[var(--border)]"
                 >
-                  <td className="sticky left-0 z-10 bg-surface-elevated px-3 py-2 tabular-nums">
+                  <td className="sticky left-0 z-10 bg-surface-elevated px-2 py-2">
+                    {row.assumed ? (
+                      <RowActionsMenu
+                        label={`payment ${row.paymentNumber}`}
+                        size="md"
+                        actions={[
+                          {
+                            label:
+                              busyNumber === row.paymentNumber
+                                ? "Confirming..."
+                                : "Confirm",
+                            disabled: busyNumber === row.paymentNumber,
+                            onSelect: () =>
+                              void decidePayment(row.paymentNumber, "confirm"),
+                          },
+                          {
+                            label:
+                              busyNumber === row.paymentNumber
+                                ? "Removing..."
+                                : "Remove",
+                            variant: "destructive",
+                            disabled: busyNumber === row.paymentNumber,
+                            onSelect: () =>
+                              void decidePayment(row.paymentNumber, "remove"),
+                          },
+                        ]}
+                      />
+                    ) : null}
+                  </td>
+                  <td className="px-3 py-2 tabular-nums">
                     {row.paymentNumber}
                   </td>
                   <td className="px-3 py-2 font-mono tabular-nums">
@@ -279,7 +390,9 @@ function LoanPaymentHistory({
                   <td className="px-3 py-2 font-mono tabular-nums text-[var(--muted-foreground)]">
                     {row.assumed
                       ? "assumed"
-                      : formatDisplayDate(row.postedDate)}
+                      : row.transactionId
+                        ? formatDisplayDate(row.postedDate)
+                        : "Confirmed"}
                   </td>
                   <td className="px-3 py-2 text-right">
                     <MoneyText amount={row.paymentAmount} currency={currency} />
@@ -509,7 +622,11 @@ function AccountDetailView({
       {loan ? (
         <>
           <LoanPaymentTimeline loan={loan} />
-          <LoanPaymentHistory loan={loan} currency={currency} />
+          <LoanPaymentHistory
+            accountId={account.accountId}
+            loan={loan}
+            currency={currency}
+          />
         </>
       ) : (
         <AccountPastTransactions

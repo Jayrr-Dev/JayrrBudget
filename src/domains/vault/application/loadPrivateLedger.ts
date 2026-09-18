@@ -333,7 +333,20 @@ function asLoan(
     loanType: row.loanType == null ? null : String(row.loanType),
     rateType: row.rateType == null ? null : String(row.rateType),
     vehicleLabel: row.vehicleLabel == null ? null : String(row.vehicleLabel),
+    confirmedPaymentNumbers: asPaymentNumbers(row.confirmedPaymentNumbers),
+    skippedPaymentNumbers: asPaymentNumbers(row.skippedPaymentNumbers),
   };
+}
+
+function asPaymentNumbers(value: unknown): number[] {
+  if (!Array.isArray(value)) return [];
+  const numbers: number[] = [];
+  for (const item of value) {
+    const n = typeof item === "number" ? item : Number(item);
+    if (!Number.isFinite(n) || n < 1) continue;
+    numbers.push(Math.floor(n));
+  }
+  return numbers;
 }
 
 async function fetchCiphertextRecords(

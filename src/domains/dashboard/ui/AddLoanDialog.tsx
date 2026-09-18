@@ -437,6 +437,8 @@ export function AddLoanDialog({
         txnDescriptionLookup: form.txnDescriptionLookup.trim() || null,
         matchMerchantClean: form.txnDescriptionLookup.trim() || null,
         matchAmount: paymentAmount,
+        confirmedPaymentNumbers: existingLoan?.confirmedPaymentNumbers ?? [],
+        skippedPaymentNumbers: existingLoan?.skippedPaymentNumbers ?? [],
         expectedRevision: existingLoan?.revision ?? null,
       });
       if (pendingFileHash) {
@@ -853,7 +855,7 @@ function Field({
 }: {
   label: string;
   htmlFor: string;
-  info?: { title: string; body: string };
+  info?: { title: string; body: string; bullets?: string[] };
   action?: React.ReactNode;
   children: React.ReactNode;
 }) {
@@ -876,6 +878,13 @@ function Field({
               <PopoverHeader>
                 <PopoverTitle>{info.title}</PopoverTitle>
                 <PopoverDescription>{info.body}</PopoverDescription>
+                {info.bullets && info.bullets.length > 0 ? (
+                  <ul className="mt-1.5 list-disc space-y-1 pl-4 text-muted-foreground">
+                    {info.bullets.map((bullet) => (
+                      <li key={bullet}>{bullet}</li>
+                    ))}
+                  </ul>
+                ) : null}
               </PopoverHeader>
             </PopoverContent>
           </Popover>

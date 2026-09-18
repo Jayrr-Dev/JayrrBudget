@@ -34,9 +34,14 @@ export type LoanPaymentStep = {
   interestPortion: number;
   principalPortion: number;
   balanceAfter: number;
-  /** True when no chequing PAD was matched (contractual / pre-import). */
+  /** True when due, no PAD, and the user has not confirmed or removed it. */
   assumed: boolean;
   applied: boolean;
+};
+
+export type LoanPaymentDecisions = {
+  confirmedPaymentNumbers?: number[];
+  skippedPaymentNumbers?: number[];
 };
 
 export type AmortizeResult = {
@@ -143,12 +148,13 @@ export function matchPadsToSchedule(
 
 /**
  * Build full amortization schedule and as-of balance.
- * Payments with scheduledDate <= asOfDate are applied (assumed if no PAD).
+ * Due payments apply only when a PAD matched or the user confirmed.
  */
 export function amortizeLoan(
   terms: LoanTermsInput,
   asOfDate: string,
   matchedByPaymentNumber: Map<number, MatchedPad>,
+  decisions: LoanPaymentDecisions = {},
 ): AmortizeResult {
   const asOf = asOfDate.slice(0, 10);
   const frequency = normalizePaymentFrequency(
@@ -174,6 +180,8 @@ export function amortizeLoan(
   let paymentsApplied = 0;
   let currentBalance = terms.principalStart;
   let nextPaymentDate: string | null = null;
+  const confirmed = new Set(decisions.confirmedPaymentNumbers ?? []);
+  const skipped = new Set(decisions.skippedPaymentNumbers ?? []);
 
   for (let n = 1; n <= terms.paymentCount; n += 1) {
     const scheduledDate = scheduledDates[n - 1]!;
@@ -203,7 +211,10 @@ export function amortizeLoan(
 
     balance = roundCents(Math.max(0, balance - principal));
 
-    const applied = scheduledDate <= asOf;
+    const due = scheduledDate <= asOf;
+    const skippedRow = skipped.has(n);
+    const applied = due && !skippedRow && (Boolean(pad) || confirmed.has(n));
+    const assumed = due && !skippedRow && !pad && !confirmed.has(n);
     const step: LoanPaymentStep = {
       paymentNumber: n,
       scheduledDate,
@@ -213,7 +224,7 @@ export function amortizeLoan(
       interestPortion: interest,
       principalPortion: principal,
       balanceAfter: balance,
-      assumed: applied && !pad,
+      assumed,
       applied,
     };
     schedule.push(step);
@@ -223,7 +234,7 @@ export function amortizeLoan(
       paidPrincipal = roundCents(paidPrincipal + principal);
       paymentsApplied += 1;
       currentBalance = balance;
-    } else if (nextPaymentDate == null) {
+    } else if (!skippedRow && nextPaymentDate == null) {
       nextPaymentDate = scheduledDate;
     }
   }

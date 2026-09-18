@@ -350,6 +350,8 @@ export async function saveEncryptedLoan(
     matchMerchantClean?: string | null;
     txnDescriptionLookup?: string | null;
     matchAmount?: number | null;
+    confirmedPaymentNumbers?: number[];
+    skippedPaymentNumbers?: number[];
     expectedRevision?: number | null;
   },
 ) {

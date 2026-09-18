@@ -22,6 +22,9 @@ import {
 
 type ComboboxLayout = "list" | "table";
 
+const TABLE_GRID_COLS =
+  "grid-cols-[10rem_minmax(0,1fr)_7.25rem] [&>*]:min-w-0 [&>*]:overflow-hidden";
+
 const ComboboxLayoutContext = React.createContext<{
   layout: ComboboxLayout;
   columns: string[];
@@ -157,7 +160,10 @@ function ComboboxContent({
             {table ? (
               <div
                 role="row"
-                className="grid grid-cols-[5.75rem_minmax(0,1fr)_7.25rem] items-center gap-4 border-b border-border px-2 py-1.5 pr-8 text-xs font-medium text-muted-foreground"
+                className={cn(
+                  "grid items-center gap-4 border-b border-border px-2 py-1.5 pr-8 text-xs font-medium text-muted-foreground",
+                  TABLE_GRID_COLS,
+                )}
               >
                 {tableColumns.map((column) => {
                   const amount = column.toLowerCase() === "amount";
@@ -245,7 +251,10 @@ function ComboboxItem({
       className={cn(
         "relative flex w-full cursor-pointer items-center gap-2 rounded-md py-1 pr-8 pl-1.5 text-sm outline-hidden select-none data-highlighted:bg-primary-subtle data-highlighted:text-primary-subtle-foreground not-data-[variant=destructive]:data-highlighted:**:text-primary-subtle-foreground data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
         layout === "table"
-          ? "grid grid-cols-[5.75rem_minmax(0,1fr)_7.25rem] items-center gap-4 rounded-none border-b border-border/70 py-1.5 pr-8 pl-2 last:border-b-0"
+          ? cn(
+              "grid items-center gap-4 rounded-none border-b border-border/70 py-1.5 pr-8 pl-2 last:border-b-0",
+              TABLE_GRID_COLS,
+            )
           : null,
         className,
       )}
