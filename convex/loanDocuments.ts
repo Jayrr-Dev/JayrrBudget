@@ -85,6 +85,8 @@ function fieldsFromRow(row: {
     paymentCount: row.paymentCount,
     firstPaymentDate: row.firstPaymentDate,
     matchMerchantClean: row.matchMerchantClean,
+    txnDescriptionLookup:
+      row.txnDescriptionLookup ?? row.matchMerchantClean,
     institutionName: row.institutionName,
   } as const;
 }

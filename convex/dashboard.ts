@@ -38,10 +38,10 @@ function mapLoanTerms(row: {
   paymentFrequency: string;
   paymentCount: number;
   firstPaymentDate: string;
-    maturityDate: string;
-    matchMerchantClean: string;
-    txnDescriptionLookup?: string | null;
-    matchAmount: number;
+  maturityDate: string;
+  matchMerchantClean: string;
+  txnDescriptionLookup?: string | null;
+  matchAmount: number;
   principalOverride: number | null;
   overrideAsOf: string | null;
   loanType?: string;

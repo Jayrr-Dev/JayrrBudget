@@ -4524,9 +4524,9 @@ function RangeLeaderboardTable({
     ? "grid w-full min-w-0 grid-cols-[1.5rem_minmax(5rem,0.55fr)_minmax(0,1fr)_2.75rem] items-center gap-x-3 px-3 sm:grid-cols-[1.5rem_minmax(6rem,0.45fr)_minmax(0,1fr)_1.5rem]"
     : "grid w-full min-w-0 grid-cols-[1.5rem_minmax(5rem,0.55fr)_minmax(0,1fr)] items-center gap-x-3 px-3";
   const metricGrid =
-    "grid min-w-0 w-full self-stretch grid-cols-3 divide-x divide-border";
+    "grid min-w-0 w-full self-stretch grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)] divide-x divide-border";
   const metricCell =
-    "flex min-w-0 items-center justify-end overflow-hidden px-2 text-right font-mono tabular-nums sm:px-3";
+    "flex min-w-0 items-center justify-end px-2 text-right font-mono tabular-nums sm:px-3";
   const moneyFitKey = top
     .map((row) => `${row.high}:${row.mid}:${row.low}`)
     .join("|");

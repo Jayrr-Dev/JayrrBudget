@@ -9,10 +9,10 @@ function check(input: string, expected: string) {
 
 check("Pos Debit - Uber", "Uber");
 check("POS DEBIT - STARBUCKS", "Starbucks");
-check("POS DEBIT - PETRO-CANADA", "Petro-canada");
+check("POS DEBIT - PETRO-CANADA", "Petro-Canada");
 check("POS DEBIT - HUDSON'S BAY", "Hudson's Bay");
-check("INTERAC DEBIT - SAVE-ON-FOODS", "Save-on-foods");
-check("VISA DEBIT SKIPTHEDISHES", "Skipthedishes");
+check("INTERAC DEBIT - SAVE-ON-FOODS", "Save-On-Foods");
+check("VISA DEBIT SKIPTHEDISHES", "SkipTheDishes");
 check("Pad - Spotify", "Spotify");
 check("PAD - MOVATI ATHLETIC", "Movati Athletic");
 check("Interac E-transfer Out", "Interac E-transfer Out");

@@ -54,9 +54,12 @@ function MoneyGrid({
           : undefined
       }
       className={cn(
-        "inline-grid items-baseline gap-x-1.5 font-mono font-normal",
+        "font-mono font-normal",
         fit
-          ? "w-full min-w-0 grid-cols-[max-content_minmax(0,1fr)]"
+          ? "block w-full min-w-0 overflow-hidden whitespace-nowrap text-right"
+          : "inline-grid items-baseline gap-x-1.5",
+        fit
+          ? null
           : align === "right"
             ? "w-full min-w-max grid-cols-[max-content_minmax(7ch,1fr)]"
             : "w-auto grid-cols-[max-content_max-content]",
@@ -64,20 +67,30 @@ function MoneyGrid({
         className,
       )}
     >
-      <span className="text-left">{parts.symbol}</span>
-      <span
-        className={cn(
-          "whitespace-nowrap",
-          align === "right" ? "text-right" : "text-left",
-        )}
-      >
-        {parts.number}
-      </span>
+      {fit ? (
+        <>
+          {parts.symbol}
+          {"\u00a0"}
+          {parts.number}
+        </>
+      ) : (
+        <>
+          <span className="text-left">{parts.symbol}</span>
+          <span
+            className={cn(
+              "whitespace-nowrap",
+              align === "right" ? "text-right" : "text-left",
+            )}
+          >
+            {parts.number}
+          </span>
+        </>
+      )}
     </span>
   );
 }
 
-const FIT_MONEY_MIN_PX = 10;
+const FIT_MONEY_MIN_PX = 8;
 const FIT_MONEY_MAX_PX = 14;
 
 /** Shared font size for money cells in a fluid table: shrink until every amount fits. */
@@ -106,11 +119,7 @@ export function FitMoneyScale({
       let ratio = 1;
       cells.forEach((cell) => {
         const width = cell.clientWidth;
-        const parts = Array.from(cell.children) as HTMLElement[];
-        const gap = Number.parseFloat(getComputedStyle(cell).columnGap) || 0;
-        const needed =
-          parts.reduce((sum, part) => sum + part.scrollWidth, 0) +
-          Math.max(0, parts.length - 1) * gap;
+        const needed = cell.scrollWidth;
         if (width > 0 && needed > width) {
           ratio = Math.min(ratio, width / needed);
         }
@@ -119,10 +128,14 @@ export function FitMoneyScale({
       root.style.setProperty("--money-fit-size", `${next}px`);
     };
 
-    fit();
     const observer = new ResizeObserver(fit);
     observer.observe(root);
+    const frame = requestAnimationFrame(() => {
+      fit();
+      requestAnimationFrame(fit);
+    });
     return () => {
+      cancelAnimationFrame(frame);
       observer.disconnect();
       root.style.removeProperty("--money-fit-size");
     };
