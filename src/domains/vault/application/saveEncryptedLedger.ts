@@ -118,7 +118,7 @@ export async function saveEncryptedAccountLabel(
   };
 }
 
-function encryptedTxValue(
+export function encryptedTxValue(
   tx: Omit<PrivateTransaction, "recordId" | "revision">,
 ) {
   return {

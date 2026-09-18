@@ -223,7 +223,7 @@ const columns = columnHelper.columns([
       );
     },
     filterFn: "includesString",
-    meta: { width: "22rem", nowrap: true, grow: true },
+    meta: { width: "22rem", nowrap: true, grow: true, cardTitle: true },
   }),
   columnHelper.accessor("source", {
     header: "Source",

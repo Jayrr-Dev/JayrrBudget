@@ -169,6 +169,13 @@ export function manualAccountId(params: {
   return `manual-${institution}-${type}-${mask}`;
 }
 
+/** Failed OCR/parse: institution unknown and/or last-4 missing. */
+export function isPlaceholderManualAccountId(accountId: string) {
+  const trimmed = accountId.trim();
+  if (!trimmed.startsWith("manual-")) return false;
+  return trimmed.includes("-unknown-") || trimmed.endsWith("-xxxx");
+}
+
 /**
  * Content fingerprint for a posted line.
  * occurrenceIndex separates same-day same-amount same-merchant charges.

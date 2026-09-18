@@ -10,57 +10,44 @@ export function flowMoneyProps(txn: {
   amount: number;
   bankDirection?: string | null;
 }): {
-  signMark: "plus" | "auto";
   className: string | undefined;
 } {
   const flow = resolveBankDirection(txn);
   if (flow === "credit") {
-    return {
-      signMark: "auto",
-      className: "text-[var(--income)]",
-    };
+    return { className: "text-[var(--income)]" };
   }
   if (flow === "debit") {
-    return {
-      signMark: "auto",
-      className: "text-[var(--spend)]",
-    };
+    return { className: "text-[var(--spend)]" };
   }
-  return { signMark: "auto", className: undefined };
+  return { className: undefined };
+}
+
+function signToneClass(negative: boolean) {
+  return negative ? "text-[var(--income)]" : "text-[var(--spend)]";
 }
 
 function MoneyGrid({
   parts,
   className,
-  signMark,
   align = "right",
 }: {
   parts: MoneyParts;
   className?: string;
-  signMark?: "minus" | "plus" | "auto";
   align?: "left" | "right";
 }) {
-  const mark =
-    signMark === "plus"
-      ? "+"
-      : signMark === "minus"
-        ? "−"
-        : parts.negative
-          ? "−"
-          : "";
   return (
     <span
       data-slot="money-grid"
       className={cn(
         "inline-grid items-baseline gap-x-1.5 font-mono font-normal",
         align === "right"
-          ? "w-full min-w-max grid-cols-[max-content_1ch_minmax(7ch,1fr)]"
-          : "w-auto grid-cols-[max-content_1ch_max-content]",
+          ? "w-full min-w-max grid-cols-[max-content_minmax(7ch,1fr)]"
+          : "w-auto grid-cols-[max-content_max-content]",
+        signToneClass(parts.negative),
         className,
       )}
     >
       <span className="text-left">{parts.symbol}</span>
-      <span className="text-center">{mark}</span>
       <span className={align === "right" ? "text-right" : "text-left"}>
         {parts.number}
       </span>
@@ -73,14 +60,12 @@ export function MoneyText({
   currency,
   className,
   align = "right",
-  signMark = "auto",
   showSymbol = true,
 }: {
   amount: number | null | undefined;
   currency?: string;
   className?: string;
   align?: "left" | "right";
-  signMark?: "minus" | "plus" | "auto";
   /** When false, omit currency code/symbol (compact table cells). */
   showSymbol?: boolean;
 }) {
@@ -99,23 +84,15 @@ export function MoneyText({
     );
   }
   if (!showSymbol) {
-    const mark =
-      signMark === "plus"
-        ? "+"
-        : signMark === "minus"
-          ? "−"
-          : parts.negative
-            ? "−"
-            : "";
     return (
       <span
         className={cn(
           "block font-mono font-normal",
           align === "left" ? "text-left" : "text-right",
+          signToneClass(parts.negative),
           className,
         )}
       >
-        {mark}
         {parts.number}
       </span>
     );
@@ -123,7 +100,6 @@ export function MoneyText({
   return (
     <MoneyGrid
       parts={parts}
-      signMark={signMark}
       align={align}
       className={cn(align === "right" ? "ml-auto" : null, className)}
     />

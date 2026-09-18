@@ -762,7 +762,7 @@ export function ClassificationsPanel() {
           ),
           filterFn: "includesString",
           sortFn: "text",
-          meta: { width: "11rem", nowrap: true },
+          meta: { width: "11rem", nowrap: true, cardTitle: true },
         }),
         sectionHelper.accessor("categoryNames", {
           header: "Categories",
@@ -789,7 +789,7 @@ export function ClassificationsPanel() {
             </span>
           ),
           filterFn: "includesString",
-          meta: { grow: true },
+          meta: { grow: true, cardSubtitle: true },
         }),
       ]),
     [isAdmin, isUserScope, mine],
@@ -887,6 +887,7 @@ export function ClassificationsPanel() {
           ),
           filterFn: "includesString",
           sortFn: "text",
+          meta: { cardTitle: true },
         }),
         categoryHelper.accessor("subcategoryNames", {
           header: "Sub",
@@ -913,7 +914,7 @@ export function ClassificationsPanel() {
             </span>
           ),
           filterFn: "includesString",
-          meta: { grow: true },
+          meta: { grow: true, cardSubtitle: true },
         }),
       ]),
     [isAdmin, isUserScope, mine],
@@ -1020,6 +1021,7 @@ export function ClassificationsPanel() {
           ),
           filterFn: "includesString",
           sortFn: "text",
+          meta: { cardTitle: true },
         }),
         subcategoryHelper.accessor("description", {
           header: "Description",
@@ -1032,7 +1034,7 @@ export function ClassificationsPanel() {
             </span>
           ),
           filterFn: "includesString",
-          meta: { grow: true },
+          meta: { grow: true, cardSubtitle: true },
         }),
       ]),
     [isAdmin, isUserScope, mine],

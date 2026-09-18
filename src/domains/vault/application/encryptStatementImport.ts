@@ -2,6 +2,8 @@ import type { MutationClient, PrivateRecordInput } from "@/crypto/vaultRecords";
 import { savePrivateRecords } from "@/crypto/vaultRecords";
 import { toSlug } from "@/domains/enrichment/domain/slug";
 import type { ImportBankStatementSuccess } from "@/domains/statements/domain/importResult";
+import { isPlaceholderManualAccountId } from "@/domains/statements/domain/parsedStatement";
+import { resolveImportAccountId } from "@/domains/vault/application/mergePlaceholderAccounts";
 import { encryptedAccountMetaValue } from "@/domains/vault/application/saveEncryptedLedger";
 import type { PrivateLedger } from "@/domains/vault/domain/privateLedger";
 
@@ -59,12 +61,20 @@ export async function encryptStatementImportToVault(input: {
   if (!payload)
     throw new Error("Statement parse did not return vault payload.");
 
-  const accountRecordId = `account-${payload.accountId}`;
+  const accountId = resolveImportAccountId(input.ledger?.accounts, payload);
+  const accountRecordId = `account-${accountId}`;
   const existingAccount = input.ledger?.accounts.find(
     (account) =>
-      account.recordId === accountRecordId ||
-      account.accountId === payload.accountId,
+      account.recordId === accountRecordId || account.accountId === accountId,
   );
+  const keepExistingIdentity = Boolean(
+    existingAccount && !isPlaceholderManualAccountId(existingAccount.accountId),
+  );
+  const parsedMask = payload.accountMask?.replace(/\D/g, "").slice(-4) || null;
+  const keepMask =
+    parsedMask && parsedMask !== "xxxx"
+      ? parsedMask
+      : (existingAccount?.mask ?? parsedMask);
   const fileHash = input.result.fileHash?.trim() || `import-${Date.now()}`;
   const statementRecordId = `statement-${fileHash}`;
   const ocrRecordId = `ocr-${fileHash}`;
@@ -86,15 +96,19 @@ export async function encryptStatementImportToVault(input: {
       recordId: accountRecordId,
       kind: "account_meta",
       value: encryptedAccountMetaValue({
-        accountId: payload.accountId,
-        name: payload.accountName ?? payload.accountId,
+        accountId,
+        name: keepExistingIdentity
+          ? (existingAccount?.name ?? accountId)
+          : (payload.accountName ?? existingAccount?.name ?? accountId),
         label: existingAccount?.label ?? null,
-        officialName: payload.accountName,
-        mask: payload.accountMask,
-        type: payload.accountType,
-        subtype: payload.accountSubtype,
+        officialName: keepExistingIdentity
+          ? (existingAccount?.officialName ?? payload.accountName)
+          : (payload.accountName ?? existingAccount?.officialName ?? null),
+        mask: keepMask,
+        type: existingAccount?.type ?? payload.accountType,
+        subtype: existingAccount?.subtype ?? payload.accountSubtype,
         currentBalance: payload.closingBalance,
-        availableBalance: null,
+        availableBalance: existingAccount?.availableBalance ?? null,
         isoCurrencyCode: payload.currency,
       }),
       expectedRevision: existingAccount?.revision ?? null,
@@ -108,7 +122,7 @@ export async function encryptStatementImportToVault(input: {
         kind: "tx" as const,
         value: txValue(txn, {
           currency: payload.currency,
-          accountId: payload.accountId,
+          accountId,
           statementRecordId,
           tagNames: txn.tagNames ?? existing?.tagNames ?? [],
         }),

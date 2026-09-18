@@ -198,6 +198,7 @@ const FALLBACK_COLUMNS: Record<string, string[]> = {
     "accountId",
     "institutionId",
     "name",
+    "label",
     "type",
     "subtype",
     "userId",

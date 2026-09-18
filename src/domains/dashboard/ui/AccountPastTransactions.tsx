@@ -29,11 +29,11 @@ type StatusKey = "all" | "pending" | "posted";
 type SortKey = "date" | "label" | "amount" | "balance";
 type SortDir = "asc" | "desc";
 
-const RANGE_OPTIONS: { key: RangeKey; label: string }[] = [
-  { key: "4w", label: "Last 4 weeks" },
-  { key: "3m", label: "Last 3 months" },
-  { key: "6m", label: "Last 6 months" },
-  { key: "12m", label: "Last 12 months" },
+const RANGE_OPTIONS: { key: RangeKey; label: string; mobileLabel: string }[] = [
+  { key: "4w", label: "Last 4 weeks", mobileLabel: "Last 4w" },
+  { key: "3m", label: "Last 3 months", mobileLabel: "Last 3m" },
+  { key: "6m", label: "Last 6 months", mobileLabel: "Last 6m" },
+  { key: "12m", label: "Last 12 months", mobileLabel: "Last 12m" },
 ];
 
 const STATUS_OPTIONS: { key: StatusKey; label: string }[] = [
@@ -317,8 +317,10 @@ export function AccountPastTransactions({
                   variant={range === option.key ? "default" : "outline"}
                   onClick={() => setRange(option.key)}
                   aria-pressed={range === option.key}
+                  aria-label={option.label}
                 >
-                  {option.label}
+                  <span className="sm:hidden">{option.mobileLabel}</span>
+                  <span className="hidden sm:inline">{option.label}</span>
                 </Button>
               ))}
             </ButtonGroup>

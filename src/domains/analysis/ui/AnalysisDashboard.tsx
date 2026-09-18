@@ -222,8 +222,16 @@ const CHART_TOOLTIP_ESCAPE = { x: false, y: false } as const;
 function moneyTick(value: number, currency: string) {
   const parts = formatMoneyParts(value, currency, true);
   if (!parts) return "-";
-  const sign = parts.negative ? "-" : "";
-  return `${parts.symbol} ${sign}${parts.number}`;
+  return `${parts.symbol} ${parts.number}`;
+}
+
+function moneySeriesClass(key: string, amount: number) {
+  if (key === "spend") return "text-[var(--spend)]";
+  if (key === "income") return "text-[var(--income)]";
+  if (key === "net") {
+    return amount < 0 ? "text-[var(--spend)]" : "text-[var(--income)]";
+  }
+  return undefined;
 }
 
 function InfoTip({ label, children }: { label: string; children: string }) {
@@ -701,6 +709,7 @@ function AreaTreemapCell({
   depth,
   currency,
   total,
+  payload,
 }: {
   x?: number;
   y?: number;
@@ -712,10 +721,50 @@ function AreaTreemapCell({
   depth?: number;
   currency: string;
   total: number;
+  payload?: { children?: unknown[]; fillIndex?: number };
 }) {
-  if (depth !== 1 || width < 2 || height < 2) return null;
+  if (width < 2 || height < 2) return null;
+  const nestedKids = payload?.children;
+  const isGroup =
+    depth === 1 && Array.isArray(nestedKids) && nestedKids.length > 0;
+  const isLeaf = depth === 2 || (depth === 1 && !isGroup);
+  if (!isGroup && !isLeaf) return null;
 
-  const fill = CATEGORY_COLORS[Number(index) % CATEGORY_COLORS.length];
+  if (isGroup) {
+    const label = String(name ?? "");
+    return (
+      <g>
+        <rect
+          x={x}
+          y={y}
+          width={width}
+          height={height}
+          fill="var(--muted)"
+          fillOpacity={0.35}
+          stroke="var(--background)"
+          strokeWidth={3}
+        />
+        {width >= 64 && height >= 22 && label.length > 0 ? (
+          <foreignObject
+            x={x + 6}
+            y={y + 3}
+            width={Math.max(0, width - 12)}
+            height={16}
+            pointerEvents="none"
+          >
+            <div className="truncate text-[11px] font-medium text-muted-foreground">
+              {label}
+            </div>
+          </foreignObject>
+        ) : null}
+      </g>
+    );
+  }
+
+  const fill =
+    CATEGORY_COLORS[
+      Number(payload?.fillIndex ?? index) % CATEGORY_COLORS.length
+    ];
   const label = String(name ?? "");
   const spend = Number(value ?? 0);
   const share = total > 0 ? spend / total : 0;
@@ -917,7 +966,13 @@ function TimeSeriesTable({
                       <MoneyText
                         amount={Number(row[column.key] ?? 0)}
                         currency={currency}
-                        className="text-[0.7rem] sm:text-sm"
+                        className={cn(
+                          "text-[0.7rem] sm:text-sm",
+                          moneySeriesClass(
+                            column.key,
+                            Number(row[column.key] ?? 0),
+                          ),
+                        )}
                       />
                     )}
                   </TableCell>
@@ -946,7 +1001,10 @@ function TimeSeriesTable({
                     <MoneyText
                       amount={total}
                       currency={currency}
-                      className="text-[0.7rem] sm:text-sm"
+                      className={cn(
+                        "text-[0.7rem] sm:text-sm",
+                        moneySeriesClass(column.key, total),
+                      )}
                     />
                   )}
                 </TableCell>
@@ -1357,14 +1415,20 @@ function useVisibleSeries(series: AnalysisCategorySeries[]) {
   };
 }
 
-function legendPlacement(count: number): "side" | "top" {
+type SeriesLegendGroup = {
+  label: string;
+  series: AnalysisCategorySeries[];
+};
+
+function legendPlacement(count: number, grouped = false): "side" | "top" {
+  if (grouped) return "side";
   return count > LEGEND_GROUP_AFTER ? "side" : "top";
 }
 
 function seriesGroupsByRow(
   rows: Array<Record<string, string | number>>,
   series: AnalysisCategorySeries[],
-): { label: string; series: AnalysisCategorySeries[] }[] {
+): SeriesLegendGroup[] {
   const parentByKey = new Map<string, string>();
   for (const item of series) {
     let bestName = "";
@@ -1379,7 +1443,7 @@ function seriesGroupsByRow(
     parentByKey.set(item.key, bestName.length > 0 ? bestName : "Other");
   }
 
-  const groups: { label: string; series: AnalysisCategorySeries[] }[] = [];
+  const groups: SeriesLegendGroup[] = [];
   const used = new Set<string>();
   const pushGroup = (label: string) => {
     if (used.has(label)) return;
@@ -1396,6 +1460,85 @@ function seriesGroupsByRow(
     pushGroup(label);
   }
   return groups;
+}
+
+function seriesGroupsFromBuckets(
+  series: AnalysisCategorySeries[],
+  buckets: { label: string; names: string[] }[],
+): SeriesLegendGroup[] | undefined {
+  if (series.length === 0 || buckets.length === 0) return undefined;
+  const claimed = new Set<string>();
+  const groups: SeriesLegendGroup[] = [];
+  for (const bucket of buckets) {
+    const names = new Set(bucket.names);
+    const items = series.filter((item) => {
+      if (claimed.has(item.key) || !names.has(item.label)) return false;
+      claimed.add(item.key);
+      return true;
+    });
+    if (items.length === 0) continue;
+    groups.push({ label: bucket.label, series: items });
+  }
+  const rest = series.filter((item) => !claimed.has(item.key));
+  if (rest.length > 0) {
+    groups.push({ label: "Other", series: rest });
+  }
+  return groups.length > 0 ? groups : undefined;
+}
+
+function rowSeriesFromRows(
+  rows: Array<Record<string, string | number>>,
+): AnalysisCategorySeries[] {
+  return rows.map((row) => {
+    const name = String(row.name ?? "");
+    return { key: name, label: name };
+  });
+}
+
+function nestedTreemapData(
+  groups: SeriesLegendGroup[],
+  rows: Array<{ name: string; spend: number }>,
+  fillIndexByName: Map<string, number>,
+) {
+  const byName = new Map(rows.map((row) => [row.name, row]));
+  return groups.flatMap((group) => {
+    const children = group.series.flatMap((item) => {
+      const row = byName.get(item.key);
+      if (!row || row.spend <= 0) return [];
+      return [
+        {
+          name: row.name,
+          spend: row.spend,
+          fillIndex: fillIndexByName.get(row.name) ?? 0,
+        },
+      ];
+    });
+    if (children.length === 0) return [];
+    return [
+      {
+        name: group.label,
+        spend: children.reduce((sum, child) => sum + child.spend, 0),
+        children,
+      },
+    ];
+  });
+}
+
+function sectionRowGroups(
+  rows: Array<Record<string, string | number>>,
+  buckets: { label: string; names: string[] }[],
+) {
+  return seriesGroupsFromBuckets(rowSeriesFromRows(rows), buckets);
+}
+
+function nestedSectionBuckets(
+  sections: AnalysisRankedItem[],
+  nested: Record<string, AnalysisRankedItem[]> | undefined,
+) {
+  return sections.map((section) => ({
+    label: section.name,
+    names: (nested?.[section.name] ?? []).map((item) => item.name),
+  }));
 }
 
 function ChartWithSeriesList({
@@ -1437,14 +1580,14 @@ function SeriesLegend({
   value: string[];
   onValueChange: (keys: string[]) => void;
   colors?: string[];
-  groups?: { label: string; series: AnalysisCategorySeries[] }[];
+  groups?: SeriesLegendGroup[];
 }) {
   if (series.length === 0) return null;
   const colorByKey = new Map(
     series.map((item, index) => [item.key, colors[index % colors.length]]),
   );
   const sections =
-    groups && groups.length > 1 ? groups : [{ label: "", series }];
+    groups && groups.length > 0 ? groups : [{ label: "", series }];
 
   return (
     <ToggleGroup
@@ -1800,6 +1943,7 @@ function StackedMixChart({
   otherByPeriod,
   nestedByPeriod,
   overlapping = false,
+  groups,
 }: {
   title: string;
   info: string;
@@ -1814,6 +1958,7 @@ function StackedMixChart({
   nestedByPeriod?: Record<string, Record<string, AnalysisRankedItem[]>>;
   /** Multi-label series (tags): standard mode draws unstacked so shared rows are not double-counted. */
   overlapping?: boolean;
+  groups?: SeriesLegendGroup[];
 }) {
   const { visibleKeys, visibleSeries, setVisibleKeys } =
     useVisibleSeries(series);
@@ -1951,12 +2096,13 @@ function StackedMixChart({
         }}
       />
       <ChartWithSeriesList
-        placement={legendPlacement(series.length)}
+        placement={legendPlacement(series.length, (groups?.length ?? 0) > 1)}
         list={
           <SeriesLegend
             series={series}
             value={visibleKeys}
             onValueChange={setVisibleKeys}
+            groups={groups}
           />
         }
       >
@@ -2202,6 +2348,7 @@ function StackedRankedBarChart({
   onSelect,
   otherByRow,
   showViewToggle = false,
+  rowGroups,
 }: {
   title: string;
   info: string;
@@ -2212,9 +2359,13 @@ function StackedRankedBarChart({
   onSelect?: (name: string) => void;
   otherByRow?: Record<string, AnalysisRankedItem[]>;
   showViewToggle?: boolean;
+  rowGroups?: SeriesLegendGroup[];
 }) {
+  const rowSeries = useMemo(() => rowSeriesFromRows(rows), [rows]);
+  const legendSeries = rowGroups ? rowSeries : series;
   const { visibleKeys, visibleSeries, setVisibleKeys } =
-    useVisibleSeries(series);
+    useVisibleSeries(legendSeries);
+  const stackedSeries = rowGroups ? series : visibleSeries;
   const [view, setView] = useState<BreakdownView>("area");
   const config = useMemo(() => {
     const next: ChartConfig = {};
@@ -2224,32 +2375,52 @@ function StackedRankedBarChart({
         color: CATEGORY_COLORS[index % CATEGORY_COLORS.length],
       };
     });
+    rowSeries.forEach((item, index) => {
+      next[item.key] = {
+        label: item.label,
+        color: CATEGORY_COLORS[index % CATEGORY_COLORS.length],
+      };
+    });
     return next;
-  }, [series]);
-  const lastKey = visibleSeries[visibleSeries.length - 1]?.key ?? "";
+  }, [rowSeries, series]);
+  const lastKey = stackedSeries[stackedSeries.length - 1]?.key ?? "";
   const isPie = showViewToggle && view === "pie";
   const isArea = showViewToggle && view === "area";
-  const legendGroups = useMemo(
-    () =>
-      series.length > LEGEND_GROUP_AFTER
-        ? seriesGroupsByRow(rows, series)
-        : undefined,
-    [rows, series],
+  const nestedLegendGroups = useMemo(
+    () => (rowGroups ? undefined : seriesGroupsByRow(rows, series)),
+    [rowGroups, rows, series],
+  );
+  const legendGroups = rowGroups ?? nestedLegendGroups;
+  const groupedLegend = (legendGroups?.length ?? 0) > 0;
+  const visibleKeySet = useMemo(() => new Set(visibleKeys), [visibleKeys]);
+  const fillIndexByName = useMemo(
+    () => new Map(rowSeries.map((item, index) => [item.key, index])),
+    [rowSeries],
   );
   const visibleRows = useMemo(
     () =>
       rows
-        .map((row) => ({
-          ...row,
-          name: String(row.name ?? ""),
-          spend: visibleSeries.reduce(
-            (sum, item) => sum + Number(row[item.key] ?? 0),
-            0,
-          ),
-        }))
-        .filter((row) => row.spend > 0),
-    [rows, visibleSeries],
+        .map((row) => {
+          const name = String(row.name ?? "");
+          const spend = rowGroups
+            ? Number(row.spend ?? 0)
+            : stackedSeries.reduce(
+                (sum, item) => sum + Number(row[item.key] ?? 0),
+                0,
+              );
+          return { ...row, name, spend };
+        })
+        .filter((row) => {
+          if (row.spend <= 0) return false;
+          if (!rowGroups) return true;
+          return visibleKeySet.has(row.name);
+        }),
+    [rowGroups, rows, stackedSeries, visibleKeySet],
   );
+  const treemapData = useMemo(() => {
+    if (!rowGroups || rowGroups.length === 0) return visibleRows;
+    return nestedTreemapData(rowGroups, visibleRows, fillIndexByName);
+  }, [fillIndexByName, rowGroups, visibleRows]);
   const pieRows = visibleRows;
   const pieTotal = pieRows.reduce((sum, row) => sum + Number(row.spend), 0);
   const pieCalloutColumnsBySide = useMemo(
@@ -2295,13 +2466,13 @@ function StackedRankedBarChart({
         }}
       />
       <ChartWithSeriesList
-        placement={legendPlacement(series.length)}
+        placement={legendPlacement(legendSeries.length, groupedLegend)}
         list={
           <SeriesLegend
-            series={series}
+            series={legendSeries}
             value={visibleKeys}
             onValueChange={setVisibleKeys}
-            groups={legendGroups}
+            groups={groupedLegend ? legendGroups : undefined}
           />
         }
       >
@@ -2325,7 +2496,7 @@ function StackedRankedBarChart({
                     config,
                     currency,
                     otherByRow,
-                    visibleSeries,
+                    stackedSeries,
                     pieTotal,
                     false,
                   )
@@ -2365,10 +2536,15 @@ function StackedRankedBarChart({
                     />
                   )}
                 />
-                {pieRows.map((row, index) => (
+                {pieRows.map((row) => (
                   <Cell
                     key={String(row.name)}
-                    fill={CATEGORY_COLORS[index % CATEGORY_COLORS.length]}
+                    fill={
+                      CATEGORY_COLORS[
+                        (fillIndexByName.get(String(row.name)) ?? 0) %
+                          CATEGORY_COLORS.length
+                      ]
+                    }
                   />
                 ))}
               </Pie>
@@ -2381,19 +2557,23 @@ function StackedRankedBarChart({
             initialDimension={{ width: 800, height: 600 }}
           >
             <Treemap
-              data={pieRows}
+              data={treemapData}
               dataKey="spend"
               nameKey="name"
               stroke="var(--background)"
               fill="transparent"
               isAnimationActive={false}
+              nodeInset={rowGroups ? 18 : 0}
               style={onSelect ? { cursor: "pointer" } : undefined}
               onClick={(node) => {
                 const name =
                   node && typeof node === "object" && "name" in node
                     ? String((node as { name?: string }).name ?? "")
                     : "";
-                if (onSelect && name) onSelect(name);
+                const isGroup = rowGroups?.some(
+                  (group) => group.label === name,
+                );
+                if (onSelect && name && !isGroup) onSelect(name);
               }}
               content={(props) => (
                 <AreaTreemapCell
@@ -2407,6 +2587,13 @@ function StackedRankedBarChart({
                   depth={props.depth}
                   currency={currency}
                   total={pieTotal}
+                  payload={{
+                    children: props.children ?? undefined,
+                    fillIndex:
+                      typeof props.fillIndex === "number"
+                        ? props.fillIndex
+                        : undefined,
+                  }}
                 />
               )}
             >
@@ -2420,7 +2607,7 @@ function StackedRankedBarChart({
                     config,
                     currency,
                     otherByRow,
-                    visibleSeries,
+                    stackedSeries,
                     pieTotal,
                     false,
                   )
@@ -2474,11 +2661,11 @@ function StackedRankedBarChart({
                     config,
                     currency,
                     otherByRow,
-                    visibleSeries,
+                    stackedSeries,
                   )
                 }
               />
-              {visibleSeries.map((item) => (
+              {stackedSeries.map((item) => (
                 <Bar
                   key={item.key}
                   dataKey={item.key}
@@ -3634,11 +3821,13 @@ function TxnPeekRows({
                 className="border-b border-border last:border-b-0"
               >
                 {hideRowMenu ? null : (
-                  <td className="w-8 px-1 py-1 align-top">
-                    <DescriptionActionsButton
-                      description={txn.description}
-                      onEdit={onEditDescription}
-                    />
+                  <td className="w-8 p-0 align-middle">
+                    <div className="flex items-center justify-center py-1">
+                      <DescriptionActionsButton
+                        description={txn.description}
+                        onEdit={onEditDescription}
+                      />
+                    </div>
                   </td>
                 )}
                 <td className="whitespace-nowrap px-1.5 py-1 align-top tabular-nums text-muted-foreground md:px-3 md:py-1.5">
@@ -3807,10 +3996,12 @@ function RowTxnsPopover({
               keepTxnPeekPopoverOpen(event);
             }}
           >
-            <DialogHeader className="border-b border-border px-3 py-2">
-              <div className="flex items-center gap-2">
+            <DialogHeader className="border-b border-border py-2 pr-3">
+              <div className={blurb ? "flex items-start" : "flex items-center"}>
                 {headerActions ? (
-                  <div className="shrink-0">{headerActions}</div>
+                  <div className="flex w-8 shrink-0 items-center justify-center">
+                    {headerActions}
+                  </div>
                 ) : null}
                 <div className="min-w-0">
                   <DialogTitle className="text-sm">{titleRow}</DialogTitle>
@@ -3854,9 +4045,15 @@ function RowTxnsPopover({
             keepTxnPeekPopoverOpen(event);
           }}
         >
-          <div className="flex items-start gap-2 border-b border-border px-3 py-2">
+          <div
+            className={`border-b border-border py-2 pr-3 ${
+              blurb ? "flex items-start" : "flex items-center"
+            }`}
+          >
             {headerActions ? (
-              <div className="shrink-0">{headerActions}</div>
+              <div className="flex w-8 shrink-0 items-center justify-center">
+                {headerActions}
+              </div>
             ) : null}
             <div className="min-w-0">
               {titleRow}
@@ -4194,6 +4391,23 @@ function seriesKeyForLabel(name: string, series: AnalysisCategorySeries[]) {
   return series.find((item) => item.label === name)?.key;
 }
 
+function RangeMetricJoin() {
+  return (
+    <span
+      aria-hidden
+      className="block h-px w-full self-center bg-[var(--border)]"
+    />
+  );
+}
+
+function HighMidLowMetrics({ children }: { children: ReactNode }) {
+  return (
+    <div className="grid grid-cols-[7.25rem_1rem_7.25rem_1rem_7.25rem] items-center">
+      {children}
+    </div>
+  );
+}
+
 /** High / mid / low spend across header range period buckets. */
 function RangeLeaderboardTable({
   title,
@@ -4233,8 +4447,8 @@ function RangeLeaderboardTable({
   const top = ranked.slice(0, 10);
 
   const grid = showTxns
-    ? "grid w-fit max-w-full grid-cols-[1.5rem_minmax(7rem,14rem)_7.25rem_7.25rem_7.25rem_2.75rem] items-center gap-x-4 px-3 sm:grid-cols-[1.5rem_minmax(7rem,14rem)_7.25rem_7.25rem_7.25rem_1.5rem]"
-    : "grid w-fit max-w-full grid-cols-[1.5rem_minmax(7rem,14rem)_7.25rem_7.25rem_7.25rem] items-center gap-x-4 px-3";
+    ? "grid w-fit max-w-full grid-cols-[1.5rem_minmax(7rem,14rem)_max-content_2.75rem] items-center gap-x-4 px-3 sm:grid-cols-[1.5rem_minmax(7rem,14rem)_max-content_1.5rem]"
+    : "grid w-fit max-w-full grid-cols-[1.5rem_minmax(7rem,14rem)_max-content] items-center gap-x-4 px-3";
 
   return (
     <section className="min-w-0 space-y-3 rounded-xl border border-border bg-surface-elevated p-3 sm:space-y-4 sm:p-6">
@@ -4258,9 +4472,13 @@ function RangeLeaderboardTable({
             >
               <span className="tabular-nums">#</span>
               <span className="min-w-0 truncate text-left">{nameLabel}</span>
-              <span className="w-full text-right">High</span>
-              <span className="w-full text-right">Mid</span>
-              <span className="w-full text-right">Low</span>
+              <HighMidLowMetrics>
+                <span className="w-full text-right">High</span>
+                <RangeMetricJoin />
+                <span className="w-full text-right">Mid</span>
+                <RangeMetricJoin />
+                <span className="w-full text-right">Low</span>
+              </HighMidLowMetrics>
               {showTxns ? <span className="sr-only">Info</span> : null}
             </div>
             <div>
@@ -4275,15 +4493,19 @@ function RangeLeaderboardTable({
                   <span className="min-w-0 truncate font-medium text-[var(--foreground)]">
                     {asMerchant ? <MerchantLabel name={row.name} /> : row.name}
                   </span>
-                  <span className="text-right font-mono tabular-nums text-[var(--foreground)]">
-                    <MoneyText amount={row.high} currency={currency} />
-                  </span>
-                  <span className="text-right font-mono tabular-nums text-[var(--muted-foreground)]">
-                    <MoneyText amount={row.mid} currency={currency} />
-                  </span>
-                  <span className="text-right font-mono tabular-nums text-[var(--muted-foreground)]">
-                    <MoneyText amount={row.low} currency={currency} />
-                  </span>
+                  <HighMidLowMetrics>
+                    <span className="text-right font-mono tabular-nums text-[var(--foreground)]">
+                      <MoneyText amount={row.high} currency={currency} />
+                    </span>
+                    <RangeMetricJoin />
+                    <span className="text-right font-mono tabular-nums text-[var(--muted-foreground)]">
+                      <MoneyText amount={row.mid} currency={currency} />
+                    </span>
+                    <RangeMetricJoin />
+                    <span className="text-right font-mono tabular-nums text-[var(--muted-foreground)]">
+                      <MoneyText amount={row.low} currency={currency} />
+                    </span>
+                  </HighMidLowMetrics>
                   {showTxns ? (
                     <RowTxnsPopover
                       label={row.name}
@@ -4735,6 +4957,26 @@ function SectionsTab({
             variant="area"
             other={data.sectionOther}
             otherByPeriod={data.sectionOtherByPeriod}
+            groups={seriesGroupsFromBuckets(
+              data.sectionSeries,
+              data.spreads.map((spread) => {
+                const spreadCats = new Set(
+                  (data.categoriesBySpread?.[spread.name] ?? []).map(
+                    (item) => item.name,
+                  ),
+                );
+                return {
+                  label: spread.name,
+                  names: data.sections
+                    .filter((section) =>
+                      (data.categoriesBySection?.[section.name] ?? []).some(
+                        (item) => spreadCats.has(item.name),
+                      ),
+                    )
+                    .map((section) => section.name),
+                };
+              }),
+            )}
           />
           <TaxonomyBreakdownTable
             title="All sections"
@@ -5042,7 +5284,7 @@ function CategoriesTab({
         <div className="space-y-6">
           <StackedRankedBarChart
             title="Category breakdown"
-            info="Each category bar splits by its biggest subcategories. The last 15% of that category rolls into Other. Hover Other to see the names."
+            info="Categories grouped by section. Toggle a category chip to hide it. Area nests those categories inside each section."
             rows={data.categoryStacked.rows}
             series={data.categoryStacked.series}
             currency={data.currency}
@@ -5050,6 +5292,10 @@ function CategoriesTab({
             onSelect={onSelectCategory}
             otherByRow={data.categoryStacked.otherByRow}
             showViewToggle
+            rowGroups={sectionRowGroups(
+              data.categoryStacked.rows,
+              nestedSectionBuckets(data.sections, data.categoriesBySection),
+            )}
           />
           <StackedMixChart
             title="Category mix over time"
@@ -5062,6 +5308,10 @@ function CategoriesTab({
             variant="area"
             other={data.categoryOther}
             otherByPeriod={data.categoryOtherByPeriod}
+            groups={seriesGroupsFromBuckets(
+              data.categorySeries,
+              nestedSectionBuckets(data.sections, data.categoriesBySection),
+            )}
           />
           <CategoryDrilldown
             data={data}
@@ -5296,7 +5546,7 @@ function SubcategoriesTab({
         <div className="space-y-6">
           <StackedRankedBarChart
             title="Subcategory breakdown"
-            info="Every subcategory with spend, sliced by Merchant clean. The last 15% inside each row rolls into Other. Click a bar to open its merchant detail."
+            info="Subcategories grouped by section. Toggle a subcategory chip to hide it. Area nests those labels inside each section."
             rows={stacked.rows}
             series={stacked.series}
             currency={data.currency}
@@ -5308,6 +5558,10 @@ function SubcategoriesTab({
             }}
             otherByRow={stacked.otherByRow}
             showViewToggle
+            rowGroups={sectionRowGroups(
+              stacked.rows,
+              nestedSectionBuckets(data.sections, data.subcategoriesBySection),
+            )}
           />
           <StackedMixChart
             title="Subcategory mix over time"
@@ -5320,6 +5574,10 @@ function SubcategoriesTab({
             variant="area"
             other={data.subcategoryOther}
             otherByPeriod={data.subcategoryOtherByPeriod}
+            groups={seriesGroupsFromBuckets(
+              data.subcategorySeries,
+              nestedSectionBuckets(data.sections, data.subcategoriesBySection),
+            )}
           />
           <SubcategoryDrilldown
             data={data}
@@ -6116,7 +6374,7 @@ function MerchantsTab({
         <div className="space-y-6">
           <StackedRankedBarChart
             title="Merchant breakdown"
-            info="Every Merchant clean name with spend, sliced by subcategory. The last 15% inside each row rolls into Other. Click a bar to open its subcategory detail."
+            info="Merchants grouped by section. Toggle a merchant chip to hide it. Area nests those names inside each section."
             rows={stacked.rows}
             series={stacked.series}
             currency={data.currency}
@@ -6128,6 +6386,10 @@ function MerchantsTab({
             }}
             otherByRow={stacked.otherByRow}
             showViewToggle
+            rowGroups={sectionRowGroups(
+              stacked.rows,
+              nestedSectionBuckets(data.sections, data.merchantsBySection),
+            )}
           />
           <StackedMixChart
             title="Merchant mix over time"
@@ -6140,6 +6402,10 @@ function MerchantsTab({
             variant="area"
             other={data.merchantOther}
             otherByPeriod={data.merchantOtherByPeriod}
+            groups={seriesGroupsFromBuckets(
+              data.merchantSeries ?? [],
+              nestedSectionBuckets(data.sections, data.merchantsBySection),
+            )}
           />
           <MerchantDrilldown
             data={data}

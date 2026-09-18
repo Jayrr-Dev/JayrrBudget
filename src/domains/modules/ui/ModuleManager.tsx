@@ -66,7 +66,7 @@ const columns = columnHelper.columns([
       const description = (row.original.description ?? "").toLowerCase();
       return name.includes(query) || description.includes(query);
     },
-    meta: { width: "22rem", wrap: true, grow: true },
+    meta: { width: "22rem", wrap: true, grow: true, cardTitle: true },
   }),
   columnHelper.accessor("category", {
     header: "Category",

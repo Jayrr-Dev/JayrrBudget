@@ -29,7 +29,7 @@ const TOP_STACKED_SPREAD_ROWS = 4;
 const TOP_STACKED_MERCHANT_ROWS = 40;
 const TOP_CATEGORY_BREAKDOWNS = 12;
 const TOP_FACET_BREAKDOWNS = 40;
-const NAMED_SHARE = 0.85;
+const NAMED_SHARE = 1;
 const UNCATEGORIZED = "Uncategorized";
 /** Cap per facet key. Rows should arrive newest-first so early exit keeps recent txns. */
 const PEEK_LIMIT = 48;
@@ -387,16 +387,18 @@ function rankSpreads(map: Map<string, RankBucket>): AnalysisRankedItem[] {
 function vendorsByName(
   names: string[],
   nested: Map<string, Map<string, RankBucket>>,
-  limit = 10,
 ) {
   const next: Record<string, AnalysisRankedItem[]> = {};
   for (const name of names) {
-    next[name] = rankAll(nested.get(name) ?? new Map()).slice(0, limit);
+    next[name] = rankAll(nested.get(name) ?? new Map());
   }
   return next;
 }
 
 function splitNamedAndOther(ranked: AnalysisRankedItem[]) {
+  if (NAMED_SHARE >= 1) {
+    return { named: ranked, other: [] as AnalysisRankedItem[] };
+  }
   const total = ranked.reduce((sum, item) => sum + item.spend, 0);
   if (ranked.length === 0 || total <= 0) {
     return {
@@ -424,7 +426,11 @@ function splitNamedAndOther(ranked: AnalysisRankedItem[]) {
 
 function namedUntilShare(ranked: Array<[string, number]>, total: number) {
   const named = new Set<string>();
-  if (total <= 0 || ranked.length === 0) return named;
+  if (ranked.length === 0) return named;
+  if (NAMED_SHARE >= 1 || total <= 0) {
+    for (const [name] of ranked) named.add(name);
+    return named;
+  }
   if (ranked.length === 1) {
     named.add(ranked[0][0]);
     return named;
@@ -683,9 +689,9 @@ function nestedItemsByPeriod(
 function buildNestedStackedBars(
   outers: AnalysisRankedItem[],
   nested: Map<string, Map<string, RankBucket>>,
-  outerLimit: number,
+  _outerLimit: number,
 ) {
-  const limited = outers.slice(0, outerLimit).filter((item) => item.spend > 0);
+  const limited = outers.filter((item) => item.spend > 0);
   if (limited.length === 0) {
     return { rows: [], series: [], otherByRow: {} };
   }
@@ -813,6 +819,7 @@ function emptyAnalysis(
     sectionStacked: { rows: [], series: [] },
     merchantsBySection: {},
     categoriesBySection: {},
+    subcategoriesBySection: {},
     merchantsByCategory: {},
     spreads: [],
     spreadMonthly: [],
@@ -960,6 +967,7 @@ export function computeAnalysis(args: {
   const countrySpend = new Map<string, RankBucket>();
   const habitMerchantSpend = new Map<string, RankBucket>();
   const typeByCategory = new Map<string, Map<string, RankBucket>>();
+  const typeBySection = new Map<string, Map<string, RankBucket>>();
   const categoryBySection = new Map<string, Map<string, RankBucket>>();
   const categoryBySpread = new Map<string, Map<string, RankBucket>>();
   const merchantByCategory = new Map<string, Map<string, RankBucket>>();
@@ -1152,6 +1160,7 @@ export function computeAnalysis(args: {
       nestedAdd(categoryByMerchant, cleanMerchant, category, abs);
       nestedAdd(typeByCategory, category, type, abs);
       nestedAdd(categoryBySection, section, category, abs);
+      nestedAdd(typeBySection, section, type, abs);
       nestedAdd(merchantByCategory, category, merchant, abs);
       nestedAdd(vendorBySection, section, cleanMerchant, abs);
       nestedAdd(vendorByCategory, category, cleanMerchant, abs);
@@ -1247,6 +1256,7 @@ export function computeAnalysis(args: {
       }
       nestedAdd(typeByCategory, category, type, -abs);
       nestedAdd(categoryBySection, section, category, -abs);
+      nestedAdd(typeBySection, section, type, -abs);
       nestedAdd(vendorBySection, section, cleanMerchant, -abs);
       nestedAdd(vendorByCategory, category, cleanMerchant, -abs);
       nestedAdd(merchantBySubcategory, type, cleanMerchant, -abs);
@@ -1603,62 +1613,58 @@ export function computeAnalysis(args: {
     .sort((a, b) => b.count - a.count || b.spend - a.spend)
     .slice(0, 12);
 
-  const breakdowns = categories
-    .slice(0, TOP_CATEGORY_BREAKDOWNS)
-    .map((item) => {
-      const types = rankAll(typeByCategory.get(item.name) ?? new Map());
-      const {
-        series: typeSeries,
-        monthly: typeMonthly,
-        other,
-        otherByPeriod,
-      } = buildStackedSeries(
-        monthKeys,
-        typeMonthByCategory.get(item.name) ?? new Map(),
-        types,
-        period,
-      );
-      return {
-        category: item.name,
-        spend: item.spend,
-        types,
-        merchants: rankAll(merchantByCategory.get(item.name) ?? new Map()),
-        typeSeries,
-        typeMonthly,
-        other,
-        otherByPeriod,
-      };
-    });
+  const breakdowns = categories.map((item) => {
+    const types = rankAll(typeByCategory.get(item.name) ?? new Map());
+    const {
+      series: typeSeries,
+      monthly: typeMonthly,
+      other,
+      otherByPeriod,
+    } = buildStackedSeries(
+      monthKeys,
+      typeMonthByCategory.get(item.name) ?? new Map(),
+      types,
+      period,
+    );
+    return {
+      category: item.name,
+      spend: item.spend,
+      types,
+      merchants: rankAll(merchantByCategory.get(item.name) ?? new Map()),
+      typeSeries,
+      typeMonthly,
+      other,
+      otherByPeriod,
+    };
+  });
 
-  const subcategoryBreakdowns = subcategories
-    .slice(0, TOP_FACET_BREAKDOWNS)
-    .map((item) => {
-      const merchants = rankAll(
-        merchantBySubcategory.get(item.name) ?? new Map(),
-      );
-      const {
-        series: merchantSeries,
-        monthly: merchantMonthly,
-        other,
-        otherByPeriod,
-      } = buildStackedSeries(
-        monthKeys,
-        merchantMonthBySubcategory.get(item.name) ?? new Map(),
-        merchants,
-        period,
-      );
-      return {
-        subcategory: item.name,
-        spend: item.spend,
-        merchants,
-        merchantSeries,
-        merchantMonthly,
-        other,
-        otherByPeriod,
-      };
-    });
+  const subcategoryBreakdowns = subcategories.map((item) => {
+    const merchants = rankAll(
+      merchantBySubcategory.get(item.name) ?? new Map(),
+    );
+    const {
+      series: merchantSeries,
+      monthly: merchantMonthly,
+      other,
+      otherByPeriod,
+    } = buildStackedSeries(
+      monthKeys,
+      merchantMonthBySubcategory.get(item.name) ?? new Map(),
+      merchants,
+      period,
+    );
+    return {
+      subcategory: item.name,
+      spend: item.spend,
+      merchants,
+      merchantSeries,
+      merchantMonthly,
+      other,
+      otherByPeriod,
+    };
+  });
 
-  const tagBreakdowns = tags.slice(0, TOP_FACET_BREAKDOWNS).map((item) => {
+  const tagBreakdowns = tags.map((item) => {
     const merchants = rankAll(merchantByTag.get(item.name) ?? new Map());
     const {
       series: merchantSeries,
@@ -1682,7 +1688,7 @@ export function computeAnalysis(args: {
     };
   });
 
-  const typeBreakdowns = types.slice(0, TOP_FACET_BREAKDOWNS).map((item) => {
+  const typeBreakdowns = types.map((item) => {
     const merchants = rankAll(merchantByType.get(item.name) ?? new Map());
     const {
       series: merchantSeries,
@@ -1706,63 +1712,57 @@ export function computeAnalysis(args: {
     };
   });
 
-  const merchantBreakdowns = merchants
-    .slice(0, TOP_FACET_BREAKDOWNS)
-    .map((item) => {
-      const types = rankAll(subcategoryByMerchant.get(item.name) ?? new Map());
-      const categories = rankAll(
-        categoryByMerchant.get(item.name) ?? new Map(),
-      );
-      const {
-        series: typeSeries,
-        monthly: typeMonthly,
-        other,
-        otherByPeriod,
-      } = buildStackedSeries(
-        monthKeys,
-        subcategoryMonthByMerchant.get(item.name) ?? new Map(),
-        types,
-        period,
-      );
-      return {
-        merchant: item.name,
-        spend: item.spend,
-        categories,
-        types,
-        typeSeries,
-        typeMonthly,
-        other,
-        otherByPeriod,
-      };
-    });
+  const merchantBreakdowns = merchants.map((item) => {
+    const types = rankAll(subcategoryByMerchant.get(item.name) ?? new Map());
+    const categories = rankAll(categoryByMerchant.get(item.name) ?? new Map());
+    const {
+      series: typeSeries,
+      monthly: typeMonthly,
+      other,
+      otherByPeriod,
+    } = buildStackedSeries(
+      monthKeys,
+      subcategoryMonthByMerchant.get(item.name) ?? new Map(),
+      types,
+      period,
+    );
+    return {
+      merchant: item.name,
+      spend: item.spend,
+      categories,
+      types,
+      typeSeries,
+      typeMonthly,
+      other,
+      otherByPeriod,
+    };
+  });
 
-  const incomeSourceBreakdowns = incomeSources
-    .slice(0, TOP_FACET_BREAKDOWNS)
-    .map((item) => {
-      const categories = rankAll(
-        categoryByIncomeSource.get(item.name) ?? new Map(),
-      );
-      const {
-        series: categorySeries,
-        monthly: categoryMonthly,
-        other,
-        otherByPeriod,
-      } = buildStackedSeries(
-        monthKeys,
-        categoryMonthByIncomeSource.get(item.name) ?? new Map(),
-        categories,
-        period,
-      );
-      return {
-        source: item.name,
-        spend: item.spend,
-        categories,
-        categorySeries,
-        categoryMonthly,
-        other,
-        otherByPeriod,
-      };
-    });
+  const incomeSourceBreakdowns = incomeSources.map((item) => {
+    const categories = rankAll(
+      categoryByIncomeSource.get(item.name) ?? new Map(),
+    );
+    const {
+      series: categorySeries,
+      monthly: categoryMonthly,
+      other,
+      otherByPeriod,
+    } = buildStackedSeries(
+      monthKeys,
+      categoryMonthByIncomeSource.get(item.name) ?? new Map(),
+      categories,
+      period,
+    );
+    return {
+      source: item.name,
+      spend: item.spend,
+      categories,
+      categorySeries,
+      categoryMonthly,
+      other,
+      otherByPeriod,
+    };
+  });
 
   const merchantsBySection = vendorsByName(
     sections.map((item) => item.name),
@@ -1771,6 +1771,10 @@ export function computeAnalysis(args: {
   const categoriesBySection = vendorsByName(
     sections.map((item) => item.name),
     categoryBySection,
+  );
+  const subcategoriesBySection = vendorsByName(
+    sections.map((item) => item.name),
+    typeBySection,
   );
   const merchantsByCategory = vendorsByName(
     categories.map((item) => item.name),
@@ -1808,11 +1812,7 @@ export function computeAnalysis(args: {
   addWantedRows(wantedPeekKeys, "subcategory", subcategories);
   addWantedRows(wantedPeekKeys, "tag", tags);
   addWantedRows(wantedPeekKeys, "type", types);
-  addWantedRows(
-    wantedPeekKeys,
-    "merchant",
-    merchants.slice(0, TOP_FACET_BREAKDOWNS),
-  );
+  addWantedRows(wantedPeekKeys, "merchant", merchants);
   addWantedRows(wantedPeekKeys, "income-source", incomeSources);
   addWantedRows(wantedPeekKeys, "income-category", incomeCategories);
   addWantedPairs(wantedPeekKeys, "section-category", categoriesBySection);
@@ -2001,6 +2001,7 @@ export function computeAnalysis(args: {
     sectionStacked,
     merchantsBySection,
     categoriesBySection,
+    subcategoriesBySection,
     merchantsByCategory,
     spreads,
     spreadMonthly,

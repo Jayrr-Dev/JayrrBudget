@@ -8,8 +8,19 @@ import {
   formatDisplayDate,
   formatLongDisplayDate,
 } from "@/shared/lib/format-date";
+import { api } from "@convex/_generated/api";
+import { useConvexAuth, useQuery } from "convex/react";
+
+function firstNameFrom(fullName: string | null | undefined) {
+  const first = fullName?.trim().split(/\s+/)[0];
+  return first ? first : null;
+}
 
 export default function OverviewPage() {
+  const { isAuthenticated } = useConvexAuth();
+  const me = useQuery(api.users.me, isAuthenticated ? {} : "skip");
+  const firstName = firstNameFrom(me?.name);
+  const greeting = firstName ? `Hello, ${firstName}` : "Hello";
   const dashboard = useDashboard();
   const data = dashboard.data;
   const isInitialLoading = dashboard.isPending || (!data && !dashboard.isError);
@@ -23,13 +34,16 @@ export default function OverviewPage() {
   return (
     <div className="space-y-8">
       <header className="flex items-center justify-between gap-3 border-b border-[var(--border)] pb-6 sm:items-start sm:gap-6">
-        <TitleInfo
-          title="Dashboard"
-          lead="See balances across chequing, credit, and loan accounts."
-        />
-        <p className="sr-only">
-          See balances across chequing, credit, and loan accounts.
-        </p>
+        <div>
+          <TitleInfo
+            title="Dashboard"
+            lead="See balances across chequing, credit, and loan accounts."
+          />
+          <p className="sr-only">
+            See balances across chequing, credit, and loan accounts.
+          </p>
+          <p className="type-section mt-1 min-h-7">{greeting}</p>
+        </div>
         <div className="shrink-0 text-right">
           <p className="type-kicker hidden sm:block">Latest statement</p>
           <p className="whitespace-nowrap text-sm font-medium text-muted-foreground sm:hidden">

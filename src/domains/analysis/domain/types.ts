@@ -157,8 +157,10 @@ export type AnalysisData = {
   sectionStacked: AnalysisStackedRankedBreakdown;
   /** Top vendors inside each section. */
   merchantsBySection: Record<string, AnalysisRankedItem[]>;
-  /** Top categories inside each section. */
+  /** Categories inside each section. */
   categoriesBySection: Record<string, AnalysisRankedItem[]>;
+  /** Subcategories inside each section. */
+  subcategoriesBySection: Record<string, AnalysisRankedItem[]>;
   /** Top vendors inside each category. */
   merchantsByCategory: Record<string, AnalysisRankedItem[]>;
   /** Spread: Income + Needs / Wants / Savings */

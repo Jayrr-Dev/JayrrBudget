@@ -4,6 +4,14 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import {
+  Card,
+  CardAction,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import {
   dataTableFeatures,
   isDateWindowActive,
   type DataTableFeatures,
@@ -73,6 +81,8 @@ type ColumnMeta = {
   description?: string;
   /** Mobile card: render this cell as the card title (no label row). */
   cardTitle?: boolean;
+  /** Mobile card: muted line under the title, like PingCard description. */
+  cardSubtitle?: boolean;
   /** Mobile card: render this cell inline after the title, not as a row. */
   cardTitleAside?: boolean;
   nowrap?: boolean;
@@ -990,7 +1000,7 @@ export function DataTable<TData extends RowData>({
       <TooltipProvider>
         <div className="md:hidden">
           {table.getRowModel().rows?.length ? (
-            <ul className="space-y-4">
+            <ul className="grid grid-cols-1 gap-3">
               {table.getRowModel().rows.map((row) => {
                 const muted = rowMuted?.(row.original) === true;
                 const visibleCells = row.getVisibleCells();
@@ -1002,8 +1012,25 @@ export function DataTable<TData extends RowData>({
                 );
                 const cardMeta = (cell: (typeof dataCells)[number]) =>
                   cell.column.columnDef.meta as ColumnMeta | undefined;
-                const titleCell = dataCells.find((cell) =>
-                  Boolean(cardMeta(cell)?.cardTitle),
+                const titleLabel = (cell: (typeof dataCells)[number]) =>
+                  (csvColumnLabel(cell.column) ?? cell.column.id).toLowerCase();
+                const titleCell =
+                  dataCells.find((cell) =>
+                    Boolean(cardMeta(cell)?.cardTitle),
+                  ) ??
+                  dataCells.find((cell) => Boolean(cardMeta(cell)?.grow)) ??
+                  dataCells.find((cell) =>
+                    [
+                      "name",
+                      "description",
+                      "module",
+                      "merchant",
+                      "issue",
+                      "file",
+                    ].includes(titleLabel(cell)),
+                  );
+                const subtitleCell = dataCells.find((cell) =>
+                  Boolean(cardMeta(cell)?.cardSubtitle),
                 );
                 const asideCells = titleCell
                   ? dataCells.filter((cell) =>
@@ -1013,86 +1040,101 @@ export function DataTable<TData extends RowData>({
                 const detailCells = dataCells.filter(
                   (cell) =>
                     cell.id !== titleCell?.id &&
+                    cell.id !== subtitleCell?.id &&
                     !asideCells.some((aside) => aside.id === cell.id),
                 );
-                const showHeader = Boolean(titleCell) || actionCells.length > 0;
+                const showHeader =
+                  Boolean(titleCell) ||
+                  Boolean(subtitleCell) ||
+                  asideCells.length > 0 ||
+                  actionCells.length > 0;
                 const titleDim = Boolean(
                   titleCell && muted && !cardMeta(titleCell)?.keepOpaque,
                 );
-                const titleClass = `min-w-0 text-base font-extrabold leading-snug wrap-break-word [&_*]:text-inherit [&_*]:font-inherit [&_*]:whitespace-normal ${
-                  titleDim ? "opacity-40" : ""
-                }`;
+                const subtitleDim = Boolean(
+                  subtitleCell && muted && !cardMeta(subtitleCell)?.keepOpaque,
+                );
                 return (
                   <li key={row.id}>
-                    <article
+                    <Card
+                      size="sm"
                       data-state={row.getIsSelected() ? "selected" : undefined}
-                      className="rounded-xl border border-[var(--border)] bg-surface-elevated p-3"
+                      className="h-full"
                     >
-                      {showHeader && asideCells.length > 0 && titleCell ? (
-                        <div className="mb-2 flex min-h-11 items-center gap-1">
-                          <h3 className={`${titleClass} flex-1 text-left`}>
-                            <table.FlexRender cell={titleCell} />
-                          </h3>
-                          {asideCells.map((cell) => (
-                            <div key={cell.id} className="shrink-0">
-                              <table.FlexRender cell={cell} />
-                            </div>
-                          ))}
-                          {actionCells.length > 0 ? (
-                            <div className="ml-auto flex shrink-0 justify-end gap-1">
+                      {showHeader ? (
+                        <CardHeader>
+                          <div className="min-w-0">
+                            {titleCell ? (
+                              <CardTitle
+                                className={cn(
+                                  "wrap-break-word [&_*]:text-inherit [&_*]:font-inherit [&_*]:whitespace-normal",
+                                  titleDim && "opacity-40",
+                                )}
+                              >
+                                <table.FlexRender cell={titleCell} />
+                              </CardTitle>
+                            ) : null}
+                            {subtitleCell ? (
+                              <CardDescription
+                                className={cn(
+                                  "wrap-break-word [&_*]:whitespace-normal",
+                                  subtitleDim && "opacity-40",
+                                )}
+                              >
+                                <table.FlexRender cell={subtitleCell} />
+                              </CardDescription>
+                            ) : null}
+                          </div>
+                          {asideCells.length > 0 || actionCells.length > 0 ? (
+                            <CardAction className="flex items-start gap-1">
+                              {asideCells.map((cell) => (
+                                <div key={cell.id} className="shrink-0">
+                                  <table.FlexRender cell={cell} />
+                                </div>
+                              ))}
                               {actionCells.map((cell) => (
                                 <div key={cell.id}>
                                   <table.FlexRender cell={cell} />
                                 </div>
                               ))}
-                            </div>
+                            </CardAction>
                           ) : null}
-                        </div>
-                      ) : showHeader ? (
-                        <div className="relative mb-2 flex min-h-11 items-center justify-center">
-                          {titleCell ? (
-                            <h3 className={`${titleClass} px-12 text-center`}>
-                              <table.FlexRender cell={titleCell} />
-                            </h3>
-                          ) : null}
-                          {actionCells.length > 0 ? (
-                            <div className="absolute top-1/2 right-0 flex -translate-y-1/2 shrink-0 justify-end gap-1">
-                              {actionCells.map((cell) => (
-                                <div key={cell.id}>
-                                  <table.FlexRender cell={cell} />
-                                </div>
-                              ))}
-                            </div>
-                          ) : null}
-                        </div>
+                        </CardHeader>
                       ) : null}
-                      <dl className="grid grid-cols-[minmax(0,7.5rem)_minmax(0,1fr)] items-center gap-x-3 gap-y-2">
-                        {detailCells.map((cell) => {
-                          const cellMeta = cell.column.columnDef.meta as
-                            | ColumnMeta
-                            | undefined;
-                          const dim = muted && !cellMeta?.keepOpaque;
-                          return (
-                            <div key={cell.id} className="contents">
-                              <dt
-                                className={`text-xs font-medium text-foreground-muted ${
-                                  dim ? "opacity-40" : ""
-                                }`}
-                              >
-                                {csvColumnLabel(cell.column) ?? cell.column.id}
-                              </dt>
-                              <dd
-                                className={`min-w-0 text-sm wrap-break-word [&_*]:whitespace-normal [&_[data-slot=money-grid]]:ml-0 [&_[data-slot=money-grid]]:w-auto [&_[data-slot=money-grid]]:grid-cols-[max-content_max-content_max-content] [&_[data-slot=money-grid]>:last-child]:min-w-0 [&_[data-slot=money-grid]>:last-child]:text-left [&_[data-slot=input-group]]:w-full [&_[data-slot=input-group-control]]:px-0 ${
-                                  dim ? "opacity-40" : ""
-                                }`}
-                              >
-                                <table.FlexRender cell={cell} />
-                              </dd>
-                            </div>
-                          );
-                        })}
-                      </dl>
-                    </article>
+                      {detailCells.length > 0 ? (
+                        <CardContent>
+                          <dl className="grid grid-cols-2 gap-x-3 gap-y-2 text-sm">
+                            {detailCells.map((cell) => {
+                              const cellMeta = cell.column.columnDef.meta as
+                                | ColumnMeta
+                                | undefined;
+                              const dim = muted && !cellMeta?.keepOpaque;
+                              return (
+                                <div key={cell.id} className="min-w-0">
+                                  <dt
+                                    className={cn(
+                                      "text-muted-foreground",
+                                      dim && "opacity-40",
+                                    )}
+                                  >
+                                    {csvColumnLabel(cell.column) ??
+                                      cell.column.id}
+                                  </dt>
+                                  <dd
+                                    className={cn(
+                                      "min-w-0 font-medium wrap-break-word [&_*]:whitespace-normal [&_[data-slot=money-grid]]:ml-0 [&_[data-slot=money-grid]]:w-auto [&_[data-slot=money-grid]]:grid-cols-[max-content_max-content_max-content] [&_[data-slot=money-grid]>:last-child]:min-w-0 [&_[data-slot=money-grid]>:last-child]:text-left [&_[data-slot=input-group]]:w-full [&_[data-slot=input-group-control]]:px-0",
+                                      dim && "opacity-40",
+                                    )}
+                                  >
+                                    <table.FlexRender cell={cell} />
+                                  </dd>
+                                </div>
+                              );
+                            })}
+                          </dl>
+                        </CardContent>
+                      ) : null}
+                    </Card>
                   </li>
                 );
               })}
@@ -1103,14 +1145,10 @@ export function DataTable<TData extends RowData>({
             </div>
           )}
         </div>
-        <div className="hidden overflow-hidden rounded-xl border border-[var(--border)] bg-surface-elevated md:block">
+        <div className="hidden overflow-x-auto rounded-xl border border-[var(--border)] bg-surface-elevated md:block">
           <Table
             variant={variant}
-            className={
-              fillWidth
-                ? "w-full min-w-max table-fixed"
-                : "w-max min-w-max table-fixed"
-            }
+            className={fillWidth ? "w-full table-fixed" : "w-max table-fixed"}
           >
             <colgroup>
               {table.getVisibleLeafColumns().map((column) => {

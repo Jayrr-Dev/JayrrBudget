@@ -30,6 +30,9 @@ export const PIGGY_ICON_NAMES = [
   "loan-personal",
   "loan-heloc",
   "loan-other",
+  "account-chequing",
+  "account-savings",
+  "account-credit",
 ] as const;
 
 export type PiggyIconName = (typeof PIGGY_ICON_NAMES)[number];

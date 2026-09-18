@@ -1,5 +1,6 @@
 "use client";
 
+import { Button } from "@/components/ui/button";
 import {
   Popover,
   PopoverContent,
@@ -8,8 +9,12 @@ import {
   PopoverTitle,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { BudgetsManager } from "@/domains/budgets/ui/BudgetsManager";
+import {
+  BudgetsManager,
+  CreateBudgetDialog,
+} from "@/domains/budgets/ui/BudgetsManager";
 import { Info } from "lucide-react";
+import { useState } from "react";
 
 function BudgetsTitleInfo() {
   return (
@@ -49,19 +54,27 @@ function BudgetsTitleInfo() {
 }
 
 export default function BudgetsPage() {
+  const [createOpen, setCreateOpen] = useState(false);
+
   return (
     <div className="space-y-8">
-      <header className="border-b border-[var(--border)] pb-6">
-        <h1 className="type-kicker text-[20px] flex items-center gap-2">
-          Budgets
-          <BudgetsTitleInfo />
-        </h1>
-        <p className="sr-only">
-          Spend caps you set, or ones Piggy creates in chat. Amount is the cap
-          for the current cycle slice from the start date.
-        </p>
+      <header className="flex flex-col gap-4 border-b border-[var(--border)] pb-6 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="type-kicker text-[20px] flex items-center gap-2">
+            Budgets
+            <BudgetsTitleInfo />
+          </h1>
+          <p className="sr-only">
+            Spend caps you set, or ones Piggy creates in chat. Amount is the cap
+            for the current cycle slice from the start date.
+          </p>
+        </div>
+        <Button type="button" onClick={() => setCreateOpen(true)}>
+          New budget
+        </Button>
       </header>
-      <BudgetsManager />
+      <BudgetsManager onNewBudget={() => setCreateOpen(true)} />
+      <CreateBudgetDialog open={createOpen} onOpenChange={setCreateOpen} />
     </div>
   );
 }

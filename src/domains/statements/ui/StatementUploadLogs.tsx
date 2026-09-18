@@ -91,7 +91,7 @@ const columns = columnHelper.columns([
   columnHelper.accessor("filename", {
     header: "File",
     enableHiding: false,
-    meta: { width: "14rem", nowrap: true, grow: true },
+    meta: { width: "14rem", nowrap: true, grow: true, cardTitle: true },
     cell: ({ row }) => {
       const extra = [row.original.institutionName, row.original.accountMask]
         .filter(Boolean)

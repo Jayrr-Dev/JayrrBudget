@@ -2,16 +2,18 @@
 
 import { EmptyPrompt } from "@/components/ui/empty-prompt";
 import { PageSpinner } from "@/components/ui/spinner";
-import { DecryptingPage } from "@/domains/vault/ui/DecryptingStatus";
-import {
-  formatLedgerSpend,
-  formatMoney,
-} from "@/domains/dashboard/domain/money";
+import { displayAccountName } from "@/domains/dashboard/domain/accountName";
+import { formatMoney } from "@/domains/dashboard/domain/money";
 import type {
   DashboardAccount,
   DashboardData,
   DashboardTransaction,
 } from "@/domains/dashboard/domain/types";
+import {
+  peekEncryptedLedgerLocal,
+  readLastUserId,
+  upsertLastView,
+} from "@/domains/dashboard/ui/lastViewCache";
 import {
   getLedgerSnapshotVersion,
   isLastViewHydrateDone,
@@ -20,11 +22,12 @@ import {
   rememberLastViewSavedAt,
   subscribeLedgerSnapshots,
 } from "@/domains/dashboard/ui/ledgerQuerySnapshot";
-import { peekEncryptedLedgerLocal, readLastUserId, upsertLastView } from "@/domains/dashboard/ui/lastViewCache";
+import { flowMoneyProps, MoneyText } from "@/domains/dashboard/ui/MoneyText";
 import { useFeatureFlags } from "@/domains/feature-flags/ui/useFeatureFlag";
 import { MerchantLabel } from "@/domains/merchants/ui/MerchantLabel";
 import { StatementUpload } from "@/domains/statements/ui/StatementUpload";
 import { dashboardFromPrivateLedger } from "@/domains/vault/application/dashboardFromPrivateLedger";
+import { DecryptingPage } from "@/domains/vault/ui/DecryptingStatus";
 import { usePrivateLedger } from "@/domains/vault/ui/usePrivateLedger";
 import { formatDisplayDate } from "@/shared/lib/format-date";
 import { api } from "@convex/_generated/api";
@@ -115,9 +118,7 @@ export function useDashboard(transactionLimit: number | null = 250) {
     live ??
     (result === undefined ? peekDashboard(transactionLimit) : undefined);
   const hydratePending =
-    !isAuthenticated &&
-    cached === undefined &&
-    !isLastViewHydrateDone();
+    !isAuthenticated && cached === undefined && !isLastViewHydrateDone();
 
   return {
     data: cached,
@@ -193,7 +194,7 @@ export function AccountsPanel({
             >
               <div>
                 <p className="font-medium">
-                  {account.name}
+                  {displayAccountName(account)}
                   {account.mask ? (
                     <span className="text-[var(--muted-foreground)]">
                       {" "}
@@ -258,9 +259,7 @@ export function TransactionsList({
                 <div className="min-w-0">
                   <p className="min-w-0">
                     <MerchantLabel
-                      name={
-                        txn.merchantClean ?? txn.merchantName ?? txn.name
-                      }
+                      name={txn.merchantClean ?? txn.merchantName ?? txn.name}
                       src={txn.logoUrl}
                       className="font-medium"
                     />
@@ -295,9 +294,14 @@ export function TransactionsList({
                     </p>
                   ) : null}
                 </div>
-                <p className="shrink-0 font-mono text-sm text-foreground">
-                  {formatLedgerSpend(txn.amount, txn.isoCurrencyCode ?? "CAD")}
-                </p>
+                <div className="shrink-0">
+                  <MoneyText
+                    amount={txn.amount}
+                    currency={txn.isoCurrencyCode ?? "CAD"}
+                    className="text-sm"
+                    {...flowMoneyProps(txn)}
+                  />
+                </div>
               </li>
             );
           })}

@@ -10,6 +10,7 @@ import {
   loadPrivateLedger,
   type VaultListClient,
 } from "@/domains/vault/application/loadPrivateLedger";
+import { mergePlaceholderAccounts } from "@/domains/vault/application/mergePlaceholderAccounts";
 import {
   rewriteEncryptedTaxonomyLabels,
   vaultWriteReady,
@@ -73,6 +74,7 @@ export function usePrivateLedger() {
   const vaultId = vault?.vaultId ?? null;
   const hasLedger = useRef(false);
   const rewritingLabels = useRef(false);
+  const mergingPlaceholders = useRef(false);
 
   useEffect(() => {
     const onBump = () => setVersion(ledgerEpoch);
@@ -147,6 +149,18 @@ export function usePrivateLedger() {
                 .catch(() => undefined)
                 .finally(() => {
                   rewritingLabels.current = false;
+                });
+            }
+            if (!mergingPlaceholders.current) {
+              mergingPlaceholders.current = true;
+              void mergePlaceholderAccounts({ ctx: write, ledger: next })
+                .then((merged) => {
+                  if (cancelled) return;
+                  if (merged !== next) setLedger(merged);
+                })
+                .catch(() => undefined)
+                .finally(() => {
+                  mergingPlaceholders.current = false;
                 });
             }
           }

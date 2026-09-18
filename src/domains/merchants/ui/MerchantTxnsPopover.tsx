@@ -143,11 +143,13 @@ export function MerchantTxnsPopover({
                       key={`${txn.date}-${txn.description}-${index}`}
                       className="border-b border-border last:border-b-0"
                     >
-                      <td className="w-4 px-1 py-1 align-middle md:px-1.5 md:py-1.5">
-                        <DescriptionActionsButton
-                          description={txn.description}
-                          onEdit={setEditDescription}
-                        />
+                      <td className="w-8 p-0 align-middle">
+                        <div className="flex items-center justify-center py-1 md:py-1.5">
+                          <DescriptionActionsButton
+                            description={txn.description}
+                            onEdit={setEditDescription}
+                          />
+                        </div>
                       </td>
                       <td className="whitespace-nowrap px-1.5 py-1 align-top tabular-nums text-muted-foreground md:px-3 md:py-1.5">
                         <span className="md:hidden">
@@ -245,9 +247,11 @@ export function MerchantTxnsPopover({
               keepTxnPeekPopoverOpen(event);
             }}
           >
-            <DialogHeader className="border-b border-border px-3 py-2">
-              <div className="flex items-center gap-2">
-                <div className="shrink-0">{headerActions}</div>
+            <DialogHeader className="border-b border-border py-2 pr-3">
+              <div className="flex items-center">
+                <div className="flex w-8 shrink-0 items-center justify-center">
+                  {headerActions}
+                </div>
                 <DialogTitle className="flex min-w-0 items-baseline gap-2 text-sm">
                   <span className="min-w-0 truncate">{merchantName}</span>
                   {countLabel ? (
@@ -288,8 +292,10 @@ export function MerchantTxnsPopover({
             keepTxnPeekPopoverOpen(event);
           }}
         >
-          <div className="flex items-center gap-2 border-b border-border px-3 py-2">
-            <div className="shrink-0">{headerActions}</div>
+          <div className="flex items-center border-b border-border py-2 pr-3">
+            <div className="flex w-8 shrink-0 items-center justify-center">
+              {headerActions}
+            </div>
             <div className="min-w-0 text-sm font-medium">
               {merchantName}
               {countLabel ? (

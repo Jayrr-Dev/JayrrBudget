@@ -4,6 +4,13 @@ import { BulkActionsMenu } from "@/components/ui/bulk-actions-menu";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import type { DataTableFeatures } from "@/components/ui/data-table-features";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { EmptyPrompt } from "@/components/ui/empty-prompt";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -35,10 +42,10 @@ import {
   buildBudgetProgressItems,
   type BudgetSpendLine,
 } from "@/domains/budgets/domain/budgetProgress";
-import { BudgetProgressBars } from "@/domains/budgets/ui/BudgetProgressBars";
+import { BudgetProgressCards } from "@/domains/budgets/ui/BudgetProgressCards";
 import { ClassLookupCombobox } from "@/domains/budgets/ui/ClassLookupCombobox";
 import { usePrivateLedger } from "@/domains/vault/ui/usePrivateLedger";
-import { formatDisplayDate } from "@/shared/lib/format-date";
+import { formatCompactDisplayDate } from "@/shared/lib/format-date";
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { createColumnHelper } from "@tanstack/react-table";
@@ -47,11 +54,18 @@ import { Info } from "lucide-react";
 import { useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { toast } from "sonner";
 
+type ClassCatalog = {
+  sections: { name: string }[];
+  categories: { name: string }[];
+  subcategories: { name: string }[];
+};
+
 type BudgetRow = {
   id: Id<"budgets">;
   name: string;
   classLookup: string | null;
   descriptionLookup: string | null;
+  lookupTable: string;
   amount: number;
   warningThreshold: number;
   overageThreshold: number;
@@ -61,6 +75,20 @@ type BudgetRow = {
   createdAt: number;
   updatedAt: number;
 };
+
+function lookupTableLabel(
+  catalog: ClassCatalog | undefined,
+  classLookup: string | null,
+): string {
+  const value = classLookup?.trim().toLowerCase() ?? "";
+  if (!value || !catalog) return "—";
+  const has = (rows: { name: string }[]) =>
+    rows.some((row) => row.name.trim().toLowerCase() === value);
+  if (has(catalog.subcategories)) return "Subcategory";
+  if (has(catalog.categories)) return "Category";
+  if (has(catalog.sections)) return "Section";
+  return "Custom";
+}
 
 function FieldLabel({
   htmlFor,
@@ -178,6 +206,7 @@ function BudgetsBulkActions({ budgets }: { budgets: BudgetRow[] }) {
 
 function BudgetActions({ budget }: { budget: BudgetRow }) {
   const remove = useMutation(api.budgets.remove);
+  const [editOpen, setEditOpen] = useState(false);
 
   async function handleDelete() {
     try {
@@ -194,12 +223,18 @@ function BudgetActions({ budget }: { budget: BudgetRow }) {
         label={budget.name}
         size="sm"
         actions={[
+          { label: "Edit", onSelect: () => setEditOpen(true) },
           {
             label: "Delete",
             onSelect: () => void handleDelete(),
             variant: "destructive",
           },
         ]}
+      />
+      <BudgetDialog
+        open={editOpen}
+        onOpenChange={setEditOpen}
+        budget={budget}
       />
     </div>
   );
@@ -229,19 +264,26 @@ const columns = columnHelper.columns([
     cell: ({ getValue }) => (
       <span className="block truncate font-medium">{String(getValue())}</span>
     ),
-    meta: { width: "8rem", nowrap: true, grow: true },
+    meta: { width: "7.5rem", nowrap: true, cardTitle: true },
   }),
   columnHelper.accessor("classLookup", {
-    header: "Class",
+    header: "Class lookup",
     cell: ({ getValue }) => (
       <span className="block truncate text-sm">
         {getValue() ? String(getValue()) : "—"}
       </span>
     ),
-    meta: { width: "9rem", nowrap: true },
+    meta: { width: "8rem", nowrap: true },
+  }),
+  columnHelper.accessor("lookupTable", {
+    header: "Lookup table",
+    cell: ({ getValue }) => (
+      <span className="block truncate text-sm">{String(getValue())}</span>
+    ),
+    meta: { width: "7.5rem", nowrap: true },
   }),
   columnHelper.accessor("descriptionLookup", {
-    header: "Description",
+    header: "Desc. lookup",
     cell: ({ getValue }) => (
       <span
         className="block truncate text-sm text-[var(--muted-foreground)]"
@@ -250,7 +292,7 @@ const columns = columnHelper.columns([
         {getValue() ? String(getValue()) : "—"}
       </span>
     ),
-    meta: { width: "10rem", nowrap: true },
+    meta: { width: "7.5rem", nowrap: true },
   }),
   columnHelper.accessor("amount", {
     header: "Amount",
@@ -259,7 +301,7 @@ const columns = columnHelper.columns([
         {money.format(Number(getValue()))}
       </span>
     ),
-    meta: { width: "7rem", nowrap: true },
+    meta: { width: "6.5rem", nowrap: true },
   }),
   columnHelper.accessor("cycle", {
     header: "Cycle",
@@ -268,56 +310,48 @@ const columns = columnHelper.columns([
         {BUDGET_CYCLE_LABELS[getValue() as BudgetCycle] ?? String(getValue())}
       </span>
     ),
-    meta: { width: "7.5rem", nowrap: true },
+    meta: { width: "5.75rem", nowrap: true },
   }),
   columnHelper.accessor("startDate", {
     header: "Start",
     cell: ({ getValue }) => (
-      <span className="text-sm font-mono">
-        {formatDisplayDate(String(getValue()))}
+      <span className="text-sm">
+        {formatCompactDisplayDate(String(getValue()))}
       </span>
     ),
-    meta: { width: "8.5rem", nowrap: true },
+    meta: { width: "6.5rem", nowrap: true },
   }),
   columnHelper.accessor("warningThreshold", {
     header: "Warn %",
     cell: ({ getValue }) => (
       <span className="text-sm tabular-nums">{Number(getValue())}</span>
     ),
-    meta: { width: "5.5rem", nowrap: true },
+    meta: { width: "4.5rem", nowrap: true },
   }),
   columnHelper.accessor("overageThreshold", {
     header: "Over %",
     cell: ({ getValue }) => (
       <span className="text-sm tabular-nums">{Number(getValue())}</span>
     ),
-    meta: { width: "5.5rem", nowrap: true },
+    meta: { width: "4.5rem", nowrap: true },
   }),
   columnHelper.accessor("createdAt", {
     header: "Created",
     cell: ({ getValue }) => (
       <span className="text-xs text-[var(--muted-foreground)]">
-        {new Date(Number(getValue())).toLocaleString(undefined, {
-          month: "short",
-          day: "numeric",
-          year: "numeric",
-        })}
+        {formatCompactDisplayDate(toBudgetYmd(new Date(Number(getValue()))))}
       </span>
     ),
-    meta: { width: "8rem", nowrap: true },
+    meta: { width: "6.5rem", nowrap: true },
   }),
   columnHelper.accessor("updatedAt", {
     header: "Updated",
     cell: ({ getValue }) => (
       <span className="text-xs text-[var(--muted-foreground)]">
-        {new Date(Number(getValue())).toLocaleString(undefined, {
-          month: "short",
-          day: "numeric",
-          year: "numeric",
-        })}
+        {formatCompactDisplayDate(toBudgetYmd(new Date(Number(getValue()))))}
       </span>
     ),
-    meta: { width: "8rem", nowrap: true },
+    meta: { width: "6.5rem", nowrap: true },
   }),
   columnHelper.display({
     id: "actions",
@@ -333,18 +367,34 @@ const columns = columnHelper.columns([
   }),
 ]);
 
-function CreateBudgetForm() {
+function BudgetForm({
+  budget,
+  onSaved,
+}: {
+  budget?: BudgetRow;
+  onSaved?: () => void;
+}) {
   const createBudget = useMutation(api.budgets.create);
+  const updateBudget = useMutation(api.budgets.update);
   const catalog = useQuery(api.classifications.list, {});
-  const [name, setName] = useState("");
-  const [classLookup, setClassLookup] = useState("");
-  const [descriptionLookup, setDescriptionLookup] = useState("");
-  const [amount, setAmount] = useState("");
-  const [cycle, setCycle] = useState<BudgetCycle>("monthly");
-  const [startDate, setStartDate] = useState(todayBudgetYmd);
-  const [warningThreshold, setWarningThreshold] = useState("80");
-  const [overageThreshold, setOverageThreshold] = useState("100");
-  const [isActive, setIsActive] = useState(true);
+  const fieldId = budget ? `budget-${budget.id}` : "budget";
+  const [name, setName] = useState(budget?.name ?? "");
+  const [classLookup, setClassLookup] = useState(budget?.classLookup ?? "");
+  const [descriptionLookup, setDescriptionLookup] = useState(
+    budget?.descriptionLookup ?? "",
+  );
+  const [amount, setAmount] = useState(budget ? String(budget.amount) : "");
+  const [cycle, setCycle] = useState<BudgetCycle>(budget?.cycle ?? "monthly");
+  const [startDate, setStartDate] = useState(
+    budget?.startDate || todayBudgetYmd(),
+  );
+  const [warningThreshold, setWarningThreshold] = useState(
+    budget ? String(budget.warningThreshold) : "80",
+  );
+  const [overageThreshold, setOverageThreshold] = useState(
+    budget ? String(budget.overageThreshold) : "100",
+  );
+  const [isActive, setIsActive] = useState(budget?.isActive ?? true);
   const [submitting, setSubmitting] = useState(false);
 
   async function onSubmit(e: FormEvent) {
@@ -358,7 +408,7 @@ function CreateBudgetForm() {
     }
     setSubmitting(true);
     try {
-      await createBudget({
+      const payload = {
         name,
         amount: parsedAmount,
         classLookup: classLookup || null,
@@ -368,17 +418,15 @@ function CreateBudgetForm() {
         isActive,
         cycle,
         startDate,
-      });
-      setName("");
-      setClassLookup("");
-      setDescriptionLookup("");
-      setAmount("");
-      setCycle("monthly");
-      setStartDate(todayBudgetYmd());
-      setWarningThreshold("80");
-      setOverageThreshold("100");
-      setIsActive(true);
-      toast.success("Budget saved");
+      };
+      if (budget) {
+        await updateBudget({ budgetId: budget.id, ...payload });
+        toast.success("Budget updated");
+      } else {
+        await createBudget(payload);
+        toast.success("Budget saved");
+      }
+      onSaved?.();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not save budget");
     } finally {
@@ -387,18 +435,12 @@ function CreateBudgetForm() {
   }
 
   return (
-    <form
-      onSubmit={(e) => void onSubmit(e)}
-      className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4"
-    >
-      <h2 className="font-heading text-base font-semibold tracking-tight">
-        New budget
-      </h2>
-      <div className="mt-4 grid gap-3">
+    <form onSubmit={(e) => void onSubmit(e)}>
+      <div className="grid gap-3">
         <div className="grid gap-1.5">
-          <Label htmlFor="budget-name">Name</Label>
+          <Label htmlFor={`${fieldId}-name`}>Name</Label>
           <Input
-            id="budget-name"
+            id={`${fieldId}-name`}
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="Groceries"
@@ -408,9 +450,9 @@ function CreateBudgetForm() {
           />
         </div>
         <div className="grid gap-1.5">
-          <Label htmlFor="budget-class">Class lookup</Label>
+          <Label htmlFor={`${fieldId}-class`}>Class lookup</Label>
           <ClassLookupCombobox
-            id="budget-class"
+            id={`${fieldId}-class`}
             catalog={catalog}
             value={classLookup}
             disabled={submitting}
@@ -418,9 +460,9 @@ function CreateBudgetForm() {
           />
         </div>
         <div className="grid gap-1.5">
-          <Label htmlFor="budget-description">Description lookup</Label>
+          <Label htmlFor={`${fieldId}-description`}>Description lookup</Label>
           <Input
-            id="budget-description"
+            id={`${fieldId}-description`}
             value={descriptionLookup}
             onChange={(e) => setDescriptionLookup(e.target.value)}
             placeholder="Optional merchant or description"
@@ -429,9 +471,9 @@ function CreateBudgetForm() {
           />
         </div>
         <div className="grid gap-1.5">
-          <Label htmlFor="budget-amount">Amount</Label>
+          <Label htmlFor={`${fieldId}-amount`}>Amount</Label>
           <Input
-            id="budget-amount"
+            id={`${fieldId}-amount`}
             type="number"
             min="0"
             step="0.01"
@@ -445,14 +487,14 @@ function CreateBudgetForm() {
         <div className="grid grid-cols-2 gap-3">
           <div className="grid gap-1.5">
             <FieldLabel
-              htmlFor="budget-cycle"
+              htmlFor={`${fieldId}-cycle`}
               infoTitle="Cycle"
               infoBody="The cap applies to this slice, then resets."
             >
               Cycle
             </FieldLabel>
             <NativeSelect
-              id="budget-cycle"
+              id={`${fieldId}-cycle`}
               className="w-full"
               value={cycle}
               disabled={submitting}
@@ -467,14 +509,14 @@ function CreateBudgetForm() {
           </div>
           <div className="grid gap-1.5">
             <FieldLabel
-              htmlFor="budget-start"
+              htmlFor={`${fieldId}-start`}
               infoTitle="Start date"
               infoBody="Each slice lines up from this day."
             >
               Start date
             </FieldLabel>
             <Input
-              id="budget-start"
+              id={`${fieldId}-start`}
               type="date"
               value={startDate}
               onChange={(e) => setStartDate(e.target.value)}
@@ -485,9 +527,9 @@ function CreateBudgetForm() {
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div className="grid gap-1.5">
-            <Label htmlFor="budget-warn">Warning %</Label>
+            <Label htmlFor={`${fieldId}-warn`}>Warning %</Label>
             <Input
-              id="budget-warn"
+              id={`${fieldId}-warn`}
               type="number"
               min="0"
               step="1"
@@ -497,9 +539,9 @@ function CreateBudgetForm() {
             />
           </div>
           <div className="grid gap-1.5">
-            <Label htmlFor="budget-over">Overage %</Label>
+            <Label htmlFor={`${fieldId}-over`}>Overage %</Label>
             <Input
-              id="budget-over"
+              id={`${fieldId}-over`}
               type="number"
               min="0"
               step="1"
@@ -510,9 +552,9 @@ function CreateBudgetForm() {
           </div>
         </div>
         <div className="flex items-center justify-between gap-3">
-          <Label htmlFor="budget-active">Active</Label>
+          <Label htmlFor={`${fieldId}-active`}>Active</Label>
           <Switch
-            id="budget-active"
+            id={`${fieldId}-active`}
             checked={isActive}
             onCheckedChange={(checked) => setIsActive(Boolean(checked))}
             disabled={submitting}
@@ -522,23 +564,63 @@ function CreateBudgetForm() {
           type="submit"
           disabled={submitting || !name.trim() || !amount.trim()}
         >
-          {submitting ? "Saving…" : "Save budget"}
+          {submitting ? "Saving…" : budget ? "Save changes" : "Save budget"}
         </Button>
       </div>
     </form>
   );
 }
 
-export function BudgetsManager() {
+export function BudgetDialog({
+  open,
+  onOpenChange,
+  budget,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  budget?: BudgetRow;
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>{budget ? "Edit budget" : "New budget"}</DialogTitle>
+          <DialogDescription className="sr-only">
+            {budget
+              ? "Adjust the spend cap, lookups, cycle, or start date."
+              : "Set a spend cap, cycle, and start date."}
+          </DialogDescription>
+        </DialogHeader>
+        {open ? (
+          <BudgetForm budget={budget} onSaved={() => onOpenChange(false)} />
+        ) : null}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+export function CreateBudgetDialog({
+  open,
+  onOpenChange,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  return <BudgetDialog open={open} onOpenChange={onOpenChange} />;
+}
+
+export function BudgetsManager({ onNewBudget }: { onNewBudget?: () => void }) {
   const budgets = useQuery(api.budgets.list, {});
+  const catalog = useQuery(api.classifications.list, {});
   const privateLedger = usePrivateLedger();
   const rows = useMemo(() => {
     if (!budgets) return [];
     return budgets.map((budget) => ({
       ...budget,
+      lookupTable: lookupTableLabel(catalog, budget.classLookup),
       startDate: budget.startDate || toBudgetYmd(new Date(budget.createdAt)),
     }));
-  }, [budgets]);
+  }, [budgets, catalog]);
 
   const progressItems = useMemo(() => {
     if (!rows.length) return [];
@@ -580,44 +662,32 @@ export function BudgetsManager() {
 
   return (
     <div className="grid gap-4">
-      <BudgetProgressBars items={progressItems} />
-      <div className="grid gap-4 lg:grid-cols-3">
-        <div className="lg:col-span-1">
-          <CreateBudgetForm />
-        </div>
-        <div className="min-w-0 lg:col-span-2">
-          {budgets === undefined ? (
-            <PageSpinner className="min-h-40 py-8" />
-          ) : rows.length === 0 ? (
-            <EmptyPrompt
-              className="bg-[var(--surface)] py-10"
-              title="No budgets yet"
-              description="Add a spend cap here, or ask Piggy to create one."
-              action={
-                <Button
-                  type="button"
-                  size="sm"
-                  onClick={() =>
-                    document.getElementById("budget-name")?.focus()
-                  }
-                >
-                  New budget
-                </Button>
-              }
-            />
-          ) : (
-            <DataTable
-              columns={columns}
-              data={rows as BudgetRow[]}
-              searchKey="name"
-              searchPlaceholder="Filter budgets…"
-              csvFilename="budgets.csv"
-              initialColumnVisibility={{ id: false }}
-              rowMuted={(row) => !row.isActive}
-            />
-          )}
-        </div>
-      </div>
+      <BudgetProgressCards items={progressItems} />
+      {budgets === undefined ? (
+        <PageSpinner className="min-h-40 py-8" />
+      ) : rows.length === 0 ? (
+        <EmptyPrompt
+          className="bg-[var(--surface)] py-10"
+          title="No budgets yet"
+          description="Add a spend cap here, or ask Piggy to create one."
+          action={
+            <Button type="button" size="sm" onClick={onNewBudget}>
+              New budget
+            </Button>
+          }
+        />
+      ) : (
+        <DataTable
+          columns={columns}
+          data={rows as BudgetRow[]}
+          searchKey="name"
+          searchPlaceholder="Filter budgets…"
+          csvFilename="budgets.csv"
+          enableColumnToggle
+          initialColumnVisibility={{ id: false }}
+          rowMuted={(row) => !row.isActive}
+        />
+      )}
     </div>
   );
 }

@@ -146,7 +146,6 @@ function buildColumns(accountNameById: Map<string, string>) {
               <MoneyText
                 amount={amount}
                 currency={row.original.isoCurrencyCode ?? "CAD"}
-                signMark={flow.signMark}
                 className={cn(
                   "text-base leading-snug md:text-sm",
                   flow.className,
