@@ -33,8 +33,12 @@ function isSerwistPath(pathname: string) {
   return pathname === "/serwist" || pathname.startsWith("/serwist/");
 }
 
+function isServiceWorkerScript(request: Request) {
+  return request.headers.get("Service-Worker") === "script";
+}
+
 function isStaticShellRequest(request: Request, url: URL) {
-  if (isSerwistPath(url.pathname) || request.destination === "serviceworker") {
+  if (isSerwistPath(url.pathname) || isServiceWorkerScript(request)) {
     return false;
   }
   if (
