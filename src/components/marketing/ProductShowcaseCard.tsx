@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/popover";
 import {
   BarChart3,
+  CheckCheck,
   ChevronLeft,
   ChevronRight,
   EyeOff,
@@ -28,6 +29,7 @@ import {
   Tag,
   Tags,
   TrendingUp,
+  Zap,
 } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import {
@@ -40,6 +42,7 @@ import {
 import { AnalysisScene } from "./scenes/AnalysisScene";
 import { ClassificationScene } from "./scenes/ClassificationScene";
 import { EncryptionScene } from "./scenes/EncryptionScene";
+import { JevClassifyScene } from "./scenes/JevClassifyScene";
 import { LoansAiScene } from "./scenes/LoansAiScene";
 import type { SceneProps } from "./scenes/SceneFrame";
 import { StatementImportScene } from "./scenes/StatementImportScene";
@@ -54,6 +57,35 @@ type Slide = {
 };
 
 const SLIDES: readonly Slide[] = [
+  {
+    id: "jev-classify",
+    badge: { icon: Sparkles, label: "Jev classifies" },
+    title: "⚡ Jev labels every row. Fast, accurate, nothing to fix later.",
+    info: {
+      title: "How Jev classifies",
+      lead: "Jev files new transactions into your buckets as they arrive.",
+      bullets: [
+        "Uses your own Section, Category, and Subcategory labels.",
+        "Learns from how you filed similar rows before.",
+        "Runs on import, so you review results instead of typing labels.",
+      ],
+    },
+    features: [
+      {
+        icon: Zap,
+        label: "Hundreds of rows sorted before your coffee cools",
+      },
+      {
+        icon: CheckCheck,
+        label: "Labels match how you file, so they land right the first time",
+      },
+      {
+        icon: Sparkles,
+        label: "Nothing piles up waiting to be fixed at month end",
+      },
+    ],
+    Scene: JevClassifyScene,
+  },
   {
     id: "encryption",
     badge: { icon: Lock, label: "End-to-end encrypted" },
