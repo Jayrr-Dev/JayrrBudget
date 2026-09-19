@@ -11,10 +11,7 @@ import {
   STATEMENT_IMPORT_STEPS,
   type StatementImportProgress,
 } from "@/domains/statements/domain/importProgress";
-import type {
-  ImportBankStatementResult,
-  ImportBankStatementSuccess,
-} from "@/domains/statements/domain/importResult";
+import type { ImportBankStatementResult } from "@/domains/statements/domain/importResult";
 import { isOcrDocumentFilename } from "@/domains/statements/domain/ocrDocumentTypes";
 import {
   manualAccountId,
@@ -27,9 +24,9 @@ import {
   ocrDocument,
 } from "@/domains/statements/infrastructure/mistralOcr";
 import { parseStatementPaperFacts } from "@/domains/statements/infrastructure/openRouterParse";
-import { OPENROUTER_NOT_CONFIGURED } from "@/shared/ai/openRouter";
 import { runMeteredOpenRouter } from "@/shared/ai/aiMeter.server";
 import { checkAiCall } from "@/shared/ai/enforceAiCall.server";
+import { OPENROUTER_NOT_CONFIGURED } from "@/shared/ai/openRouter";
 import { resolveOpenRouterApiKey } from "@/shared/ai/resolveOpenRouter.server";
 import { api } from "@/shared/convex/httpClient";
 import { normalizeCurrencyCode } from "@/shared/lib/currency";
@@ -58,7 +55,7 @@ function emitProgress(
  * 2. AI paper-facts parse (dates/amounts/description/locations + account meta)
  * 3. Write transactions to Convex
  *
- * Classification is a separate step (Classify in the upload dialog).
+ * Classification is a separate step (Classify on Transactions).
  */
 export async function importBankStatement(params: {
   filename: string;

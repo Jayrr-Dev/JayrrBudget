@@ -12,6 +12,7 @@ import {
   DashboardToolbar,
   useDashboard,
 } from "@/domains/dashboard/ui/DashboardPanels";
+import { ClassifyTransactionsButton } from "@/domains/transactions/ui/ClassifyTransactionsButton";
 import { TransactionsDataTable } from "@/domains/transactions/ui/TransactionsDataTable";
 import { Info } from "lucide-react";
 
@@ -42,6 +43,7 @@ function TransactionsTitleInfo() {
             <li>Bank details on the left; category and labels on the right</li>
             <li>Search, month, and date range filter the list</li>
             <li>Upload a statement or CSV to add rows</li>
+            <li>Classify labels rows that still need a category</li>
           </ul>
         </PopoverHeader>
       </PopoverContent>
@@ -73,7 +75,10 @@ export default function TransactionsPage() {
             {countHint ? ` ${countHint}` : ""}
           </p>
         </div>
-        <DashboardToolbar onImported={() => dashboard.reload?.()} />
+        <div className="flex shrink-0 flex-nowrap items-center justify-end gap-2">
+          <DashboardToolbar onImported={() => dashboard.reload?.()} />
+          <ClassifyTransactionsButton transactions={data?.transactions ?? []} />
+        </div>
       </header>
       <TransactionsDataTable
         transactions={data?.transactions ?? []}

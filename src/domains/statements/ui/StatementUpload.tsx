@@ -37,12 +37,12 @@ import { Spinner } from "@/components/ui/spinner";
 import { getVaultMasterKey } from "@/crypto/session";
 import type { MutationClient } from "@/crypto/vaultRecords";
 import { useFeatureFlags } from "@/domains/feature-flags/ui/useFeatureFlag";
+import { filesFromDataTransfer } from "@/domains/statements/domain/collectDroppedFiles";
 import {
   normalizeStatementFilename,
   sha256FileHex,
 } from "@/domains/statements/domain/fileFingerprint";
 import { describeImportResult } from "@/domains/statements/domain/importCopy";
-import { filesFromDataTransfer } from "@/domains/statements/domain/collectDroppedFiles";
 import {
   formatImportProgress,
   STATEMENT_IMPORT_STEPS,
@@ -60,10 +60,7 @@ import {
 } from "@/domains/statements/ui/OcrDocumentPickerButton";
 import { StatementAiRulesDialog } from "@/domains/statements/ui/StatementAiRulesDialog";
 import { useOcrMode } from "@/domains/statements/ui/useOcrMode";
-import type { CategorizationSummary } from "@/domains/statements/domain/importResult";
-import type { LabeledTransaction } from "@/domains/statements/application/categorizeStatement";
 import { encryptStatementImportToVault } from "@/domains/vault/application/encryptStatementImport";
-import { applyVaultCategorization } from "@/domains/vault/application/applyVaultCategorization";
 import {
   hydrateVaultSession,
   type VaultClient,
@@ -212,7 +209,6 @@ export function StatementUpload({ onImported }: Props) {
   const [items, setItems] = useState<QueueItem[]>([]);
   const [dragOver, setDragOver] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [classifying, setClassifying] = useState(false);
   const client = useConvex();
   const flags = useFeatureFlags();
   const ocrMode = useOcrMode();
@@ -223,7 +219,7 @@ export function StatementUpload({ onImported }: Props) {
 
   const ocrPicker = useOcrDocumentInputs({
     multiple: true,
-    disabled: busy || classifying || isOffline,
+    disabled: busy || isOffline,
     onFiles: (files) => addFiles(files),
   });
 
@@ -337,7 +333,7 @@ export function StatementUpload({ onImported }: Props) {
   }
 
   function addFiles(list: FileList | File[] | null | undefined) {
-    if (!list || busyRef.current || classifying) return;
+    if (!list || busyRef.current) return;
     const incoming = Array.from(list);
     const existingKeys = new Set(items.map((item) => fileKey(item.file)));
     const next: QueueItem[] = [];
@@ -611,93 +607,6 @@ export function StatementUpload({ onImported }: Props) {
     );
   }
 
-  async function startClassify() {
-    if (toastIfOffline()) return;
-    if (busy || classifying) return;
-    const ids = new Set(
-      items
-        .filter((item) => item.state === "done" && item.statementRecordId)
-        .map((item) => item.statementRecordId as string),
-    );
-    if (ids.size === 0) return;
-
-    const txs = privateLedger.ledger.transactions.filter(
-      (tx) => tx.statementRecordId && ids.has(tx.statementRecordId),
-    );
-    if (txs.length === 0) {
-      toast.message("Nothing to classify", {
-        description: "Import the files first, then classify.",
-      });
-      return;
-    }
-
-    setClassifying(true);
-    toast.loading(`Classifying ${txs.length} lines…`, {
-      id: "statement-upload-classify",
-    });
-    try {
-      const response = await fetch("/api/statements/categorize-vault", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          transactions: txs.map((tx) => ({
-            transactionId: tx.recordId,
-            description: tx.description,
-            amount: tx.amount,
-          })),
-        }),
-      });
-      const result = (await response.json()) as {
-        error?: string;
-        summary?: CategorizationSummary;
-        labeled?: LabeledTransaction[];
-      };
-      if (!response.ok) {
-        throw new Error(result.error ?? "Classification failed");
-      }
-      const masterKey = getVaultMasterKey();
-      if (
-        !privateLedger.userId ||
-        !privateLedger.vaultId ||
-        !privateLedger.keyId ||
-        !masterKey
-      ) {
-        throw new Error("Sign in again, then classify.");
-      }
-      await applyVaultCategorization({
-        client: client as unknown as MutationClient,
-        userId: privateLedger.userId,
-        vaultId: privateLedger.vaultId,
-        keyId: privateLedger.keyId,
-        masterKey,
-        ledger: privateLedger.ledger,
-        labeled: result.labeled ?? [],
-      });
-      privateLedger.reload();
-      const summary = result.summary;
-      const description = summary
-        ? `${summary.cached} reused, ${summary.ai} classified, ${summary.pending} pending.`
-        : undefined;
-      if (summary?.ok === false) {
-        toast.warning("Classification needs attention", {
-          id: "statement-upload-classify",
-          description: summary.error ?? description,
-        });
-        return;
-      }
-      toast.success("Classification complete", {
-        id: "statement-upload-classify",
-        description,
-      });
-    } catch (error) {
-      toast.error(errorMessage(error, "Classification failed"), {
-        id: "statement-upload-classify",
-      });
-    } finally {
-      setClassifying(false);
-    }
-  }
-
   const pendingCount = items.filter(
     (item) =>
       (item.state === "idle" || item.state === "error") &&
@@ -718,35 +627,22 @@ export function StatementUpload({ onImported }: Props) {
     (item) => item.dupCheck === "pending" && item.state === "idle",
   ).length;
 
-  const classifyCount = items.filter(
-    (item) => item.state === "done" && item.statementRecordId,
-  ).length;
-  const pickerLocked = busy || classifying || isOffline;
+  const pickerLocked = busy || isOffline;
 
   const isMobile = useIsMobile();
   const triggerLabel = busy
     ? "Uploading…"
-    : classifying
-      ? "Classifying…"
-      : isMobile
-        ? "Upload"
-        : "Upload statement";
+    : isMobile
+      ? "Upload"
+      : "Upload statement";
 
   // Mobile: no footer Upload — pick from the drop zone, then start once
   // duplicate checks finish. Idle-only so failed rows do not auto-retry.
   useEffect(() => {
-    if (!isMobile || !dialogOpen || busy || classifying || isOffline) return;
+    if (!isMobile || !dialogOpen || busy || isOffline) return;
     if (checkingCount > 0 || idleReadyCount === 0) return;
     void startUpload();
-  }, [
-    isMobile,
-    dialogOpen,
-    busy,
-    classifying,
-    isOffline,
-    checkingCount,
-    idleReadyCount,
-  ]);
+  }, [isMobile, dialogOpen, busy, isOffline, checkingCount, idleReadyCount]);
 
   const uploadHelp = (
     <Popover>
@@ -783,7 +679,9 @@ export function StatementUpload({ onImported }: Props) {
             Opens a picker for PDFs, photos, or a folder of statements.
           </PopoverDescription>
           <ul className="mt-1.5 list-disc space-y-1 pl-4 text-muted-foreground">
-            <li>Upload scans the files. Classify is a separate step.</li>
+            <li>
+              Upload scans the files. Classify is on the Transactions page.
+            </li>
             <li>Up to 24 files. Duplicates are marked before scan.</li>
             <li>Upload rules apply only to your own statements.</li>
             <li>CSV import is encrypted.</li>
@@ -797,11 +695,9 @@ export function StatementUpload({ onImported }: Props) {
     <Button
       type="button"
       variant="outline"
-      disabled={busy || classifying}
+      disabled={busy}
       className="gap-1 px-3 max-md:px-2.5"
-      aria-label={
-        busy ? "Uploading" : classifying ? "Classifying" : "Upload statement"
-      }
+      aria-label={busy ? "Uploading" : "Upload statement"}
       onClick={() => setDialogOpen(true)}
     >
       {triggerLabel}
@@ -916,11 +812,12 @@ export function StatementUpload({ onImported }: Props) {
                     <PopoverTitle>How upload works</PopoverTitle>
                     <PopoverDescription className="sr-only">
                       Drag PDFs or photos here, or choose files or a folder. Up
-                      to {MAX_FILES} · 20MB each. Import first, then classify.
+                      to {MAX_FILES} · 20MB each. Import, then classify on
+                      Transactions.
                     </PopoverDescription>
                     <ul className="mt-1 list-disc space-y-1 pl-4 text-sm leading-relaxed text-muted-foreground">
                       <li>On your phone, tap to take a photo or pick a file</li>
-                      <li>Folders are fine. Import, then tap Classify.</li>
+                      <li>Folders are fine. Classify is on Transactions.</li>
                       <li>Up to {MAX_FILES} · 20MB each.</li>
                       <li>Already-imported files are marked before scan.</li>
                       <li>The scan is encrypted. Only you can read it.</li>
@@ -931,8 +828,8 @@ export function StatementUpload({ onImported }: Props) {
             </DialogTitle>
             <DialogDescription className="sr-only">
               Drag PDFs or photos here, or choose files or a folder. Up to{" "}
-              {MAX_FILES} · 20MB each. Import first, then classify. The scan is
-              encrypted. Only you can read it.
+              {MAX_FILES} · 20MB each. Import, then classify on Transactions.
+              The scan is encrypted. Only you can read it.
             </DialogDescription>
           </DialogHeader>
 
@@ -1187,12 +1084,7 @@ export function StatementUpload({ onImported }: Props) {
           </div>
 
           <DialogFooter className="flex flex-wrap items-center justify-center gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              disabled={classifying}
-              onClick={onCancelClick}
-            >
+            <Button type="button" variant="outline" onClick={onCancelClick}>
               {busy
                 ? "Cancel upload"
                 : items.some((item) => item.state === "done")
@@ -1202,11 +1094,7 @@ export function StatementUpload({ onImported }: Props) {
             <Button
               type="button"
               disabled={
-                pendingCount === 0 ||
-                busy ||
-                classifying ||
-                checkingCount > 0 ||
-                isOffline
+                pendingCount === 0 || busy || checkingCount > 0 || isOffline
               }
               onClick={() => void startUpload()}
             >
@@ -1224,20 +1112,6 @@ export function StatementUpload({ onImported }: Props) {
                         : dupCount > 0
                           ? "All duplicates"
                           : "Upload"}
-            </Button>
-            <Button
-              type="button"
-              variant="secondary"
-              disabled={
-                classifyCount === 0 || busy || classifying || isOffline
-              }
-              onClick={() => void startClassify()}
-            >
-              {classifying
-                ? "Classifying…"
-                : classifyCount > 1
-                  ? `Classify ${classifyCount}`
-                  : "Classify"}
             </Button>
           </DialogFooter>
         </DialogContent>
