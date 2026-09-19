@@ -65,6 +65,7 @@ import type * as loanDocuments from "../loanDocuments.js";
 import type * as merchants from "../merchants.js";
 import type * as migrations from "../migrations.js";
 import type * as modules from "../modules.js";
+import type * as passwordSetup from "../passwordSetup.js";
 import type * as piggyCrew from "../piggyCrew.js";
 import type * as piggyMemory from "../piggyMemory.js";
 import type * as piggyPings from "../piggyPings.js";
@@ -143,6 +144,7 @@ declare const fullApi: ApiFromModules<{
   merchants: typeof merchants;
   migrations: typeof migrations;
   modules: typeof modules;
+  passwordSetup: typeof passwordSetup;
   piggyCrew: typeof piggyCrew;
   piggyMemory: typeof piggyMemory;
   piggyPings: typeof piggyPings;

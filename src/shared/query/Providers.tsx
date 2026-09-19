@@ -1,11 +1,12 @@
 "use client";
 
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { useState, type ReactNode } from "react";
 import { Toaster } from "@/components/ui/sonner";
+import { SetGooglePasswordDialog } from "@/domains/auth/ui/SetGooglePasswordDialog";
 import { ConvexClientProvider } from "@/shared/convex/ConvexClientProvider";
 import { EnsureUserBootstrap } from "@/shared/convex/EnsureUserBootstrap";
 import { ErrorBoundary } from "@/shared/errors/ErrorBoundary";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { useState, type ReactNode } from "react";
 
 export function Providers({ children }: { children: ReactNode }) {
   const [queryClient] = useState(
@@ -29,6 +30,7 @@ export function Providers({ children }: { children: ReactNode }) {
     <ConvexClientProvider>
       <EnsureUserBootstrap>
         <QueryClientProvider client={queryClient}>
+          <SetGooglePasswordDialog />
           <ErrorBoundary>{children}</ErrorBoundary>
           <Toaster />
         </QueryClientProvider>

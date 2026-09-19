@@ -63,7 +63,7 @@ export default function SignInPage() {
           </div>
         </header>
         <div className="grid w-full items-start gap-8 lg:grid-cols-[minmax(0,2fr)_minmax(16rem,1fr)] lg:items-center lg:gap-12">
-          <div className="relative z-10 w-full max-w-sm justify-self-center space-y-6 lg:col-start-2 lg:max-w-none lg:justify-self-stretch">
+          <div className="relative z-10 w-full max-w-sm justify-self-center space-y-4 lg:col-start-2 lg:max-w-none lg:justify-self-stretch">
             {flow === "signIn" || flow === "signUp" ? (
               <div
                 className="grid grid-cols-2 rounded-lg border border-[var(--border)] bg-surface-elevated p-1"
@@ -141,7 +141,7 @@ export default function SignInPage() {
             ) : null}
 
             <form
-              className="space-y-8 rounded-lg border border-[var(--border)] bg-surface-elevated p-6"
+              className="space-y-4 rounded-lg border border-[var(--border)] bg-surface-elevated p-4"
               onSubmit={(event) => {
                 event.preventDefault();
                 setError(null);
@@ -167,20 +167,6 @@ export default function SignInPage() {
                   }
                   formData.delete("confirmPassword");
                 }
-                if (flow === "signUp") {
-                  const firstName = String(
-                    formData.get("firstName") ?? "",
-                  ).trim();
-                  const lastName = String(
-                    formData.get("lastName") ?? "",
-                  ).trim();
-                  formData.set("firstName", firstName);
-                  formData.set("lastName", lastName);
-                } else if (flow === "signIn") {
-                  formData.delete("firstName");
-                  formData.delete("lastName");
-                }
-
                 if (flow === "reset") {
                   formData.delete("password");
                   formData.delete("newPassword");
@@ -215,33 +201,7 @@ export default function SignInPage() {
                   .finally(() => setPending(false));
               }}
             >
-              {flow === "signUp" ? (
-                <div className="grid grid-cols-2 gap-4">
-                  <label className="block space-y-2 text-sm">
-                    <span className="text-[var(--muted-foreground)]">
-                      First name
-                    </span>
-                    <input
-                      name="firstName"
-                      type="text"
-                      autoComplete="given-name"
-                      className={AUTH_FIELD_CLASS}
-                    />
-                  </label>
-                  <label className="block space-y-2 text-sm">
-                    <span className="text-[var(--muted-foreground)]">
-                      Last name
-                    </span>
-                    <input
-                      name="lastName"
-                      type="text"
-                      autoComplete="family-name"
-                      className={AUTH_FIELD_CLASS}
-                    />
-                  </label>
-                </div>
-              ) : null}
-              <label className="block space-y-2 pb-2 text-sm">
+              <label className="block space-y-2 text-sm">
                 <span className="text-[var(--muted-foreground)]">Email</span>
                 <input
                   name="email"

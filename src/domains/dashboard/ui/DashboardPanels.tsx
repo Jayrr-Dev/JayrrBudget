@@ -4,6 +4,11 @@ import { EmptyPrompt } from "@/components/ui/empty-prompt";
 import { PageSpinner } from "@/components/ui/spinner";
 import { displayAccountName } from "@/domains/dashboard/domain/accountName";
 import { formatMoney } from "@/domains/dashboard/domain/money";
+import {
+  accountClassFor,
+  balanceTone,
+  transactionTone,
+} from "@/domains/dashboard/domain/moneyTone";
 import type {
   DashboardAccount,
   DashboardData,
@@ -22,19 +27,14 @@ import {
   rememberLastViewSavedAt,
   subscribeLedgerSnapshots,
 } from "@/domains/dashboard/ui/ledgerQuerySnapshot";
-import {
-  accountClassFor,
-  balanceTone,
-  transactionTone,
-} from "@/domains/dashboard/domain/moneyTone";
 import { MoneyText, moneyToneClass } from "@/domains/dashboard/ui/MoneyText";
 import { useFeatureFlags } from "@/domains/feature-flags/ui/useFeatureFlag";
 import { MerchantLabel } from "@/domains/merchants/ui/MerchantLabel";
 import { StatementUpload } from "@/domains/statements/ui/StatementUpload";
 import { dashboardFromPrivateLedger } from "@/domains/vault/application/dashboardFromPrivateLedger";
 import { DecryptingPage } from "@/domains/vault/ui/DecryptingStatus";
-import { cn } from "@/lib/utils";
 import { usePrivateLedger } from "@/domains/vault/ui/usePrivateLedger";
+import { cn } from "@/lib/utils";
 import { formatDisplayDate } from "@/shared/lib/format-date";
 import { api } from "@convex/_generated/api";
 import { useConvexAuth, useQuery } from "convex/react";

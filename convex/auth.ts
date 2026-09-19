@@ -1,7 +1,7 @@
 import Google from "@auth/core/providers/google";
 import { Email } from "@convex-dev/auth/providers/Email";
 import { Password } from "@convex-dev/auth/providers/Password";
-import { convexAuth } from "@convex-dev/auth/server";
+import { convexAuth, getAuthUserId } from "@convex-dev/auth/server";
 import { ConvexError } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
@@ -83,6 +83,14 @@ async function upsertAuthUser(
       .first();
     userId = linked?._id ?? null;
   }
+  if (!userId) {
+    if (args.type === "credentials") {
+      if (email) {
+        // Public sign-up must not claim a Google account. Only the signed-in owner can.
+        userId = await sessionUserForPasswordLink(ctx, email);
+      }
+    }
+  }
 
   if (userId) {
     const existing = await ctx.db.get(userId);
@@ -92,7 +100,10 @@ async function upsertAuthUser(
         ...(name ? { name } : {}),
         ...(image ? { image } : {}),
         ...(emailVerified
-          ? { emailVerificationTime: existing.emailVerificationTime ?? Date.now() }
+          ? {
+              emailVerificationTime:
+                existing.emailVerificationTime ?? Date.now(),
+            }
           : {}),
         ...(isUserRole(existing.role) ? {} : { role: DEFAULT_USER_ROLE }),
       });
@@ -110,6 +121,27 @@ async function upsertAuthUser(
   });
   await seedUserAfterAuth(ctx, createdId);
   return createdId;
+}
+
+async function sessionUserForPasswordLink(
+  ctx: MutationCtx,
+  email: string,
+): Promise<Id<"users"> | null> {
+  const sessionUserId = await getAuthUserId(ctx);
+  if (sessionUserId === null) return null;
+  const sessionUser = await ctx.db.get(sessionUserId);
+  if (!sessionUser) return null;
+  const sessionEmail = sessionUser.email?.trim().toLowerCase();
+  if (sessionEmail !== email) return null;
+  if (sessionUser.emailVerificationTime) return sessionUserId;
+  const google = await ctx.db
+    .query("authAccounts")
+    .withIndex("userIdAndProvider", (q) =>
+      q.eq("userId", sessionUserId).eq("provider", "google"),
+    )
+    .first();
+  if (!google) return null;
+  return sessionUserId;
 }
 
 async function seedUserAfterAuth(ctx: MutationCtx, userId: Id<"users">) {
