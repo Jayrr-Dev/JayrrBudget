@@ -24,7 +24,7 @@ const azeretMono = Azeret_Mono({
 });
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://www.jayrrbudgets.com"),
+  metadataBase: new URL("https://www.jevsbudget.app"),
   applicationName: "Jev's Budget",
   title: "Jev's Budget",
   description: "Personal budgeting with private statement imports",
@@ -48,7 +48,9 @@ export const metadata: Metadata = {
   icons: {
     icon: [{ url: "/icon.svg", type: "image/svg+xml" }],
     shortcut: "/icon.svg",
-    apple: [{ url: "/apple-touch-icon.png", type: "image/png", sizes: "180x180" }],
+    apple: [
+      { url: "/apple-touch-icon.png", type: "image/png", sizes: "180x180" },
+    ],
   },
 };
 

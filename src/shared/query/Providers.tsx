@@ -30,8 +30,10 @@ export function Providers({ children }: { children: ReactNode }) {
     <ConvexClientProvider>
       <EnsureUserBootstrap>
         <QueryClientProvider client={queryClient}>
-          <SetGooglePasswordDialog />
-          <ErrorBoundary>{children}</ErrorBoundary>
+          <ErrorBoundary>
+            <SetGooglePasswordDialog />
+            {children}
+          </ErrorBoundary>
           <Toaster />
         </QueryClientProvider>
       </EnsureUserBootstrap>

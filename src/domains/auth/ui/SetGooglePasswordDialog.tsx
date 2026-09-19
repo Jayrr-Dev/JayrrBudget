@@ -21,7 +21,7 @@ import { MIN_PASSCODE_LENGTH } from "@/domains/vault/application/ensureVaultFrom
 import { api } from "@convex/_generated/api";
 import { useAction, useConvexAuth, useQuery } from "convex/react";
 import { Info } from "lucide-react";
-import { useState } from "react";
+import { Component, useState, type ErrorInfo, type ReactNode } from "react";
 
 const FIELD_CLASS =
   "min-h-11 w-full rounded-md border border-control-border bg-surface-elevated px-3 py-2 text-base text-foreground outline-none focus:border-primary focus:outline-2 focus:outline-offset-1 focus:outline-ring";
@@ -43,7 +43,35 @@ function setupError(error: unknown) {
   return raw.slice(index + marker.length);
 }
 
+class PasswordSetupBoundary extends Component<
+  { children: ReactNode },
+  { failed: boolean }
+> {
+  state = { failed: false };
+
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+
+  componentDidCatch(_error: Error, _info: ErrorInfo) {
+    return;
+  }
+
+  render() {
+    if (this.state.failed) return null;
+    return this.props.children;
+  }
+}
+
 export function SetGooglePasswordDialog() {
+  return (
+    <PasswordSetupBoundary>
+      <SetGooglePasswordDialogInner />
+    </PasswordSetupBoundary>
+  );
+}
+
+function SetGooglePasswordDialogInner() {
   const { isAuthenticated } = useConvexAuth();
   const needsPassword = useQuery(
     api.passwordSetup.needsPasswordSetup,

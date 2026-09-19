@@ -16,6 +16,9 @@ declare global {
 
 declare const self: ServiceWorkerGlobalScope;
 
+const APEX_HOST = "jevsbudget.app";
+const WWW_HOST = "www.jevsbudget.app";
+
 function isConvexHost(hostname: string) {
   return (
     hostname.endsWith(".convex.cloud") || hostname.endsWith(".convex.site")
@@ -26,7 +29,14 @@ function isApiPath(pathname: string) {
   return pathname === "/api" || pathname.startsWith("/api/");
 }
 
+function isSerwistPath(pathname: string) {
+  return pathname === "/serwist" || pathname.startsWith("/serwist/");
+}
+
 function isStaticShellRequest(request: Request, url: URL) {
+  if (isSerwistPath(url.pathname) || request.destination === "serviceworker") {
+    return false;
+  }
   if (
     request.destination === "script" ||
     request.destination === "style" ||
@@ -42,7 +52,7 @@ function isStaticShellRequest(request: Request, url: URL) {
 
 const serwist = new Serwist({
   precacheEntries: self.__SW_MANIFEST,
-  skipWaiting: false,
+  skipWaiting: true,
   clientsClaim: true,
   navigationPreload: false,
   disableDevLogs: true,
@@ -54,14 +64,31 @@ const serwist = new Serwist({
       {
         url: "/~offline",
         matcher({ request }) {
-          return request.mode === "navigate" || request.destination === "document";
+          return (
+            request.mode === "navigate" || request.destination === "document"
+          );
         },
       },
     ],
   },
   runtimeCaching: [
     {
-      matcher: ({ url }) => isApiPath(url.pathname) || isConvexHost(url.hostname),
+      matcher: ({ url }) => url.hostname === APEX_HOST,
+      handler: {
+        handle: async ({ request }) => {
+          const url = new URL(request.url);
+          url.hostname = WWW_HOST;
+          return Response.redirect(url.href, 308);
+        },
+      },
+    },
+    {
+      matcher: ({ url }) => isSerwistPath(url.pathname),
+      handler: new NetworkOnly(),
+    },
+    {
+      matcher: ({ url }) =>
+        isApiPath(url.pathname) || isConvexHost(url.hostname),
       handler: new NetworkOnly(),
     },
     {
