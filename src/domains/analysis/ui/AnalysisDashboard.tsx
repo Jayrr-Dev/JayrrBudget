@@ -914,14 +914,15 @@ function TimeSeriesTable({
   if (rows.length === 0) return null;
   return (
     <ScrollArea
-      type="always"
+      type="auto"
+      scrollbars="vertical"
       className="h-56 overflow-hidden rounded-lg border border-border sm:h-72 [&>[data-slot=scroll-area-viewport]>div]:block!"
     >
       <Table
         variant="lined"
-        containerClassName="overflow-visible [transform:none]"
+        containerClassName="overflow-visible"
         className={cn(
-          "border-separate! border-spacing-0 [transform:none] text-[0.7rem] sm:text-sm",
+          "border-separate! border-spacing-0 text-[0.7rem] sm:text-sm",
           "[&_th]:h-8 [&_th]:px-1.5 [&_th]:py-1 sm:[&_th]:h-10 sm:[&_th]:px-2 sm:[&_th]:py-0",
           "[&_td]:px-1.5 [&_td]:py-1 sm:[&_td]:p-2",
           "[&_thead_th]:border-t-0 [&_tbody_tr:first-child_td]:border-t-0",
@@ -1943,9 +1944,9 @@ function OtherBreakdownTable({
       </div>
       <Table
         variant="lined"
-        containerClassName="max-h-72 overflow-auto rounded-lg border border-border [transform:none]"
+        containerClassName="max-h-72 overflow-auto rounded-lg border border-border"
         className={cn(
-          "border-separate! border-spacing-0 [transform:none] text-[0.7rem] sm:text-sm",
+          "border-separate! border-spacing-0 text-[0.7rem] sm:text-sm",
           "[&_th]:h-8 [&_th]:px-1.5 [&_th]:py-1 sm:[&_th]:h-10 sm:[&_th]:px-2 sm:[&_th]:py-0",
           "[&_td]:px-1.5 [&_td]:py-1 sm:[&_td]:p-2",
           "[&_thead_th]:border-t-0 [&_tbody_tr:first-child_td]:border-t-0",
@@ -2933,7 +2934,11 @@ function TaxonomyBreakdownTable({
                   </TableCell>
                 ) : null}
                 <TableCell className="text-right">
-                  <MoneyText amount={row.spend} currency={currency} tone={tone} />
+                  <MoneyText
+                    amount={row.spend}
+                    currency={currency}
+                    tone={tone}
+                  />
                 </TableCell>
                 <TableCell className="hidden text-right font-mono tabular-nums text-[var(--muted-foreground)] sm:table-cell">
                   {formatCount(row.count ?? 0)}

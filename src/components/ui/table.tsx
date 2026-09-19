@@ -6,7 +6,7 @@ import * as React from "react";
 
 const tableVariants = cva(
   [
-    "w-full caption-bottom text-sm [transform:rotateX(180deg)]",
+    "w-full caption-bottom text-sm",
     "[&_th[data-sticky-col]]:sticky [&_th[data-sticky-col]]:left-0 [&_th[data-sticky-col]]:z-20 [&_th[data-sticky-col]]:bg-surface-elevated",
     "[&_td[data-sticky-col]]:sticky [&_td[data-sticky-col]]:left-0 [&_td[data-sticky-col]]:z-10 [&_td[data-sticky-col]]:bg-surface-elevated",
   ].join(" "),
@@ -58,7 +58,7 @@ function Table({
     <div
       data-slot="table-container"
       className={cn(
-        "relative w-full min-w-0 overflow-x-auto overflow-y-hidden overscroll-x-contain [transform:rotateX(180deg)]",
+        "relative w-full min-w-0 overflow-x-auto overflow-y-hidden overscroll-x-contain",
         containerClassName,
       )}
     >

@@ -13,7 +13,7 @@ import { usePrivateLedger } from "@/domains/vault/ui/usePrivateLedger";
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { useQuery } from "convex/react";
-import { useMemo } from "react";
+import { useMemo, useRef } from "react";
 
 type ClassCatalog = {
   sections: { name: string }[];
@@ -60,19 +60,31 @@ export function useBudgetProgressItems() {
   const budgets = useQuery(api.budgets.list, {});
   const catalog = useQuery(api.classifications.list, {});
   const privateLedger = usePrivateLedger();
+  const sortActiveByIdRef = useRef(new Map<Id<"budgets">, boolean>());
   const rows = useMemo((): BudgetTableRow[] => {
     if (!budgets) return [];
-    return budgets
-      .map((budget) => ({
-        ...budget,
-        pingLinks: budget.pingLinks ?? [],
-        lookupTable: lookupTableLabel(catalog, budget.classLookup),
-        startDate: budget.startDate || toBudgetYmd(new Date(budget.createdAt)),
-      }))
-      .sort((a, b) => {
-        if (a.isActive !== b.isActive) return a.isActive ? -1 : 1;
-        return b.createdAt - a.createdAt;
-      });
+    const mapped = budgets.map((budget) => ({
+      ...budget,
+      pingLinks: budget.pingLinks ?? [],
+      lookupTable: lookupTableLabel(catalog, budget.classLookup),
+      startDate: budget.startDate || toBudgetYmd(new Date(budget.createdAt)),
+    }));
+    const sortActiveById = sortActiveByIdRef.current;
+    const liveIds = new Set(mapped.map((row) => row.id));
+    for (const id of sortActiveById.keys()) {
+      if (!liveIds.has(id)) sortActiveById.delete(id);
+    }
+    for (const row of mapped) {
+      if (!sortActiveById.has(row.id)) {
+        sortActiveById.set(row.id, row.isActive);
+      }
+    }
+    return mapped.sort((a, b) => {
+      const aActive = sortActiveById.get(a.id) ?? a.isActive;
+      const bActive = sortActiveById.get(b.id) ?? b.isActive;
+      if (aActive !== bActive) return aActive ? -1 : 1;
+      return b.createdAt - a.createdAt;
+    });
   }, [budgets, catalog]);
 
   const progressItems = useMemo(() => {
