@@ -198,9 +198,17 @@ export async function labelDescriptionGroups(
     const aiRules = await client.query(api.aiRules.get, {});
     const deadline = Date.now() + 240_000;
 
-    // Flag-gated historically; Jev now owns classification when a key is set.
-    // Unknown groups stay pending for retry — no chat-model fallback.
-    if (await shouldUseJevCategorization(client)) {
+    // Re-run / recategorize (`skipCache`) always uses Jev. First classify
+    // uses Jev only when the jevCategorization flag is on. No chat fallback.
+    const useJev = await shouldUseJevCategorization(client, {
+      force: options?.skipCache,
+    });
+    if (options?.skipCache && !useJev) {
+      throw new Error(
+        "Jev is not configured. Set JEV_API_KEY to re-run classification.",
+      );
+    }
+    if (useJev) {
       const catalog = await client.query(api.classifications.list, {});
       const jev = await labelGroupsWithJev({
         groups: unknown.map((key) => ({
@@ -225,7 +233,10 @@ export async function labelDescriptionGroups(
           `[categorization] jev left ${jev.failed.length} group(s): ${jev.error}`,
         );
       }
-      return { summary: { ...summary, ok: summary.pending === 0 && !summary.error }, labeled };
+      return {
+        summary: { ...summary, ok: summary.pending === 0 && !summary.error },
+        labeled,
+      };
     }
 
     const ownerRules = formatUserAiRulesCategorizeBlock(aiRules.rules);

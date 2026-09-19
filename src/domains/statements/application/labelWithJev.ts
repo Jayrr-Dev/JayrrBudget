@@ -383,10 +383,20 @@ async function labelOne(params: {
   };
 }
 
-/** True when the server has a Jev key. Classification uses Jev, not the chat model. */
-export async function shouldUseJevCategorization(_client: ConvexHttpClient) {
-  void _client;
-  return isJevConfigured();
+/**
+ * First classify uses Jev only when `jevCategorization` is on.
+ * Re-run / recategorize pass `force` so they use Jev even if the flag is off.
+ */
+export async function shouldUseJevCategorization(
+  client: ConvexHttpClient,
+  options?: { force?: boolean },
+) {
+  if (!isJevConfigured()) return false;
+  if (options?.force) return true;
+  const flag = await client.query(api.featureFlags.get, {
+    key: "jevCategorization",
+  });
+  return flag.enabled;
 }
 
 export async function labelGroupsWithJev(params: {
