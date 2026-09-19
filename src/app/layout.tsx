@@ -1,6 +1,7 @@
 import { SerwistAppProvider } from "@/components/pwa/SerwistAppProvider";
 import { Providers } from "@/shared/query/Providers";
 import { ConvexAuthNextjsServerProvider } from "@convex-dev/auth/nextjs/server";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 import type { Metadata, Viewport } from "next";
 import { Azeret_Mono, Outfit, Plus_Jakarta_Sans } from "next/font/google";
 import "./globals.css";
@@ -68,6 +69,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
             <Providers>{children}</Providers>
           </ConvexAuthNextjsServerProvider>
         </SerwistAppProvider>
+        <SpeedInsights />
       </body>
     </html>
   );
