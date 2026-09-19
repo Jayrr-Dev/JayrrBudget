@@ -1,4 +1,4 @@
-import type { ExcalidrawElement, ExcalidrawImperativeAPI } from "jayrr-draw";
+import type { ExcalidrawElement, ExcalidrawImperativeAPI } from "jev-draw";
 
 function normalizeLabel(value: string) {
   return value.replace(/\s+/g, " ").trim().toLowerCase();

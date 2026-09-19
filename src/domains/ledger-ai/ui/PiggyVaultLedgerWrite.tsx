@@ -94,7 +94,7 @@ export function PiggyVaultLedgerWrite({
       reported.current = true;
       onDoneRef.current({
         ok: false,
-        error: "Unlock the vault so Piggy can save this change.",
+        error: "Unlock the vault so Jev can save this change.",
       });
       return;
     }

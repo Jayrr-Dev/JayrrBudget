@@ -1,8 +1,11 @@
+import Google from "@auth/core/providers/google";
 import { Email } from "@convex-dev/auth/providers/Email";
 import { Password } from "@convex-dev/auth/providers/Password";
 import { convexAuth } from "@convex-dev/auth/server";
 import { ConvexError } from "convex/values";
 import { internal } from "./_generated/api";
+import type { Id } from "./_generated/dataModel";
+import type { MutationCtx } from "./_generated/server";
 import { ensureModulesForUser } from "./lib/ensureModules";
 import { DEFAULT_USER_ROLE, isUserRole } from "./lib/roles";
 import { seedStarterTaxonomyForUser } from "./lib/seedStarterTaxonomy";
@@ -21,6 +24,7 @@ const passwordResetEmail = Email({
 
 export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
   providers: [
+    Google,
     Password({
       profile(params) {
         const email = String(params.email ?? "")
@@ -44,41 +48,73 @@ export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
   ],
   callbacks: {
     async createOrUpdateUser(ctx, args) {
-      const email =
-        typeof args.profile.email === "string"
-          ? args.profile.email.trim().toLowerCase()
-          : undefined;
-      const name =
-        typeof args.profile.name === "string" ? args.profile.name : undefined;
-
-      if (args.existingUserId) {
-        const existing = await ctx.db.get(args.existingUserId);
-        if (existing) {
-          await ctx.db.patch(args.existingUserId, {
-            ...(email ? { email } : {}),
-            ...(name ? { name } : {}),
-            ...(isUserRole(existing.role) ? {} : { role: DEFAULT_USER_ROLE }),
-          });
-          const user = await ctx.db.get(args.existingUserId);
-          if (user) {
-            await ensureModulesForUser(ctx, user);
-            await seedStarterTaxonomyForUser(ctx, user);
-          }
-          return args.existingUserId;
-        }
-      }
-
-      const userId = await ctx.db.insert("users", {
-        email,
-        name,
-        role: DEFAULT_USER_ROLE,
+      return await upsertAuthUser(ctx, {
+        existingUserId: args.existingUserId ?? null,
+        type: args.type,
+        profile: args.profile,
       });
-      const user = await ctx.db.get(userId);
-      if (user) {
-        await ensureModulesForUser(ctx, user);
-        await seedStarterTaxonomyForUser(ctx, user);
-      }
-      return userId;
     },
   },
 });
+
+async function upsertAuthUser(
+  ctx: MutationCtx,
+  args: {
+    existingUserId: Id<"users"> | null;
+    type: "oauth" | "credentials" | "email" | "phone" | "verification";
+    profile: Record<string, unknown>;
+  },
+): Promise<Id<"users">> {
+  const email =
+    typeof args.profile.email === "string"
+      ? args.profile.email.trim().toLowerCase()
+      : undefined;
+  const name =
+    typeof args.profile.name === "string" ? args.profile.name : undefined;
+  const image =
+    typeof args.profile.image === "string" ? args.profile.image : undefined;
+  const emailVerified = args.type === "oauth" && Boolean(email);
+
+  let userId = args.existingUserId;
+  if (!userId && args.type === "oauth" && email) {
+    const linked = await ctx.db
+      .query("users")
+      .withIndex("email", (q) => q.eq("email", email))
+      .first();
+    userId = linked?._id ?? null;
+  }
+
+  if (userId) {
+    const existing = await ctx.db.get(userId);
+    if (existing) {
+      await ctx.db.patch(userId, {
+        ...(email ? { email } : {}),
+        ...(name ? { name } : {}),
+        ...(image ? { image } : {}),
+        ...(emailVerified
+          ? { emailVerificationTime: existing.emailVerificationTime ?? Date.now() }
+          : {}),
+        ...(isUserRole(existing.role) ? {} : { role: DEFAULT_USER_ROLE }),
+      });
+      await seedUserAfterAuth(ctx, userId);
+      return userId;
+    }
+  }
+
+  const createdId = await ctx.db.insert("users", {
+    email,
+    name,
+    image,
+    role: DEFAULT_USER_ROLE,
+    ...(emailVerified ? { emailVerificationTime: Date.now() } : {}),
+  });
+  await seedUserAfterAuth(ctx, createdId);
+  return createdId;
+}
+
+async function seedUserAfterAuth(ctx: MutationCtx, userId: Id<"users">) {
+  const user = await ctx.db.get(userId);
+  if (!user) return;
+  await ensureModulesForUser(ctx, user);
+  await seedStarterTaxonomyForUser(ctx, user);
+}

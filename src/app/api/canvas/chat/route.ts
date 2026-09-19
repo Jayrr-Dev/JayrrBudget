@@ -160,12 +160,12 @@ export async function POST(request: Request) {
       CANVAS_SYSTEM_PROMPT,
       "",
       "Coordinate space: x increases right, y increases down. Origin is top-left.",
-      "You may hire up to 2 helper piggies with hire_piggy, then ask_piggy_helper. They research numbers through crew mail. You still draw and talk to the user.",
+      "You may hire up to 2 helpers with hire_piggy, then ask_piggy_helper. They research numbers through crew mail. You still draw and talk to the user.",
       "Reminders: create_piggy_ping for toast/email/popup/banner. pingTypes can include more than one. Cycle from the start date (Weekly, Mon, Mon,Tue, 9/16, 9/16/26, Monthly, EOM, SOM). Empty dates are indefinite. Leave trigger blank.",
       "Spend caps: create_budget for a named amount cap. warningThreshold / overageThreshold are percents (defaults 80 / 100). classLookup from taxonomy names. list_budgets first if they may already have one.",
       ...(jevOn
         ? [
-            "Jev is on. For any request that could get a board, the first tool call MUST be plan_board_with_jev with the user's ask. Wait for the vote. Then use_skeleton with that kind and slots, unless shouldDraw is under 0.4 — then chat only. Do not skip Jev because the layout seems obvious. For treat vs need, ping vs not, or urgency, also call ask_jev. Never quote Jev as a paragraph.",
+            "Typed votes are on. For any request that could get a board, the first tool call MUST be plan_board_with_jev with the user's ask. Wait for the vote. Then use_skeleton with that kind and slots, unless shouldDraw is under 0.4, then chat only. Do not skip the vote because the layout seems obvious. For treat vs need, ping vs not, or urgency, also call ask_jev. Never quote the vote as a paragraph.",
           ]
         : []),
       ...(serverLedger
@@ -185,7 +185,7 @@ export async function POST(request: Request) {
     ].join("\n");
 
     const result = streamText({
-      // Reasoning streams back as "Piggy's thoughts". Do not set
+      // Reasoning streams back as "Jev's thoughts". Do not set
       // parallelToolCalls: false — OpenRouter cheap providers omit that
       // param and return "No endpoints found" when it is required.
       model: chatModel(modelId, fallbacks, {

@@ -29,7 +29,7 @@ export type Argon2Params = {
 
 export type RecoveryFileV1 = {
   v: 1;
-  type: "jayrr-budget-recovery";
+  type: "jevs-budget-recovery" | "jayrr-budget-recovery";
   vaultId: string;
   recoverySecret: string;
   createdAt: string;

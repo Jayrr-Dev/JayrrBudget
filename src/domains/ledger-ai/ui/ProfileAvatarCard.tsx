@@ -68,14 +68,14 @@ export function ProfileAvatarCard({ avatarIcon }: Props) {
             <PopoverHeader className="gap-1.5">
               <PopoverTitle>Avatar</PopoverTitle>
               <PopoverDescription>
-                The icon shown next to your messages in Piggy chat.
+                The icon shown next to your messages in Jev chat.
               </PopoverDescription>
             </PopoverHeader>
           </PopoverContent>
         </Popover>
       </h2>
       <p className="sr-only">
-        Pick the icon shown next to your messages in Piggy chat.
+        Pick the icon shown next to your messages in Jev chat.
       </p>
 
       <RadioGroup

@@ -36,7 +36,7 @@ function PiggyPingsTitleInfo() {
         <PopoverHeader className="gap-1.5">
           <PopoverTitle>Piggy Pings</PopoverTitle>
           <PopoverDescription>
-            Reminders for you, or ones Piggy creates in chat.
+            Reminders for you, or ones Jev creates in chat.
           </PopoverDescription>
           <ul className="mt-1.5 list-disc space-y-1 pl-4 text-muted-foreground">
             <li>
@@ -68,7 +68,7 @@ export default function PiggyPingsPage() {
             <PiggyPingsTitleInfo />
           </h1>
           <p className="sr-only">
-            Reminders for you, or ones Piggy creates in chat. Toast, email,
+            Reminders for you, or ones Jev creates in chat. Toast, email,
             popup, and banner. Blank start or end means that side never closes.
           </p>
         </div>

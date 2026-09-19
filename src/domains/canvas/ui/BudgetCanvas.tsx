@@ -5,12 +5,12 @@ import { CanvasAiChat } from "@/domains/canvas/ui/CanvasAiChat";
 import { CanvasApiContext } from "@/domains/canvas/ui/canvasApiContext";
 import { api } from "@convex/_generated/api";
 import {
-  JayrrDraw,
+  JevDraw,
   MainMenu,
   serializeAsJSON,
   type ExcalidrawImperativeAPI,
   type ExcalidrawInitialDataState,
-} from "jayrr-draw";
+} from "jev-draw";
 import "@/domains/canvas/ui/excalidrawTheme.css";
 import { useMutation, useQuery } from "convex/react";
 import {
@@ -120,7 +120,7 @@ export function BudgetCanvas() {
   }, [cloud, importIfEmpty]);
 
   const onChange = useCallback<
-    NonNullable<ComponentProps<typeof JayrrDraw>["onChange"]>
+    NonNullable<ComponentProps<typeof JevDraw>["onChange"]>
   >(
     (elements, appState, files) => {
       if (!allowSave.current) return;
@@ -151,8 +151,8 @@ export function BudgetCanvas() {
 
   return (
     <CanvasApiContext.Provider value={apiRef}>
-      <div className="jayrr-excalidraw h-full min-h-0 w-full flex-1 overflow-hidden rounded-xl border border-border bg-surface shadow-sm ring-1 ring-foreground/10">
-        <JayrrDraw
+      <div className="jev-excalidraw h-full min-h-0 w-full flex-1 overflow-hidden rounded-xl border border-border bg-surface shadow-sm ring-1 ring-foreground/10">
+        <JevDraw
           excalidrawAPI={setApi}
           initialData={initialData ?? undefined}
           onChange={onChange}
@@ -172,7 +172,7 @@ export function BudgetCanvas() {
             <MainMenu.Separator />
             <MainMenu.DefaultItems.ChangeCanvasBackground />
           </MainMenu>
-        </JayrrDraw>
+        </JevDraw>
       </div>
     </CanvasApiContext.Provider>
   );

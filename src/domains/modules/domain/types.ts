@@ -49,7 +49,7 @@ export const SEED_MODULES: SeedModule[] = [
   {
     slug: "budgets",
     name: "Budgets",
-    description: "Spend caps Piggy can set and you can edit.",
+    description: "Spend caps Jev can set and you can edit.",
     href: "/budgets",
     icon: "IconWallet",
     category: "finance",
@@ -126,7 +126,7 @@ export const SEED_MODULES: SeedModule[] = [
   {
     slug: "piggy-pings",
     name: "Piggy Pings",
-    description: "Reminders Piggy can send as toast, email, popup, or banner.",
+    description: "Reminders Jev can send as toast, email, popup, or banner.",
     href: "/piggy-pings",
     icon: "IconBell",
     category: "finance",

@@ -62,7 +62,9 @@ type ScratchWriteDeps = {
   reload: () => void;
 };
 
-let scratchWriteDeps: ScratchWriteDeps | null = null;
+const scratchWriteDepsRef: { current: ScratchWriteDeps | null } = {
+  current: null,
+};
 
 function notifyScratchUi() {
   for (const listener of scratchUiListeners) listener();
@@ -276,7 +278,7 @@ async function flushEncryptedScratch() {
   while (scratchDirty) {
     scratchDirty = false;
     const payload = pendingScratch;
-    const deps = scratchWriteDeps;
+    const deps = scratchWriteDepsRef.current;
     if (!payload || !deps) return;
     const expected = scratchRevision ?? deps.ledgerRevision;
     skipNextPrivateLedgerReload();
@@ -303,7 +305,7 @@ function queueEncryptedScratch(next: ScratchNoteState) {
       scratchRevision = null;
       clearSkipNextPrivateLedgerReload();
       notifyScratchUi();
-      scratchWriteDeps?.reload();
+      scratchWriteDepsRef.current?.reload();
     });
 }
 
@@ -325,7 +327,7 @@ export function useScratchNoteActions() {
   const closeTabMut = useMutation(api.scratchNotes.closeTab);
   const renameTabMut = useMutation(api.scratchNotes.renameTab);
 
-  scratchWriteDeps = {
+  scratchWriteDepsRef.current = {
     ledgerRevision: privateLedger.ledger.scratchPads[0]?.revision ?? null,
     reload: privateLedger.reload,
     persist: async (state, expectedRevision) => {

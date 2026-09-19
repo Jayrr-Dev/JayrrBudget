@@ -78,7 +78,7 @@ const SLIDES: readonly Slide[] = [
       },
       {
         icon: EyeOff,
-        label: "A breach on our side leaks noise, not your spending",
+        label: "What we keep is noise, not your spending",
       },
     ],
     Scene: EncryptionScene,

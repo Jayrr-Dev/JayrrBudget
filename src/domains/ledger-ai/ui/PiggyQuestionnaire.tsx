@@ -62,7 +62,7 @@ export function PiggyQuestionnaire({
     <div className="w-full rounded-xl border border-border bg-surface p-3 text-sm shadow-xs">
       <div className="mb-2 flex items-center justify-between gap-2">
         <p className="text-xs font-medium text-muted-foreground">
-          {input.title?.trim() || "Piggy has a question"}
+          {input.title?.trim() || "Jev has a question"}
         </p>
         <Button
           type="button"
@@ -128,7 +128,7 @@ export function PiggyQuestionnaire({
           {multi ? <QuestionnairePrevious size="xs" /> : null}
           <QuestionnaireSkip size="xs" />
           {multi ? <QuestionnaireNext size="xs" /> : null}
-          <QuestionnaireSubmit size="xs">Send to Piggy</QuestionnaireSubmit>
+          <QuestionnaireSubmit size="xs">Send to Jev</QuestionnaireSubmit>
         </QuestionnaireActions>
       </Questionnaire>
     </div>

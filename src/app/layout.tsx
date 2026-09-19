@@ -1,6 +1,7 @@
 import { SerwistAppProvider } from "@/components/pwa/SerwistAppProvider";
 import { Providers } from "@/shared/query/Providers";
 import { ConvexAuthNextjsServerProvider } from "@convex-dev/auth/nextjs/server";
+import { Analytics } from "@vercel/analytics/next";
 import type { Metadata, Viewport } from "next";
 import { Azeret_Mono, Outfit, Plus_Jakarta_Sans } from "next/font/google";
 import "./globals.css";
@@ -24,12 +25,12 @@ const azeretMono = Azeret_Mono({
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://www.jayrrbudgets.com"),
-  applicationName: "JayrrBudget",
-  title: "JayrrBudget",
+  applicationName: "Jev's Budget",
+  title: "Jev's Budget",
   description: "Personal budgeting with private statement imports",
   appleWebApp: {
     capable: true,
-    title: "JayrrBudget",
+    title: "Jev's Budget",
     statusBarStyle: "default",
   },
   robots: {
@@ -68,6 +69,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
             <Providers>{children}</Providers>
           </ConvexAuthNextjsServerProvider>
         </SerwistAppProvider>
+        <Analytics />
       </body>
     </html>
   );

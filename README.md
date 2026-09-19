@@ -1,4 +1,4 @@
-# JayrrBudget
+# Jev's Budget
 
 Personal budgeting app: **Next.js** on **Vercel**, **Convex** for the live ledger, **Convex Auth** (email + password), plus optional statement OCR (Mistral) and canvas AI (OpenRouter).
 

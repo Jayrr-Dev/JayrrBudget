@@ -203,7 +203,7 @@ export const bootstrapOwnerAccount = action({
       account: { id: email, secret: args.password },
       profile: {
         email,
-        name: args.name?.trim() || "Jayrr",
+        name: args.name?.trim() || "Jev",
       },
     });
     const assigned: any = await ctx.runMutation(

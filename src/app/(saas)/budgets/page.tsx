@@ -17,7 +17,7 @@ export default function BudgetsPage() {
         <div>
           <TitleInfo
             title="Budgets"
-            lead="Spend caps you set, or ones Piggy creates in chat."
+            lead="Spend caps you set, or ones Jev creates in chat."
             bullets={[
               "Amount is the cap for the current cycle slice",
               "Cycle is daily, weekly, bi-weekly, monthly, or yearly",
@@ -28,7 +28,7 @@ export default function BudgetsPage() {
             ]}
           />
           <p className="sr-only">
-            Spend caps you set, or ones Piggy creates in chat. Amount is the cap
+            Spend caps you set, or ones Jev creates in chat. Amount is the cap
             for the current cycle slice from the start date.
           </p>
         </div>

@@ -155,7 +155,7 @@ export const hire = mutation({
     if (helpers.length >= MAX_HELPERS) {
       return {
         ok: false as const,
-        error: "Piggy already has two helpers on this chat.",
+        error: "Jev already has two helpers on this chat.",
       };
     }
     const used = new Set(helpers.map((row) => row.slot));

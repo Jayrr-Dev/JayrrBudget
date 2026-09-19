@@ -10,9 +10,10 @@ import {
   utcMonthKey,
 } from "@/shared/ai/aiCostTable";
 import { errorMessage } from "@/shared/lib/error-message";
+import { useClientNow } from "@/shared/lib/useClientNow";
 import { api } from "@convex/_generated/api";
 import { useMutation, useQuery } from "convex/react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 type PlanDraft = {
@@ -119,11 +120,15 @@ function PlanCard({
 }
 
 export function ServiceAdmin() {
-  const monthKey = useMemo(() => utcMonthKey(Date.now()), []);
+  const now = useClientNow();
+  const monthKey = now === undefined ? undefined : utcMonthKey(now);
   const ensurePlans = useMutation(api.service.ensurePlans);
   const savePlan = useMutation(api.service.savePlan);
   const saveAiModels = useMutation(api.service.saveAiModels);
-  const team = useQuery(api.service.teamMonth, { monthKey });
+  const team = useQuery(
+    api.service.teamMonth,
+    monthKey ? { monthKey } : "skip",
+  );
   const aiModels = useQuery(api.service.getAiModels);
   const [drafts, setDrafts] = useState<PlanDraft[]>([]);
   const [savingRole, setSavingRole] = useState<string | null>(null);

@@ -1,5 +1,5 @@
 ---
-description: JayrrBudget flat Turso schema — one transactions table + filter lookups
+description: Jev's Budget flat Turso schema — one transactions table + filter lookups
 globs: src/shared/db/**,scripts/**,src/domains/db-explorer/**,src/app/api/db/**,drizzle.config.ts,AGENTS.md
 alwaysApply: false
 ---

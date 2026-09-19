@@ -38,7 +38,7 @@ import { usePrivateLedger } from "@/domains/vault/ui/usePrivateLedger";
 import { formatDisplayDate } from "@/shared/lib/format-date";
 import { api } from "@convex/_generated/api";
 import { useConvexAuth, useQuery } from "convex/react";
-import { useMemo, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useSyncExternalStore } from "react";
 
 export function useDashboard(transactionLimit: number | null = 250) {
   const { isAuthenticated, isLoading: authLoading } = useConvexAuth();
@@ -70,6 +70,23 @@ export function useDashboard(transactionLimit: number | null = 250) {
     privateLedger.encryptedLedger,
     privateLedger.ledger,
     privateLedger.unlocked,
+    transactionLimit,
+  ]);
+
+  const liveDashboard = result?.ok ? result.data : undefined;
+  useEffect(() => {
+    if (authLoading || flags.loading || privateLedger.encryptedLedger) return;
+    if (!liveDashboard || transactionLimit !== 250) return;
+    if (peekEncryptedLedgerLocal()) return;
+    const userId = readLastUserId();
+    if (!userId) return;
+    rememberLastViewSavedAt(Date.now());
+    void upsertLastView({ userId, dashboard: liveDashboard });
+  }, [
+    authLoading,
+    flags.loading,
+    liveDashboard,
+    privateLedger.encryptedLedger,
     transactionLimit,
   ]);
 
@@ -106,19 +123,7 @@ export function useDashboard(transactionLimit: number | null = 250) {
 
   const live = result?.ok ? result.data : undefined;
   if (live) {
-    const changed = rememberDashboard(transactionLimit, live);
-    if (
-      changed &&
-      transactionLimit === 250 &&
-      !privateLedger.encryptedLedger &&
-      !peekEncryptedLedgerLocal()
-    ) {
-      const userId = readLastUserId();
-      if (userId) {
-        rememberLastViewSavedAt(Date.now());
-        void upsertLastView({ userId, dashboard: live });
-      }
-    }
+    rememberDashboard(transactionLimit, live);
   }
   const cached =
     live ??

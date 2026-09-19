@@ -33,7 +33,7 @@ const nextConfig: NextConfig = {
       { source: "/private-vault", destination: "/profile", permanent: false },
     ];
   },
-  transpilePackages: ["jayrr-draw"],
+  transpilePackages: ["jev-draw"],
   serverExternalPackages: ["tesseract.js"],
   experimental: {
     staleTimes: {

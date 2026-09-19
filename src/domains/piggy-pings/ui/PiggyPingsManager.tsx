@@ -882,7 +882,7 @@ function PingFormDialog({
                   <PopoverDescription>
                     {isEdit
                       ? "Change this reminder, then save."
-                      : "Save a reminder for you, or one Piggy can also create in chat."}
+                      : "Save a reminder for you, or one Jev can also create in chat."}
                   </PopoverDescription>
                   <ul className="mt-1.5 list-disc space-y-1 pl-4 text-muted-foreground">
                     <li>Toast, email, dialog, and banner. Pick one or more. Toast is the default</li>
@@ -1161,7 +1161,7 @@ export function PiggyPingsManager({
       <EmptyPrompt
         className="bg-surface py-10"
         title="No pings yet"
-        description="Add a reminder here, or ask Piggy to create one."
+        description="Add a reminder here, or ask Jev to create one."
         action={
           <Button type="button" size="sm" onClick={onCreatePing}>
             Create ping

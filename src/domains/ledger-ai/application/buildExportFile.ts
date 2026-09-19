@@ -33,7 +33,7 @@ async function buildPdf(input: ExportFileInput): Promise<Blob> {
   doc.setFont("helvetica", "normal");
   doc.setFontSize(10);
   doc.setTextColor(110);
-  const subtitle = input.subtitle?.trim() || `Piggy · ${new Date().toLocaleDateString()}`;
+  const subtitle = input.subtitle?.trim() || `Jev · ${new Date().toLocaleDateString()}`;
   doc.text(subtitle, PDF_MARGIN, y);
   doc.setTextColor(0);
   y += 16;

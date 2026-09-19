@@ -10,8 +10,8 @@ import { PageSpinner } from "@/components/ui/spinner";
 import { TitleInfo } from "@/domains/ops/ui/TitleInfo";
 import { formatUsd } from "@/shared/ai/aiCostTable";
 import { api } from "@convex/_generated/api";
+import { useClientNow } from "@/shared/lib/useClientNow";
 import { useConvexAuth, useQuery } from "convex/react";
-import { useMemo } from "react";
 import {
   Area,
   AreaChart,
@@ -80,10 +80,10 @@ function Kpi({
 
 export function RevenueDashboard() {
   const { isAuthenticated } = useConvexAuth();
-  const now = useMemo(() => Date.now(), []);
+  const now = useClientNow();
   const data = useQuery(
     api.revenue.dashboard,
-    isAuthenticated ? { now } : "skip",
+    isAuthenticated && now !== undefined ? { now } : "skip",
   );
 
   if (data === undefined) {

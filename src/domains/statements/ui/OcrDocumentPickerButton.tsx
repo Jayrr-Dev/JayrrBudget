@@ -1,6 +1,6 @@
 "use client";
 
-import { CameraIcon, FileUpIcon } from "lucide-react";
+import { CameraIcon, FileUpIcon, FolderUpIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -68,6 +68,7 @@ function useOcrCameraAvailable() {
 
 function useOcrDocumentInputRefs(options: PickerOptions) {
   const fileRef = useRef<HTMLInputElement>(null);
+  const folderRef = useRef<HTMLInputElement>(null);
   const cameraRef = useRef<HTMLInputElement>(null);
 
   function emitFromInput(input: HTMLInputElement | null) {
@@ -88,6 +89,15 @@ function useOcrDocumentInputRefs(options: PickerOptions) {
         onChange={() => emitFromInput(fileRef.current)}
       />
       <input
+        ref={folderRef}
+        type="file"
+        className="hidden"
+        disabled={options.disabled}
+        multiple
+        {...({ webkitdirectory: "", directory: "" } as Record<string, string>)}
+        onChange={() => emitFromInput(folderRef.current)}
+      />
+      <input
         ref={cameraRef}
         type="file"
         accept="image/*"
@@ -102,6 +112,7 @@ function useOcrDocumentInputRefs(options: PickerOptions) {
   return {
     inputs,
     openFilePicker: () => fileRef.current?.click(),
+    openFolderPicker: () => folderRef.current?.click(),
     openCamera: () => cameraRef.current?.click(),
   };
 }
@@ -132,11 +143,12 @@ export function OcrDocumentPickerButton({
   onFiles,
 }: Props) {
   const { isMobile, cameraAvailable } = useOcrCameraAvailable();
-  const { inputs, openFilePicker, openCamera } = useOcrDocumentInputRefs({
-    multiple,
-    disabled,
-    onFiles,
-  });
+  const { inputs, openFilePicker, openFolderPicker, openCamera } =
+    useOcrDocumentInputRefs({
+      multiple,
+      disabled,
+      onFiles,
+    });
 
   const showCameraMenu = cameraAvailable && !isMobile;
 
@@ -184,6 +196,13 @@ export function OcrDocumentPickerButton({
           <DropdownMenuItem className="cursor-pointer" onClick={openFilePicker}>
             <FileUpIcon className="size-4" />
             Choose file
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            className="cursor-pointer"
+            onClick={openFolderPicker}
+          >
+            <FolderUpIcon className="size-4" />
+            Choose folder
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>

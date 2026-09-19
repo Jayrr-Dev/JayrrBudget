@@ -10,9 +10,9 @@ import {
 } from "@/components/ui/popover";
 import { formatUsd, utcMonthKey } from "@/shared/ai/aiCostTable";
 import { api } from "@convex/_generated/api";
+import { useClientNow } from "@/shared/lib/useClientNow";
 import { useConvexAuth, useQuery } from "convex/react";
 import { Info } from "lucide-react";
-import { useMemo } from "react";
 
 function tokenLine(input: number, output: number) {
   return `${input} in / ${output} out`;
@@ -20,14 +20,15 @@ function tokenLine(input: number, output: number) {
 
 export function ProfileAiUsageCard() {
   const { isAuthenticated } = useConvexAuth();
-  const monthKey = useMemo(() => utcMonthKey(Date.now()), []);
+  const now = useClientNow();
+  const monthKey = now === undefined ? undefined : utcMonthKey(now);
   const month = useQuery(
     api.aiUsage.myMonth,
-    isAuthenticated ? { monthKey } : "skip",
+    isAuthenticated && monthKey ? { monthKey } : "skip",
   );
   const quota = useQuery(
     api.service.myQuota,
-    isAuthenticated ? { monthKey } : "skip",
+    isAuthenticated && monthKey ? { monthKey } : "skip",
   );
   const recent = useQuery(
     api.aiUsage.myRecent,

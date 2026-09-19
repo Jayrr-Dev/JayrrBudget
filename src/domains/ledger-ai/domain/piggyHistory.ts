@@ -40,9 +40,16 @@ export function restorePiggyHistory(value: unknown): PiggyHistory {
 
 export type PiggyTab = { id: string; name: string };
 export type PiggyChatIndex = { tabs: PiggyTab[]; activeId: string };
+
+function migrateTabName(name: string) {
+  if (name === "Piggy") return "Jev";
+  const match = /^Piggy (\d+)$/.exec(name);
+  return match ? `Jev ${match[1]}` : name;
+}
+
 export function emptyPiggyChatIndex(): PiggyChatIndex {
   const id = crypto.randomUUID();
-  return { tabs: [{ id, name: "Piggy" }], activeId: id };
+  return { tabs: [{ id, name: "Jev" }], activeId: id };
 }
 export function restorePiggyChatIndex(value: unknown): PiggyChatIndex {
   if (!value || typeof value !== "object") return emptyPiggyChatIndex();
@@ -52,7 +59,7 @@ export function restorePiggyChatIndex(value: unknown): PiggyChatIndex {
     if (!tab || typeof tab.id !== "string" || !tab.id || typeof tab.name !== "string" || ids.has(tab.id)) return false;
     ids.add(tab.id);
     return true;
-  }).slice(0, 8);
+  }).map((tab) => ({ ...tab, name: migrateTabName(tab.name) })).slice(0, 8);
   if (!tabs.length) return emptyPiggyChatIndex();
   return { tabs, activeId: tabs.some((tab) => tab.id === record.activeId) ? record.activeId! : tabs[0].id };
 }

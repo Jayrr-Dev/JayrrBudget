@@ -148,10 +148,10 @@ function createPiggyTab(name: string): PiggyTab {
 
 function nextPiggyName(tabs: PiggyTab[]) {
   const used = new Set(tabs.map((tab) => tab.name));
-  if (!used.has("Piggy")) return "Piggy";
+  if (!used.has("Jev")) return "Jev";
   let index = 2;
-  while (used.has(`Piggy ${index}`)) index += 1;
-  return `Piggy ${index}`;
+  while (used.has(`Jev ${index}`)) index += 1;
+  return `Jev ${index}`;
 }
 
 function messageText(parts: Array<{ type: string; text?: string }>) {
@@ -168,7 +168,7 @@ function PiggyAboutInfo() {
         <button
           type="button"
           className="inline-flex size-5 shrink-0 items-center justify-center rounded-full text-accent hover:text-primary"
-          aria-label="About Piggy"
+          aria-label="About Jev"
         >
           <Info className="size-3.5" />
         </button>
@@ -180,7 +180,7 @@ function PiggyAboutInfo() {
         className="w-[min(20rem,calc(100vw-2rem))] gap-0 p-3.5"
       >
         <PopoverHeader className="gap-1">
-          <PopoverTitle>Piggy</PopoverTitle>
+          <PopoverTitle>Jev</PopoverTitle>
           <PopoverDescription>
             A financial advisor mascot who works from your budget numbers.
           </PopoverDescription>
@@ -278,7 +278,7 @@ function PiggyChatPaneSession({
       return lastAssistantMessageIsCompleteWithToolCalls(options);
     },
     onError: (err) => {
-      toast.error("Piggy stumbled", {
+      toast.error("Jev stumbled", {
         description: errorMessage(err, "Chat request failed"),
       });
     },
@@ -420,7 +420,7 @@ function PiggyChatPaneSession({
       {blocked ? (
         <p className="shrink-0 border-b border-border bg-warning-subtle px-3 py-2 text-xs text-warning">
           Turn on Cloud Processing in Modules before sending budget data to
-          Piggy.
+          Jev.
         </p>
       ) : null}
 
@@ -618,7 +618,7 @@ function PiggyChatPaneSession({
           <PiggyTranscriptItem messageId="piggy-thinking">
             <PiggyAssistantMessage mood="thinking">
               <p role="status" className="py-2 text-xs text-muted-foreground">
-                Piggy is thinking…
+                Jev is thinking…
               </p>
             </PiggyAssistantMessage>
           </PiggyTranscriptItem>
@@ -705,7 +705,7 @@ function PiggyChatPaneSession({
               onBlur={() => setInputFocused(false)}
               placeholder={
                 busy
-                  ? "Piggy is busy…"
+                  ? "Jev is busy…"
                   : awaitingAnswer
                     ? "Type to interrupt, or answer above"
                     : pendingFiles.length > 0
@@ -722,7 +722,7 @@ function PiggyChatPaneSession({
                   size="icon-xs"
                   variant="default"
                   onClick={() => void stop()}
-                  aria-label="Stop Piggy"
+                  aria-label="Stop Jev"
                   className="size-6 max-md:size-6 max-md:h-6 max-md:w-6 rounded-full"
                 >
                   <Square className="size-3 fill-current" />
@@ -777,7 +777,7 @@ export function LedgerAiChat(
         style={{ width: PIGGY_PANEL_DEFAULT_SIZE.width }}
       >
         <p className="text-xs text-muted-foreground">
-          Loading saved Piggy chats…
+          Loading saved Jev chats…
         </p>
       </div>
     );
@@ -914,9 +914,9 @@ function LedgerAiChatSession({
       )}
       style={{ width: panelSize.size.width }}
     >
-      <DockPanelResizeGrip label="Piggy panel" resize={panelSize} />
+      <DockPanelResizeGrip label="Jev panel" resize={panelSize} />
       <div className="relative shrink-0 border-b border-border bg-muted/25">
-        <ChromeTabStrip ariaLabel="Piggy chats">
+        <ChromeTabStrip ariaLabel="Jev chats">
           {tabs.map((tab) => (
             <ChromeTab
               key={tab.id}
@@ -931,7 +931,7 @@ function LedgerAiChatSession({
           <div className="mb-1 ml-0.5 flex shrink-0 items-center gap-0.5">
             <button
               type="button"
-              aria-label="Add Piggy tab"
+              aria-label="Add Jev tab"
               title={
                 tabs.length >= MAX_PIGGY_TABS
                   ? `Up to ${MAX_PIGGY_TABS} chats`

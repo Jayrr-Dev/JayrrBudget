@@ -10,8 +10,8 @@ import { PageSpinner } from "@/components/ui/spinner";
 import { TitleInfo } from "@/domains/ops/ui/TitleInfo";
 import { cn } from "@/lib/utils";
 import { api } from "@convex/_generated/api";
+import { useClientNow } from "@/shared/lib/useClientNow";
 import { useConvexAuth, useQuery } from "convex/react";
-import { useMemo } from "react";
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
 
 const SIGNUP_CONFIG = {
@@ -73,10 +73,10 @@ function Kpi({
 
 export function UsersDashboard() {
   const { isAuthenticated } = useConvexAuth();
-  const now = useMemo(() => Date.now(), []);
+  const now = useClientNow();
   const data = useQuery(
     api.userMetrics.dashboard,
-    isAuthenticated ? { now } : "skip",
+    isAuthenticated && now !== undefined ? { now } : "skip",
   );
 
   if (data === undefined) {

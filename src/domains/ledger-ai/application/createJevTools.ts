@@ -194,7 +194,7 @@ export function createCanvasJevTools(canvas: CanvasSnapshot | null) {
               should_draw: {
                 type: "noul",
                 instructions:
-                  "Should Piggy draw a board now, rather than only reply in chat?",
+                  "Should Jev draw a board now, rather than only reply in chat?",
               },
               highlight_risk: {
                 type: "noul",

@@ -48,7 +48,7 @@ export async function importStatementFromChat(options: {
       if (!options.userId || !vaultId || !keyId || !masterKey) {
         return {
           ok: false,
-          error: "Unlock the vault, then ask Piggy to import again.",
+          error: "Unlock the vault, then ask Jev to import again.",
         };
       }
       const ledger =

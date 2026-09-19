@@ -35,7 +35,6 @@ import { api } from "@/shared/convex/httpClient";
 import { normalizeCurrencyCode } from "@/shared/lib/currency";
 import { errorMessage } from "@/shared/lib/error-message";
 import type { ConvexHttpClient } from "convex/browser";
-import { labelDescriptionGroups } from "./categorizeStatement";
 
 export type {
   ImportBankStatementResult,
@@ -59,7 +58,7 @@ function emitProgress(
  * 2. AI paper-facts parse (dates/amounts/description/locations + account meta)
  * 3. Write transactions to Convex
  *
- * 4. Reuse saved categorization, then classify unfamiliar descriptions.
+ * Classification is a separate step (Classify in the upload dialog).
  */
 export async function importBankStatement(params: {
   filename: string;
@@ -237,43 +236,6 @@ async function importBankStatementWithKey(
     });
 
     emitProgress(params.onProgress, "save");
-    emitProgress(params.onProgress, "categorize");
-    let categorization;
-    let labeledTxns = transactions;
-    try {
-      const labeled = await labelDescriptionGroups(
-        params.client,
-        transactions,
-      );
-      categorization = labeled.summary;
-      const byId = new Map(
-        labeled.labeled.map((row) => [row.transactionId, row]),
-      );
-      labeledTxns = transactions.map((txn) => {
-        const hit = byId.get(txn.transactionId);
-        if (!hit) return txn;
-        return {
-          ...txn,
-          merchantClean: hit.profile.merchant,
-          sectionName: hit.section,
-          categoryName: hit.category,
-          subcategoryName: hit.subcategory,
-          spreadName: hit.profile.spread,
-          transactionTypeName: hit.profile.transactionType,
-          txnCode: hit.profile.txnCode,
-          channel: hit.profile.channel,
-          tagNames: hit.profile.tags ?? [],
-        };
-      });
-    } catch (error) {
-      categorization = {
-        ok: false,
-        cached: 0,
-        ai: 0,
-        pending: transactions.length,
-        error: errorMessage(error, "Categorization failed"),
-      };
-    }
     emitProgress(params.onProgress, "done");
     return {
       ok: true,
@@ -297,7 +259,6 @@ async function importBankStatementWithKey(
       computedClosing: balance.computedClosing,
       balanceDelta: balance.delta,
       balanceOk: balance.balanced,
-      categorization,
       vaultPayload: {
         accountId,
         accountName: parsed.accountName,
@@ -308,7 +269,7 @@ async function importBankStatementWithKey(
         openingBalance: balance.openingBalance,
         closingBalance: balance.closingBalance,
         ocrMarkdown: ocr.markdown,
-        transactions: labeledTxns,
+        transactions,
       },
     };
   } catch (error) {

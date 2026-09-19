@@ -30,7 +30,7 @@ export function NotFoundScreen() {
         />
       </div>
       <p className="mt-6 text-sm text-muted-foreground">
-        Piggy cannot find that path. Pick a real page.
+        Jev cannot find that path. Pick a real page.
       </p>
       <div className="mt-8">
         <Button size="lg" render={<Link href="/" />}>

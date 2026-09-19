@@ -10,7 +10,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 ## Database (Convex) — agent context
 
-**Source of truth:** Convex project `jayrr-budget` (team `jayrr-dev`). Env: `NEXT_PUBLIC_CONVEX_URL` (+ `CONVEX_DEPLOYMENT` for CLI) in `.env.local`.
+**Product:** Jev's Budget. **Source of truth:** Convex project `jayrr-budget` (team `jayrr-dev`; deployment name unchanged). Env: `NEXT_PUBLIC_CONVEX_URL` (+ `CONVEX_DEPLOYMENT` for CLI) in `.env.local`.
 
 **Auth:** Convex Auth (email + password via `@convex-dev/auth`). Roles: `admin` | `premium` | `normal` (`convex/lib/roles.ts`). `convex/auth.config.ts` validates tokens from this deployment (`CONVEX_SITE_URL`). Every private ledger row is scoped by `userId` (`convex/lib/auth.ts` → `requireUser` / `getAuthUserId`). Never trust a client-supplied user id.
 

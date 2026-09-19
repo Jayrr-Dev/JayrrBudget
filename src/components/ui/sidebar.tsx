@@ -226,7 +226,7 @@ function MobileBrandMark({ title }: { title: string }) {
 export const MobileSidebar = ({
   className,
   children,
-  title = "Jayrr's Budget",
+  title = "Jev's Budget",
   headerActions,
   ...props
 }: React.ComponentProps<"div"> & {

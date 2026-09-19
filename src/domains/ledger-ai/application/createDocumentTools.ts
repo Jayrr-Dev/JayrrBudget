@@ -1,4 +1,4 @@
-﻿import {
+import {
   importStatementDocumentClientTool,
   importStatementDocumentInputSchema,
 } from "@/domains/ledger-ai/domain/importStatementDocumentTool";
@@ -48,7 +48,7 @@ export function createDocumentTools({
     }
     if (!isOcrDocumentFilename(doc.filename)) {
       throw new Error(
-        `"${doc.filename}" is not a PDF or image. Piggy can only read PDF, PNG, JPG, WEBP, AVIF, or HEIC.`,
+        `"${doc.filename}" is not a PDF or image. Jev can only read PDF, PNG, JPG, WEBP, AVIF, or HEIC.`,
       );
     }
     return doc;

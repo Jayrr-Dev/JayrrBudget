@@ -5,8 +5,8 @@ const BACKGROUND_PINK = "#fff5f3";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "JayrrBudget",
-    short_name: "JayrrBudget",
+    name: "Jev's Budget",
+    short_name: "Jev's Budget",
     description: "Personal budgeting with private statement imports",
     start_url: "/",
     display: "standalone",

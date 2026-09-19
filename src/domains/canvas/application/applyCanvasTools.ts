@@ -24,7 +24,7 @@ import {
   type ExcalidrawImperativeAPI,
   type ExcalidrawTextElement,
   type FontFamilyValues,
-} from "jayrr-draw";
+} from "jev-draw";
 
 const DEFAULT_STROKE = "#1e1e1e";
 const DEFAULT_TEXT = "#1e1e1e";
@@ -58,7 +58,7 @@ const FONT_CSS_FAMILY: Record<CanvasFontName, string> = {
  */
 export async function ensureCanvasFontsLoaded(sampleText = "") {
   if (typeof document === "undefined" || !document.fonts) return;
-  const text = sampleText || "Piggy";
+  const text = sampleText || "Jev";
   await Promise.all(
     Object.values(FONT_CSS_FAMILY).map((family) =>
       document.fonts

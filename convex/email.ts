@@ -1,7 +1,7 @@
 "use node";
 
-import nodemailer from "nodemailer";
 import { v } from "convex/values";
+import { Resend } from "resend";
 import { internalAction } from "./_generated/server";
 
 export const sendPasswordReset = internalAction({
@@ -12,28 +12,18 @@ export const sendPasswordReset = internalAction({
   },
   returns: v.null(),
   handler: async (_ctx, args) => {
-    const host = process.env.SMTP_HOST;
-    const port = Number(process.env.SMTP_PORT ?? "587");
-    const user = process.env.SMTP_USER;
-    const password = process.env.SMTP_PASSWORD;
-    const from = process.env.SMTP_FROM;
-    if (!host || !Number.isFinite(port) || !user || !password || !from) {
+    const apiKey = process.env.RESEND_API_KEY;
+    const from = process.env.RESEND_FROM;
+    if (!apiKey || !from) {
       throw new Error("Password recovery email is not configured");
     }
 
-    const transporter = nodemailer.createTransport({
-      host,
-      port,
-      secure: process.env.SMTP_SECURE === "true" || port === 465,
-      auth: { user, pass: password },
-    });
-
-    await transporter.sendMail({
+    const { error } = await new Resend(apiKey).emails.send({
       from,
       to: args.to,
-      subject: "Reset your Jayrr's Budget password",
+      subject: "Reset your Jev's Budget password",
       text: [
-        "We received a request to reset your Jayrr's Budget password.",
+        "We received a request to reset your Jev's Budget password.",
         "",
         `Your reset code is: ${args.token}`,
         "",
@@ -41,6 +31,11 @@ export const sendPasswordReset = internalAction({
         "If you did not request this, you can ignore this email.",
       ].join("\n"),
     });
+
+    if (error) {
+      console.error("Resend password reset failed", error.message);
+      throw new Error("Failed to send password recovery email");
+    }
 
     return null;
   },

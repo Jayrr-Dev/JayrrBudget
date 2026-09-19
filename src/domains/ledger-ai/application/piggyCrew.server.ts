@@ -79,7 +79,7 @@ async function runHelper(options: {
   const helperTools = {
     ...readTools,
     reply_to_lead: tool({
-      description: "Send your findings back to lead Piggy through the crew mail table.",
+      description: "Send your findings back to lead Jev through the crew mail table.",
       inputSchema: z.object({ body: z.string().min(1).max(4000) }),
       execute: async ({ body }) => {
         return await options.client.mutation(api.piggyCrew.post, {
@@ -96,7 +96,7 @@ async function runHelper(options: {
   const result = await generateText({
     model: chatModel(options.modelId, options.fallbacks),
     system: [
-      `You are ${helper.name}, a helper piggy hired by lead Piggy for this user's budget.`,
+      `You are ${helper.name}, a helper hired by lead Jev for this user's budget.`,
       `Your job: ${helper.brief}`,
       "Read numbers with tools. Do not invent totals. Do not edit transactions.",
       "When you have an answer, call reply_to_lead with a short report, then stop.",
@@ -153,7 +153,7 @@ export function createPiggyCrewTools(options: CrewToolsOptions) {
   return {
     hire_piggy: tool({
       description:
-        "Hire a helper piggy for this chat (max 2). Helpers research and write to the crew mail table. You stay the advisor who talks to the user.",
+        "Hire a helper for this chat (max 2). Helpers research and write to the crew mail table. You stay the advisor who talks to the user.",
       inputSchema: z.object({
         name: z.string().min(1).max(32),
         brief: z.string().min(1).max(400),
@@ -169,7 +169,7 @@ export function createPiggyCrewTools(options: CrewToolsOptions) {
 
     list_piggy_crew: tool({
       description:
-        "List hired helper piggies and recent crew mail for this chat. Mail is stored in Convex, locked to this user.",
+        "List hired helpers and recent crew mail for this chat. Mail is stored in Convex, locked to this user.",
       inputSchema: z.object({}),
       execute: async () => {
         return await options.client.query(api.piggyCrew.list, { chatId });
@@ -199,7 +199,7 @@ export function createPiggyCrewTools(options: CrewToolsOptions) {
           });
         } catch (error) {
           return {
-            error: errorMessage(error, "Helper piggy failed"),
+            error: errorMessage(error, "Helper failed"),
           };
         }
       },

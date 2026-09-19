@@ -52,9 +52,9 @@ export const PIGGY_FEATURE_SLIDES: readonly PiggyFeatureSlide[] = [
   {
     id: "crew",
     mood: "excited",
-    badge: { icon: Users, label: "Helper piggies" },
+    badge: { icon: Users, label: "Helpers" },
     title: "Hires up to two helpers",
-    chips: ["Piggy", "Helper 1", "Helper 2"],
+    chips: ["Jev", "Helper 1", "Helper 2"],
     features: [
       { icon: Users, label: "Splits big jobs across a small crew" },
       { icon: MessageCircleQuestion, label: "They talk through your private crew mail" },
@@ -131,7 +131,7 @@ export const PIGGY_FEATURE_SLIDES: readonly PiggyFeatureSlide[] = [
     mood: "sleepy",
     badge: { icon: PanelsTopLeft, label: "Tabs and saving" },
     title: "Separate chats, saved for you",
-    chips: ["Piggy", "Piggy 2", "Piggy 3"],
+    chips: ["Jev", "Jev 2", "Jev 3"],
     features: [
       { icon: PanelsTopLeft, label: "Open extra tabs for separate chats" },
       { icon: Save, label: "Chats and drafts stay on this browser" },
@@ -187,7 +187,7 @@ export function PiggyFeatureCarousel({
       onBlur={() => setPaused(false)}
       role="region"
       aria-roledescription="carousel"
-      aria-label="Piggy features"
+      aria-label="Jev features"
     >
       <div className="relative overflow-hidden">
         <AnimatePresence mode="wait" initial={false} custom={direction}>
@@ -272,7 +272,7 @@ export function PiggyFeatureCarousel({
         >
           <ChevronLeft className="size-4" />
         </button>
-        <div className="flex items-center gap-1.5" role="tablist" aria-label="Piggy feature tour">
+        <div className="flex items-center gap-1.5" role="tablist" aria-label="Jev feature tour">
           {slides.map((item, i) => {
             const selected = i === index;
             return (

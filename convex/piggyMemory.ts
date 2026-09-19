@@ -153,7 +153,7 @@ async function getOrCreateOwnedDoc(
     updatedAt: now,
   });
   const created = await ctx.db.get(id);
-  if (!created) throw new Error("Failed to create Piggy memory");
+  if (!created) throw new Error("Failed to create Jev memory");
   return created;
 }
 

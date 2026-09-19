@@ -31,6 +31,7 @@ import {
   type VaultCacheDebugEvent,
   type VaultCacheDebugKind,
 } from "@/shared/debug/vaultCacheDebug";
+import { useClientNow } from "@/shared/lib/useClientNow";
 import { api } from "@convex/_generated/api";
 import { useConvexAuth, useQuery } from "convex/react";
 import { Info, XIcon } from "lucide-react";
@@ -230,7 +231,7 @@ function PiggyMemoryView({
   if (!hasFacts && memory.sessionCount === 0) {
     return (
       <p className="py-6 text-center text-xs text-[var(--muted-foreground)]">
-        Piggy has not saved anything yet. Chat with Piggy first.
+        Jev has not saved anything yet. Chat with Jev first.
       </p>
     );
   }
@@ -307,9 +308,9 @@ function DebuggerAboutInfo() {
           </PopoverDescription>
           <ul className="mt-1.5 list-disc space-y-1 pl-4 text-muted-foreground">
             <li>Cache logs IndexedDB hits and Convex ciphertext reads</li>
-            <li>AI Usage logs tokens from Piggy / canvas and Mistral OCR pages</li>
+            <li>AI Usage logs tokens from Jev / canvas and Mistral OCR pages</li>
             <li>Cost estimates use the rate card (OpenRouter + Mistral)</li>
-            <li>Memory shows what Piggy has saved about you</li>
+            <li>Memory shows what Jev has saved about you</li>
             <li>Plaintext ledger never appears here</li>
           </ul>
         </PopoverHeader>
@@ -348,14 +349,17 @@ export function VaultCacheDebugPanel({
     ...getVaultCacheDebugEvents(),
   ]);
   const { isAuthenticated } = useConvexAuth();
-  const monthKey = useMemo(() => utcMonthKey(Date.now()), []);
+  const now = useClientNow();
+  const monthKey = now === undefined ? undefined : utcMonthKey(now);
   const aiEvents = useQuery(
     api.aiUsage.myRecent,
     isAuthenticated && open ? {} : "skip",
   );
   const teamMonth = useQuery(
     api.aiUsage.adminMonth,
-    isAuthenticated && open && aiSubTab === "team" ? { monthKey } : "skip",
+    isAuthenticated && open && aiSubTab === "team" && monthKey
+      ? { monthKey }
+      : "skip",
   );
   const piggyMemory = useQuery(
     api.piggyMemory.get,
@@ -596,7 +600,7 @@ export function VaultCacheDebugPanel({
                   </li>
                 ) : aiEvents.length === 0 ? (
                   <li className="py-6 text-center text-xs text-[var(--muted-foreground)]">
-                    Send a Piggy / canvas chat, or upload a statement with
+                    Send a Jev / canvas chat, or upload a statement with
                     server OCR.
                   </li>
                 ) : (

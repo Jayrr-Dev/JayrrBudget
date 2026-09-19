@@ -51,16 +51,16 @@ function SketchAboutInfo() {
         <button
           type="button"
           className="inline-flex size-5 shrink-0 items-center justify-center rounded-full text-accent hover:text-primary"
-          aria-label="About Piggy sketch"
+          aria-label="About Jev sketch"
         >
           <Info className="size-3.5" />
         </button>
       </PopoverTrigger>
       <PopoverContent align="start" side="bottom" sideOffset={8} className="w-72 gap-0 p-3.5">
         <PopoverHeader className="gap-1.5">
-          <PopoverTitle>Piggy sketch</PopoverTitle>
+          <PopoverTitle>Jev sketch</PopoverTitle>
           <PopoverDescription>
-            A small whiteboard Piggy can open to picture a money idea.
+            A small whiteboard Jev can open to picture a money idea.
           </PopoverDescription>
           <ul className="mt-1.5 list-disc space-y-1 pl-4 text-muted-foreground">
             <li>Shapes and labels from a command list, not freehand code</li>
@@ -113,7 +113,7 @@ export function PiggySketchDialog() {
             <SketchAboutInfo />
           </div>
           <p id="piggy-sketch-sr" className="sr-only">
-            Piggy opened a sketch to explain something about your budget.
+            Jev opened a sketch to explain something about your budget.
           </p>
         </DialogHeader>
         <canvas
@@ -125,7 +125,7 @@ export function PiggySketchDialog() {
         />
         {sketch.commands.length === 0 ? (
           <p className="text-xs text-muted-foreground">
-            Piggy sent a caption but no shapes. Ask it to sketch bars or boxes.
+            Jev sent a caption but no shapes. Ask it to sketch bars or boxes.
           </p>
         ) : null}
         {sketch.caption ? (

@@ -99,7 +99,7 @@ export async function registerLoanFromChat(options: {
     if (!options.userId || !vaultId || !keyId || !masterKey) {
       return {
         ok: false,
-        error: "Unlock the vault, then ask Piggy to register the loan again.",
+        error: "Unlock the vault, then ask Jev to register the loan again.",
       };
     }
 

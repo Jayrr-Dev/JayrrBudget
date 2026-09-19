@@ -1,4 +1,4 @@
-import type { ExcalidrawImperativeAPI } from "jayrr-draw";
+import type { ExcalidrawImperativeAPI } from "jev-draw";
 
 const DEFAULT_SNAPSHOT_LIMIT = 120;
 

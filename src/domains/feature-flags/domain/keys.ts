@@ -24,11 +24,11 @@ export const FEATURE_FLAG_COPY: Record<
   jevCategorization: {
     name: "Jev categorization (beta)",
     description:
-      "Picks categories with TypeSafe Jev instead of the chat model. Faster and cheaper; anything Jev cannot label falls back to the normal model.",
+      "Picks section, then category, then subcategory with TypeSafe Jev from your classification catalog, using each bank line's description.",
   },
   jevPiggy: {
-    name: "Jev for Piggy (beta)",
+    name: "Typed votes for Jev (beta)",
     description:
-      "Lets Piggy ask Jev for typed votes: which board to draw, yes/no checks, and scores. Jev does not write chat or look at images.",
+      "Lets Jev take typed votes: which board to draw, yes/no checks, and scores. Votes do not write chat or look at images.",
   },
 };

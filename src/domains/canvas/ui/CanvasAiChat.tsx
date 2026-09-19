@@ -112,11 +112,11 @@ function hasVisibleParts(message: UIMessage | undefined) {
 }
 
 function thinkingLabel(status: string, last: UIMessage | undefined) {
-  if (status === "submitted") return "Piggy is thinking…";
+  if (status === "submitted") return "Jev is thinking…";
   const streamingTool = last?.parts.some(
     (part) => isToolUIPart(part) && part.state === "input-streaming",
   );
-  return streamingTool ? "Piggy is sketching…" : "Piggy is writing…";
+  return streamingTool ? "Jev is sketching…" : "Jev is writing…";
 }
 
 function CanvasPiggyInfo() {
@@ -126,7 +126,7 @@ function CanvasPiggyInfo() {
         <button
           type="button"
           className="inline-flex size-5 shrink-0 items-center justify-center rounded-full text-accent hover:text-primary"
-          aria-label="About Canvas Piggy"
+          aria-label="About Canvas Jev"
         >
           <Info className="size-3.5" />
         </button>
@@ -138,9 +138,9 @@ function CanvasPiggyInfo() {
         className="z-[2100] w-72 gap-0 p-3.5"
       >
         <PopoverHeader className="gap-1.5">
-          <PopoverTitle>Canvas Piggy</PopoverTitle>
+          <PopoverTitle>Canvas Jev</PopoverTitle>
           <PopoverDescription>
-            Piggy advises from your budget, then draws it on the board.
+            Jev advises from your budget, then draws it on the board.
           </PopoverDescription>
           <ul className="mt-1.5 list-disc space-y-1 pl-4 text-muted-foreground">
             <li>Chat can see the budget numbers you send</li>
@@ -153,16 +153,16 @@ function CanvasPiggyInfo() {
               and lists its sources
             </li>
             <li>
-              Can hire up to two helper piggies; they talk through your private
-              crew mail
+              Can hire up to two helpers; they talk through your private crew
+              mail
             </li>
-            <li>Piggy stamps a chart skeleton, then fills your numbers</li>
+            <li>Jev stamps a chart skeleton, then fills your numbers</li>
             <li>
-              Thoughts and stamp notes show while Piggy works, then tuck away
+              Thoughts and stamp notes show while Jev works, then tuck away
             </li>
-            <li>Ask for edits — Piggy moves or erases what’s there</li>
+            <li>Ask for edits. Jev moves or erases what is there</li>
             <li>
-              When a drawing is done, Piggy drops a short line in the speech
+              When a drawing is done, Jev drops a short line in the speech
               bubble by the button
             </li>
             <li>Enter sends, Shift+Enter adds a line</li>
@@ -330,7 +330,7 @@ export function CanvasAiChat() {
       <Button
         variant="ghost"
         disabled
-        aria-label="Loading saved Canvas Piggy chat"
+        aria-label="Loading saved Canvas Jev chat"
         className="h-9 min-w-0 shrink-0 justify-start gap-1.5 rounded-lg border border-border bg-surface-elevated px-2 pr-2 text-sm font-medium text-foreground shadow-md ring-1 ring-foreground/10 [&_svg]:size-5"
       >
         <PiggyMascot mood="thinking" iconClassName="size-8" />
@@ -432,7 +432,7 @@ function CanvasAiChatSession({
     // board; this only kicks in if a request hit the step cap mid-drawing.
     sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
     onError: (err) => {
-      toast.error("Piggy stumbled", {
+      toast.error("Jev stumbled", {
         description: errorMessage(err, "Chat request failed"),
       });
     },
@@ -552,11 +552,11 @@ function CanvasAiChatSession({
     <div className="pointer-events-auto fixed top-16 right-3 z-2000 flex w-[min(24rem,calc(100vw-1.5rem))] flex-col gap-0 overflow-hidden rounded-xl border border-border bg-background p-0 shadow-lg ring-1 ring-foreground/10">
       <PopoverHeader className="flex-row items-center gap-1.5 border-b border-accent/15 bg-linear-to-r from-accent-subtle/80 to-transparent px-3 py-2.5">
         <PopoverTitle className="flex min-w-0 flex-1 items-center gap-1.5">
-          Canvas Piggy
+          Canvas Jev
           <CanvasPiggyInfo />
         </PopoverTitle>
         <PopoverDescription className="sr-only">
-          Chat can see the budget numbers you send. Piggy draws on the board.
+          Chat can see the budget numbers you send. Jev draws on the board.
         </PopoverDescription>
         <Button
           type="button"
@@ -575,7 +575,7 @@ function CanvasAiChatSession({
       {blocked ? (
         <p className="border-b border-border bg-warning-subtle px-3 py-2 text-xs text-warning">
           Turn on Cloud Processing in Modules before sending budget data to
-          Piggy.
+          Jev.
         </p>
       ) : null}
 
@@ -586,7 +586,7 @@ function CanvasAiChatSession({
       )}
 
       <PiggyTranscript
-        ariaLabel="Canvas Piggy conversation"
+        ariaLabel="Canvas Jev conversation"
         className="h-80"
         onClearChat={clearChat}
         canClearChat={messages.length > 0 || !!error}
@@ -599,7 +599,7 @@ function CanvasAiChatSession({
               </span>
               <div className="space-y-1">
                 <p className="text-sm font-medium">
-                  Ask Piggy to sketch your money
+                  Ask Jev to sketch your money
                 </p>
                 <p className="text-xs text-muted-foreground">
                   Charts, flows, and notes land on the board.
@@ -681,9 +681,9 @@ function CanvasAiChatSession({
             onFocus={() => setInputFocused(true)}
             onBlur={() => setInputFocused(false)}
             onKeyDown={onKeyDown}
-            placeholder={busy ? "Piggy is busy…" : "Ask or draw…"}
+            placeholder={busy ? "Jev is busy…" : "Ask or draw…"}
             disabled={blocked}
-            aria-label="Message Canvas Piggy"
+            aria-label="Message Canvas Jev"
             className="max-h-28 min-h-8 px-3 py-1.5 text-sm leading-5"
           />
           <InputGroupAddon align="inline-end" className="self-center">
@@ -720,8 +720,8 @@ function CanvasAiChatSession({
       <Button
         type="button"
         variant="ghost"
-        title="Canvas Piggy"
-        aria-label="Canvas Piggy"
+        title="Canvas Jev"
+        aria-label="Canvas Jev"
         aria-expanded={open}
         className={cn(
           "h-9 min-w-0 shrink-0 justify-start gap-1.5 rounded-lg border border-border bg-surface-elevated px-2 pr-2 text-sm font-medium text-foreground shadow-md ring-1 ring-foreground/10 hover:bg-muted hover:text-foreground [&_svg]:size-5",

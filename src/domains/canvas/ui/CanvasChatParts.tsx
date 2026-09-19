@@ -161,13 +161,13 @@ const TOOL_META: Record<string, ToolMeta> = {
   ask_jev: {
     icon: Scale,
     preparing: "Posing a vote…",
-    running: "Asking Jev…",
-    done: "Jev voted",
+    running: "Taking a vote…",
+    done: "Vote in",
   },
   plan_board_with_jev: {
     icon: Scale,
     preparing: "Picking a layout…",
-    running: "Asking Jev which board…",
+    running: "Voting on a board…",
     done: "Layout picked",
   },
 };
@@ -312,10 +312,10 @@ export function ReasoningBlock({ part }: { part: ReasoningUIPart }) {
 
   const preview = thoughtPreview(text, streaming);
   const header = streaming
-    ? "Piggy is thinking…"
+    ? "Jev is thinking…"
     : elapsedSec != null
       ? `Thought for ${elapsedSec}s`
-      : "Piggy's thoughts";
+      : "Jev's thoughts";
 
   return (
     <Collapsible

@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" fill="none" role="img" aria-labelledby="title desc">
-  <title id="title">JayrrBudget</title>
+  <title id="title">Jev's Budget</title>
   <desc id="desc">A soft pink piggy bank with a golden savings coin, a compact body, and rounded cocoa outlines.</desc>
   <g transform="translate(9.6 0) scale(.85 1)" stroke="#60353D" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round">
     <path d="M106 74C123 78 126 58 116 59C108 60 112 70 119 66"/>
@@ -27,6 +27,3 @@
   </g>
   <path d="M59 49.03L100 61.09" stroke="#60353D" stroke-width="5" stroke-linecap="round"/>
 </svg>
-
-
-

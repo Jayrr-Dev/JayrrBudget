@@ -76,7 +76,7 @@ export type AskUserUITool = InferUITool<typeof askUserTool>;
 
 /** One-line recap shown in the transcript after the user answers. */
 export function summarizeAskUserAnswers(output: AskUserOutput): string {
-  if (output.dismissed) return "Skipped Piggy's questions.";
+  if (output.dismissed) return "Skipped Jev's questions.";
   const lines = output.answers.map((answer) => {
     if (answer.skipped) return `${answer.prompt} — skipped`;
     const parts = [...answer.labels];

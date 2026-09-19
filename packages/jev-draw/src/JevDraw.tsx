@@ -4,8 +4,8 @@ import { Excalidraw } from "@excalidraw/excalidraw";
 import "@excalidraw/excalidraw/index.css";
 import type { ComponentProps } from "react";
 
-export type JayrrDrawProps = ComponentProps<typeof Excalidraw>;
+export type JevDrawProps = ComponentProps<typeof Excalidraw>;
 
-export function JayrrDraw(props: JayrrDrawProps) {
+export function JevDraw(props: JevDrawProps) {
   return <Excalidraw {...props} />;
 }

@@ -22,6 +22,9 @@ import { useState } from "react";
 
 type AuthFlow = "signIn" | "signUp" | "reset" | "resetVerification";
 
+const AUTH_FIELD_CLASS =
+  "min-h-14 w-full rounded-lg border border-control-border bg-surface-elevated px-4 py-3 text-base text-[var(--foreground)] outline-none focus:border-primary";
+
 export default function SignInPage() {
   const { signIn } = useAuthActions();
   const router = useRouter();
@@ -54,7 +57,7 @@ export default function SignInPage() {
           />
           <div className="min-w-0 text-left">
             <h1 className="type-page text-[2rem] leading-none lg:text-[2.75rem]">
-              Jayrr&apos;s Budget!
+              Jev&apos;s Budget!
             </h1>
             <p className="type-lead mt-2 text-base lg:text-lg">{headerLead}</p>
           </div>
@@ -109,8 +112,36 @@ export default function SignInPage() {
               </div>
             ) : null}
 
+            {flow === "signIn" || flow === "signUp" ? (
+              <div className="space-y-4">
+                <button
+                  type="button"
+                  disabled={pending}
+                  className="flex min-h-11 w-full touch-manipulation items-center justify-center gap-2 rounded-lg border border-[var(--border)] bg-surface-elevated px-3 py-2 text-sm font-medium text-[var(--foreground)] hover:bg-surface-subtle disabled:opacity-60"
+                  onClick={() => {
+                    setError(null);
+                    setPending(true);
+                    void signIn("google", { redirectTo: "/" }).catch(
+                      (err: unknown) => {
+                        setError(authErrorMessage(err, flow));
+                        setPending(false);
+                      },
+                    );
+                  }}
+                >
+                  <GoogleMark />
+                  Continue with Google
+                </button>
+                <div className="flex items-center gap-3 text-xs text-[var(--muted-foreground)]">
+                  <span className="h-px flex-1 bg-[var(--border)]" />
+                  or
+                  <span className="h-px flex-1 bg-[var(--border)]" />
+                </div>
+              </div>
+            ) : null}
+
             <form
-              className="space-y-4 rounded-lg border border-[var(--border)] bg-surface-elevated p-6"
+              className="space-y-8 rounded-lg border border-[var(--border)] bg-surface-elevated p-6"
               onSubmit={(event) => {
                 event.preventDefault();
                 setError(null);
@@ -194,7 +225,7 @@ export default function SignInPage() {
                       name="firstName"
                       type="text"
                       autoComplete="given-name"
-                      className="w-full rounded-md border border-control-border bg-surface-elevated px-3 py-2 text-[var(--foreground)] outline-none focus:border-primary"
+                      className={AUTH_FIELD_CLASS}
                     />
                   </label>
                   <label className="block space-y-2 text-sm">
@@ -205,19 +236,19 @@ export default function SignInPage() {
                       name="lastName"
                       type="text"
                       autoComplete="family-name"
-                      className="w-full rounded-md border border-control-border bg-surface-elevated px-3 py-2 text-[var(--foreground)] outline-none focus:border-primary"
+                      className={AUTH_FIELD_CLASS}
                     />
                   </label>
                 </div>
               ) : null}
-              <label className="block space-y-2 text-sm">
+              <label className="block space-y-2 pb-2 text-sm">
                 <span className="text-[var(--muted-foreground)]">Email</span>
                 <input
                   name="email"
                   type="email"
                   required
                   autoComplete="username"
-                  className="w-full rounded-md border border-control-border bg-surface-elevated px-3 py-2 text-[var(--foreground)] outline-none focus:border-primary"
+                  className={AUTH_FIELD_CLASS}
                 />
               </label>
               {flow === "resetVerification" ? (
@@ -231,7 +262,7 @@ export default function SignInPage() {
                     inputMode="numeric"
                     autoComplete="one-time-code"
                     required
-                    className="w-full rounded-md border border-control-border bg-surface-elevated px-3 py-2 text-[var(--foreground)] outline-none focus:border-primary"
+                    className={AUTH_FIELD_CLASS}
                   />
                 </label>
               ) : null}
@@ -299,7 +330,7 @@ export default function SignInPage() {
                         });
                       });
                     }}
-                    className="w-full rounded-md border border-control-border bg-surface-elevated px-3 py-2 text-[var(--foreground)] outline-none focus:border-primary"
+                    className={AUTH_FIELD_CLASS}
                   />
                 </label>
               ) : null}
@@ -314,7 +345,7 @@ export default function SignInPage() {
                     required
                     minLength={MIN_PASSCODE_LENGTH}
                     autoComplete="new-password"
-                    className="w-full rounded-md border border-control-border bg-surface-elevated px-3 py-2 text-[var(--foreground)] outline-none focus:border-primary"
+                    className={AUTH_FIELD_CLASS}
                   />
                 </label>
               ) : null}
@@ -393,5 +424,28 @@ export default function SignInPage() {
         </div>
       </div>
     </main>
+  );
+}
+
+function GoogleMark() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24" className="size-4">
+      <path
+        fill="#4285F4"
+        d="M23.52 12.27c0-.85-.07-1.67-.21-2.46H12v4.66h6.46a5.52 5.52 0 0 1-2.4 3.62v3h3.88c2.27-2.09 3.58-5.17 3.58-8.82"
+      />
+      <path
+        fill="#34A853"
+        d="M12 24c3.24 0 5.96-1.07 7.95-2.91l-3.88-3c-1.08.73-2.46 1.16-4.07 1.16-3.13 0-5.78-2.11-6.73-4.96H1.27v3.09A12 12 0 0 0 12 24"
+      />
+      <path
+        fill="#FBBC05"
+        d="M5.27 14.29A7.2 7.2 0 0 1 4.89 12c0-.8.14-1.57.38-2.29V6.62H1.27A12 12 0 0 0 0 12c0 1.94.46 3.77 1.27 5.38z"
+      />
+      <path
+        fill="#EA4335"
+        d="M12 4.75c1.76 0 3.34.6 4.58 1.79l3.43-3.43C17.95 1.19 15.23 0 12 0 7.31 0 3.26 2.69 1.27 6.62l4 3.09C6.22 6.86 8.87 4.75 12 4.75"
+      />
+    </svg>
   );
 }

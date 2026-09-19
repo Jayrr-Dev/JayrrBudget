@@ -19,4 +19,4 @@ export type {
   ExcalidrawImperativeAPI,
   ExcalidrawInitialDataState,
 } from "@excalidraw/excalidraw/types";
-export { JayrrDraw, type JayrrDrawProps } from "./JayrrDraw";
+export { JevDraw, type JevDrawProps } from "./JevDraw";

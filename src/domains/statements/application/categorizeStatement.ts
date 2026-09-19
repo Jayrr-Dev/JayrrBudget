@@ -198,9 +198,10 @@ export async function labelDescriptionGroups(
     const aiRules = await client.query(api.aiRules.get, {});
     const deadline = Date.now() + 240_000;
 
-    // Flag-gated: Jev picks from the existing catalog. Whatever it cannot
-    // label stays in `unknown` and falls through to the OpenRouter path.
+    // Flag-gated historically; Jev now owns classification when a key is set.
+    // Unknown groups stay pending for retry — no chat-model fallback.
     if (await shouldUseJevCategorization(client)) {
+      const catalog = await client.query(api.classifications.list, {});
       const jev = await labelGroupsWithJev({
         groups: unknown.map((key) => ({
           key,
@@ -208,6 +209,7 @@ export async function labelDescriptionGroups(
           amount: groups.get(key)![0].amount,
         })),
         paths,
+        catalog,
         spreads: vocabulary.spreads,
         types: vocabulary.types,
         tags: tagCatalog,
@@ -218,13 +220,12 @@ export async function labelDescriptionGroups(
       unknown.length = 0;
       unknown.push(...jev.failed);
       if (jev.error) {
+        summary.error = jev.error;
         console.warn(
-          `[categorization] jev left ${jev.failed.length} group(s) for fallback: ${jev.error}`,
+          `[categorization] jev left ${jev.failed.length} group(s): ${jev.error}`,
         );
       }
-      if (!unknown.length) {
-        return { summary: { ...summary, ok: summary.pending === 0 }, labeled };
-      }
+      return { summary: { ...summary, ok: summary.pending === 0 && !summary.error }, labeled };
     }
 
     const ownerRules = formatUserAiRulesCategorizeBlock(aiRules.rules);

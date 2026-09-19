@@ -49,7 +49,7 @@ export function createPiggyMemoryTools(client: ConvexHttpClient) {
   return {
     remember_about_user: tool({
       description:
-        "Save facts about the signed-in user to Piggy's memory. Pass only the lists you are adding to. nickname replaces the stored nickname (empty string clears it). lastSessionSummary is one sentence about this chat.",
+        "Save facts about the signed-in user to Jev's memory. Pass only the lists you are adding to. nickname replaces the stored nickname (empty string clears it). lastSessionSummary is one sentence about this chat.",
       inputSchema: z.object({
         nickname: z.string().max(24).optional(),
         basicInfo: factList.optional(),
@@ -79,7 +79,7 @@ export function createPiggyMemoryTools(client: ConvexHttpClient) {
 
     forget_about_user: tool({
       description:
-        "Remove entries from one of Piggy's memory lists for the signed-in user. Entries must match the stored text.",
+        "Remove entries from one of Jev's memory lists for the signed-in user. Entries must match the stored text.",
       inputSchema: z.object({
         field: z.enum([
           "basicInfo",

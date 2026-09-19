@@ -36,8 +36,8 @@ export async function registerPasskey(masterKey: CryptoKey, vaultId: string) {
   const salt = await vaultSalt(vaultId);
   const credential = await navigator.credentials.create({ publicKey: {
     challenge: toArrayBuffer(randomBytes(32)),
-    rp: { name: "Jayrr's Budget", id: window.location.hostname },
-    user: { id: toArrayBuffer(randomBytes(16)), name: `vault-${vaultId}`, displayName: "Jayrr's Budget" },
+    rp: { name: "Jev's Budget", id: window.location.hostname },
+    user: { id: toArrayBuffer(randomBytes(16)), name: `vault-${vaultId}`, displayName: "Jev's Budget" },
     pubKeyCredParams: [{ type: "public-key", alg: -7 }, { type: "public-key", alg: -257 }],
     authenticatorSelection: { residentKey: "preferred", userVerification: "required" },
     timeout: 60_000,

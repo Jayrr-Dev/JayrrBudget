@@ -525,7 +525,7 @@ function NotesPanel({
                 />
               ) : (
                 <p className="text-[11px] text-[var(--muted-foreground)]">
-                  Empty note. Switch to Edit to type, or ask Piggy to save a
+                  Empty note. Switch to Edit to type, or ask Jev to save a
                   table here.
                 </p>
               )}
@@ -749,12 +749,12 @@ export function PersistentNoteFab({
 
       <PiggySketchDialog />
 
-      <FabTooltip label="Piggy" side={contentSide}>
+      <FabTooltip label="Jev" side={contentSide}>
         <button
           type="button"
           aria-expanded={aiOpen}
           aria-haspopup="dialog"
-          aria-label="Piggy"
+          aria-label="Jev"
           className={segmentBtn(aiOpen)}
           onClick={() => handleAiOpenChange(!aiOpen)}
         >
@@ -764,7 +764,7 @@ export function PersistentNoteFab({
           />
           {aiOpen && !isNavbar ? (
             <span className="flex min-w-0 select-none items-center pr-0.5 text-sm font-medium tracking-tight whitespace-nowrap">
-              Piggy
+              Jev
             </span>
           ) : null}
         </button>

@@ -924,7 +924,7 @@ export function BudgetsManager({ onNewBudget }: { onNewBudget?: () => void }) {
         <EmptyPrompt
           className="bg-[var(--surface)] py-10"
           title="No budgets yet"
-          description="Add a spend cap here, or ask Piggy to create one."
+          description="Add a spend cap here, or ask Jev to create one."
           action={
             <Button type="button" size="sm" onClick={onNewBudget}>
               New budget

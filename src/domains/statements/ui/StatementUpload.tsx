@@ -42,6 +42,7 @@ import {
   sha256FileHex,
 } from "@/domains/statements/domain/fileFingerprint";
 import { describeImportResult } from "@/domains/statements/domain/importCopy";
+import { filesFromDataTransfer } from "@/domains/statements/domain/collectDroppedFiles";
 import {
   formatImportProgress,
   STATEMENT_IMPORT_STEPS,
@@ -59,7 +60,10 @@ import {
 } from "@/domains/statements/ui/OcrDocumentPickerButton";
 import { StatementAiRulesDialog } from "@/domains/statements/ui/StatementAiRulesDialog";
 import { useOcrMode } from "@/domains/statements/ui/useOcrMode";
+import type { CategorizationSummary } from "@/domains/statements/domain/importResult";
+import type { LabeledTransaction } from "@/domains/statements/application/categorizeStatement";
 import { encryptStatementImportToVault } from "@/domains/vault/application/encryptStatementImport";
+import { applyVaultCategorization } from "@/domains/vault/application/applyVaultCategorization";
 import {
   hydrateVaultSession,
   type VaultClient,
@@ -86,6 +90,7 @@ import {
   FileTextIcon,
   FileUpIcon,
   FileWarningIcon,
+  FolderUpIcon,
   Info,
   ListChecks,
   UploadIcon,
@@ -114,6 +119,7 @@ type QueueItem = {
   dupCheck: DupCheck;
   duplicateKind: DupKind;
   duplicateHint: string | null;
+  statementRecordId: string | null;
 };
 
 type Fingerprint = {
@@ -206,6 +212,7 @@ export function StatementUpload({ onImported }: Props) {
   const [items, setItems] = useState<QueueItem[]>([]);
   const [dragOver, setDragOver] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [classifying, setClassifying] = useState(false);
   const client = useConvex();
   const flags = useFeatureFlags();
   const ocrMode = useOcrMode();
@@ -216,7 +223,7 @@ export function StatementUpload({ onImported }: Props) {
 
   const ocrPicker = useOcrDocumentInputs({
     multiple: true,
-    disabled: busy || isOffline,
+    disabled: busy || classifying || isOffline,
     onFiles: (files) => addFiles(files),
   });
 
@@ -330,7 +337,7 @@ export function StatementUpload({ onImported }: Props) {
   }
 
   function addFiles(list: FileList | File[] | null | undefined) {
-    if (!list || busyRef.current) return;
+    if (!list || busyRef.current || classifying) return;
     const incoming = Array.from(list);
     const existingKeys = new Set(items.map((item) => fileKey(item.file)));
     const next: QueueItem[] = [];
@@ -368,6 +375,7 @@ export function StatementUpload({ onImported }: Props) {
         dupCheck: "pending",
         duplicateKind: null,
         duplicateHint: null,
+        statementRecordId: null,
       });
     }
 
@@ -479,9 +487,7 @@ export function StatementUpload({ onImported }: Props) {
           ocrMode,
           onProgress: (progress) => {
             const state: ItemState =
-              progress.step === "parse" ||
-              progress.step === "save" ||
-              progress.step === "categorize"
+              progress.step === "parse" || progress.step === "save"
                 ? "processing"
                 : "uploading";
             patchItem(item.id, { state, progress });
@@ -535,18 +541,16 @@ export function StatementUpload({ onImported }: Props) {
             detail: result.filename ?? item.file.name,
           });
         }
-        if (result.categorization?.ok === false) {
-          toast.warning("Imported; categorization needs attention", {
-            description: copy.description,
-          });
-        }
         if (copy.tone === "warning") warningCount += 1;
         else okCount += 1;
 
+        const fileHash = result.fileHash?.trim() || item.fileHash;
         patchItem(item.id, {
           state: "done",
           progress: { step: "done", ...STATEMENT_IMPORT_STEPS.done },
           error: null,
+          fileHash,
+          statementRecordId: fileHash ? `statement-${fileHash}` : null,
         });
       } catch (error) {
         if (isUploadAbortError(error) || controller.signal.aborted) {
@@ -607,6 +611,93 @@ export function StatementUpload({ onImported }: Props) {
     );
   }
 
+  async function startClassify() {
+    if (toastIfOffline()) return;
+    if (busy || classifying) return;
+    const ids = new Set(
+      items
+        .filter((item) => item.state === "done" && item.statementRecordId)
+        .map((item) => item.statementRecordId as string),
+    );
+    if (ids.size === 0) return;
+
+    const txs = privateLedger.ledger.transactions.filter(
+      (tx) => tx.statementRecordId && ids.has(tx.statementRecordId),
+    );
+    if (txs.length === 0) {
+      toast.message("Nothing to classify", {
+        description: "Import the files first, then classify.",
+      });
+      return;
+    }
+
+    setClassifying(true);
+    toast.loading(`Classifying ${txs.length} lines…`, {
+      id: "statement-upload-classify",
+    });
+    try {
+      const response = await fetch("/api/statements/categorize-vault", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          transactions: txs.map((tx) => ({
+            transactionId: tx.recordId,
+            description: tx.description,
+            amount: tx.amount,
+          })),
+        }),
+      });
+      const result = (await response.json()) as {
+        error?: string;
+        summary?: CategorizationSummary;
+        labeled?: LabeledTransaction[];
+      };
+      if (!response.ok) {
+        throw new Error(result.error ?? "Classification failed");
+      }
+      const masterKey = getVaultMasterKey();
+      if (
+        !privateLedger.userId ||
+        !privateLedger.vaultId ||
+        !privateLedger.keyId ||
+        !masterKey
+      ) {
+        throw new Error("Sign in again, then classify.");
+      }
+      await applyVaultCategorization({
+        client: client as unknown as MutationClient,
+        userId: privateLedger.userId,
+        vaultId: privateLedger.vaultId,
+        keyId: privateLedger.keyId,
+        masterKey,
+        ledger: privateLedger.ledger,
+        labeled: result.labeled ?? [],
+      });
+      privateLedger.reload();
+      const summary = result.summary;
+      const description = summary
+        ? `${summary.cached} reused, ${summary.ai} classified, ${summary.pending} pending.`
+        : undefined;
+      if (summary?.ok === false) {
+        toast.warning("Classification needs attention", {
+          id: "statement-upload-classify",
+          description: summary.error ?? description,
+        });
+        return;
+      }
+      toast.success("Classification complete", {
+        id: "statement-upload-classify",
+        description,
+      });
+    } catch (error) {
+      toast.error(errorMessage(error, "Classification failed"), {
+        id: "statement-upload-classify",
+      });
+    } finally {
+      setClassifying(false);
+    }
+  }
+
   const pendingCount = items.filter(
     (item) =>
       (item.state === "idle" || item.state === "error") &&
@@ -627,20 +718,35 @@ export function StatementUpload({ onImported }: Props) {
     (item) => item.dupCheck === "pending" && item.state === "idle",
   ).length;
 
+  const classifyCount = items.filter(
+    (item) => item.state === "done" && item.statementRecordId,
+  ).length;
+  const pickerLocked = busy || classifying || isOffline;
+
   const isMobile = useIsMobile();
   const triggerLabel = busy
     ? "Uploading…"
-    : isMobile
-      ? "Upload"
-      : "Upload statement";
+    : classifying
+      ? "Classifying…"
+      : isMobile
+        ? "Upload"
+        : "Upload statement";
 
   // Mobile: no footer Upload — pick from the drop zone, then start once
   // duplicate checks finish. Idle-only so failed rows do not auto-retry.
   useEffect(() => {
-    if (!isMobile || !dialogOpen || busy || isOffline) return;
+    if (!isMobile || !dialogOpen || busy || classifying || isOffline) return;
     if (checkingCount > 0 || idleReadyCount === 0) return;
     void startUpload();
-  }, [isMobile, dialogOpen, busy, isOffline, checkingCount, idleReadyCount]);
+  }, [
+    isMobile,
+    dialogOpen,
+    busy,
+    classifying,
+    isOffline,
+    checkingCount,
+    idleReadyCount,
+  ]);
 
   const uploadHelp = (
     <Popover>
@@ -674,9 +780,10 @@ export function StatementUpload({ onImported }: Props) {
         <PopoverHeader className="gap-1.5">
           <PopoverTitle>Manual import path</PopoverTitle>
           <PopoverDescription>
-            Opens a picker for PDFs or photos.
+            Opens a picker for PDFs, photos, or a folder of statements.
           </PopoverDescription>
           <ul className="mt-1.5 list-disc space-y-1 pl-4 text-muted-foreground">
+            <li>Upload scans the files. Classify is a separate step.</li>
             <li>Up to 24 files. Duplicates are marked before scan.</li>
             <li>Upload rules apply only to your own statements.</li>
             <li>CSV import is encrypted.</li>
@@ -690,9 +797,11 @@ export function StatementUpload({ onImported }: Props) {
     <Button
       type="button"
       variant="outline"
-      disabled={busy}
+      disabled={busy || classifying}
       className="gap-1 px-3 max-md:px-2.5"
-      aria-label={busy ? "Uploading" : "Upload statement"}
+      aria-label={
+        busy ? "Uploading" : classifying ? "Classifying" : "Upload statement"
+      }
       onClick={() => setDialogOpen(true)}
     >
       {triggerLabel}
@@ -806,13 +915,12 @@ export function StatementUpload({ onImported }: Props) {
                   <PopoverHeader className="gap-1.5">
                     <PopoverTitle>How upload works</PopoverTitle>
                     <PopoverDescription className="sr-only">
-                      Drag PDFs or photos here or choose files. Up to{" "}
-                      {MAX_FILES} · 20MB each. Already-imported files are marked
-                      before scan.
-                      {" The scan is encrypted. Only you can read it."}
+                      Drag PDFs or photos here, or choose files or a folder. Up
+                      to {MAX_FILES} · 20MB each. Import first, then classify.
                     </PopoverDescription>
                     <ul className="mt-1 list-disc space-y-1 pl-4 text-sm leading-relaxed text-muted-foreground">
                       <li>On your phone, tap to take a photo or pick a file</li>
+                      <li>Folders are fine. Import, then tap Classify.</li>
                       <li>Up to {MAX_FILES} · 20MB each.</li>
                       <li>Already-imported files are marked before scan.</li>
                       <li>The scan is encrypted. Only you can read it.</li>
@@ -822,8 +930,8 @@ export function StatementUpload({ onImported }: Props) {
               </Popover>
             </DialogTitle>
             <DialogDescription className="sr-only">
-              Drag PDFs or photos here or choose files. Up to {MAX_FILES} · 20MB
-              each. Already-imported files are marked before scan. The scan is
+              Drag PDFs or photos here, or choose files or a folder. Up to{" "}
+              {MAX_FILES} · 20MB each. Import first, then classify. The scan is
               encrypted. Only you can read it.
             </DialogDescription>
           </DialogHeader>
@@ -834,18 +942,18 @@ export function StatementUpload({ onImported }: Props) {
             {ocrPicker.showCameraMenu ? (
               <DropdownMenu>
                 <DropdownMenuTrigger
-                  disabled={busy}
+                  disabled={pickerLocked}
                   render={
                     <button
                       type="button"
-                      aria-label="Upload statement files or take a photo"
+                      aria-label="Upload statement files, a folder, or take a photo"
                       onDragEnter={(event) => {
                         event.preventDefault();
-                        if (!busy) setDragOver(true);
+                        if (!pickerLocked) setDragOver(true);
                       }}
                       onDragOver={(event) => {
                         event.preventDefault();
-                        if (!busy) setDragOver(true);
+                        if (!pickerLocked) setDragOver(true);
                       }}
                       onDragLeave={(event) => {
                         event.preventDefault();
@@ -854,13 +962,15 @@ export function StatementUpload({ onImported }: Props) {
                       onDrop={(event) => {
                         event.preventDefault();
                         setDragOver(false);
-                        if (busy) return;
-                        addFiles(event.dataTransfer.files);
+                        if (pickerLocked) return;
+                        void filesFromDataTransfer(event.dataTransfer).then(
+                          addFiles,
+                        );
                       }}
                       className={cn(
                         "flex w-full flex-col items-center justify-center gap-2 rounded-xl border border-dashed px-4 py-8 text-center transition-colors outline-none",
                         "focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50",
-                        busy
+                        pickerLocked
                           ? "pointer-events-none opacity-60"
                           : "cursor-pointer",
                         dragOver
@@ -877,8 +987,8 @@ export function StatementUpload({ onImported }: Props) {
                     {OCR_UPLOAD_HINT_POINTER}
                   </span>
                   <span className="text-xs text-muted-foreground">
-                    PDF or photo · take photo or choose file · up to {MAX_FILES}{" "}
-                    · 20MB each
+                    PDF or photo · take photo, file, or folder · up to{" "}
+                    {MAX_FILES} · 20MB each
                   </span>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent
@@ -901,19 +1011,26 @@ export function StatementUpload({ onImported }: Props) {
                     <FileUpIcon className="size-4" />
                     Choose file
                   </DropdownMenuItem>
+                  <DropdownMenuItem
+                    className="cursor-pointer"
+                    onClick={() => ocrPicker.openFolderPicker()}
+                  >
+                    <FolderUpIcon className="size-4" />
+                    Choose folder
+                  </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
             ) : (
               <div
                 role="button"
-                tabIndex={busy ? -1 : 0}
-                aria-disabled={busy}
+                tabIndex={pickerLocked ? -1 : 0}
+                aria-disabled={pickerLocked}
                 aria-label="Choose statement files"
                 onClick={() => {
-                  if (!busy) ocrPicker.openFilePicker();
+                  if (!pickerLocked) ocrPicker.openFilePicker();
                 }}
                 onKeyDown={(event) => {
-                  if (busy) return;
+                  if (pickerLocked) return;
                   if (event.key === "Enter" || event.key === " ") {
                     event.preventDefault();
                     ocrPicker.openFilePicker();
@@ -921,11 +1038,11 @@ export function StatementUpload({ onImported }: Props) {
                 }}
                 onDragEnter={(event) => {
                   event.preventDefault();
-                  if (!busy) setDragOver(true);
+                  if (!pickerLocked) setDragOver(true);
                 }}
                 onDragOver={(event) => {
                   event.preventDefault();
-                  if (!busy) setDragOver(true);
+                  if (!pickerLocked) setDragOver(true);
                 }}
                 onDragLeave={(event) => {
                   event.preventDefault();
@@ -934,13 +1051,15 @@ export function StatementUpload({ onImported }: Props) {
                 onDrop={(event) => {
                   event.preventDefault();
                   setDragOver(false);
-                  if (busy) return;
-                  addFiles(event.dataTransfer.files);
+                  if (pickerLocked) return;
+                  void filesFromDataTransfer(event.dataTransfer).then(addFiles);
                 }}
                 className={cn(
                   "flex w-full flex-col items-center justify-center gap-2 rounded-xl border border-dashed px-4 py-8 text-center transition-colors outline-none",
                   "focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50",
-                  busy ? "pointer-events-none opacity-60" : "cursor-pointer",
+                  pickerLocked
+                    ? "pointer-events-none opacity-60"
+                    : "cursor-pointer",
                   dragOver
                     ? "border-foreground/40 bg-muted/60"
                     : "border-border bg-muted/20 hover:bg-muted/40",
@@ -956,6 +1075,15 @@ export function StatementUpload({ onImported }: Props) {
                 </span>
                 <span className="text-xs text-muted-foreground">
                   PDF or photo · up to {MAX_FILES} · 20MB each
+                </span>
+                <span
+                  className="text-xs text-muted-foreground underline-offset-2 hover:underline"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    if (!pickerLocked) ocrPicker.openFolderPicker();
+                  }}
+                >
+                  Choose folder
                 </span>
               </div>
             )}
@@ -1058,8 +1186,13 @@ export function StatementUpload({ onImported }: Props) {
             ) : null}
           </div>
 
-          <DialogFooter className="hidden items-center sm:justify-center md:flex">
-            <Button type="button" variant="outline" onClick={onCancelClick}>
+          <DialogFooter className="flex flex-wrap items-center justify-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={classifying}
+              onClick={onCancelClick}
+            >
               {busy
                 ? "Cancel upload"
                 : items.some((item) => item.state === "done")
@@ -1069,7 +1202,11 @@ export function StatementUpload({ onImported }: Props) {
             <Button
               type="button"
               disabled={
-                pendingCount === 0 || busy || checkingCount > 0 || isOffline
+                pendingCount === 0 ||
+                busy ||
+                classifying ||
+                checkingCount > 0 ||
+                isOffline
               }
               onClick={() => void startUpload()}
             >
@@ -1087,6 +1224,20 @@ export function StatementUpload({ onImported }: Props) {
                         : dupCount > 0
                           ? "All duplicates"
                           : "Upload"}
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={
+                classifyCount === 0 || busy || classifying || isOffline
+              }
+              onClick={() => void startClassify()}
+            >
+              {classifying
+                ? "Classifying…"
+                : classifyCount > 1
+                  ? `Classify ${classifyCount}`
+                  : "Classify"}
             </Button>
           </DialogFooter>
         </DialogContent>

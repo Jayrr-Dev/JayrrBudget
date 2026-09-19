@@ -82,7 +82,7 @@ export function buildPiggyMemoryLines(
   lines.push(...bullets("About them", memory.basicInfo));
   lines.push(...bullets("Their goals", memory.goals));
   lines.push(...bullets("Pain points", memory.painPoints));
-  lines.push(...bullets("How they like Piggy to talk", memory.preferences));
+  lines.push(...bullets("How they like Jev to talk", memory.preferences));
   lines.push(...bullets("Wins to celebrate", memory.wins));
   lines.push(...bullets("Follow up on", memory.followUps));
   if (memory.lastSessionAt) {
@@ -94,7 +94,7 @@ export function buildPiggyMemoryLines(
     }
   }
   if (lines.length === 0) return [];
-  return ["WHAT PIGGY REMEMBERS ABOUT THIS USER:", ...lines];
+  return ["WHAT JEV REMEMBERS ABOUT THIS USER:", ...lines];
 }
 
 /** Rules for when and how Piggy writes to memory. */

@@ -46,6 +46,18 @@ export function authErrorMessage(
     return "Enter your email address.";
   }
 
+  if (matches(raw, "AccessDenied", "access_denied")) {
+    return "Google sign-in was cancelled.";
+  }
+
+  if (matches(raw, "OAuthAccountNotLinked")) {
+    return "That Google email is already used. Sign in with password first.";
+  }
+
+  if (matches(raw, "AUTH_GOOGLE", "invalid_client", "OAuthCallback")) {
+    return "Couldn’t sign in with Google. Try again, or use email.";
+  }
+
   // Strip Convex request-id noise if we somehow got a plain message
   const cleaned = raw
     .replace(/^\[Request ID:[^\]]+\]\s*/i, "")

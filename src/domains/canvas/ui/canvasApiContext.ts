@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useContext } from "react";
-import type { ExcalidrawImperativeAPI } from "jayrr-draw";
+import type { ExcalidrawImperativeAPI } from "jev-draw";
 
 export const CanvasApiContext = createContext<ExcalidrawImperativeAPI | null>(
   null,
