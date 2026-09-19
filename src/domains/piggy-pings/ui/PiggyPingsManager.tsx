@@ -7,6 +7,7 @@ import {
   CardAction,
   CardContent,
   CardDescription,
+  CardFooter,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
@@ -52,24 +53,24 @@ import {
   resolveNextPingDate,
   toLocalYmd,
 } from "@/domains/piggy-pings/domain/resolveNextPingDate";
-import { formatDisplayDate } from "@/shared/lib/format-date";
 import {
   CYCLE_PRESETS,
   DEFAULT_PING_TYPES,
   NONE_CYCLE,
   PING_TYPES,
   applyCycleDate,
-  cycleDisplay,
-  pingTypeLabel,
   cycleDateToIso,
+  cycleDisplay,
   isCycleDateValue,
   isCyclePresetOn,
   isNoneCycle,
+  pingTypeLabel,
   toggleCyclePreset,
   togglePingType,
   type PingType,
 } from "@/domains/piggy-pings/domain/types";
 import { usePiggyPingRuntime } from "@/domains/piggy-pings/ui/PiggyPingRuntime";
+import { formatDisplayDate } from "@/shared/lib/format-date";
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { cn } from "cn";
@@ -170,7 +171,10 @@ function CycleInfo() {
             <li>Mon or Mon,Tue: those weekdays each week</li>
             <li>9/16: that month-day every year</li>
             <li>9/16/26: that one calendar day</li>
-            <li>Monthly: same day each month. No start date means first fire is next month, not today</li>
+            <li>
+              Monthly: same day each month. No start date means first fire is
+              next month, not today
+            </li>
             <li>EOM: last day of the month</li>
             <li>SOM: first day of the month</li>
           </ul>
@@ -290,7 +294,9 @@ function PingTriggerPicker({
                   <ul className="mt-1.5 list-disc space-y-1 pl-4 text-muted-foreground">
                     <li>One budget at a time</li>
                     <li>Warn fires at the warning mark</li>
-                    <li>Over fires at the overage mark, with or without Warn</li>
+                    <li>
+                      Over fires at the overage mark, with or without Warn
+                    </li>
                   </ul>
                 </PopoverHeader>
               </PopoverContent>
@@ -319,7 +325,11 @@ function PingTriggerPicker({
                       pressed={selected && warn}
                       disabled={disabled}
                       onToggle={() =>
-                        apply(name, selected ? !warn : true, selected ? over : false)
+                        apply(
+                          name,
+                          selected ? !warn : true,
+                          selected ? over : false,
+                        )
                       }
                     />
                     <CycleChip
@@ -327,7 +337,11 @@ function PingTriggerPicker({
                       pressed={selected && over}
                       disabled={disabled}
                       onToggle={() =>
-                        apply(name, selected ? warn : false, selected ? !over : true)
+                        apply(
+                          name,
+                          selected ? warn : false,
+                          selected ? !over : true,
+                        )
                       }
                     />
                   </span>
@@ -616,7 +630,7 @@ function PingCard({ ping }: { ping: PingRow }) {
           <PingActions ping={ping} />
         </CardAction>
       </CardHeader>
-      <CardContent className="grid gap-3">
+      <CardContent className="grid flex-1 gap-3">
         <p className="line-clamp-3 text-sm text-muted-foreground">
           {ping.message}
         </p>
@@ -626,7 +640,9 @@ function PingCard({ ping }: { ping: PingRow }) {
               Cycle
               <CycleInfo />
             </dt>
-            <dd className="min-w-0 truncate font-medium">{cycleDisplay(ping.cycle)}</dd>
+            <dd className="min-w-0 truncate font-medium">
+              {cycleDisplay(ping.cycle)}
+            </dd>
           </div>
           {ping.trigger ? (
             <div className="col-span-2">
@@ -678,12 +694,12 @@ function PingCard({ ping }: { ping: PingRow }) {
               <dd className="line-clamp-2">{ping.notes}</dd>
             </div>
           ) : null}
-          <div className="col-span-2 flex items-baseline justify-between gap-3 border-t border-border pt-2">
-            <dt className="text-muted-foreground">Next</dt>
-            <dd className="font-medium">{nextPingLabel(ping)}</dd>
-          </div>
         </dl>
       </CardContent>
+      <CardFooter className="mt-auto justify-between gap-3">
+        <span className="text-muted-foreground">Next</span>
+        <span className="font-medium">{nextPingLabel(ping)}</span>
+      </CardFooter>
     </Card>
   );
 }
@@ -885,7 +901,10 @@ function PingFormDialog({
                       : "Save a reminder for you, or one Jev can also create in chat."}
                   </PopoverDescription>
                   <ul className="mt-1.5 list-disc space-y-1 pl-4 text-muted-foreground">
-                    <li>Toast, email, dialog, and banner. Pick one or more. Toast is the default</li>
+                    <li>
+                      Toast, email, dialog, and banner. Pick one or more. Toast
+                      is the default
+                    </li>
                     <li>Cycle from the start date</li>
                     <li>Blank start or end means that side never closes</li>
                   </ul>
@@ -1194,7 +1213,7 @@ export function PiggyPingsManager({
       ) : (
         <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {filtered.map((ping) => (
-            <li key={ping.id}>
+            <li key={ping.id} className="h-full">
               <PingCard ping={ping} />
             </li>
           ))}
