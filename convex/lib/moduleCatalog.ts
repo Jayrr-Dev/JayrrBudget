@@ -108,8 +108,8 @@ export const MODULE_CATALOG: readonly ModuleCatalogEntry[] = [
     description: "Reminders Piggy can send as toast, email, popup, or banner.",
     href: "/piggy-pings",
     icon: "IconBell",
-    category: "core",
-    sortOrder: 55,
+    category: "finance",
+    sortOrder: 18,
     isCore: false,
   },
   {

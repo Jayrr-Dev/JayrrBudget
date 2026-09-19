@@ -1,5 +1,11 @@
 export const PING_TYPES = ["Toast", "Email", "Popup", "Banner"] as const;
 export type PingType = (typeof PING_TYPES)[number];
+export const DEFAULT_PING_TYPES: PingType[] = ["Toast"];
+
+export function pingTypeLabel(type: PingType): string {
+  if (type === "Popup") return "Dialog";
+  return type;
+}
 
 export function normalizePingTypes(types: readonly string[]): PingType[] {
   return PING_TYPES.filter((type) => types.includes(type));
@@ -16,7 +22,16 @@ export function togglePingType(
   return normalizePingTypes([...selected, type]);
 }
 
-export const CYCLE_MODES = ["Weekly", "Monthly", "EOM", "SOM"] as const;
+export const NONE_CYCLE = "None";
+export const TRIGGERED_CYCLE = "Triggered";
+
+export const CYCLE_MODES = [
+  "None",
+  "Weekly",
+  "Monthly",
+  "EOM",
+  "SOM",
+] as const;
 export const CYCLE_WEEKDAYS = [
   "Mon",
   "Tue",
@@ -87,15 +102,37 @@ function serializeCycle(tokens: readonly string[]): string {
   return [...presets, ...extras].join(",");
 }
 
+export function isNoneCycle(cycle: string): boolean {
+  const tokens = cycleTokens(cycle);
+  if (tokens.length === 0) return true;
+  return tokens.includes(NONE_CYCLE) || tokens.includes(TRIGGERED_CYCLE);
+}
+
 export function isCyclePresetOn(cycle: string, preset: CyclePreset): boolean {
+  if (preset === NONE_CYCLE) return isNoneCycle(cycle);
   return cycleTokens(cycle).includes(preset);
+}
+
+export function isTriggeredCycle(cycle: string): boolean {
+  return isNoneCycle(cycle);
+}
+
+export function cycleDisplay(cycle: string): string {
+  if (isNoneCycle(cycle)) return NONE_CYCLE;
+  return cycle;
 }
 
 export function toggleCyclePreset(cycle: string, preset: CyclePreset): string {
   const tokens = cycleTokens(cycle);
-  const next = tokens.includes(preset)
-    ? tokens.filter((token) => token !== preset)
-    : [...tokens, preset];
+  if (preset === NONE_CYCLE) {
+    return NONE_CYCLE;
+  }
+  const withoutNone = tokens.filter(
+    (token) => token !== NONE_CYCLE && token !== TRIGGERED_CYCLE,
+  );
+  const next = withoutNone.includes(preset)
+    ? withoutNone.filter((token) => token !== preset)
+    : [...withoutNone, preset];
   return serializeCycle(next);
 }
 
@@ -104,6 +141,11 @@ export function applyCycleDate(cycle: string, iso: string): string {
   if (!date) {
     return cycle;
   }
-  const kept = cycleTokens(cycle).filter((token) => !isCycleDateToken(token));
+  const kept = cycleTokens(cycle).filter((token) => {
+    if (isCycleDateToken(token)) return false;
+    if (token === NONE_CYCLE) return false;
+    if (token === TRIGGERED_CYCLE) return false;
+    return true;
+  });
   return serializeCycle([...kept, date]);
 }

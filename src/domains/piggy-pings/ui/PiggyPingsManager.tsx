@@ -1,20 +1,5 @@
 "use client";
 
-import {
-  Alert,
-  AlertAction,
-  AlertDescription,
-  AlertTitle,
-} from "@/components/ui/alert";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -52,25 +37,44 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { RowActionsMenu } from "@/components/ui/row-actions-menu";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { PageSpinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  budgetNameFromTrigger,
+  budgetPingTrigger,
+  triggerHasOver,
+  triggerHasWarn,
+  uniqueBudgetNames,
+} from "@/domains/piggy-pings/domain/budgetPingTrigger";
+import {
+  resolveNextPingDate,
+  toLocalYmd,
+} from "@/domains/piggy-pings/domain/resolveNextPingDate";
+import { formatDisplayDate } from "@/shared/lib/format-date";
+import {
   CYCLE_PRESETS,
+  DEFAULT_PING_TYPES,
+  NONE_CYCLE,
   PING_TYPES,
   applyCycleDate,
+  cycleDisplay,
+  pingTypeLabel,
   cycleDateToIso,
   isCycleDateValue,
   isCyclePresetOn,
+  isNoneCycle,
   toggleCyclePreset,
   togglePingType,
   type PingType,
 } from "@/domains/piggy-pings/domain/types";
+import { usePiggyPingRuntime } from "@/domains/piggy-pings/ui/PiggyPingRuntime";
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { cn } from "cn";
 import { useMutation, useQuery } from "convex/react";
-import { Info, X } from "lucide-react";
+import { ChevronDownIcon, Info } from "lucide-react";
 import {
   useEffect,
   useMemo,
@@ -78,7 +82,6 @@ import {
   type FormEvent,
   type ReactNode,
 } from "react";
-import { createPortal } from "react-dom";
 import { toast } from "sonner";
 
 type PingRow = {
@@ -92,6 +95,7 @@ type PingRow = {
   cycle: string;
   trigger: string | null;
   triggerCount: number;
+  firedKeys: string[];
   isActive: boolean;
   startDate: string | null;
   endDate: string | null;
@@ -107,7 +111,20 @@ function pingIconName(value: string | null | undefined): PiggyIconName {
 
 function dateLabel(value: string | null) {
   if (!value) return "Indefinite";
-  return value;
+  return formatDisplayDate(value);
+}
+
+function nextPingLabel(ping: PingRow) {
+  const next = resolveNextPingDate({
+    cycle: ping.cycle,
+    startDate: ping.startDate,
+    endDate: ping.endDate,
+    createdAt: ping.createdAt,
+  });
+  if (next.kind === "trigger") return "On trigger";
+  if (next.kind === "ended") return "Ended";
+  if (next.kind === "none") return "None";
+  return formatDisplayDate(next.ymd);
 }
 
 function pingTypeList(ping: PingRow): PingType[] {
@@ -147,12 +164,13 @@ function CycleInfo() {
             When the ping repeats, counted from the start date.
           </PopoverDescription>
           <ul className="mt-1.5 list-disc space-y-1 pl-4 text-muted-foreground">
-            <li>Combine any chips; they save as a comma list</li>
+            <li>None: no calendar repeat. Budget links can still fire it</li>
+            <li>Combine any other chips; they save as a comma list</li>
             <li>Weekly: every 7 days</li>
             <li>Mon or Mon,Tue: those weekdays each week</li>
             <li>9/16: that month-day every year</li>
             <li>9/16/26: that one calendar day</li>
-            <li>Monthly: same day of the month as start</li>
+            <li>Monthly: same day each month. No start date means first fire is next month, not today</li>
             <li>EOM: last day of the month</li>
             <li>SOM: first day of the month</li>
           </ul>
@@ -184,6 +202,147 @@ function CycleChip({
     >
       {label}
     </Button>
+  );
+}
+
+function PingTriggerPicker({
+  names,
+  value,
+  disabled,
+  onChange,
+}: {
+  names: readonly string[];
+  value: string;
+  disabled: boolean;
+  onChange: (next: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const selectedName = budgetNameFromTrigger(value);
+  const warn = triggerHasWarn(value);
+  const over = triggerHasOver(value);
+  const hasValue = Boolean(value.trim());
+
+  function apply(name: string, nextWarn: boolean, nextOver: boolean) {
+    const trimmed = name.trim();
+    if (!trimmed) {
+      onChange("");
+      return;
+    }
+    if (!nextWarn && !nextOver) {
+      onChange("");
+      return;
+    }
+    onChange(budgetPingTrigger(trimmed, nextWarn, nextOver));
+  }
+
+  if (names.length === 0) {
+    return (
+      <p className="text-sm text-muted-foreground">No budget triggers yet</p>
+    );
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          disabled={disabled}
+          className="h-9 w-full justify-between gap-2 px-3 font-normal"
+        >
+          {hasValue ? (
+            <span className="flex min-w-0 flex-1 items-center justify-between gap-2">
+              <span className="min-w-0 truncate">{selectedName}</span>
+              <span className="flex shrink-0 gap-1">
+                {warn ? <Badge variant="outline">Warn</Badge> : null}
+                {over ? <Badge variant="outline">Over</Badge> : null}
+              </span>
+            </span>
+          ) : (
+            <span className="text-muted-foreground">Select trigger</span>
+          )}
+          <ChevronDownIcon className="size-4 shrink-0 text-muted-foreground" />
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="flex max-h-[90dvh] flex-col overflow-hidden sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            Select trigger
+            <Popover>
+              <PopoverTrigger asChild>
+                <button
+                  type="button"
+                  className="inline-flex size-11 sm:size-6 shrink-0 items-center justify-center rounded-full text-accent hover:text-primary"
+                  aria-label="Trigger info"
+                >
+                  <Info className="size-3.5" />
+                </button>
+              </PopoverTrigger>
+              <PopoverContent
+                align="start"
+                className="z-[100] w-80 max-w-[calc(100vw-2rem)] gap-0 p-3.5"
+              >
+                <PopoverHeader className="gap-1.5">
+                  <PopoverTitle>Trigger</PopoverTitle>
+                  <PopoverDescription>
+                    Pick a budget, then Warn, Over, or both.
+                  </PopoverDescription>
+                  <ul className="mt-1.5 list-disc space-y-1 pl-4 text-muted-foreground">
+                    <li>One budget at a time</li>
+                    <li>Warn fires at the warning mark</li>
+                    <li>Over fires at the overage mark, with or without Warn</li>
+                  </ul>
+                </PopoverHeader>
+              </PopoverContent>
+            </Popover>
+          </DialogTitle>
+          <DialogDescription className="sr-only">
+            Pick a budget and Warn, Over, or both.
+          </DialogDescription>
+        </DialogHeader>
+        <ScrollArea className="min-h-20 max-h-[min(16rem,40dvh)] overflow-hidden pr-3">
+          <ul className="grid gap-1">
+            {names.map((name) => {
+              const selected =
+                selectedName.toLowerCase() === name.toLowerCase() && hasValue;
+              return (
+                <li
+                  key={name}
+                  className="flex items-center justify-between gap-2 rounded-lg px-1 py-1"
+                >
+                  <span className="min-w-0 truncate font-medium" title={name}>
+                    {name}
+                  </span>
+                  <span className="flex shrink-0 items-center gap-1">
+                    <CycleChip
+                      label="Warn"
+                      pressed={selected && warn}
+                      disabled={disabled}
+                      onToggle={() =>
+                        apply(name, selected ? !warn : true, selected ? over : false)
+                      }
+                    />
+                    <CycleChip
+                      label="Over"
+                      pressed={selected && over}
+                      disabled={disabled}
+                      onToggle={() =>
+                        apply(name, selected ? warn : false, selected ? !over : true)
+                      }
+                    />
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        </ScrollArea>
+        <DialogFooter>
+          <Button type="button" onClick={() => setOpen(false)}>
+            Done
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -286,38 +445,25 @@ function CycleDateChip({
   );
 }
 
+function useDeliverPingTest(ping: PingRow) {
+  const { deliver } = usePiggyPingRuntime();
+  return () => {
+    deliver({
+      title: ping.title,
+      message: ping.message,
+      pingTypes: pingTypeList(ping),
+      icon: ping.icon,
+      tone: "default",
+    });
+  };
+}
+
 function PingActions({ ping }: { ping: PingRow }) {
   const remove = useMutation(api.piggyPings.remove);
   const createPing = useMutation(api.piggyPings.create);
   const updatePing = useMutation(api.piggyPings.update);
+  const handleTest = useDeliverPingTest(ping);
   const [editOpen, setEditOpen] = useState(false);
-  const [popupOpen, setPopupOpen] = useState(false);
-  const [bannerOpen, setBannerOpen] = useState(false);
-
-  function handleTest() {
-    const types = pingTypeList(ping);
-    for (const type of types) {
-      if (type === "Popup") {
-        setPopupOpen(true);
-        continue;
-      }
-      if (type === "Banner") {
-        setBannerOpen(true);
-        continue;
-      }
-      if (type === "Email") {
-        toast.info(ping.title, {
-          description: `${ping.message}\n\nEmail send is not wired yet. This is the preview.`,
-          duration: 8000,
-        });
-        continue;
-      }
-      toast.message(ping.title, {
-        description: ping.message,
-        duration: Infinity,
-      });
-    }
-  }
 
   async function handleToggleActive() {
     try {
@@ -364,7 +510,7 @@ function PingActions({ ping }: { ping: PingRow }) {
         label={ping.name}
         size="sm"
         actions={[
-          { label: "Test", onSelect: handleTest },
+          { label: "Test", onSelect: () => handleTest() },
           { label: "Edit", onSelect: () => setEditOpen(true) },
           {
             label: ping.isActive ? "Deactivate" : "Activate",
@@ -379,39 +525,6 @@ function PingActions({ ping }: { ping: PingRow }) {
         ]}
       />
       <PingFormDialog open={editOpen} onOpenChange={setEditOpen} ping={ping} />
-      <AlertDialog open={popupOpen} onOpenChange={setPopupOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>{ping.title}</AlertDialogTitle>
-            <AlertDialogDescription>{ping.message}</AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogAction>Dismiss</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-      {bannerOpen && typeof document !== "undefined"
-        ? createPortal(
-            <div className="pointer-events-none fixed inset-x-0 top-0 z-50 flex justify-center p-3">
-              <Alert className="pointer-events-auto w-full max-w-xl shadow-lg">
-                <AlertTitle>{ping.title}</AlertTitle>
-                <AlertDescription>{ping.message}</AlertDescription>
-                <AlertAction>
-                  <Button
-                    type="button"
-                    size="icon-xs"
-                    variant="ghost"
-                    aria-label="Dismiss banner"
-                    onClick={() => setBannerOpen(false)}
-                  >
-                    <X className="size-3.5" />
-                  </Button>
-                </AlertAction>
-              </Alert>
-            </div>,
-            document.body,
-          )
-        : null}
     </>
   );
 }
@@ -485,11 +598,7 @@ function PingIconPicker({ ping }: { ping: PingRow }) {
 
 function PingCard({ ping }: { ping: PingRow }) {
   const types = pingTypeList(ping);
-  const created = new Date(ping.createdAt).toLocaleString(undefined, {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
+  const created = formatDisplayDate(toLocalYmd(new Date(ping.createdAt)));
 
   return (
     <Card size="sm" className="h-full">
@@ -497,7 +606,9 @@ function PingCard({ ping }: { ping: PingRow }) {
         <div className="flex min-w-0 items-start gap-2.5">
           <PingIconPicker ping={ping} />
           <div className="min-w-0">
-            <CardTitle className="truncate">{ping.name}</CardTitle>
+            <CardTitle className="truncate text-[20px] leading-tight font-semibold">
+              {ping.name}
+            </CardTitle>
             <CardDescription className="truncate">{ping.title}</CardDescription>
           </div>
         </div>
@@ -515,14 +626,32 @@ function PingCard({ ping }: { ping: PingRow }) {
               Cycle
               <CycleInfo />
             </dt>
-            <dd className="min-w-0 truncate font-medium">{ping.cycle}</dd>
+            <dd className="min-w-0 truncate font-medium">{cycleDisplay(ping.cycle)}</dd>
           </div>
+          {ping.trigger ? (
+            <div className="col-span-2">
+              <dt className="text-muted-foreground">Trigger</dt>
+              <dd className="flex min-w-0 items-center justify-between gap-2">
+                <span className="min-w-0 truncate font-medium">
+                  {budgetNameFromTrigger(ping.trigger)}
+                </span>
+                <span className="flex shrink-0 gap-1">
+                  {triggerHasWarn(ping.trigger) ? (
+                    <Badge variant="outline">Warn</Badge>
+                  ) : null}
+                  {triggerHasOver(ping.trigger) ? (
+                    <Badge variant="outline">Over</Badge>
+                  ) : null}
+                </span>
+              </dd>
+            </div>
+          ) : null}
           <div>
             <dt className="text-muted-foreground">Ping Type(s)</dt>
             <dd className="flex flex-wrap gap-1">
               {types.map((type) => (
                 <Badge key={type} variant="outline">
-                  {type}
+                  {pingTypeLabel(type)}
                 </Badge>
               ))}
             </dd>
@@ -549,6 +678,10 @@ function PingCard({ ping }: { ping: PingRow }) {
               <dd className="line-clamp-2">{ping.notes}</dd>
             </div>
           ) : null}
+          <div className="col-span-2 flex items-baseline justify-between gap-3 border-t border-border pt-2">
+            <dt className="text-muted-foreground">Next</dt>
+            <dd className="font-medium">{nextPingLabel(ping)}</dd>
+          </div>
         </dl>
       </CardContent>
     </Card>
@@ -576,28 +709,44 @@ function PingFormDialog({
 }) {
   const createPing = useMutation(api.piggyPings.create);
   const updatePing = useMutation(api.piggyPings.update);
+  const budgets = useQuery(api.budgets.list, {});
   const isEdit = Boolean(ping);
   const formId = ping ? `edit-ping-form-${ping.id}` : "create-ping-form";
   const [step, setStep] = useState<PingFormStep>(1);
   const [name, setName] = useState("");
   const [title, setTitle] = useState("");
   const [message, setMessage] = useState("");
-  const [pingTypes, setPingTypes] = useState<PingType[]>(["Toast"]);
+  const [pingTypes, setPingTypes] = useState<PingType[]>(DEFAULT_PING_TYPES);
   const [cycle, setCycle] = useState("Weekly");
+  const [eventTrigger, setEventTrigger] = useState("");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [notes, setNotes] = useState("");
   const [isActive, setIsActive] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const stepMeta = PING_FORM_STEPS[step - 1];
+  const triggerNames = useMemo(() => {
+    const fromBudgets = uniqueBudgetNames(
+      (budgets ?? []).map((budget) => budget.name),
+    );
+    const current = budgetNameFromTrigger(eventTrigger);
+    if (
+      current &&
+      !fromBudgets.some((name) => name.toLowerCase() === current.toLowerCase())
+    ) {
+      return [current, ...fromBudgets];
+    }
+    return fromBudgets;
+  }, [budgets, eventTrigger]);
 
   function resetForm() {
     setStep(1);
     setName("");
     setTitle("");
     setMessage("");
-    setPingTypes(["Toast"]);
+    setPingTypes(DEFAULT_PING_TYPES);
     setCycle("Weekly");
+    setEventTrigger("");
     setStartDate("");
     setEndDate("");
     setNotes("");
@@ -610,7 +759,8 @@ function PingFormDialog({
     setTitle(row.title);
     setMessage(row.message);
     setPingTypes(row.pingTypes.length > 0 ? row.pingTypes : [row.pingType]);
-    setCycle(row.cycle);
+    setCycle(cycleDisplay(row.cycle));
+    setEventTrigger(row.trigger ?? "");
     setStartDate(row.startDate ?? "");
     setEndDate(row.endDate ?? "");
     setNotes(row.notes ?? "");
@@ -642,9 +792,6 @@ function PingFormDialog({
       }
       return null;
     }
-    if (current === 2 && !cycle.trim()) {
-      return "Cycle is required";
-    }
     return null;
   }
 
@@ -660,6 +807,7 @@ function PingFormDialog({
       return;
     }
 
+    const savedCycle = cycle.trim() || NONE_CYCLE;
     setSubmitting(true);
     try {
       if (ping) {
@@ -669,7 +817,8 @@ function PingFormDialog({
           title,
           message,
           pingTypes,
-          cycle,
+          cycle: savedCycle,
+          trigger: eventTrigger.trim() || null,
           startDate: startDate || null,
           endDate: endDate || null,
           notes: notes.trim() || null,
@@ -681,11 +830,11 @@ function PingFormDialog({
           title,
           message,
           pingTypes,
-          cycle,
+          cycle: savedCycle,
           startDate: startDate || null,
           endDate: endDate || null,
           notes: notes.trim() || null,
-          trigger: null,
+          trigger: eventTrigger.trim() || null,
           isActive,
         });
       }
@@ -701,8 +850,7 @@ function PingFormDialog({
 
   const nextDisabled =
     submitting ||
-    (step === 1 && (!name.trim() || !title.trim() || !message.trim())) ||
-    (step === 2 && !cycle.trim());
+    (step === 1 && (!name.trim() || !title.trim() || !message.trim()));
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -737,7 +885,7 @@ function PingFormDialog({
                       : "Save a reminder for you, or one Piggy can also create in chat."}
                   </PopoverDescription>
                   <ul className="mt-1.5 list-disc space-y-1 pl-4 text-muted-foreground">
-                    <li>Toast, email, popup, and banner. Pick one or more</li>
+                    <li>Toast, email, dialog, and banner. Pick one or more. Toast is the default</li>
                     <li>Cycle from the start date</li>
                     <li>Blank start or end means that side never closes</li>
                   </ul>
@@ -773,7 +921,7 @@ function PingFormDialog({
         <form
           id={formId}
           onSubmit={(e) => void onSubmit(e)}
-          className="grid min-h-0 flex-1 gap-3 overflow-y-auto p-1 -m-1"
+          className="grid min-h-0 flex-1 gap-3 overflow-x-hidden overflow-y-auto"
         >
           {step === 1 ? (
             <>
@@ -820,7 +968,7 @@ function PingFormDialog({
                   {PING_TYPES.map((type) => (
                     <CycleChip
                       key={type}
-                      label={type}
+                      label={pingTypeLabel(type)}
                       pressed={pingTypes.includes(type)}
                       disabled={submitting}
                       onToggle={() =>
@@ -862,11 +1010,22 @@ function PingFormDialog({
                   ))}
                   <CycleDateChip
                     cycle={cycle}
-                    disabled={submitting}
+                    disabled={submitting || isNoneCycle(cycle)}
                     onPick={setCycle}
                   />
                 </div>
               </div>
+              {isNoneCycle(cycle) ? (
+                <div className="grid gap-1.5">
+                  <Label>Trigger</Label>
+                  <PingTriggerPicker
+                    names={triggerNames}
+                    value={eventTrigger}
+                    disabled={submitting || budgets === undefined}
+                    onChange={setEventTrigger}
+                  />
+                </div>
+              ) : null}
               <div className="grid grid-cols-2 gap-3">
                 <div className="grid gap-1.5">
                   <Label htmlFor={`${formId}-start`}>Start date</Label>
@@ -911,6 +1070,7 @@ function PingFormDialog({
                   placeholder="Optional"
                   maxLength={2000}
                   rows={2}
+                  className="overflow-hidden"
                   disabled={submitting}
                 />
               </div>
@@ -1032,7 +1192,7 @@ export function PiggyPingsManager({
           description="Try a different name, title, or message."
         />
       ) : (
-        <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {filtered.map((ping) => (
             <li key={ping.id}>
               <PingCard ping={ping} />

@@ -15,6 +15,7 @@ export type BudgetCap = {
   amount: number;
   warningThreshold: number;
   overageThreshold: number;
+  isActive?: boolean;
   cycle?: BudgetCycle | string | null;
   startDate?: string | null;
 };
@@ -193,7 +194,9 @@ export function buildBudgetProgressItems(
   budgets: BudgetCap[],
   lines: BudgetSpendLine[],
 ): BudgetProgressItem[] {
-  return budgets.map((budget) => {
+  return budgets
+    .filter((budget) => budget.isActive !== false)
+    .map((budget) => {
     const cycle = parseBudgetCycle(budget.cycle);
     const spent = spentForBudget(lines, budget);
     const lookup =

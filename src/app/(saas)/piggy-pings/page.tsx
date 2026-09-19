@@ -40,8 +40,9 @@ function PiggyPingsTitleInfo() {
           </PopoverDescription>
           <ul className="mt-1.5 list-disc space-y-1 pl-4 text-muted-foreground">
             <li>
-              Toast, email, popup, and banner. One ping can use more than one
+              Toast, email, dialog, and banner. Toast is the default. One ping can use more than one
             </li>
+            <li>Budget links from the Budgets page land here too, ready to edit</li>
             <li>
               Cycle from the start date: weekly, weekdays, a date, monthly, EOM,
               or SOM

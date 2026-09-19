@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import { mutation, query } from "./_generated/server";
 import { requireUser } from "./lib/auth";
+import { budgetPingTrigger } from "./lib/budgetPingTrigger";
 
 const budgetCycle = v.union(
   v.literal("daily"),
@@ -10,6 +11,12 @@ const budgetCycle = v.union(
   v.literal("monthly"),
   v.literal("yearly"),
 );
+
+const pingLinkValidator = v.object({
+  pingId: v.id("piggyPings"),
+  warn: v.boolean(),
+  over: v.boolean(),
+});
 
 const budgetRecord = v.object({
   id: v.id("budgets"),
@@ -22,6 +29,7 @@ const budgetRecord = v.object({
   isActive: v.boolean(),
   cycle: budgetCycle,
   startDate: v.string(),
+  pingLinks: v.array(pingLinkValidator),
   createdAt: v.number(),
   updatedAt: v.number(),
 });
@@ -87,6 +95,67 @@ function requireThreshold(value: number, label: string) {
   return value;
 }
 
+async function sanitizePingLinks(
+  ctx: {
+    db: {
+      get: (id: Id<"piggyPings">) => Promise<Doc<"piggyPings"> | null>;
+    };
+  },
+  userId: Id<"users">,
+  links:
+    | Array<{ pingId: Id<"piggyPings">; warn: boolean; over: boolean }>
+    | undefined,
+) {
+  if (!links) return [];
+  const seen = new Set<string>();
+  const out: Array<{
+    pingId: Id<"piggyPings">;
+    warn: boolean;
+    over: boolean;
+  }> = [];
+  for (const link of links) {
+    if (!link.warn && !link.over) continue;
+    if (seen.has(link.pingId)) continue;
+    const ping = await ctx.db.get(link.pingId);
+    if (!ping || ping.userId !== userId) {
+      throw new Error("Ping not found");
+    }
+    seen.add(link.pingId);
+    out.push({
+      pingId: link.pingId,
+      warn: link.warn,
+      over: link.over,
+    });
+  }
+  return out;
+}
+
+async function syncLinkedPings(
+  ctx: {
+    db: {
+      get: (id: Id<"piggyPings">) => Promise<Doc<"piggyPings"> | null>;
+      patch: (
+        id: Id<"piggyPings">,
+        value: Partial<Doc<"piggyPings">>,
+      ) => Promise<void>;
+    };
+  },
+  userId: Id<"users">,
+  budgetName: string,
+  links: Array<{ pingId: Id<"piggyPings">; warn: boolean; over: boolean }>,
+) {
+  const now = Date.now();
+  for (const link of links) {
+    const ping = await ctx.db.get(link.pingId);
+    if (!ping || ping.userId !== userId) continue;
+    await ctx.db.patch(link.pingId, {
+      cycle: "None",
+      trigger: budgetPingTrigger(budgetName, link.warn, link.over),
+      updatedAt: now,
+    });
+  }
+}
+
 function toRecord(doc: Doc<"budgets">) {
   return {
     id: doc._id,
@@ -96,12 +165,15 @@ function toRecord(doc: Doc<"budgets">) {
     amount: doc.amount,
     warningThreshold: doc.warningThreshold,
     overageThreshold: doc.overageThreshold,
-    isActive: doc.isActive,
+    isActive: doc.isActive !== false,
     cycle: requireCycle(doc.cycle),
     startDate:
       doc.startDate && /^\d{4}-\d{2}-\d{2}$/.test(doc.startDate.trim())
         ? doc.startDate.trim()
         : "",
+    pingLinks: (doc.pingLinks ?? []).filter(
+      (link) => link.warn || link.over,
+    ),
     createdAt: doc.createdAt,
     updatedAt: doc.updatedAt,
   };
@@ -143,14 +215,17 @@ export const create = mutation({
     isActive: v.optional(v.boolean()),
     cycle: v.optional(budgetCycle),
     startDate: v.optional(v.union(v.string(), v.null())),
+    pingLinks: v.optional(v.array(pingLinkValidator)),
   },
   returns: budgetRecord,
   handler: async (ctx, args) => {
     const user = await requireUser(ctx);
     const now = Date.now();
+    const name = requiredText(args.name, "Name", MAX_NAME);
+    const pingLinks = await sanitizePingLinks(ctx, user._id, args.pingLinks);
     const id = await ctx.db.insert("budgets", {
       userId: user._id,
-      name: requiredText(args.name, "Name", MAX_NAME),
+      name,
       classLookup: optionalTrim(args.classLookup, MAX_LOOKUP),
       descriptionLookup: optionalTrim(args.descriptionLookup, MAX_LOOKUP),
       amount: requireAmount(args.amount),
@@ -165,9 +240,11 @@ export const create = mutation({
       isActive: args.isActive !== false,
       cycle: requireCycle(args.cycle),
       startDate: requireStartDate(args.startDate),
+      pingLinks,
       createdAt: now,
       updatedAt: now,
     });
+    await syncLinkedPings(ctx, user._id, name, pingLinks);
     const created = await ctx.db.get(id);
     if (!created) throw new Error("Failed to create budget");
     return toRecord(created);
@@ -186,6 +263,7 @@ export const update = mutation({
     isActive: v.optional(v.boolean()),
     cycle: v.optional(budgetCycle),
     startDate: v.optional(v.union(v.string(), v.null())),
+    pingLinks: v.optional(v.array(pingLinkValidator)),
   },
   returns: budgetRecord,
   handler: async (ctx, args) => {
@@ -224,9 +302,18 @@ export const update = mutation({
     if (args.startDate !== undefined) {
       patch.startDate = requireStartDate(args.startDate);
     }
+    if (args.pingLinks !== undefined) {
+      patch.pingLinks = await sanitizePingLinks(ctx, user._id, args.pingLinks);
+    }
     await ctx.db.patch(doc._id, patch);
     const next = await ctx.db.get(doc._id);
     if (!next) throw new Error("Budget not found");
+    await syncLinkedPings(
+      ctx,
+      user._id,
+      next.name,
+      next.pingLinks ?? [],
+    );
     return toRecord(next);
   },
 });

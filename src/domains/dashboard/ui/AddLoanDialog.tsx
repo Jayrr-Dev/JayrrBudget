@@ -786,15 +786,15 @@ export function AddLoanDialog({
                 </Field>
               </div>
               <Field
-                label="Transaction description lookup (optional)"
+                label="Transaction description lookups (optional)"
                 htmlFor="loan-txn-description"
                 info={{
-                  title: "Transaction description lookup",
-                  body: "Phrase from a bank line used to attach PAD payments.",
+                  title: "Transaction description lookups",
+                  body: "Phrases from bank lines used to attach PAD payments.",
                   bullets: [
-                    "Search and pick an existing transaction",
-                    "Edit the text afterward to a shorter phrase",
-                    "Merchant names are ignored",
+                    "Search and pick one or more transactions",
+                    "Type a shorter phrase and select it",
+                    "Remove a chip to drop that match",
                   ],
                 }}
               >
@@ -803,7 +803,7 @@ export function AddLoanDialog({
                   value={form.txnDescriptionLookup}
                   transactions={privateLedger.ledger.transactions}
                   onChange={(next) => setField("txnDescriptionLookup", next)}
-                  placeholder="Search transactions…"
+                  placeholder="Search and add transactions…"
                   disabled={busy}
                 />
               </Field>

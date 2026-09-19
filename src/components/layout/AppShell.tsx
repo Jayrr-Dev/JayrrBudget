@@ -49,6 +49,8 @@ import { PiggyMascot } from "@/domains/ledger-ai/ui/PiggyMascot";
 import type { AppModuleRecord } from "@/domains/modules/domain/types";
 import { resolveModuleIcon } from "@/domains/modules/ui/moduleIcons";
 import { TrackingUsageHeartbeat } from "@/domains/user-metrics/ui/TrackingUsageHeartbeat";
+import { BudgetThresholdPingWatcher } from "@/domains/piggy-pings/ui/BudgetThresholdPingWatcher";
+import { PiggyPingRuntime } from "@/domains/piggy-pings/ui/PiggyPingRuntime";
 import {
   useVaultPageLocked,
   VaultLockedGate,
@@ -548,6 +550,7 @@ export function AppShell({
 
   return (
     <ProvidesMinimizedDialogs>
+      <PiggyPingRuntime>
       <div
         className={cn(
           "fixed inset-0 flex min-h-0 w-full min-w-0 flex-col overflow-hidden bg-[var(--background)] pt-[env(safe-area-inset-top)] pr-[env(safe-area-inset-right)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] md:flex-row",
@@ -595,12 +598,16 @@ export function AppShell({
               contentClassName,
             )}
           >
-            <VaultLockedGate>{children}</VaultLockedGate>
+            <VaultLockedGate>
+              <BudgetThresholdPingWatcher />
+              {children}
+            </VaultLockedGate>
           </div>
         </main>
         {isMobile ? null : workspaceTools}
         <MinimizedDialogStack />
       </div>
+      </PiggyPingRuntime>
     </ProvidesMinimizedDialogs>
   );
 }

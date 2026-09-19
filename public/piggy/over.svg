@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="400" height="400" viewBox="0 0 400 400" fill="none" role="img" aria-labelledby="title desc"><title id="title">Over pig</title><desc id="desc">Animated pink pig head with an over-budget stomp. Transparent, scalable vector artwork.</desc><style> .pig{transform-origin:200px 240px;animation:var(--motion) 0.45s ease-in-out infinite}.eyes{transform-origin:200px 212px;animation:blink 5.6s infinite}.accent{animation:float 3s ease-in-out infinite}.tear{animation:teardrop 2.8s ease-in infinite}@keyframes breathe{50%{transform:translateY(-3px)}}@keyframes sway{0%,100%{transform:rotate(-3deg)}50%{transform:rotate(3deg) translateY(-3px)}}@keyframes huff{0%,100%{transform:translateY(1px)}50%{transform:translateY(-3px) scale(1.025)}}@keyframes sleep{50%{transform:translateY(4px) rotate(2deg)}}@keyframes bounce{0%,100%{transform:translateY(0)}50%{transform:translateY(-10px)}}@keyframes stomp{0%,100%{transform:translateY(2px) rotate(-4deg) scale(1)}30%{transform:translateY(-6px) rotate(6deg) scale(1.06)}60%{transform:translateY(3px) rotate(-8deg) scale(1.04)}}@keyframes blink{0%,43%,47%,100%{transform:scaleY(1)}45%{transform:scaleY(.08)}}@keyframes float{0%,100%{transform:translateY(0);opacity:.65}50%{transform:translateY(-8px);opacity:1}}@keyframes teardrop{0%{transform:translateY(0);opacity:0}20%{opacity:1}85%,100%{transform:translateY(30px);opacity:0}}@media(prefers-reduced-motion:reduce){.pig,.eyes,.accent,.tear{animation:none}}</style><g stroke="#60353D" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"><g class="pig" style="--motion:stomp">      <!-- Soft triangular ears with rounded tips. -->
+      <path d="M91 163C72 137 62 89 79 84C98 77 137 104 149 130" fill="#F6B5C0"/>
+      <path d="M97 140C88 122 84 108 88 103C103 105 118 117 124 127" fill="#E78EAA" stroke="none"/>
+      <path d="M249 130C266 105 302 79 317 89C332 101 320 149 304 166" fill="#F6B5C0"/>
+      <path d="M275 128C285 115 300 105 307 107C310 116 305 133 299 145" fill="#E78EAA" stroke="none"/>
+      <!-- Main head. -->
+      <path d="M201 114C121 111 65 160 65 226C65 295 121 335 201 335C280 335 335 291 335 226C335 159 279 115 201 114Z" fill="#F8C3CC"/>
+      <path d="M88 267C110 302 151 316 202 316C254 316 297 299 319 268C302 310 256 335 201 335C149 335 106 316 88 267Z" fill="#ECA5B7" stroke="none"/>
+      <path d="M107 171C127 148 154 137 181 135" stroke="#FFE5E8" stroke-width="9"/>
+<g class="eyes"><g fill="#60353D" stroke="none"><ellipse cx="146" cy="212" rx="11" ry="15"/><ellipse cx="254" cy="212" rx="11" ry="15"/><circle cx="149" cy="207" r="3.5" fill="#FFF5F3"/><circle cx="257" cy="207" r="3.5" fill="#FFF5F3"/></g><path d="M128 178L160 190M240 190L272 178" /></g>      <g fill="#EF94AF" stroke="none" opacity=".65">
+        <ellipse cx="112" cy="242" rx="20" ry="12" transform="rotate(12 112 242)"/>
+        <ellipse cx="287" cy="239" rx="20" ry="12" transform="rotate(-12 287 239)"/>
+      </g>
+      <!-- Squishy snout and tiny contemplative mouth. -->
+      <ellipse cx="200" cy="251" rx="47" ry="32" fill="#F09DAF" stroke-width="5"/>
+      <path d="M174 234Q187 227 200 229" stroke="#FFD6DF" stroke-width="5"/>
+      <ellipse cx="183" cy="251" rx="6" ry="8" fill="#854653" stroke="none"/>
+      <ellipse cx="217" cy="251" rx="6" ry="8" fill="#854653" stroke="none"/>
+<path d="M181 304Q200 290 219 304" /><g class="accent" stroke="#D06B83" stroke-width="8" transform="translate(292 164) scale(1.6) translate(-292 -164)"><path d="M287 150V159H278M297 150V159H306M287 178V169H278M297 178V169H306"/></g></g></g></svg>

@@ -567,8 +567,10 @@ export default defineSchema({
   }).index("by_userId", ["userId"]),
 
   /**
-   * Piggy Pings: owner-scoped reminders. Empty startDate or endDate means
-   * that bound is indefinite. trigger is reserved for a later engine.
+    * Piggy Pings: owner-scoped reminders. Empty startDate or endDate means
+   * that bound is indefinite. trigger names budget events
+   * (`Name + Warn`, `Name + Warn + Over`). Cycle `None` has no calendar
+   * date; linked budget events can still fire it.
    */
   piggyPings: defineTable({
     userId: v.id("users"),
@@ -596,6 +598,7 @@ export default defineSchema({
     cycle: v.string(),
     trigger: v.union(v.string(), v.null()),
     triggerCount: v.number(),
+    firedKeys: v.optional(v.array(v.string())),
     isActive: v.optional(v.boolean()),
     startDate: v.union(v.string(), v.null()),
     endDate: v.union(v.string(), v.null()),
@@ -608,6 +611,7 @@ export default defineSchema({
    * Spend caps. classLookup / descriptionLookup are name fragments for
    * later matching against classifications and ledger descriptions.
    * warningThreshold / overageThreshold are percent of amount (0–100+).
+   * pingLinks: Piggy Pings that fire on warn / over.
    */
   budgets: defineTable({
     userId: v.id("users"),
@@ -622,6 +626,15 @@ export default defineSchema({
     cycle: v.optional(v.string()),
     /** YYYY-MM-DD. Slice repeats from this day. Missing = created day. */
     startDate: v.optional(v.union(v.string(), v.null())),
+    pingLinks: v.optional(
+      v.array(
+        v.object({
+          pingId: v.id("piggyPings"),
+          warn: v.boolean(),
+          over: v.boolean(),
+        }),
+      ),
+    ),
     createdAt: v.number(),
     updatedAt: v.number(),
   }).index("by_userId", ["userId"]),

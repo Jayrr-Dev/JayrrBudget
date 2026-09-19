@@ -8,13 +8,38 @@ export type PadCandidateRow = {
   description: string;
 };
 
+function parseTxnDescriptionLookups(raw: string | null | undefined): string[] {
+  if (raw == null) return [];
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const part of raw.split(/\n+/)) {
+    const trimmed = part.trim();
+    if (!trimmed) continue;
+    const key = trimmed.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(trimmed);
+  }
+  return out;
+}
+
 function descriptionAliases(txnDescriptionLookup: string): string[] {
-  const needle = txnDescriptionLookup.trim().toLowerCase();
-  if (!needle) return [];
-  const aliases = [needle];
-  // Legacy CIBC statement labels for the seeded car loan.
-  if (needle.includes("cibc") && needle.includes("loan")) {
-    aliases.push("cibc loans", "cibc car loan");
+  const aliases: string[] = [];
+  const seen = new Set<string>();
+  for (const needle of parseTxnDescriptionLookups(txnDescriptionLookup).map(
+    (part) => part.toLowerCase(),
+  )) {
+    if (!seen.has(needle)) {
+      seen.add(needle);
+      aliases.push(needle);
+    }
+    if (needle.includes("cibc") && needle.includes("loan")) {
+      for (const extra of ["cibc loans", "cibc car loan"]) {
+        if (seen.has(extra)) continue;
+        seen.add(extra);
+        aliases.push(extra);
+      }
+    }
   }
   return aliases;
 }

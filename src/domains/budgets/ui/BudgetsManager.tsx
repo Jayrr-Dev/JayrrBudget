@@ -37,12 +37,21 @@ import {
   todayBudgetYmd,
   type BudgetCycle,
 } from "@/domains/budgets/domain/budgetCycle";
+import { BudgetPingLinksField, type BudgetPingLinkDraft } from "@/domains/budgets/ui/BudgetPingLinksField";
 import { BudgetProgressCards } from "@/domains/budgets/ui/BudgetProgressCards";
 import { ClassLookupCombobox } from "@/domains/budgets/ui/ClassLookupCombobox";
 import {
   useBudgetProgressItems,
   type BudgetTableRow,
 } from "@/domains/budgets/ui/useBudgetProgressItems";
+import { budgetPingCopy } from "@/domains/piggy-pings/domain/budgetPingCopy";
+import {
+  DEFAULT_PING_TYPES,
+  PING_TYPES,
+  pingTypeLabel,
+  type PingType,
+} from "@/domains/piggy-pings/domain/types";
+import { usePiggyPingRuntime } from "@/domains/piggy-pings/ui/PiggyPingRuntime";
 import { formatCompactDisplayDate } from "@/shared/lib/format-date";
 import { api } from "@convex/_generated/api";
 import { createColumnHelper } from "@tanstack/react-table";
@@ -58,12 +67,15 @@ function FieldLabel({
   children,
   infoTitle,
   infoBody,
+  infoItems,
 }: {
   htmlFor: string;
   children: ReactNode;
   infoTitle: string;
   infoBody: string;
+  infoItems?: string[];
 }) {
+  const items = infoItems ?? [];
   return (
     <div className="flex items-center gap-1">
       <Label htmlFor={htmlFor}>{children}</Label>
@@ -86,6 +98,13 @@ function FieldLabel({
           <PopoverHeader className="gap-1.5">
             <PopoverTitle>{infoTitle}</PopoverTitle>
             <PopoverDescription>{infoBody}</PopoverDescription>
+            {items.length > 0 ? (
+              <ul className="mt-1.5 list-disc space-y-1 pl-4 text-muted-foreground">
+                {items.map((item) => (
+                  <li key={item}>{item}</li>
+                ))}
+              </ul>
+            ) : null}
           </PopoverHeader>
         </PopoverContent>
       </Popover>
@@ -107,18 +126,24 @@ function ActiveToggle({ budget }: { budget: BudgetRow }) {
   async function handleChange(checked: boolean) {
     try {
       await updateBudget({ budgetId: budget.id, isActive: checked });
+      toast.success(checked ? "Budget active" : "Budget deactivated");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Update failed");
     }
   }
 
   return (
-    <Switch
-      size="sm"
-      checked={budget.isActive}
-      onCheckedChange={(checked) => void handleChange(Boolean(checked))}
-      aria-label={budget.isActive ? "Deactivate budget" : "Activate budget"}
-    />
+    <div className="flex flex-col items-center gap-0.5">
+      <Switch
+        size="sm"
+        checked={budget.isActive}
+        onCheckedChange={(checked) => void handleChange(Boolean(checked))}
+        aria-label={budget.isActive ? "Deactivate budget" : "Activate budget"}
+      />
+      <span className="text-[10px] leading-none text-muted-foreground">
+        {budget.isActive ? "Active" : "Deactivated"}
+      </span>
+    </div>
   );
 }
 
@@ -207,7 +232,42 @@ function BudgetsBulkActions({ budgets }: { budgets: BudgetRow[] }) {
 
 function BudgetActions({ budget }: { budget: BudgetRow }) {
   const remove = useMutation(api.budgets.remove);
+  const pings = useQuery(api.piggyPings.list, {});
+  const { deliver } = usePiggyPingRuntime();
   const [editOpen, setEditOpen] = useState(false);
+
+  function handleTest(tone: "warn" | "over") {
+    const warn = tone === "warn";
+    const over = tone === "over";
+    const linked = (pings ?? []).filter((ping) =>
+      budget.pingLinks.some((link) => {
+        if (link.pingId !== ping.id) return false;
+        if (over) return link.over;
+        return link.warn;
+      }),
+    );
+    if (linked.length > 0) {
+      for (const ping of linked) {
+        const types =
+          ping.pingTypes.length > 0 ? ping.pingTypes : DEFAULT_PING_TYPES;
+        deliver({
+          title: ping.title,
+          message: ping.message,
+          pingTypes: types,
+          icon: ping.icon,
+          tone,
+        });
+      }
+      return;
+    }
+    const copy = budgetPingCopy(budget.name, warn, over);
+    deliver({
+      title: copy.title,
+      message: copy.message,
+      pingTypes: DEFAULT_PING_TYPES,
+      tone,
+    });
+  }
 
   async function handleDelete() {
     try {
@@ -225,6 +285,8 @@ function BudgetActions({ budget }: { budget: BudgetRow }) {
         size="sm"
         actions={[
           { label: "Edit", onSelect: () => setEditOpen(true) },
+          { label: "Test warn", onSelect: () => handleTest("warn") },
+          { label: "Test over", onSelect: () => handleTest("over") },
           {
             label: "Delete",
             onSelect: () => void handleDelete(),
@@ -244,7 +306,7 @@ function BudgetActions({ budget }: { budget: BudgetRow }) {
 const columns = columnHelper.columns([
   columnHelper.accessor("isActive", {
     header: () => (
-      <span className="flex w-full items-center justify-center">Active</span>
+      <span className="flex w-full items-center justify-center">Status</span>
     ),
     cell: ({ row }) => (
       <div className="flex items-center justify-center">
@@ -252,7 +314,7 @@ const columns = columnHelper.columns([
       </div>
     ),
     enableSorting: false,
-    meta: { label: "Active", width: "4.25rem", keepOpaque: true },
+    meta: { label: "Status", width: "5.5rem", keepOpaque: true },
   }),
   columnHelper.accessor("id", {
     header: "Id",
@@ -347,13 +409,10 @@ const columns = columnHelper.columns([
     ),
     meta: { width: "6.5rem", nowrap: true },
   }),
-  columnHelper.accessor("updatedAt", {
-    header: "Updated",
-    cell: ({ getValue }) => (
-      <span className="text-xs text-[var(--muted-foreground)]">
-        {formatCompactDisplayDate(toBudgetYmd(new Date(Number(getValue()))))}
-      </span>
-    ),
+  columnHelper.display({
+    id: "pingLinks",
+    header: "Ping attached",
+    cell: ({ row }) => <PingAttachedCell links={row.original.pingLinks} />,
     meta: { width: "6.5rem", nowrap: true },
   }),
   columnHelper.display({
@@ -370,6 +429,144 @@ const columns = columnHelper.columns([
   }),
 ]);
 
+const BUDGET_FORM_STEPS = [
+  { id: "basics", label: "Basics" },
+  { id: "thresholds", label: "Thresholds" },
+  { id: "review", label: "Review" },
+] as const;
+
+type BudgetFormStepId = (typeof BUDGET_FORM_STEPS)[number]["id"];
+
+function nextBudgetFormStep(step: BudgetFormStepId): BudgetFormStepId {
+  if (step === "basics") return "thresholds";
+  return "review";
+}
+
+function previousBudgetFormStep(
+  step: BudgetFormStepId,
+): BudgetFormStepId | null {
+  if (step === "thresholds") return "basics";
+  if (step === "review") return "thresholds";
+  return null;
+}
+
+function budgetAmountError(amount: string): string | null {
+  const parsedAmount = Number(amount);
+  if (!Number.isFinite(parsedAmount) || parsedAmount < 0) {
+    return "Amount must be zero or more";
+  }
+  return null;
+}
+
+function displayOrDash(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) return "—";
+  return trimmed;
+}
+
+function percentLabel(value: string, fallback: number): string {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return `${fallback}%`;
+  return `${parsed}%`;
+}
+
+function linkedPingLabel(count: number): string {
+  if (count === 0) return "None";
+  if (count === 1) return "1 linked";
+  return `${count} linked`;
+}
+
+function defaultPingTypeLabel(): string {
+  const first = DEFAULT_PING_TYPES[0] ?? "Toast";
+  return pingTypeLabel(first);
+}
+
+function attachedPingTypeLabel(
+  links: { pingId: string }[],
+  pings:
+    | { id: string; pingTypes: PingType[] }[]
+    | undefined,
+): string {
+  if (links.length === 0) return defaultPingTypeLabel();
+  if (!pings) return linkedPingLabel(links.length);
+  const selected = new Set<PingType>();
+  for (const link of links) {
+    const ping = pings.find((row) => row.id === link.pingId);
+    const types = ping?.pingTypes ?? DEFAULT_PING_TYPES;
+    for (const type of types) {
+      selected.add(type);
+    }
+  }
+  const labels = PING_TYPES.filter((type) => selected.has(type)).map(
+    pingTypeLabel,
+  );
+  if (labels.length === 0) return defaultPingTypeLabel();
+  return labels.join(", ");
+}
+
+function PingAttachedCell({
+  links,
+}: {
+  links: BudgetTableRow["pingLinks"];
+}) {
+  const pings = useQuery(api.piggyPings.list, {});
+  return (
+    <span className="text-xs text-muted-foreground">
+      {attachedPingTypeLabel(links, pings)}
+    </span>
+  );
+}
+
+function BudgetFormStepper({ step }: { step: BudgetFormStepId }) {
+  return (
+    <nav aria-label="Budget steps">
+      <ol className="flex flex-wrap items-center gap-1.5 text-xs">
+        {BUDGET_FORM_STEPS.map((item, index) => {
+          const current = item.id === step;
+          return (
+            <li
+              key={item.id}
+              aria-current={current ? "step" : undefined}
+              className={
+                current
+                  ? "rounded-full bg-primary px-2.5 py-1 font-medium text-primary-foreground"
+                  : "px-1.5 py-1 text-muted-foreground"
+              }
+            >
+              {index + 1}. {item.label}
+            </li>
+          );
+        })}
+      </ol>
+    </nav>
+  );
+}
+
+function BudgetReviewList({
+  rows,
+}: {
+  rows: { label: string; value: string }[];
+}) {
+  return (
+    <dl className="grid gap-2">
+      {rows.map((row) => (
+        <div
+          key={row.label}
+          className="flex items-baseline justify-between gap-3 text-sm"
+        >
+          <dt className="shrink-0 text-muted-foreground">{row.label}</dt>
+          <dd
+            className="min-w-0 truncate text-right font-medium"
+            title={row.value}
+          >
+            {row.value}
+          </dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
 function BudgetForm({
   budget,
   onSaved,
@@ -380,6 +577,7 @@ function BudgetForm({
   const createBudget = useMutation(api.budgets.create);
   const updateBudget = useMutation(api.budgets.update);
   const catalog = useQuery(api.classifications.list, {});
+  const pings = useQuery(api.piggyPings.list, {});
   const fieldId = budget ? `budget-${budget.id}` : "budget";
   const [name, setName] = useState(budget?.name ?? "");
   const [classLookup, setClassLookup] = useState(budget?.classLookup ?? "");
@@ -398,15 +596,61 @@ function BudgetForm({
     budget ? String(budget.overageThreshold) : "100",
   );
   const [isActive, setIsActive] = useState(budget?.isActive ?? true);
+  const [pingLinks, setPingLinks] = useState<BudgetPingLinkDraft[]>(
+    budget?.pingLinks ?? [],
+  );
+  const [step, setStep] = useState<BudgetFormStepId>("basics");
   const [submitting, setSubmitting] = useState(false);
+  const previousStep = previousBudgetFormStep(step);
+  const basicsBlocked = !name.trim() || !amount.trim();
+  const reviewRows = [
+    { label: "Name", value: displayOrDash(name) },
+    { label: "Class lookup", value: displayOrDash(classLookup) },
+    { label: "Description", value: displayOrDash(descriptionLookup) },
+    {
+      label: "Amount",
+      value: budgetAmountError(amount)
+        ? displayOrDash(amount)
+        : money.format(Number(amount)),
+    },
+    { label: "Cycle", value: BUDGET_CYCLE_LABELS[cycle] },
+    { label: "Start date", value: formatCompactDisplayDate(startDate) },
+    { label: "Warning", value: percentLabel(warningThreshold, 80) },
+    { label: "Overage", value: percentLabel(overageThreshold, 100) },
+    { label: "Piggy pings", value: attachedPingTypeLabel(pingLinks, pings) },
+    { label: "Status", value: isActive ? "Active" : "Deactivated" },
+  ];
+
+  function goBack() {
+    if (!previousStep) return;
+    setStep(previousStep);
+  }
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
+    if (step !== "review") {
+      if (step === "basics") {
+        if (!name.trim()) {
+          toast.error("Name the budget first");
+          return;
+        }
+        const amountError = budgetAmountError(amount);
+        if (amountError) {
+          toast.error(amountError);
+          return;
+        }
+      }
+      setStep(nextBudgetFormStep(step));
+      return;
+    }
+
     const parsedAmount = Number(amount);
     const warn = Number(warningThreshold);
     const over = Number(overageThreshold);
-    if (!Number.isFinite(parsedAmount) || parsedAmount < 0) {
-      toast.error("Amount must be zero or more");
+    const amountError = budgetAmountError(amount);
+    if (amountError) {
+      toast.error(amountError);
+      setStep("basics");
       return;
     }
     setSubmitting(true);
@@ -421,6 +665,7 @@ function BudgetForm({
         isActive,
         cycle,
         startDate,
+        pingLinks,
       };
       if (budget) {
         await updateBudget({ budgetId: budget.id, ...payload });
@@ -440,135 +685,190 @@ function BudgetForm({
   return (
     <form onSubmit={(e) => void onSubmit(e)}>
       <div className="grid gap-3">
-        <div className="grid gap-1.5">
-          <Label htmlFor={`${fieldId}-name`}>Name</Label>
-          <Input
-            id={`${fieldId}-name`}
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="Groceries"
-            maxLength={80}
-            required
-            disabled={submitting}
-          />
-        </div>
-        <div className="grid gap-1.5">
-          <Label htmlFor={`${fieldId}-class`}>Class lookup</Label>
-          <ClassLookupCombobox
-            id={`${fieldId}-class`}
-            catalog={catalog}
-            value={classLookup}
-            disabled={submitting}
-            onChange={setClassLookup}
-          />
-        </div>
-        <div className="grid gap-1.5">
-          <Label htmlFor={`${fieldId}-description`}>Description lookup</Label>
-          <Input
-            id={`${fieldId}-description`}
-            value={descriptionLookup}
-            onChange={(e) => setDescriptionLookup(e.target.value)}
-            placeholder="Optional merchant or description"
-            maxLength={160}
-            disabled={submitting}
-          />
-        </div>
-        <div className="grid gap-1.5">
-          <Label htmlFor={`${fieldId}-amount`}>Amount</Label>
-          <Input
-            id={`${fieldId}-amount`}
-            type="number"
-            min="0"
-            step="0.01"
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-            placeholder="400"
-            required
-            disabled={submitting}
-          />
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          <div className="grid gap-1.5">
-            <FieldLabel
-              htmlFor={`${fieldId}-cycle`}
-              infoTitle="Cycle"
-              infoBody="The cap applies to this slice, then resets."
+        <BudgetFormStepper step={step} />
+        {step === "basics" ? (
+          <>
+            <div className="grid gap-1.5">
+              <Label htmlFor={`${fieldId}-name`}>Name</Label>
+              <Input
+                id={`${fieldId}-name`}
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Groceries"
+                maxLength={80}
+                required
+                disabled={submitting}
+              />
+            </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor={`${fieldId}-class`}>Class lookup</Label>
+              <ClassLookupCombobox
+                id={`${fieldId}-class`}
+                catalog={catalog}
+                value={classLookup}
+                disabled={submitting}
+                onChange={setClassLookup}
+              />
+            </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor={`${fieldId}-description`}>Description lookup</Label>
+              <Input
+                id={`${fieldId}-description`}
+                value={descriptionLookup}
+                onChange={(e) => setDescriptionLookup(e.target.value)}
+                placeholder="Optional merchant or description"
+                maxLength={160}
+                disabled={submitting}
+              />
+            </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor={`${fieldId}-amount`}>Amount</Label>
+              <Input
+                id={`${fieldId}-amount`}
+                type="number"
+                min="0"
+                step="0.01"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                placeholder="400"
+                required
+                disabled={submitting}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="grid gap-1.5">
+                <FieldLabel
+                  htmlFor={`${fieldId}-cycle`}
+                  infoTitle="Cycle"
+                  infoBody="The cap applies to this slice, then resets."
+                >
+                  Cycle
+                </FieldLabel>
+                <NativeSelect
+                  id={`${fieldId}-cycle`}
+                  className="w-full"
+                  value={cycle}
+                  disabled={submitting}
+                  onChange={(e) => setCycle(e.target.value as BudgetCycle)}
+                >
+                  {BUDGET_CYCLES.map((option) => (
+                    <NativeSelectOption key={option} value={option}>
+                      {BUDGET_CYCLE_LABELS[option]}
+                    </NativeSelectOption>
+                  ))}
+                </NativeSelect>
+              </div>
+              <div className="grid gap-1.5">
+                <FieldLabel
+                  htmlFor={`${fieldId}-start`}
+                  infoTitle="Start date"
+                  infoBody="Each slice lines up from this day."
+                >
+                  Start date
+                </FieldLabel>
+                <Input
+                  id={`${fieldId}-start`}
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  required
+                  disabled={submitting}
+                />
+              </div>
+            </div>
+          </>
+        ) : null}
+        {step === "thresholds" ? (
+          <>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="grid gap-1.5">
+                <Label htmlFor={`${fieldId}-warn`}>Warning %</Label>
+                <Input
+                  id={`${fieldId}-warn`}
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={warningThreshold}
+                  onChange={(e) => setWarningThreshold(e.target.value)}
+                  disabled={submitting}
+                />
+              </div>
+              <div className="grid gap-1.5">
+                <Label htmlFor={`${fieldId}-over`}>Overage %</Label>
+                <Input
+                  id={`${fieldId}-over`}
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={overageThreshold}
+                  onChange={(e) => setOverageThreshold(e.target.value)}
+                  disabled={submitting}
+                />
+              </div>
+            </div>
+            <div className="grid gap-1.5">
+              <FieldLabel
+                htmlFor={`${fieldId}-pings`}
+                infoTitle="Piggy pings"
+                infoBody="These reminders save on the Piggy Pings page."
+                infoItems={[
+                  "Toast is the default. You can also pick Dialog, Email, or Banner.",
+                  "Warn and Over use the same wording for every type.",
+                  "Open Piggy Pings later if you want a custom message.",
+                ]}
+              >
+                Piggy pings
+              </FieldLabel>
+              <BudgetPingLinksField
+                budgetName={name}
+                links={pingLinks}
+                disabled={submitting}
+                onChange={setPingLinks}
+              />
+            </div>
+            <div className="flex items-center justify-between gap-3">
+              <Label htmlFor={`${fieldId}-active`}>
+                {isActive ? "Active" : "Deactivated"}
+              </Label>
+              <Switch
+                id={`${fieldId}-active`}
+                checked={isActive}
+                onCheckedChange={(checked) => setIsActive(Boolean(checked))}
+                disabled={submitting}
+              />
+            </div>
+          </>
+        ) : null}
+        {step === "review" ? <BudgetReviewList rows={reviewRows} /> : null}
+        <div className="flex items-center gap-2">
+          {previousStep ? (
+            <Button
+              type="button"
+              variant="outline"
+              disabled={submitting}
+              onClick={goBack}
             >
-              Cycle
-            </FieldLabel>
-            <NativeSelect
-              id={`${fieldId}-cycle`}
-              className="w-full"
-              value={cycle}
-              disabled={submitting}
-              onChange={(e) => setCycle(e.target.value as BudgetCycle)}
+              Back
+            </Button>
+          ) : null}
+          {step === "review" ? (
+            <Button
+              className="ml-auto"
+              type="submit"
+              disabled={submitting || basicsBlocked}
             >
-              {BUDGET_CYCLES.map((option) => (
-                <NativeSelectOption key={option} value={option}>
-                  {BUDGET_CYCLE_LABELS[option]}
-                </NativeSelectOption>
-              ))}
-            </NativeSelect>
-          </div>
-          <div className="grid gap-1.5">
-            <FieldLabel
-              htmlFor={`${fieldId}-start`}
-              infoTitle="Start date"
-              infoBody="Each slice lines up from this day."
+              {submitting ? "Saving…" : budget ? "Save changes" : "Save budget"}
+            </Button>
+          ) : (
+            <Button
+              className="ml-auto"
+              type="submit"
+              disabled={submitting || (step === "basics" ? basicsBlocked : false)}
             >
-              Start date
-            </FieldLabel>
-            <Input
-              id={`${fieldId}-start`}
-              type="date"
-              value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
-              required
-              disabled={submitting}
-            />
-          </div>
+              Next
+            </Button>
+          )}
         </div>
-        <div className="grid grid-cols-2 gap-3">
-          <div className="grid gap-1.5">
-            <Label htmlFor={`${fieldId}-warn`}>Warning %</Label>
-            <Input
-              id={`${fieldId}-warn`}
-              type="number"
-              min="0"
-              step="1"
-              value={warningThreshold}
-              onChange={(e) => setWarningThreshold(e.target.value)}
-              disabled={submitting}
-            />
-          </div>
-          <div className="grid gap-1.5">
-            <Label htmlFor={`${fieldId}-over`}>Overage %</Label>
-            <Input
-              id={`${fieldId}-over`}
-              type="number"
-              min="0"
-              step="1"
-              value={overageThreshold}
-              onChange={(e) => setOverageThreshold(e.target.value)}
-              disabled={submitting}
-            />
-          </div>
-        </div>
-        <div className="flex items-center justify-between gap-3">
-          <Label htmlFor={`${fieldId}-active`}>Active</Label>
-          <Switch
-            id={`${fieldId}-active`}
-            checked={isActive}
-            onCheckedChange={(checked) => setIsActive(Boolean(checked))}
-            disabled={submitting}
-          />
-        </div>
-        <Button
-          type="submit"
-          disabled={submitting || !name.trim() || !amount.trim()}
-        >
-          {submitting ? "Saving…" : budget ? "Save changes" : "Save budget"}
-        </Button>
       </div>
     </form>
   );
@@ -590,8 +890,8 @@ export function BudgetDialog({
           <DialogTitle>{budget ? "Edit budget" : "New budget"}</DialogTitle>
           <DialogDescription className="sr-only">
             {budget
-              ? "Adjust the spend cap, lookups, cycle, or start date."
-              : "Set a spend cap, cycle, and start date."}
+              ? "Edit this budget in three steps: basics, thresholds, then review."
+              : "Create a budget in three steps: basics, thresholds, then review."}
           </DialogDescription>
         </DialogHeader>
         {open ? (

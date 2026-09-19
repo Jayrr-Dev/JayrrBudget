@@ -83,6 +83,7 @@ const pingRecord = v.object({
   cycle: v.string(),
   trigger: v.union(v.string(), v.null()),
   triggerCount: v.number(),
+  firedKeys: v.array(v.string()),
   isActive: v.boolean(),
   startDate: v.union(v.string(), v.null()),
   endDate: v.union(v.string(), v.null()),
@@ -97,7 +98,9 @@ const MAX_NAME = 80;
 const MAX_TITLE = 160;
 const MAX_MESSAGE = 2000;
 const MAX_CYCLE = 80;
+const MAX_TRIGGER = 160;
 const MAX_NOTES = 2000;
+const MAX_FIRE_KEYS = 24;
 
 function requiredText(value: string, label: string, max: number) {
   const trimmed = value.trim();
@@ -134,6 +137,7 @@ function toRecord(doc: Doc<"piggyPings">, owner: string) {
     cycle: doc.cycle,
     trigger: doc.trigger,
     triggerCount: doc.triggerCount,
+    firedKeys: doc.firedKeys ?? [],
     isActive: doc.isActive !== false,
     startDate: doc.startDate,
     endDate: doc.endDate,
@@ -194,7 +198,7 @@ export const create = mutation({
     const now = Date.now();
     const fromList = args.pingTypes ?? [];
     const pingTypes = normalizePingTypes(
-      fromList.length > 0 ? fromList : args.pingType ? [args.pingType] : [],
+      fromList.length > 0 ? fromList : args.pingType ? [args.pingType] : ["Toast"],
     );
     const id = await ctx.db.insert("piggyPings", {
       userId: user._id,
@@ -205,8 +209,9 @@ export const create = mutation({
       pingType: primaryPingType(pingTypes),
       pingTypes,
       cycle: requiredText(args.cycle, "Cycle", MAX_CYCLE),
-      trigger: optionalTrim(args.trigger, MAX_CYCLE),
+      trigger: optionalTrim(args.trigger, MAX_TRIGGER),
       triggerCount: 0,
+      firedKeys: [],
       isActive: args.isActive !== false,
       startDate: optionalTrim(args.startDate, 32),
       endDate: optionalTrim(args.endDate, 32),
@@ -266,7 +271,7 @@ export const update = mutation({
       patch.cycle = requiredText(args.cycle, "Cycle", MAX_CYCLE);
     }
     if (args.trigger !== undefined) {
-      patch.trigger = optionalTrim(args.trigger, MAX_CYCLE);
+      patch.trigger = optionalTrim(args.trigger, MAX_TRIGGER);
     }
     if (args.startDate !== undefined) {
       patch.startDate = optionalTrim(args.startDate, 32);
@@ -284,6 +289,36 @@ export const update = mutation({
     const next = await ctx.db.get(doc._id);
     if (!next) throw new Error("Ping not found");
     return toRecord(next, ownerLabel(user));
+  },
+});
+
+export const recordFire = mutation({
+  args: {
+    pingId: v.id("piggyPings"),
+    fireKey: v.string(),
+  },
+  returns: v.object({ fired: v.boolean() }),
+  handler: async (ctx, args) => {
+    const user = await requireUser(ctx);
+    const doc = await ownPing(ctx, user._id, args.pingId);
+    if (doc.isActive === false) {
+      return { fired: false };
+    }
+    const fireKey = args.fireKey.trim().slice(0, 200);
+    if (!fireKey) {
+      throw new Error("Fire key is required");
+    }
+    const firedKeys = doc.firedKeys ?? [];
+    if (firedKeys.includes(fireKey)) {
+      return { fired: false };
+    }
+    const nextKeys = [...firedKeys, fireKey].slice(-MAX_FIRE_KEYS);
+    await ctx.db.patch(doc._id, {
+      firedKeys: nextKeys,
+      triggerCount: doc.triggerCount + 1,
+      updatedAt: Date.now(),
+    });
+    return { fired: true };
   },
 });
 

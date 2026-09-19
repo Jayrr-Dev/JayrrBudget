@@ -2,18 +2,27 @@
 
 import {
   Combobox,
+  ComboboxChip,
+  ComboboxChips,
+  ComboboxChipsInput,
   ComboboxContent,
   ComboboxEmpty,
-  ComboboxInput,
   ComboboxItem,
   ComboboxList,
+  ComboboxValue,
+  useComboboxAnchor,
 } from "@/components/ui/combobox";
 import { formatMoney } from "@/domains/dashboard/domain/money";
+import {
+  parseTxnDescriptionLookups,
+  serializeTxnDescriptionLookups,
+} from "@/domains/loans/application/matchLoanPayments";
 import type { PrivateTransaction } from "@/domains/vault/domain/privateLedger";
 import { formatShortDisplayDate } from "@/shared/lib/format-date";
 import { useMemo, useState } from "react";
 
 type TxnOption = {
+  recordId: string;
   value: string;
   description: string;
   date: string;
@@ -25,18 +34,21 @@ type TxnOption = {
 
 type SortKey = "Date" | "Description" | "Amount";
 
-const COMMIT_BLOCK_REASONS = new Set([
-  "input-change",
-  "input-clear",
-  "list-navigation",
-  "focus-out",
-  "escape-key",
-  "outside-press",
-  "close-press",
-  "cancel-open",
-]);
-
 const MAX_OPTIONS = 200;
+
+function optionFromDescription(description: string): TxnOption {
+  const trimmed = description.trim();
+  return {
+    recordId: `lookup:${trimmed.toLowerCase()}`,
+    value: trimmed.toLowerCase(),
+    description: trimmed,
+    date: "—",
+    postedDate: "",
+    amount: "",
+    amountValue: 0,
+    label: trimmed,
+  };
+}
 
 function buildOptions(transactions: PrivateTransaction[]): TxnOption[] {
   const byId = new Map<string, TxnOption>();
@@ -47,7 +59,8 @@ function buildOptions(transactions: PrivateTransaction[]): TxnOption[] {
     const date = formatShortDisplayDate(txn.date);
     const amount = formatMoney(txn.amount, txn.currency || "CAD");
     byId.set(txn.recordId, {
-      value: txn.recordId,
+      recordId: txn.recordId,
+      value: description.toLowerCase(),
       description,
       date,
       postedDate: txn.date,
@@ -95,52 +108,73 @@ export function TxnDescriptionLookupCombobox({
   placeholder = "Search transactions…",
   onChange,
 }: TxnDescriptionLookupComboboxProps) {
+  const anchor = useComboboxAnchor();
+  const [inputValue, setInputValue] = useState("");
   const [sortColumn, setSortColumn] = useState<SortKey>("Date");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
 
-  const options = useMemo(
+  const txnOptions = useMemo(
     () => sortOptions(buildOptions(transactions), sortColumn, sortDirection),
     [transactions, sortColumn, sortDirection],
   );
 
   const selected = useMemo(() => {
-    const needle = value.trim().toLowerCase();
-    if (!needle) return null;
-    return (
-      options.find((option) => option.description.toLowerCase() === needle) ??
-      null
-    );
-  }, [options, value]);
+    return parseTxnDescriptionLookups(value).map((phrase) => {
+      const key = phrase.toLowerCase();
+      return (
+        txnOptions.find((option) => option.value === key) ??
+        optionFromDescription(phrase)
+      );
+    });
+  }, [txnOptions, value]);
+
+  const typed = inputValue.trim();
+  const typedKey = typed.toLowerCase();
+  const items = useMemo(() => {
+    if (!typed) return txnOptions;
+    const exists = txnOptions.some((option) => option.value === typedKey);
+    const selectedHas = selected.some((option) => option.value === typedKey);
+    if (exists || selectedHas) return txnOptions;
+    return [optionFromDescription(typed), ...txnOptions];
+  }, [selected, txnOptions, typed, typedKey]);
 
   return (
     <Combobox
-      items={options}
+      items={items}
+      multiple
       value={selected}
-      inputValue={value}
+      inputValue={inputValue}
       disabled={disabled}
       itemToStringLabel={(item) => item.description}
       isItemEqualToValue={(a, b) => a.value === b.value}
-      onInputValueChange={(next) => {
-        onChange(next);
-      }}
-      onValueChange={(next, details) => {
-        const reason = details?.reason;
-        if (reason && COMMIT_BLOCK_REASONS.has(reason)) return;
-        if (next == null) {
-          onChange("");
-          return;
-        }
-        onChange(next.description);
+      onInputValueChange={setInputValue}
+      onValueChange={(next) => {
+        onChange(
+          serializeTxnDescriptionLookups(next.map((item) => item.description)),
+        );
+        setInputValue("");
       }}
     >
-      <ComboboxInput
-        id={id}
-        placeholder={placeholder}
-        className="w-full"
-        showClear={Boolean(value)}
-        disabled={disabled}
-      />
+      <ComboboxChips ref={anchor} className="w-full min-w-0">
+        <ComboboxValue>
+          {selected.map((item) => (
+            <ComboboxChip
+              key={item.value}
+              className="max-w-[18rem] min-w-0 overflow-hidden"
+              title={item.description}
+            >
+              <span className="min-w-0 truncate">{item.description}</span>
+            </ComboboxChip>
+          ))}
+        </ComboboxValue>
+        <ComboboxChipsInput
+          id={id}
+          placeholder={placeholder}
+          disabled={disabled}
+        />
+      </ComboboxChips>
       <ComboboxContent
+        anchor={anchor}
         className="z-60 w-[min(40rem,calc(100vw-1.5rem))]"
         layout="table"
         columns={["Date", "Description", "Amount"]}
@@ -162,7 +196,7 @@ export function TxnDescriptionLookupCombobox({
         </ComboboxEmpty>
         <ComboboxList>
           {(item) => (
-            <ComboboxItem key={item.value} value={item}>
+            <ComboboxItem key={item.recordId} value={item}>
               <span className="overflow-hidden whitespace-nowrap font-mono text-sm tabular-nums">
                 {item.date}
               </span>

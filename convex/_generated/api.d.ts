@@ -28,6 +28,7 @@ import type * as lib_aiCostTable from "../lib/aiCostTable.js";
 import type * as lib_amortize from "../lib/amortize.js";
 import type * as lib_analysisTypes from "../lib/analysisTypes.js";
 import type * as lib_auth from "../lib/auth.js";
+import type * as lib_budgetPingTrigger from "../lib/budgetPingTrigger.js";
 import type * as lib_canonicalCategories from "../lib/canonicalCategories.js";
 import type * as lib_carLoanConstants from "../lib/carLoanConstants.js";
 import type * as lib_cashFlow from "../lib/cashFlow.js";
@@ -105,6 +106,7 @@ declare const fullApi: ApiFromModules<{
   "lib/amortize": typeof lib_amortize;
   "lib/analysisTypes": typeof lib_analysisTypes;
   "lib/auth": typeof lib_auth;
+  "lib/budgetPingTrigger": typeof lib_budgetPingTrigger;
   "lib/canonicalCategories": typeof lib_canonicalCategories;
   "lib/carLoanConstants": typeof lib_carLoanConstants;
   "lib/cashFlow": typeof lib_cashFlow;

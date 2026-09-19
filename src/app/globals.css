@@ -499,3 +499,28 @@ body {
   font-size: 0.75rem;
   line-height: 1.25;
 }
+
+[data-sonner-toast].cn-toast-piggy {
+  align-items: center;
+  gap: 0.75rem !important;
+  min-height: 4.5rem !important;
+  padding: 0.75rem 1rem !important;
+}
+
+[data-sonner-toast].cn-toast-piggy [data-icon],
+.cn-toast-piggy-icon {
+  width: 3rem !important;
+  height: 3rem !important;
+  min-width: 3rem !important;
+  min-height: 3rem !important;
+  margin: 0 !important;
+  overflow: visible !important;
+}
+
+[data-sonner-toast].cn-toast-piggy [data-icon] img,
+[data-sonner-toast].cn-toast-piggy [data-icon] svg {
+  width: 3rem !important;
+  height: 3rem !important;
+  max-width: none !important;
+  max-height: none !important;
+}

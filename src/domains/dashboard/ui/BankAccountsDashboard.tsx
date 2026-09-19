@@ -2,6 +2,8 @@
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { DataTable } from "@/components/ui/data-table";
+import type { DataTableFeatures } from "@/components/ui/data-table-features";
 import { EmptyPrompt } from "@/components/ui/empty-prompt";
 import {
   Popover,
@@ -13,6 +15,7 @@ import {
 } from "@/components/ui/popover";
 import { RowActionsMenu } from "@/components/ui/row-actions-menu";
 import { DashboardBudgets } from "@/domains/budgets/ui/DashboardBudgets";
+import { DashboardPings } from "@/domains/piggy-pings/ui/DashboardPings";
 import {
   ACCOUNT_SECTION_LABELS,
   detectCardNetwork,
@@ -28,6 +31,7 @@ import { displayAccountName } from "@/domains/dashboard/domain/accountName";
 import { formatMoney } from "@/domains/dashboard/domain/money";
 import type {
   DashboardAccount,
+  DashboardLoanPayment,
   DashboardLoanSummary,
   DashboardTransaction,
 } from "@/domains/dashboard/domain/types";
@@ -47,6 +51,7 @@ import {
   normalizeRateType,
 } from "@/domains/loans/domain/loanTypes";
 import { LoanAccountActions } from "@/domains/loans/ui/LoanAccountActions";
+import { LoanTxnDescriptionLookupsField } from "@/domains/loans/ui/LoanTxnDescriptionLookupsField";
 import { LoanPaymentTimeline } from "@/domains/loans/ui/LoanPaymentTimeline";
 import { LoanTypeIcon } from "@/domains/loans/ui/LoanTypeIcon";
 import { StatementUpload } from "@/domains/statements/ui/StatementUpload";
@@ -57,9 +62,10 @@ import { usePrivateLedger } from "@/domains/vault/ui/usePrivateLedger";
 import { cn } from "@/lib/utils";
 import {
   formatCompactDisplayDate,
-  formatDisplayDate,
+  formatLongDisplayDate,
 } from "@/shared/lib/format-date";
 import { toastIfOffline } from "@/shared/offline/offlineWriteGuard";
+import { createColumnHelper } from "@tanstack/react-table";
 import { useConvex } from "convex/react";
 import { Info, PlusIcon } from "lucide-react";
 import Link from "next/link";
@@ -263,21 +269,74 @@ function DetailRow({ label, value }: { label: string; value: string }) {
   );
 }
 
+type PaymentHistoryRow = DashboardLoanPayment & {
+  description: string;
+};
+
+const paymentHistoryHelper = createColumnHelper<
+  DataTableFeatures,
+  PaymentHistoryRow
+>();
+
+function loanPaymentDescription(
+  payment: DashboardLoanPayment,
+  txn: DashboardTransaction | undefined,
+  lookup: string,
+): string {
+  const fromTxn =
+    txn?.originalDescription?.trim() ||
+    txn?.name?.trim() ||
+    txn?.merchantClean?.trim() ||
+    "";
+  if (fromTxn) return fromTxn;
+  const phrase = lookup.trim();
+  if (payment.assumed) {
+    if (phrase) return phrase;
+    return "Assumed payment";
+  }
+  if (payment.transactionId) return "Matched payment";
+  return "Confirmed payment";
+}
+
+function postedLabel(row: PaymentHistoryRow): string {
+  if (row.assumed) return "Assumed";
+  if (row.transactionId) return formatLongDisplayDate(row.postedDate);
+  return "Confirmed";
+}
+
 function LoanPaymentHistory({
   accountId,
   loan,
   currency,
+  transactions,
 }: {
   accountId: string;
   loan: DashboardLoanSummary;
   currency: string;
+  transactions: DashboardTransaction[];
 }) {
   const client = useConvex();
   const privateLedger = usePrivateLedger();
   const [busyNumber, setBusyNumber] = useState<number | null>(null);
-  const rows = [...loan.payments].sort(
-    (a, b) => b.paymentNumber - a.paymentNumber,
-  );
+  const lookup = loan.txnDescriptionLookup || loan.matchMerchantClean;
+
+  const rows = useMemo(() => {
+    const byTxnId = new Map(
+      transactions.map((txn) => [txn.transactionId, txn] as const),
+    );
+    return [...loan.payments]
+      .sort((a, b) => b.paymentNumber - a.paymentNumber)
+      .map((payment) => ({
+        ...payment,
+        description: loanPaymentDescription(
+          payment,
+          payment.transactionId
+            ? byTxnId.get(payment.transactionId)
+            : undefined,
+          lookup,
+        ),
+      }));
+  }, [loan.payments, lookup, transactions]);
 
   async function decidePayment(
     paymentNumber: number,
@@ -319,6 +378,150 @@ function LoanPaymentHistory({
     }
   }
 
+  const columns = useMemo(
+    () =>
+      paymentHistoryHelper.columns([
+        paymentHistoryHelper.display({
+          id: "actions",
+          header: () => <span className="sr-only">Actions</span>,
+          cell: ({ row }) => {
+            if (!row.original.assumed) return null;
+            const paymentNumber = row.original.paymentNumber;
+            const busy = busyNumber === paymentNumber;
+            return (
+              <div className="flex items-center justify-center">
+                <RowActionsMenu
+                  label={`payment ${paymentNumber}`}
+                  size="sm"
+                  actions={[
+                    {
+                      label: busy ? "Confirming..." : "Confirm",
+                      disabled: busy,
+                      onSelect: () =>
+                        void decidePayment(paymentNumber, "confirm"),
+                    },
+                    {
+                      label: busy ? "Removing..." : "Remove",
+                      variant: "destructive",
+                      disabled: busy,
+                      onSelect: () =>
+                        void decidePayment(paymentNumber, "remove"),
+                    },
+                  ]}
+                />
+              </div>
+            );
+          },
+          enableSorting: false,
+          enableHiding: false,
+          meta: { label: "Actions", width: "2rem", keepOpaque: true },
+        }),
+        paymentHistoryHelper.accessor("scheduledDate", {
+          header: "Scheduled",
+          cell: ({ getValue }) => (
+            <span className="text-base leading-snug md:text-sm">
+              {formatLongDisplayDate(getValue())}
+            </span>
+          ),
+          filterFn: "dateWindow",
+          sortFn: "datetime",
+          meta: {
+            width: "14rem",
+            nowrap: true,
+            description: "Date this payment is due on the schedule.",
+          },
+        }),
+        paymentHistoryHelper.accessor("paymentNumber", {
+          header: "No.",
+          cell: ({ getValue }) => (
+            <span className="font-medium tabular-nums">{Number(getValue())}</span>
+          ),
+          enableSorting: false,
+          meta: {
+            width: "4.5rem",
+            nowrap: true,
+            keepOpaque: true,
+            label: "No.",
+          },
+        }),
+        paymentHistoryHelper.accessor("description", {
+          header: "Description",
+          cell: ({ getValue }) => (
+            <span className="block text-sm font-medium leading-snug wrap-break-word">
+              {String(getValue())}
+            </span>
+          ),
+          meta: {
+            width: "28rem",
+            grow: true,
+            wrap: true,
+            cardTitle: true,
+            description: "Bank line when a payment matched, else the lookup.",
+          },
+        }),
+        paymentHistoryHelper.display({
+          id: "posted",
+          header: "Posted",
+          cell: ({ row }) => (
+            <span className="text-sm text-[var(--muted-foreground)]">
+              {postedLabel(row.original)}
+            </span>
+          ),
+          enableSorting: false,
+          meta: {
+            width: "14rem",
+            wrap: true,
+            description: "Bank post date, or assumed until you confirm.",
+          },
+        }),
+        paymentHistoryHelper.accessor("paymentAmount", {
+          header: "Payment",
+          cell: ({ getValue }) => (
+            <MoneyText
+              amount={Number(getValue())}
+              currency={currency}
+              tone="neutral"
+            />
+          ),
+          meta: { width: "8rem", nowrap: true },
+        }),
+        paymentHistoryHelper.accessor("interestPortion", {
+          header: "Interest",
+          cell: ({ getValue }) => (
+            <MoneyText
+              amount={Number(getValue())}
+              currency={currency}
+              tone="cost"
+            />
+          ),
+          meta: { width: "8rem", nowrap: true },
+        }),
+        paymentHistoryHelper.accessor("principalPortion", {
+          header: "Principal",
+          cell: ({ getValue }) => (
+            <MoneyText
+              amount={Number(getValue())}
+              currency={currency}
+              tone="neutral"
+            />
+          ),
+          meta: { width: "8rem", nowrap: true },
+        }),
+        paymentHistoryHelper.accessor("balanceAfter", {
+          header: "Balance",
+          cell: ({ getValue }) => (
+            <MoneyText
+              amount={Number(getValue())}
+              currency={currency}
+              tone={balanceTone(Number(getValue()), "liability")}
+            />
+          ),
+          meta: { width: "8.5rem", nowrap: true },
+        }),
+      ]),
+    [busyNumber, currency],
+  );
+
   return (
     <div className="space-y-4">
       <h2 className="flex items-center gap-2 text-lg font-semibold tracking-tight">
@@ -348,105 +551,18 @@ function LoanPaymentHistory({
           </PopoverContent>
         </Popover>
       </h2>
-      <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-surface-elevated">
-        <div className="overflow-x-auto overscroll-x-contain">
-          <table className="w-full min-w-[46rem] text-left text-sm">
-            <thead className="border-b border-[var(--border)] text-xs text-[var(--muted-foreground)]">
-              <tr>
-                <th className="sticky left-0 z-10 bg-surface-elevated px-3 py-2 font-medium">
-                  <span className="sr-only">Actions</span>
-                </th>
-                <th className="px-3 py-2 font-medium">#</th>
-                <th className="px-3 py-2 font-medium">Scheduled</th>
-                <th className="px-3 py-2 font-medium">Posted</th>
-                <th className="px-3 py-2 font-medium text-right">Payment</th>
-                <th className="px-3 py-2 font-medium text-right">Interest</th>
-                <th className="px-3 py-2 font-medium text-right">Principal</th>
-                <th className="px-3 py-2 font-medium text-right">Balance</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row) => (
-                <tr
-                  key={row.paymentNumber}
-                  className="border-t border-[var(--border)]"
-                >
-                  <td className="sticky left-0 z-10 bg-surface-elevated px-2 py-2">
-                    {row.assumed ? (
-                      <RowActionsMenu
-                        label={`payment ${row.paymentNumber}`}
-                        size="md"
-                        actions={[
-                          {
-                            label:
-                              busyNumber === row.paymentNumber
-                                ? "Confirming..."
-                                : "Confirm",
-                            disabled: busyNumber === row.paymentNumber,
-                            onSelect: () =>
-                              void decidePayment(row.paymentNumber, "confirm"),
-                          },
-                          {
-                            label:
-                              busyNumber === row.paymentNumber
-                                ? "Removing..."
-                                : "Remove",
-                            variant: "destructive",
-                            disabled: busyNumber === row.paymentNumber,
-                            onSelect: () =>
-                              void decidePayment(row.paymentNumber, "remove"),
-                          },
-                        ]}
-                      />
-                    ) : null}
-                  </td>
-                  <td className="px-3 py-2 tabular-nums">
-                    {row.paymentNumber}
-                  </td>
-                  <td className="px-3 py-2 font-mono tabular-nums">
-                    {formatDisplayDate(row.scheduledDate)}
-                  </td>
-                  <td className="px-3 py-2 font-mono tabular-nums text-[var(--muted-foreground)]">
-                    {row.assumed
-                      ? "assumed"
-                      : row.transactionId
-                        ? formatDisplayDate(row.postedDate)
-                        : "Confirmed"}
-                  </td>
-                  <td className="px-3 py-2 text-right">
-                    <MoneyText
-                      amount={row.paymentAmount}
-                      currency={currency}
-                      tone="neutral"
-                    />
-                  </td>
-                  <td className="px-3 py-2 text-right">
-                    <MoneyText
-                      amount={row.interestPortion}
-                      currency={currency}
-                      tone="cost"
-                    />
-                  </td>
-                  <td className="px-3 py-2 text-right">
-                    <MoneyText
-                      amount={row.principalPortion}
-                      currency={currency}
-                      tone="neutral"
-                    />
-                  </td>
-                  <td className="px-3 py-2 text-right font-medium">
-                    <MoneyText
-                      amount={row.balanceAfter}
-                      currency={currency}
-                      tone={balanceTone(row.balanceAfter, "liability")}
-                    />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      <DataTable
+        columns={columns}
+        data={rows}
+        enableGlobalFilter
+        globalFilterFn="fuzzy"
+        searchPlaceholder="Search…"
+        dateColumnId="scheduledDate"
+        csvFilename="loan-payments.csv"
+        enableColumnToggle
+        initialSorting={[{ id: "scheduledDate", desc: true }]}
+        pageSize={25}
+      />
     </div>
   );
 }
@@ -652,6 +768,44 @@ function AccountDetailView({
             )}
           </div>
         </div>
+        {loan ? (
+          <div className="border-t border-[var(--border)] px-4 py-4 sm:px-5">
+            <div className="mb-2 flex items-center gap-2">
+              <p className="text-sm text-[var(--muted-foreground)]">
+                Transaction lookups
+              </p>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <button
+                    type="button"
+                    className="inline-flex size-6 shrink-0 items-center justify-center rounded-full text-accent hover:text-primary"
+                    aria-label="About transaction lookups"
+                  >
+                    <Info className="size-3.5" />
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent align="start" side="bottom" className="w-72">
+                  <PopoverHeader>
+                    <PopoverTitle>Transaction lookups</PopoverTitle>
+                    <PopoverDescription>
+                      Phrases from bank lines used to attach PAD payments.
+                    </PopoverDescription>
+                    <ul className="mt-1.5 list-disc space-y-1 pl-4 text-muted-foreground">
+                      <li>Pick one or more transactions</li>
+                      <li>Type a shorter phrase and select it</li>
+                      <li>Remove a chip to drop that match</li>
+                    </ul>
+                  </PopoverHeader>
+                </PopoverContent>
+              </Popover>
+            </div>
+            <p className="sr-only">
+              Add or remove transaction description phrases that identify this
+              loan&apos;s payments.
+            </p>
+            <LoanTxnDescriptionLookupsField accountId={account.accountId} />
+          </div>
+        ) : null}
       </div>
 
       {loan ? (
@@ -661,6 +815,7 @@ function AccountDetailView({
             accountId={account.accountId}
             loan={loan}
             currency={currency}
+            transactions={transactions}
           />
         </>
       ) : (
@@ -878,7 +1033,12 @@ export function BankAccountsDashboard({
         </section>
       ))}
 
-      {showBudgets ? <DashboardBudgets /> : null}
+      {showBudgets ? (
+        <>
+          <DashboardBudgets />
+          <DashboardPings />
+        </>
+      ) : null}
 
       <AddLoanDialog open={addLoanOpen} onOpenChange={setAddLoanOpen} />
     </div>

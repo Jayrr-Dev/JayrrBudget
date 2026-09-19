@@ -33,6 +33,11 @@ export type BudgetTableRow = {
   isActive: boolean;
   cycle: BudgetCycle;
   startDate: string;
+  pingLinks: Array<{
+    pingId: Id<"piggyPings">;
+    warn: boolean;
+    over: boolean;
+  }>;
   createdAt: number;
   updatedAt: number;
 };
@@ -57,11 +62,17 @@ export function useBudgetProgressItems() {
   const privateLedger = usePrivateLedger();
   const rows = useMemo((): BudgetTableRow[] => {
     if (!budgets) return [];
-    return budgets.map((budget) => ({
-      ...budget,
-      lookupTable: lookupTableLabel(catalog, budget.classLookup),
-      startDate: budget.startDate || toBudgetYmd(new Date(budget.createdAt)),
-    }));
+    return budgets
+      .map((budget) => ({
+        ...budget,
+        pingLinks: budget.pingLinks ?? [],
+        lookupTable: lookupTableLabel(catalog, budget.classLookup),
+        startDate: budget.startDate || toBudgetYmd(new Date(budget.createdAt)),
+      }))
+      .sort((a, b) => {
+        if (a.isActive !== b.isActive) return a.isActive ? -1 : 1;
+        return b.createdAt - a.createdAt;
+      });
   }, [budgets, catalog]);
 
   const progressItems = useMemo(() => {

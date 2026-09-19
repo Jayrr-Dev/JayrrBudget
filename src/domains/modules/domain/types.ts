@@ -129,9 +129,9 @@ export const SEED_MODULES: SeedModule[] = [
     description: "Reminders Piggy can send as toast, email, popup, or banner.",
     href: "/piggy-pings",
     icon: "IconBell",
-    category: "core",
+    category: "finance",
     enabled: true,
-    sortOrder: 55,
+    sortOrder: 18,
     isCore: false,
   },
   {

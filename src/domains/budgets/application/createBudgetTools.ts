@@ -45,10 +45,11 @@ export function createBudgetTools(client: ConvexHttpClient) {
   return {
     list_budgets: tool({
       description:
-        "List this user's spend budgets (name, class, description match, amount, cycle, start date, thresholds).",
+        "List this user's active spend budgets (name, class, description match, amount, cycle, start date, thresholds). Deactivated budgets are omitted and do not warn.",
       inputSchema: z.object({}),
       execute: async () => {
-        return await client.query(api.budgets.list, {});
+        const rows = await client.query(api.budgets.list, {});
+        return rows.filter((row) => row.isActive);
       },
     }),
 
