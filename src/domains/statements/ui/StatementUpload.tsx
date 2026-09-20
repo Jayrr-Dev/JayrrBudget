@@ -36,7 +36,6 @@ import {
 import { Spinner } from "@/components/ui/spinner";
 import { getVaultMasterKey } from "@/crypto/session";
 import type { MutationClient } from "@/crypto/vaultRecords";
-import { useFeatureFlags } from "@/domains/feature-flags/ui/useFeatureFlag";
 import { filesFromDataTransfer } from "@/domains/statements/domain/collectDroppedFiles";
 import {
   normalizeStatementFilename,
@@ -48,7 +47,10 @@ import {
   STATEMENT_IMPORT_STEPS,
   type StatementImportProgress,
 } from "@/domains/statements/domain/importProgress";
-import { isOcrDocumentFile } from "@/domains/statements/domain/ocrDocumentTypes";
+import {
+  isStatementUploadFile,
+  STATEMENT_UPLOAD_ACCEPT,
+} from "@/domains/statements/domain/ocrDocumentTypes";
 import {
   isUploadAbortError,
   uploadBankStatement,
@@ -58,7 +60,6 @@ import {
   OCR_UPLOAD_HINT_TOUCH,
   useOcrDocumentInputs,
 } from "@/domains/statements/ui/OcrDocumentPickerButton";
-import { StatementAiRulesDialog } from "@/domains/statements/ui/StatementAiRulesDialog";
 import { useOcrMode } from "@/domains/statements/ui/useOcrMode";
 import { encryptStatementImportToVault } from "@/domains/vault/application/encryptStatementImport";
 import {
@@ -83,13 +84,10 @@ import {
   CameraIcon,
   CheckIcon,
   CopyCheckIcon,
-  EllipsisIcon,
   FileTextIcon,
   FileUpIcon,
   FileWarningIcon,
-  FolderUpIcon,
   Info,
-  ListChecks,
   UploadIcon,
   XIcon,
 } from "lucide-react";
@@ -129,10 +127,12 @@ type Fingerprint = {
 
 type Props = {
   onImported?: () => void | Promise<void>;
+  triggerVariant?: "outline" | "default";
+  showCsvImport?: boolean;
 };
 
-function isStatementUploadFile(file: File) {
-  return isOcrDocumentFile(file);
+function isQueuedStatementFile(file: File) {
+  return isStatementUploadFile(file);
 }
 
 function formatFileSize(bytes: number) {
@@ -198,19 +198,21 @@ function classifyAgainstKnown(
   return { kind: null, hint: null };
 }
 
-export function StatementUpload({ onImported }: Props) {
+export function StatementUpload({
+  onImported,
+  triggerVariant = "outline",
+  showCsvImport = true,
+}: Props) {
   const busyRef = useRef(false);
   const abortRef = useRef<AbortController | null>(null);
   const itemsRef = useRef<QueueItem[]>([]);
   const fingerprintsRef = useRef<Fingerprint[] | undefined>(undefined);
   const hashingIdsRef = useRef(new Set<string>());
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [rulesOpen, setRulesOpen] = useState(false);
   const [items, setItems] = useState<QueueItem[]>([]);
   const [dragOver, setDragOver] = useState(false);
   const [busy, setBusy] = useState(false);
   const client = useConvex();
-  const flags = useFeatureFlags();
   const ocrMode = useOcrMode();
   const privateLedger = usePrivateLedger();
   const { isOffline } = useConnectionState();
@@ -220,6 +222,7 @@ export function StatementUpload({ onImported }: Props) {
   const ocrPicker = useOcrDocumentInputs({
     multiple: true,
     disabled: busy || isOffline,
+    accept: STATEMENT_UPLOAD_ACCEPT,
     onFiles: (files) => addFiles(files),
   });
 
@@ -347,7 +350,7 @@ export function StatementUpload({ onImported }: Props) {
         skippedCap += 1;
         continue;
       }
-      if (!isStatementUploadFile(file)) {
+      if (!isQueuedStatementFile(file)) {
         skippedType += 1;
         continue;
       }
@@ -381,7 +384,7 @@ export function StatementUpload({ onImported }: Props) {
     }
 
     const notes: string[] = [];
-    if (skippedType) notes.push(`${skippedType} not PDF/image`);
+    if (skippedType) notes.push(`${skippedType} not a statement file`);
     if (skippedSize) notes.push(`${skippedSize} over 20MB`);
     if (skippedDup) notes.push(`${skippedDup} already queued`);
     if (skippedCap) notes.push(`cap ${MAX_FILES} files`);
@@ -417,6 +420,10 @@ export function StatementUpload({ onImported }: Props) {
     }
     clearQueue();
     setDialogOpen(false);
+  }
+
+  function openUploadDialog() {
+    setDialogOpen(true);
   }
 
   async function startUpload() {
@@ -495,12 +502,22 @@ export function StatementUpload({ onImported }: Props) {
           },
         });
 
-        if (!flags.cloudProcessing) {
-          throw new Error(
-            "Turn on Cloud Processing in Modules before uploading a document.",
-          );
-        }
         await vaultWrite(async () => {
+          patchItem(item.id, {
+            state: "processing",
+            progress: {
+              step: "save",
+              ...STATEMENT_IMPORT_STEPS.save,
+            },
+          });
+          inFlight.set(
+            item.id,
+            `${item.file.name} · ${formatImportProgress({
+              step: "save",
+              ...STATEMENT_IMPORT_STEPS.save,
+            })}`,
+          );
+          refreshToast();
           const opened = await hydrateVaultSession(
             client as unknown as VaultClient,
           );
@@ -676,15 +693,14 @@ export function StatementUpload({ onImported }: Props) {
         <PopoverHeader className="gap-1.5">
           <PopoverTitle>Manual import path</PopoverTitle>
           <PopoverDescription>
-            Opens a picker for PDFs, photos, or a folder of statements.
+            Opens a picker for PDFs, photos, or bank exports.
           </PopoverDescription>
           <ul className="mt-1.5 list-disc space-y-1 pl-4 text-muted-foreground">
             <li>
               Upload scans the files. Classify is on the Transactions page.
             </li>
             <li>Up to 24 files. Duplicates are marked before scan.</li>
-            <li>Upload rules apply only to your own statements.</li>
-            <li>CSV import is encrypted.</li>
+            <li>CSV import is encrypted. Odd layouts are cleaned with AI.</li>
           </ul>
         </PopoverHeader>
       </PopoverContent>
@@ -694,67 +710,27 @@ export function StatementUpload({ onImported }: Props) {
   const uploadButton = (
     <Button
       type="button"
-      variant="outline"
+      variant={triggerVariant}
+      size={triggerVariant === "default" ? "sm" : "default"}
       disabled={busy}
       className="gap-1 px-3 max-md:px-2.5"
       aria-label={busy ? "Uploading" : "Upload statement"}
-      onClick={() => setDialogOpen(true)}
+      onClick={openUploadDialog}
     >
       {triggerLabel}
-      {uploadHelp}
+      {showCsvImport ? uploadHelp : null}
     </Button>
   );
 
   return (
     <div className="flex flex-col items-start gap-1.5">
-      {isMobile ? (
-        <div className="flex flex-nowrap items-center gap-2">
-          {uploadButton}
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              aria-label="More import options"
-              render={
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="icon"
-                  disabled={busy}
-                />
-              }
-            >
-              <EllipsisIcon className="size-4" />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="min-w-44">
-              <DropdownMenuItem
-                className="p-0 focus:bg-transparent"
-                onSelect={(event) => event.preventDefault()}
-              >
-                <ImportLedgerCsv onImported={onImported} variant="item" />
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                disabled={busy}
-                onClick={() => setRulesOpen(true)}
-              >
-                <ListChecks />
-                Upload Rules
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-      ) : (
+      {showCsvImport ? (
         <ButtonGroup>
           <ImportLedgerCsv onImported={onImported} />
           {uploadButton}
-          <Button
-            type="button"
-            variant="outline"
-            disabled={busy}
-            onClick={() => setRulesOpen(true)}
-          >
-            <ListChecks data-icon="inline-start" />
-            Upload Rules
-          </Button>
         </ButtonGroup>
+      ) : (
+        uploadButton
       )}
 
       <Dialog
@@ -764,7 +740,7 @@ export function StatementUpload({ onImported }: Props) {
             closeDialog();
             return;
           }
-          setDialogOpen(true);
+          openUploadDialog();
         }}
       >
         <DialogContent
@@ -811,13 +787,16 @@ export function StatementUpload({ onImported }: Props) {
                   <PopoverHeader className="gap-1.5">
                     <PopoverTitle>How upload works</PopoverTitle>
                     <PopoverDescription className="sr-only">
-                      Drag PDFs or photos here, or choose files or a folder. Up
-                      to {MAX_FILES} · 20MB each. Import, then classify on
+                      Drag PDFs, photos, or bank exports here, or choose files.
+                      Up to {MAX_FILES} · 20MB each. Import, then classify on
                       Transactions.
                     </PopoverDescription>
                     <ul className="mt-1 list-disc space-y-1 pl-4 text-sm leading-relaxed text-muted-foreground">
                       <li>On your phone, tap to take a photo or pick a file</li>
-                      <li>Folders are fine. Classify is on Transactions.</li>
+                      <li>
+                        Bank CSV, OFX, QFX, QIF, QBO, and TXT exports work too
+                      </li>
+                      <li>Classify is on Transactions.</li>
                       <li>Up to {MAX_FILES} · 20MB each.</li>
                       <li>Already-imported files are marked before scan.</li>
                       <li>The scan is encrypted. Only you can read it.</li>
@@ -827,7 +806,7 @@ export function StatementUpload({ onImported }: Props) {
               </Popover>
             </DialogTitle>
             <DialogDescription className="sr-only">
-              Drag PDFs or photos here, or choose files or a folder. Up to{" "}
+              Drag PDFs, photos, or bank exports here, or choose files. Up to{" "}
               {MAX_FILES} · 20MB each. Import, then classify on Transactions.
               The scan is encrypted. Only you can read it.
             </DialogDescription>
@@ -843,7 +822,7 @@ export function StatementUpload({ onImported }: Props) {
                   render={
                     <button
                       type="button"
-                      aria-label="Upload statement files, a folder, or take a photo"
+                      aria-label="Upload statement files or take a photo"
                       onDragEnter={(event) => {
                         event.preventDefault();
                         if (!pickerLocked) setDragOver(true);
@@ -884,7 +863,7 @@ export function StatementUpload({ onImported }: Props) {
                     {OCR_UPLOAD_HINT_POINTER}
                   </span>
                   <span className="text-xs text-muted-foreground">
-                    PDF or photo · take photo, file, or folder · up to{" "}
+                    PDF, photo, CSV, or OFX · take photo or file · up to{" "}
                     {MAX_FILES} · 20MB each
                   </span>
                 </DropdownMenuTrigger>
@@ -907,13 +886,6 @@ export function StatementUpload({ onImported }: Props) {
                   >
                     <FileUpIcon className="size-4" />
                     Choose file
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    className="cursor-pointer"
-                    onClick={() => ocrPicker.openFolderPicker()}
-                  >
-                    <FolderUpIcon className="size-4" />
-                    Choose folder
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
@@ -971,16 +943,7 @@ export function StatementUpload({ onImported }: Props) {
                     : "Drag & drop or choose file to upload"}
                 </span>
                 <span className="text-xs text-muted-foreground">
-                  PDF or photo · up to {MAX_FILES} · 20MB each
-                </span>
-                <span
-                  className="text-xs text-muted-foreground underline-offset-2 hover:underline"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    if (!pickerLocked) ocrPicker.openFolderPicker();
-                  }}
-                >
-                  Choose folder
+                  PDF, photo, CSV, or OFX · up to {MAX_FILES} · 20MB each
                 </span>
               </div>
             )}
@@ -1116,8 +1079,6 @@ export function StatementUpload({ onImported }: Props) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      <StatementAiRulesDialog open={rulesOpen} onOpenChange={setRulesOpen} />
     </div>
   );
 }

@@ -8,10 +8,10 @@ import {
   PopoverTitle,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import {
-  DashboardToolbar,
-  useDashboard,
-} from "@/domains/dashboard/ui/DashboardPanels";
+import { ButtonGroup } from "@/components/ui/button-group";
+import { useDashboard } from "@/domains/dashboard/ui/DashboardPanels";
+import { StatementAiRulesButton } from "@/domains/statements/ui/StatementAiRulesButton";
+import { AddTransactionButton } from "@/domains/transactions/ui/AddTransactionDialog";
 import { ClassifyTransactionsButton } from "@/domains/transactions/ui/ClassifyTransactionsButton";
 import { TransactionsDataTable } from "@/domains/transactions/ui/TransactionsDataTable";
 import { Info } from "lucide-react";
@@ -42,8 +42,8 @@ function TransactionsTitleInfo() {
           <ul className="mt-1.5 list-disc space-y-1 pl-4 text-muted-foreground">
             <li>Bank details on the left; category and labels on the right</li>
             <li>Search, month, and date range filter the list</li>
-            <li>Upload a statement or CSV to add rows</li>
-            <li>Classify labels rows that still need a category</li>
+            <li>Add a row by hand, or import statements on Statement imports</li>
+            <li>Upload Rules guide Classify for rows that still need a category</li>
           </ul>
         </PopoverHeader>
       </PopoverContent>
@@ -76,8 +76,13 @@ export default function TransactionsPage() {
           </p>
         </div>
         <div className="flex shrink-0 flex-nowrap items-center justify-end gap-2">
-          <DashboardToolbar onImported={() => dashboard.reload?.()} />
-          <ClassifyTransactionsButton transactions={data?.transactions ?? []} />
+          <ButtonGroup>
+            <AddTransactionButton />
+            <StatementAiRulesButton />
+            <ClassifyTransactionsButton
+              transactions={data?.transactions ?? []}
+            />
+          </ButtonGroup>
         </div>
       </header>
       <TransactionsDataTable

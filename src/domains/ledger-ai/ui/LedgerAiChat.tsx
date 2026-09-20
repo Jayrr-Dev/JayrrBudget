@@ -96,7 +96,7 @@ import {
 } from "@/domains/ledger-ai/ui/PiggyTranscript";
 import { PiggyVaultLedgerWrite } from "@/domains/ledger-ai/ui/PiggyVaultLedgerWrite";
 import { useScratchNote } from "@/domains/scratch-note/scratchNoteStore";
-import { OCR_DOCUMENT_ACCEPT } from "@/domains/statements/domain/ocrDocumentTypes";
+import { STATEMENT_UPLOAD_ACCEPT } from "@/domains/statements/domain/ocrDocumentTypes";
 import { dashboardFromPrivateLedger } from "@/domains/vault/application/dashboardFromPrivateLedger";
 import { usePrivateLedger } from "@/domains/vault/ui/usePrivateLedger";
 import { cn } from "@/lib/utils";
@@ -689,7 +689,7 @@ function PiggyChatPaneSession({
           <input
             ref={fileInputRef}
             type="file"
-            accept={OCR_DOCUMENT_ACCEPT}
+            accept={STATEMENT_UPLOAD_ACCEPT}
             multiple
             hidden
             onChange={(event) => {

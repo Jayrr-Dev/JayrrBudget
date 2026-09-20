@@ -8,6 +8,7 @@ let lastViewSavedAt: number | undefined;
 let lastViewHydrateDone = false;
 let snapshotVersion = 0;
 const snapshotListeners = new Set<() => void>();
+let notifyScheduled = false;
 
 function dashboardCacheKey(limit: number | null) {
   return limit == null ? "all" : String(limit);
@@ -15,7 +16,12 @@ function dashboardCacheKey(limit: number | null) {
 
 function bumpSnapshots() {
   snapshotVersion += 1;
-  for (const listener of snapshotListeners) listener();
+  if (notifyScheduled) return;
+  notifyScheduled = true;
+  queueMicrotask(() => {
+    notifyScheduled = false;
+    for (const listener of snapshotListeners) listener();
+  });
 }
 
 export function subscribeLedgerSnapshots(onStoreChange: () => void) {
@@ -42,8 +48,10 @@ export function peekDashboard(limit: number | null) {
 }
 
 export function rememberMerchants<T>(rows: T[]) {
+  if (merchants === rows) return false;
   merchants = rows;
   bumpSnapshots();
+  return true;
 }
 
 export function peekMerchants<T>() {

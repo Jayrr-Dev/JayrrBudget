@@ -4,12 +4,12 @@ import { DataTable } from "@/components/ui/data-table";
 import type { DataTableFeatures } from "@/components/ui/data-table-features";
 import { displayAccountName } from "@/domains/dashboard/domain/accountName";
 import { formatMoney } from "@/domains/dashboard/domain/money";
+import { transactionTone } from "@/domains/dashboard/domain/moneyTone";
 import type {
   DashboardAccount,
   DashboardTransaction,
 } from "@/domains/dashboard/domain/types";
 import { queryKeys } from "@/domains/dashboard/queries/query-keys";
-import { transactionTone } from "@/domains/dashboard/domain/moneyTone";
 import { MoneyText } from "@/domains/dashboard/ui/MoneyText";
 import { MerchantLabel } from "@/domains/merchants/ui/MerchantLabel";
 import { LOG_MONEY_RANGE_OPTIONS } from "@/domains/transactions/domain/amountLogRange";
@@ -156,6 +156,41 @@ function buildColumns(
           filterFn: "amountLogRange",
           sortFn: "basic",
         }),
+        columnHelper.accessor("authorizedDate", {
+          header: "Authorized",
+          meta: bandMeta(
+            "9.5rem",
+            "read",
+            "Purchase/auth date when it differs from posted.",
+          ),
+          cell: ({ getValue }) => {
+            const value = getValue();
+            if (value == null || value === "") {
+              return (
+                <span className="text-sm text-[var(--muted-foreground)]">
+                  -
+                </span>
+              );
+            }
+            return (
+              <span className="whitespace-nowrap font-mono text-xs tabular-nums">
+                {formatDisplayDate(value)}
+              </span>
+            );
+          },
+          filterFn: "fuzzy",
+          sortFn: "datetime",
+        }),
+        columnHelper.accessor("pending", {
+          header: "Pending",
+          meta: bandMeta(
+            "5rem",
+            "read",
+            "True when the charge is not settled yet.",
+          ),
+          cell: ({ getValue }) => textOrDash(getValue() ? "true" : "false"),
+          sortFn: "basic",
+        }),
       ]),
     }),
     columnHelper.group({
@@ -221,78 +256,6 @@ function buildColumns(
             />
           ),
           filterFn: "equalsString",
-          sortFn: "text",
-        }),
-      ]),
-    }),
-    columnHelper.group({
-      id: "dates",
-      header: "Dates",
-      columns: columnHelper.columns([
-        columnHelper.accessor("authorizedDate", {
-          header: "Authorized",
-          meta: bandMeta(
-            "9.5rem",
-            "read",
-            "Purchase/auth date when it differs from posted.",
-          ),
-          cell: ({ getValue }) => {
-            const value = getValue();
-            if (value == null || value === "") {
-              return (
-                <span className="text-sm text-[var(--muted-foreground)]">
-                  -
-                </span>
-              );
-            }
-            return (
-              <span className="whitespace-nowrap font-mono text-xs tabular-nums">
-                {formatDisplayDate(value)}
-              </span>
-            );
-          },
-          filterFn: "fuzzy",
-          sortFn: "datetime",
-        }),
-        columnHelper.accessor("pending", {
-          header: "Pending",
-          meta: bandMeta(
-            "5rem",
-            "read",
-            "True when the charge is not settled yet.",
-          ),
-          cell: ({ getValue }) => textOrDash(getValue() ? "true" : "false"),
-          sortFn: "basic",
-        }),
-      ]),
-    }),
-    columnHelper.group({
-      id: "accountGroup",
-      header: "Account",
-      columns: columnHelper.columns([
-        columnHelper.accessor(
-          (row) => accountNameById.get(row.accountId) ?? row.accountId,
-          {
-            id: "account",
-            header: "Name",
-            meta: bandMeta("22rem", "read", "Friendly account name."),
-            cell: ({ getValue }) => (
-              <span
-                className="block truncate text-sm"
-                title={String(getValue())}
-              >
-                {String(getValue())}
-              </span>
-            ),
-            filterFn: "fuzzy",
-            sortFn: "text",
-          },
-        ),
-        columnHelper.accessor("accountId", {
-          header: "ID",
-          meta: bandMeta("22rem", "read", "Stable ledger account key."),
-          cell: ({ getValue }) => textOrDash(getValue()),
-          filterFn: "fuzzy",
           sortFn: "text",
         }),
       ]),
@@ -462,6 +425,31 @@ function buildColumns(
           filterFn: "equalsString",
           sortFn: "text",
         }),
+        columnHelper.accessor(
+          (row) => accountNameById.get(row.accountId) ?? row.accountId,
+          {
+            id: "account",
+            header: "Account",
+            meta: bandMeta("22rem", "read", "Friendly account name."),
+            cell: ({ getValue }) => (
+              <span
+                className="block truncate text-sm"
+                title={String(getValue())}
+              >
+                {String(getValue())}
+              </span>
+            ),
+            filterFn: "fuzzy",
+            sortFn: "text",
+          },
+        ),
+        columnHelper.accessor("accountId", {
+          header: "Account ID",
+          meta: bandMeta("22rem", "read", "Stable ledger account key."),
+          cell: ({ getValue }) => textOrDash(getValue()),
+          filterFn: "fuzzy",
+          sortFn: "text",
+        }),
         columnHelper.accessor("transactionId", {
           header: "transactionId",
           meta: bandMeta(
@@ -592,12 +580,6 @@ function buildColumns(
           filterFn: "equalsString",
           sortFn: "text",
         }),
-      ]),
-    }),
-    columnHelper.group({
-      id: "status",
-      header: "Status",
-      columns: columnHelper.columns([
         columnHelper.accessor("historyMatch", {
           header: "Cross-check",
           meta: bandMeta(
@@ -670,8 +652,7 @@ export function TransactionsDataTable({
   }, [accounts]);
 
   const accountTypeById = useMemo(
-    () =>
-      new Map(accounts.map((account) => [account.accountId, account.type])),
+    () => new Map(accounts.map((account) => [account.accountId, account.type])),
     [accounts],
   );
 

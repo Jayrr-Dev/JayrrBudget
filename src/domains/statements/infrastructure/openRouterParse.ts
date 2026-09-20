@@ -5,19 +5,25 @@ import {
   type CategoryVocabulary,
 } from "@/domains/statements/application/categoryVocabulary";
 import {
-  detectPaperFactsFields,
-  paperFactsStatementSchema,
+  paperFactsMetaSchema,
   paperFactsToParsed,
   paperFactsTransactionSchemaFor,
-  type PaperFactsFieldSet,
   type PaperFactsStatementInput,
 } from "@/domains/statements/domain/paperFactsStatement";
 import {
   parsedStatementSchema,
   type ParsedStatement,
 } from "@/domains/statements/domain/parsedStatement";
+import {
+  paperFactsParseProgress,
+  type StatementImportProgress,
+} from "@/domains/statements/domain/importProgress";
 import { formatUserAiRulesPromptBlock } from "@/domains/statements/domain/userAiRules";
-import { generateObjectWithFallback, mapPool } from "@/shared/ai/openRouter";
+import {
+  generateObjectWithFallback,
+  mapPool,
+  runWithModelChain,
+} from "@/shared/ai/openRouter";
 import { z } from "zod";
 
 export {
@@ -32,18 +38,16 @@ const transactionBatchSchema = z.object({
   transactions: parsedStatementSchema.shape.transactions,
 });
 
-const paperFactsMetaSchema = paperFactsStatementSchema.omit({
-  transactions: true,
+const paperFactsLineSchema = paperFactsTransactionSchemaFor({
+  location: false,
+  fx: false,
+});
+const paperFactsBatchSchema = z.object({
+  transactions: z.array(paperFactsLineSchema),
 });
 
-/** Statement + row schema trimmed to the field groups this OCR shows. */
-function paperFactsSchemasFor(fields: PaperFactsFieldSet) {
-  const transactions = z.array(paperFactsTransactionSchemaFor(fields));
-  return {
-    statement: paperFactsMetaSchema.extend({ transactions }),
-    batch: z.object({ transactions }),
-  };
-}
+/** Flash models only. Page-parallel extract should not wait on the Service chat pick. */
+const PAPER_FACTS_MODELS = ["deepseek/deepseek-v4-flash", "z-ai/glm-5.3-flash"];
 
 function splitOcrPages(ocrMarkdown: string) {
   const parts = ocrMarkdown
@@ -69,7 +73,7 @@ const SIGN_AND_BALANCE_RULES = [
   "BALANCE: chequing/savings: openingBalance - sum(amounts) = closingBalance (±0.02).",
 ].join("\n");
 
-const DEDUP_AND_META_RULES = [
+const LINE_DEDUP_RULES = [
   "CRITICAL: Canadian credit cards (CIBC Visa etc.) list TWO dates per line: Trans date and Post date.",
   "Emit ONE transaction per statement LINE. Never create two rows for the same line.",
   "Same amount + same description + same Post date = one row, even if OCR repeated it.",
@@ -78,10 +82,15 @@ const DEDUP_AND_META_RULES = [
   "Skip CreditSmart / spend-category summary tables, payment slips, ads, and page footers.",
   "Skip section total rows (Total payments, Total for card, etc.).",
   "openingBalance = Previous balance. closingBalance = Total balance / New balance.",
-  "totalDebits = purchases/charges total when shown. totalCredits = payments/credits total when shown.",
-  "Strip OCR dingbats (arrows, stars, warning marks) from description and merchantName.",
+  "Strip OCR dingbats (arrows, stars, warning marks) from description.",
   "WRAPPED LINES: chequing statements often print the rail on one OCR line and the payee on the next ('ONLINE PURCHASE -' then 'AMAZON.CA'; 'PAD -' then 'SPOTIFY'; 'BILL PAYMENT -' then 'CIBC VISA'). Join them into ONE description: 'ONLINE PURCHASE - AMAZON.CA'.",
   "A description must name who was paid when the statement does. Never emit a description that is only a rail ('PAD -', 'ONLINE PURCHASE -', 'BILL PAYMENT -') or that ends with a dash; look at the neighbouring OCR line for the payee first.",
+  "Keep FX notes like 'USD 12.00 @ 1.42' in description.",
+];
+
+const DEDUP_AND_META_RULES = [
+  ...LINE_DEDUP_RULES,
+  "totalDebits = purchases/charges total when shown. totalCredits = payments/credits total when shown.",
   "Keep FX notes like 'USD 12.00 @ 1.42' in description, and ALSO fill foreignAmount, foreignCurrency, and exchangeRate when present.",
   MERCHANT_CLEAN_AI_RULES,
 ].join("\n");
@@ -124,18 +133,14 @@ const BALANCE_AND_DEDUP_RULES = [
 ].join("\n");
 
 /** Paper-facts extract: ledger math + line text only (no categories / merchants). */
-function paperFactsRules(fields: PaperFactsFieldSet) {
+function paperFactsRules() {
   return [
     SIGN_AND_BALANCE_RULES,
-    DEDUP_AND_META_RULES,
+    LINE_DEDUP_RULES.join("\n"),
     MASK_RULES,
-    "Do NOT invent categories, subcategories, paymentChannel, merchantName, or transactionCode.",
-    `Fill date, authorizedDate, description, amount, pending${fields.location ? ", and locationCity/Region/Country when present" : ""}.`,
-    ...(fields.fx
-      ? [
-          "When a line shows FX (e.g. `12,280.00 PHP @ 0.024` or `USD 12.00 @ 1.42`), fill foreignAmount, foreignCurrency (ISO 4217), and exchangeRate. Leave all three null for domestic CAD lines.",
-        ]
-      : []),
+    "Do NOT invent categories, subcategories, paymentChannel, merchantName, location, or transactionCode.",
+    "Fill date, authorizedDate, description, amount, pending only.",
+    "Keep FX notes like `USD 12.00 @ 1.42` inside description. Do not add extra FX fields.",
     "Keep description as the full original statement line (minus OCR dingbats).",
   ].join("\n");
 }
@@ -284,52 +289,67 @@ export async function rebalanceParsedStatement(
 }
 
 /**
- * Faster paper-facts parse: dates, description, amounts, locations, account meta.
- * No categories, channels, merchant labels, hygiene, or enrichment.
+ * Faster paper-facts parse: dates, description, amounts, account meta.
+ * Pages run in parallel. Location/FX are filled in polish, not by the model.
  * Optional owner preferences apply only to this PDF extract (never other AI paths).
  */
 export async function parseStatementPaperFacts(
   ocrMarkdown: string,
-  options?: { sourceHint?: string; userRules?: string[] },
+  options?: {
+    sourceHint?: string;
+    userRules?: string[];
+    onProgress?: (progress: StatementImportProgress) => void;
+  },
+): Promise<ParsedStatement> {
+  return runWithModelChain(PAPER_FACTS_MODELS, () =>
+    parseStatementPaperFactsWithModels(ocrMarkdown, options),
+  );
+}
+
+async function parseStatementPaperFactsWithModels(
+  ocrMarkdown: string,
+  options?: {
+    sourceHint?: string;
+    userRules?: string[];
+    onProgress?: (progress: StatementImportProgress) => void;
+  },
 ): Promise<ParsedStatement> {
   const pages = splitOcrPages(ocrMarkdown);
   const started = Date.now();
   const hintBlock = sourceHintBlock(options?.sourceHint);
-  // After hard rules in each prompt - preferences are advisory for this PDF only.
   const userBlock = formatUserAiRulesPromptBlock(options?.userRules);
-  // Only ask for FX / location columns when the OCR shows them; the code-side
-  // FX regex (fillFxGapsFromDescription) still catches stragglers.
-  const fields = detectPaperFactsFields(ocrMarkdown);
-  const schemas = paperFactsSchemasFor(fields);
-  const rules = paperFactsRules(fields);
-  const fieldNote = `fields: fx=${fields.fx ? "on" : "off"} location=${fields.location ? "on" : "off"}`;
-
-  if (pages.length <= 2) {
-    const { object } = await generateObjectWithFallback({
-      schema: schemas.statement,
-      logLabel: "statements-paper",
-      prompt: [
-        "Extract paper facts from this Canadian bank/credit-card OCR.",
-        "Extract EVERY posted transaction line. Prefer CAD.",
-        "accountType (pick one): chequing|checking, savings, credit|credit_card (Visa/Mastercard/Amex), lending|line_of_credit (LOC/HELOC/loan), other (TFSA/business/unclear).",
-        ...hintBlock,
-        rules,
-        ...userBlock,
-        ocrMarkdown.slice(0, 120_000),
-      ].join("\n"),
+  const rules = paperFactsRules();
+  const pageCount = pages.length;
+  let pagesDone = 0;
+  let lastProgress = paperFactsParseProgress({
+    pageCount,
+    pagesDone: 0,
+    label:
+      pageCount === 1
+        ? "Reading lines…"
+        : `Reading lines on ${pageCount} pages…`,
+  });
+  const emit = (progress: StatementImportProgress) => {
+    lastProgress = progress;
+    options?.onProgress?.(progress);
+  };
+  emit(lastProgress);
+  const beat = setInterval(() => {
+    const waited = Math.round((Date.now() - started) / 1000);
+    if (waited < 8) return;
+    options?.onProgress?.({
+      ...lastProgress,
+      label: `${lastProgress.label.replace(/ · \d+s$/, "")} · ${waited}s`,
     });
-
-    console.info(
-      `[statements] paper-facts single-pass ${object.transactions.length} txns in ${Date.now() - started}ms (${fieldNote})`,
-    );
-    return paperFactsToParsed(object);
-  }
+  }, 8_000);
 
   const preview = ocrMarkdown.slice(0, 24_000);
 
+  try {
   const metaPromise = generateObjectWithFallback({
     schema: paperFactsMetaSchema,
     logLabel: "statements-paper-meta",
+    timeoutMs: 40_000,
     prompt: [
       "Extract statement metadata only from this Canadian bank/credit-card OCR.",
       "No transactions. Prefer CAD.",
@@ -337,40 +357,66 @@ export async function parseStatementPaperFacts(
       ...hintBlock,
       MASK_RULES,
       "openingBalance = Previous balance. closingBalance = Total balance / New balance.",
-      "Fill statementPeriodStart/End, totalDebits, totalCredits when present.",
+      "Fill statementPeriodStart/End when present.",
       ...userBlock,
       "",
       preview,
     ].join("\n"),
   });
 
-  const pageResults = await mapPool(pages, 2, async (pageText, index) => {
+  const pageResults = await mapPool(pages, 4, async (pageText, index) => {
+    emit(
+      paperFactsParseProgress({
+        pageCount,
+        pagesDone,
+        label: `Reading page ${index + 1} of ${pageCount}…`,
+      }),
+    );
     const { object } = await generateObjectWithFallback({
-      schema: schemas.batch,
+      schema: paperFactsBatchSchema,
       logLabel: "statements-paper-page",
+      timeoutMs: 40_000,
       prompt: [
         "Extract EVERY posted transaction LINE on this statement page OCR.",
         "Canadian bank/credit card statement (often CIBC Visa).",
         ...hintBlock,
         rules,
         ...userBlock,
-        `This is page ${index + 1} of ${pages.length}.`,
+        `This is page ${index + 1} of ${pageCount}.`,
         pageText.slice(0, 40_000),
       ].join("\n"),
     });
 
+    pagesDone += 1;
+    emit(
+      paperFactsParseProgress({
+        pageCount,
+        pagesDone,
+        label: `Read page ${index + 1} of ${pageCount} · ${object.transactions.length} lines`,
+      }),
+    );
     return object.transactions;
   });
 
   const { object: meta } = await metaPromise;
+  emit(
+    paperFactsParseProgress({
+      pageCount,
+      pagesDone: pageCount,
+      label: "Checking balances…",
+    }),
+  );
   const paper: PaperFactsStatementInput = {
     ...meta,
     transactions: pageResults.flat(),
   };
 
   console.info(
-    `[statements] paper-facts ${paper.transactions.length} txns across ${pages.length} pages in ${Date.now() - started}ms (${fieldNote})`,
+    `[statements] paper-facts ${paper.transactions.length} txns across ${pageCount} pages in ${Date.now() - started}ms`,
   );
 
   return paperFactsToParsed(paper);
+  } finally {
+    clearInterval(beat);
+  }
 }

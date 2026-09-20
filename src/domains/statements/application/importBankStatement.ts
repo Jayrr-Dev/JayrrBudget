@@ -12,7 +12,13 @@ import {
   type StatementImportProgress,
 } from "@/domains/statements/domain/importProgress";
 import type { ImportBankStatementResult } from "@/domains/statements/domain/importResult";
-import { isOcrDocumentFilename } from "@/domains/statements/domain/ocrDocumentTypes";
+import {
+  isStatementTextMime,
+  isStatementTextSource,
+  isStatementUploadFilename,
+  statementExportMarkdown,
+  UNSUPPORTED_STATEMENT_FILE,
+} from "@/domains/statements/domain/ocrDocumentTypes";
 import {
   manualAccountId,
   statementFileHash,
@@ -69,7 +75,8 @@ export async function importBankStatement(params: {
   clientOcr?: { markdown: string; pageCount: number } | null;
   onProgress?: (progress: StatementImportProgress) => void;
 }): Promise<ImportBankStatementResult> {
-  if (!params.clientOcr && !isMistralConfigured()) {
+  const textExport = isStatementTextSource(params.filename, params.mimeType);
+  if (!params.clientOcr && !textExport && !isMistralConfigured()) {
     return {
       ok: false,
       status: 503,
@@ -90,7 +97,7 @@ export async function importBankStatement(params: {
 
   const gate = await checkAiCall(params.client, {
     billedTo: loaded.billedTo,
-    usesPlatformOcr: !params.clientOcr,
+    usesPlatformOcr: !params.clientOcr && !textExport,
   });
   if (!gate.ok) {
     return {
@@ -109,12 +116,17 @@ export async function importBankStatement(params: {
 async function importBankStatementWithKey(
   params: Parameters<typeof importBankStatement>[0],
 ): Promise<ImportBankStatementResult> {
-  if (!isOcrDocumentFilename(params.filename)) {
+  const mime = params.mimeType?.trim().toLowerCase() ?? "";
+  const allowedName = isStatementUploadFilename(params.filename);
+  const allowedMime =
+    mime === "application/pdf" ||
+    mime.startsWith("image/") ||
+    isStatementTextMime(mime);
+  if (!allowedName && !allowedMime) {
     return {
       ok: false,
       status: 400,
-      error:
-        "Only PDF or image files (PNG, JPG, WEBP, AVIF, HEIC) are supported.",
+      error: UNSUPPORTED_STATEMENT_FILE,
     };
   }
 
@@ -145,6 +157,7 @@ async function importBankStatementWithKey(
       };
     }
 
+    const textExport = isStatementTextSource(params.filename, params.mimeType);
     emitProgress(params.onProgress, "ocr");
     const ocrStarted = Date.now();
     const ocr = params.clientOcr
@@ -152,22 +165,29 @@ async function importBankStatementWithKey(
           markdown: params.clientOcr.markdown,
           pageCount: params.clientOcr.pageCount,
         }
-      : await ocrDocument({
-          filename: params.filename,
-          bytes: params.bytes,
-          mimeType: params.mimeType,
-        });
+      : textExport
+        ? {
+            markdown: statementExportMarkdown(params.bytes),
+            pageCount: 1,
+          }
+        : await ocrDocument({
+            filename: params.filename,
+            bytes: params.bytes,
+            mimeType: params.mimeType,
+          });
     console.info(
       `[statements] OCR pages=${ocr.pageCount} in ${Date.now() - ocrStarted}ms${
-        params.clientOcr ? " (local)" : ""
+        params.clientOcr ? " (local)" : textExport ? " (export)" : ""
       }`,
     );
 
-    if (!ocr.markdown.trim()) {
+    if (!ocr.markdown.replace(/^## Page \d+\s*$/gim, "").trim()) {
       return {
         ok: false,
         status: 422,
-        error: "OCR returned no readable text from this PDF.",
+        error: textExport
+          ? "This export had no readable text."
+          : "OCR returned no readable text from this PDF.",
       };
     }
 
@@ -179,6 +199,7 @@ async function importBankStatementWithKey(
     const rawParsed = await parseStatementPaperFacts(ocr.markdown, {
       sourceHint,
       userRules: aiRules.rules,
+      onProgress: params.onProgress,
     });
     const parsed = polishPaperFactsStatement(rawParsed, {
       ocrMarkdown: ocr.markdown,
@@ -233,7 +254,6 @@ async function importBankStatementWithKey(
     });
 
     emitProgress(params.onProgress, "save");
-    emitProgress(params.onProgress, "done");
     return {
       ok: true,
       uploadId: 0,

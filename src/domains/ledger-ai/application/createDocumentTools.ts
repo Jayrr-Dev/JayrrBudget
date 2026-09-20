@@ -4,7 +4,12 @@ import {
 } from "@/domains/ledger-ai/domain/importStatementDocumentTool";
 import { registerLoanFromDocumentClientTool } from "@/domains/ledger-ai/domain/registerLoanFromDocumentTool";
 import { formatDocumentBytes } from "@/domains/ledger-ai/domain/piggyDocuments";
-import { isOcrDocumentFilename } from "@/domains/statements/domain/ocrDocumentTypes";
+import {
+  isStatementTextSource,
+  isStatementUploadFilename,
+  statementExportMarkdown,
+  UNSUPPORTED_STATEMENT_FILE,
+} from "@/domains/statements/domain/ocrDocumentTypes";
 import {
   isMistralConfigured,
   ocrDocument,
@@ -46,9 +51,9 @@ export function createDocumentTools({
         `No attached document #${index}. Attached: ${documents.map((d) => `#${d.index} ${d.filename}`).join(", ")}.`,
       );
     }
-    if (!isOcrDocumentFilename(doc.filename)) {
+    if (!isStatementUploadFilename(doc.filename)) {
       throw new Error(
-        `"${doc.filename}" is not a PDF or image. Jev can only read PDF, PNG, JPG, WEBP, AVIF, or HEIC.`,
+        `"${doc.filename}" is not a statement file. ${UNSUPPORTED_STATEMENT_FILE}`,
       );
     }
     return doc;
@@ -56,11 +61,16 @@ export function createDocumentTools({
   const ocr = (doc: PiggyDocument) => {
     let hit = ocrCache.get(doc.index);
     if (!hit) {
-      hit = ocrDocument({
-        filename: doc.filename,
-        bytes: doc.bytes,
-        mimeType: doc.mediaType,
-      });
+      hit = isStatementTextSource(doc.filename, doc.mediaType)
+        ? Promise.resolve({
+            markdown: statementExportMarkdown(doc.bytes),
+            pageCount: 1,
+          })
+        : ocrDocument({
+            filename: doc.filename,
+            bytes: doc.bytes,
+            mimeType: doc.mediaType,
+          });
       ocrCache.set(doc.index, hit);
     }
     return hit;
@@ -82,7 +92,7 @@ export function createDocumentTools({
 
     read_document: tool({
       description: [
-        "OCR an attached PDF or image and return its text so you can decide what it is (bank statement, loan contract, receipt, other) or answer questions about it.",
+        "Read an attached PDF, photo, or bank export (CSV, OFX, QFX, QIF, TXT) and return its text so you can decide what it is (bank statement, loan contract, receipt, other) or answer questions about it.",
         "Prefer import_statement_document or register_loan_from_document when the user wants it filed; they OCR on their own.",
       ].join(" "),
       inputSchema: z.object({
@@ -91,7 +101,8 @@ export function createDocumentTools({
       }),
       execute: async ({ documentIndex, maxChars }) => {
         const doc = pick(documentIndex);
-        if (!isMistralConfigured()) {
+        const textExport = isStatementTextSource(doc.filename, doc.mediaType);
+        if (!textExport && !isMistralConfigured()) {
           return {
             ok: false as const,
             error: "Document OCR is not configured on this server.",

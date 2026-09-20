@@ -22,11 +22,13 @@ export function LoanPaymentTimeline({
   loan,
   compact = false,
   size = compact ? "xl" : "lg",
+  showColumnLabels = true,
   className,
 }: {
   loan: DashboardLoanSummary;
   compact?: boolean;
   size?: SquareTimelineSize;
+  showColumnLabels?: boolean;
   className?: string;
 }) {
   const cells = useMemo(() => loanPaymentTimelineCells(loan), [loan]);
@@ -43,6 +45,7 @@ export function LoanPaymentTimeline({
         slider
         rowLabels={WEEKDAY_ROW_LABELS}
         ariaLabel={ariaLabel}
+        showColumnLabels={showColumnLabels}
         className={className}
       />
     );

@@ -124,45 +124,56 @@ function MerchantsTable({
           enableHiding: false,
           meta: { label: "Actions", width: "2.5rem" },
         }),
-        columnHelper.accessor("name", {
-          header: "Merchant",
-          cell: ({ row, getValue }) => (
-            <MerchantLabel
-              name={getValue()}
-              src={row.original.logoSrc ?? row.original.logoUrl}
-              className="text-sm font-medium"
-            />
-          ),
-          filterFn: "includesString",
-          sortFn: "text",
-          meta: { width: "18rem", nowrap: true, grow: true, cardTitle: true },
-        }),
-        columnHelper.accessor("transactionCount", {
-          header: "Txns",
-          cell: ({ getValue }) => (
-            <span className="text-sm tabular-nums">
-              {(getValue() ?? 0).toLocaleString()}
-            </span>
-          ),
-          sortFn: "basic",
-          meta: { width: "5.5rem", nowrap: true },
-        }),
-        columnHelper.accessor("updatedAt", {
-          header: "Updated",
-          cell: ({ getValue }) => cellText(formatWhen(getValue())),
-          sortFn: "basic",
-          meta: { width: "8.5rem", nowrap: true },
-        }),
-        columnHelper.accessor("slug", {
-          header: "Slug",
-          cell: ({ getValue }) =>
-            cellText(
-              getValue(),
-              "font-mono text-xs text-[var(--muted-foreground)]",
-            ),
-          filterFn: "includesString",
-          sortFn: "text",
-          meta: { width: "14rem", nowrap: true },
+        columnHelper.group({
+          id: "main",
+          header: "Main",
+          columns: columnHelper.columns([
+            columnHelper.accessor("name", {
+              header: "Merchant",
+              cell: ({ row, getValue }) => (
+                <MerchantLabel
+                  name={getValue()}
+                  src={row.original.logoSrc ?? row.original.logoUrl}
+                  className="text-sm font-medium"
+                />
+              ),
+              filterFn: "includesString",
+              sortFn: "text",
+              meta: {
+                width: "18rem",
+                nowrap: true,
+                grow: true,
+                cardTitle: true,
+              },
+            }),
+            columnHelper.accessor("transactionCount", {
+              header: "Txns",
+              cell: ({ getValue }) => (
+                <span className="text-sm tabular-nums">
+                  {(getValue() ?? 0).toLocaleString()}
+                </span>
+              ),
+              sortFn: "basic",
+              meta: { width: "5.5rem", nowrap: true },
+            }),
+            columnHelper.accessor("updatedAt", {
+              header: "Updated",
+              cell: ({ getValue }) => cellText(formatWhen(getValue())),
+              sortFn: "basic",
+              meta: { width: "8.5rem", nowrap: true },
+            }),
+            columnHelper.accessor("slug", {
+              header: "Slug",
+              cell: ({ getValue }) =>
+                cellText(
+                  getValue(),
+                  "font-mono text-xs text-[var(--muted-foreground)]",
+                ),
+              filterFn: "includesString",
+              sortFn: "text",
+              meta: { width: "14rem", nowrap: true },
+            }),
+          ]),
         }),
         columnHelper.display({
           id: "txnsInfo",

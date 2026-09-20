@@ -4,7 +4,7 @@ import {
   formatDocumentBytes,
 } from "@/domains/ledger-ai/domain/piggyDocuments";
 import {
-  isOcrDocumentFile,
+  isStatementUploadFile,
   ocrDocumentMime,
 } from "@/domains/statements/domain/ocrDocumentTypes";
 import type { FileUIPart } from "ai";
@@ -20,8 +20,10 @@ export function addPiggyDocuments(current: File[], incoming: File[]) {
 
   for (const file of incoming) {
     if (next.some((f) => f.name === file.name && f.size === file.size)) continue;
-    if (!isOcrDocumentFile(file)) {
-      rejected.push(`${file.name}: only PDF or image files`);
+    if (!isStatementUploadFile(file)) {
+      rejected.push(
+        `${file.name}: use a PDF, photo, CSV, OFX, QFX, QIF, or TXT`,
+      );
       continue;
     }
     if (next.length >= MAX_PIGGY_DOCUMENTS) {

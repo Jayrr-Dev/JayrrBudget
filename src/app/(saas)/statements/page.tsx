@@ -34,15 +34,15 @@ export default function StatementsPage() {
         <div>
           <TitleInfo
             title="Statement imports"
-            lead="Upload bank PDFs, set upload rules, and check what got imported."
+            lead="Upload bank PDFs and check what got imported."
             bullets={[
               "Upload PDFs or photos to pull ledger rows",
-              "Upload rules apply only to your own statements",
               "Parse logs show status, counts, and OCR text",
+              "Upload Rules live next to Classify on Transactions",
             ]}
           />
           <p className="sr-only">
-            Upload bank PDFs, set upload rules, and check what got imported.
+            Upload bank PDFs and check what got imported.
           </p>
         </div>
         <DashboardToolbar

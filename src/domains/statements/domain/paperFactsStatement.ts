@@ -57,11 +57,33 @@ export const paperFactsTransactionSchema = paperFactsCoreTransactionSchema
   .extend(paperFactsLocationFields.shape)
   .extend(paperFactsFxFields.shape);
 
-export const paperFactsStatementSchema = parsedStatementSchema
-  .omit({ transactions: true })
-  .extend({
-    transactions: z.array(paperFactsTransactionSchema),
-  });
+/** Account header only. FX and location are filled after parse, not by the model. */
+export const paperFactsMetaSchema = z.object({
+  institutionName: z.string().nullable(),
+  accountName: z.string().nullable(),
+  accountMask: z
+    .string()
+    .nullable()
+    .describe(
+      "Last 4 of the product: card PAN for Visa/MC, account number for chequing/LOC.",
+    ),
+  accountType: parsedStatementSchema.shape.accountType,
+  currency: parsedStatementSchema.shape.currency,
+  statementPeriodStart: z
+    .string()
+    .nullable()
+    .describe("YYYY-MM-DD statement period start"),
+  statementPeriodEnd: z
+    .string()
+    .nullable()
+    .describe("YYYY-MM-DD statement period end"),
+  openingBalance: z.number().nullable(),
+  closingBalance: z.number().nullable(),
+});
+
+export const paperFactsStatementSchema = paperFactsMetaSchema.extend({
+  transactions: z.array(paperFactsTransactionSchema),
+});
 
 export type PaperFactsStatement = z.infer<typeof paperFactsStatementSchema>;
 export type PaperFactsTransaction = z.infer<typeof paperFactsTransactionSchema>;
@@ -97,10 +119,9 @@ export type PaperFactsTransactionInput = z.infer<
   Partial<z.infer<typeof paperFactsLocationFields>> &
   Partial<z.infer<typeof paperFactsFxFields>>;
 
-export type PaperFactsStatementInput = Omit<
-  PaperFactsStatement,
-  "transactions"
-> & { transactions: PaperFactsTransactionInput[] };
+export type PaperFactsStatementInput = z.infer<typeof paperFactsMetaSchema> & {
+  transactions: PaperFactsTransactionInput[];
+};
 
 const FX_RATE = /@\s*\d/;
 /** Common non-CAD currencies printed on Canadian card lines (`USD 12.00`, `12,280.00 PHP`). */
@@ -129,6 +150,8 @@ export function paperFactsToParsed(
 ): ParsedStatement {
   return {
     ...paper,
+    totalDebits: null,
+    totalCredits: null,
     transactions: paper.transactions.map((txn) => ({
       date: txn.date,
       authorizedDate: txn.authorizedDate,

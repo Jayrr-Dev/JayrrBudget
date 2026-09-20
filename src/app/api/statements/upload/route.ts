@@ -7,6 +7,7 @@ import {
   getAuthenticatedConvexClient,
 } from "@/shared/convex/httpClient.server";
 import { errorMessage } from "@/shared/lib/error-message";
+import { api } from "@convex/_generated/api";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -72,6 +73,19 @@ export async function POST(request: Request) {
       };
 
       try {
+        const cloud = await client.query(api.featureFlags.get, {
+          key: "cloudProcessing",
+        });
+        if (!cloud.enabled) {
+          send({
+            type: "error",
+            error: "Turn on Cloud Processing, then retry.",
+            status: 403,
+          });
+          controller.close();
+          return;
+        }
+
         const result = await importBankStatement({
           filename,
           bytes,
@@ -111,7 +125,8 @@ export async function POST(request: Request) {
   return new Response(stream, {
     headers: {
       "Content-Type": "application/x-ndjson; charset=utf-8",
-      "Cache-Control": "no-cache, no-transform",
+        "Cache-Control": "no-cache, no-transform",
+        "X-Accel-Buffering": "no",
     },
   });
 }

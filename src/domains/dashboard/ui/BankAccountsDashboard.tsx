@@ -15,7 +15,6 @@ import {
 } from "@/components/ui/popover";
 import { RowActionsMenu } from "@/components/ui/row-actions-menu";
 import { DashboardBudgets } from "@/domains/budgets/ui/DashboardBudgets";
-import { DashboardPings } from "@/domains/piggy-pings/ui/DashboardPings";
 import {
   ACCOUNT_SECTION_LABELS,
   detectCardNetwork,
@@ -29,6 +28,10 @@ import {
 } from "@/domains/dashboard/domain/accountCategory";
 import { displayAccountName } from "@/domains/dashboard/domain/accountName";
 import { formatMoney } from "@/domains/dashboard/domain/money";
+import {
+  accountClassFor,
+  balanceTone,
+} from "@/domains/dashboard/domain/moneyTone";
 import type {
   DashboardAccount,
   DashboardLoanPayment,
@@ -40,9 +43,9 @@ import { AccountPastTransactions } from "@/domains/dashboard/ui/AccountPastTrans
 import { AddLoanDialog } from "@/domains/dashboard/ui/AddLoanDialog";
 import { BankAccountActions } from "@/domains/dashboard/ui/BankAccountActions";
 import {
-  accountClassFor,
-  balanceTone,
-} from "@/domains/dashboard/domain/moneyTone";
+  LoanAccountRow,
+  LoanRowChevron,
+} from "@/domains/dashboard/ui/LoanAccountRow";
 import { MoneyText, moneyToneClass } from "@/domains/dashboard/ui/MoneyText";
 import { PiggyPageStatus } from "@/domains/ledger-ai/ui/PiggyPageStatus";
 import {
@@ -51,19 +54,17 @@ import {
   normalizeRateType,
 } from "@/domains/loans/domain/loanTypes";
 import { LoanAccountActions } from "@/domains/loans/ui/LoanAccountActions";
-import { LoanTxnDescriptionLookupsField } from "@/domains/loans/ui/LoanTxnDescriptionLookupsField";
 import { LoanPaymentTimeline } from "@/domains/loans/ui/LoanPaymentTimeline";
+import { LoanTxnDescriptionLookupsField } from "@/domains/loans/ui/LoanTxnDescriptionLookupsField";
 import { LoanTypeIcon } from "@/domains/loans/ui/LoanTypeIcon";
+import { DashboardPings } from "@/domains/piggy-pings/ui/DashboardPings";
 import { StatementUpload } from "@/domains/statements/ui/StatementUpload";
 import { applyVaultLoanPaymentDecision } from "@/domains/vault/application/applyVaultLoanPaymentDecision";
 import { vaultWriteReady } from "@/domains/vault/application/saveEncryptedLedger";
 import { DecryptingStatus } from "@/domains/vault/ui/DecryptingStatus";
 import { usePrivateLedger } from "@/domains/vault/ui/usePrivateLedger";
 import { cn } from "@/lib/utils";
-import {
-  formatCompactDisplayDate,
-  formatLongDisplayDate,
-} from "@/shared/lib/format-date";
+import { formatLongDisplayDate } from "@/shared/lib/format-date";
 import { toastIfOffline } from "@/shared/offline/offlineWriteGuard";
 import { createColumnHelper } from "@tanstack/react-table";
 import { useConvex } from "convex/react";
@@ -116,92 +117,6 @@ function accountSecondaryLine(account: DashboardAccount) {
 const ROW_LINK_CLASS =
   "transition-colors hover:bg-[var(--muted)]/70 focus-visible:bg-[var(--muted)]/70 focus-visible:outline-none";
 
-function loanTypeProgressLine(loan: DashboardLoanSummary) {
-  const typeLabel =
-    LOAN_TYPES.find((t) => t.value === loan.loanType)?.label ?? "Loan";
-  return `${loan.vehicleLabel ?? typeLabel} · ${loan.paymentsApplied} of ${loan.paymentCount} payments`;
-}
-
-function loanNextPaymentLine(loan: DashboardLoanSummary) {
-  if (!loan.nextPaymentDate) return "Paid off";
-  return `Next payment for ${formatCompactDisplayDate(loan.nextPaymentDate)}`;
-}
-
-function LoanAccountRow({
-  account,
-  loan,
-  href,
-}: {
-  account: DashboardAccount;
-  loan: DashboardLoanSummary;
-  href: string;
-}) {
-  const category = resolveAccountCategory(account);
-  const amount = displayBalanceAmount(account.currentBalance, category);
-  const currency = account.isoCurrencyCode ?? "CAD";
-  const fill = Math.min(100, Math.max(0, loan.progressPct));
-  const percentLabel = `${Math.round(fill)}% paid`;
-  const monthlyLabel = `${formatMoney(loan.paymentAmount, currency)}/m`;
-
-  return (
-    <div className={`group px-4 py-3.5 ${ROW_LINK_CLASS}`}>
-      <Link
-        href={href}
-        className="flex items-start justify-between gap-3"
-        aria-label={`Open ${displayAccountName(account)} details`}
-      >
-        <div className="flex min-w-0 items-start gap-3">
-          <LoanTypeIcon
-            loanType={loan.loanType}
-            className="mt-0.5 size-10 shrink-0"
-          />
-          <div className="min-w-0">
-            <div className="flex min-w-0 items-center gap-2">
-              <p className="min-w-0 truncate text-[16px] font-semibold text-[var(--foreground)] sm:text-[20px]">
-                {displayAccountName(account)}
-              </p>
-              <Badge className="hidden h-5 shrink-0 bg-accent px-1.5 text-[10px] font-semibold text-accent-foreground tabular-nums sm:inline-flex">
-                {monthlyLabel}
-              </Badge>
-            </div>
-            <p className="truncate text-base text-[var(--muted-foreground)]">
-              {loanNextPaymentLine(loan)}
-            </p>
-          </div>
-        </div>
-        <div className="flex shrink-0 items-center justify-end gap-2">
-          <div className="flex flex-col items-end text-right">
-            <p
-              className={cn(
-                "whitespace-nowrap text-base font-semibold tabular-nums tracking-tight",
-                moneyToneClass(
-                  balanceTone(account.currentBalance, "liability"),
-                ),
-              )}
-            >
-              {formatMoney(amount, currency)}
-            </p>
-            <Badge className="mt-0.5 h-4 bg-accent px-1.5 text-[10px] font-semibold text-accent-foreground tabular-nums sm:hidden">
-              {monthlyLabel}
-            </Badge>
-            <p className="hidden text-xs text-[var(--muted-foreground)] sm:block">
-              remaining
-            </p>
-          </div>
-          <ChevronRight />
-        </div>
-      </Link>
-      <div className="mt-3">
-        <LoanPaymentTimeline loan={loan} compact />
-      </div>
-      <div className="mt-1.5 flex items-center justify-between gap-3 text-xs tabular-nums text-[var(--muted-foreground)]">
-        <span>{percentLabel}</span>
-        <span className="truncate">{loanTypeProgressLine(loan)}</span>
-      </div>
-    </div>
-  );
-}
-
 function AccountRow({
   account,
   href,
@@ -249,7 +164,7 @@ function AccountRow({
           >
             {formatMoney(amount, account.isoCurrencyCode ?? "CAD")}
           </p>
-          <ChevronRight />
+          <LoanRowChevron />
         </div>
       </Link>
     </div>
@@ -416,107 +331,122 @@ function LoanPaymentHistory({
           enableHiding: false,
           meta: { label: "Actions", width: "2rem", keepOpaque: true },
         }),
-        paymentHistoryHelper.accessor("scheduledDate", {
-          header: "Scheduled",
-          cell: ({ getValue }) => (
-            <span className="text-base leading-snug md:text-sm">
-              {formatLongDisplayDate(getValue())}
-            </span>
-          ),
-          filterFn: "dateWindow",
-          sortFn: "datetime",
-          meta: {
-            width: "14rem",
-            nowrap: true,
-            description: "Date this payment is due on the schedule.",
-          },
+        paymentHistoryHelper.group({
+          id: "main",
+          header: "Main",
+          columns: paymentHistoryHelper.columns([
+            paymentHistoryHelper.accessor("scheduledDate", {
+              header: "Scheduled",
+              cell: ({ getValue }) => (
+                <span className="text-base leading-snug md:text-sm">
+                  {formatLongDisplayDate(getValue())}
+                </span>
+              ),
+              filterFn: "dateWindow",
+              sortFn: "datetime",
+              meta: {
+                width: "14rem",
+                nowrap: true,
+                description: "Date this payment is due on the schedule.",
+              },
+            }),
+            paymentHistoryHelper.accessor("paymentNumber", {
+              header: "No.",
+              cell: ({ getValue }) => (
+                <span className="font-medium tabular-nums">
+                  {Number(getValue())}
+                </span>
+              ),
+              enableSorting: false,
+              meta: {
+                width: "4.5rem",
+                nowrap: true,
+                keepOpaque: true,
+                label: "No.",
+              },
+            }),
+            paymentHistoryHelper.accessor("description", {
+              header: "Description",
+              cell: ({ getValue }) => (
+                <span className="block text-sm font-medium leading-snug wrap-break-word">
+                  {String(getValue())}
+                </span>
+              ),
+              meta: {
+                width: "28rem",
+                grow: true,
+                wrap: true,
+                cardTitle: true,
+                description:
+                  "Bank line when a payment matched, else the lookup.",
+              },
+            }),
+            paymentHistoryHelper.display({
+              id: "posted",
+              header: "Posted",
+              cell: ({ row }) => (
+                <span className="text-sm text-[var(--muted-foreground)]">
+                  {postedLabel(row.original)}
+                </span>
+              ),
+              enableSorting: false,
+              meta: {
+                width: "14rem",
+                wrap: true,
+                description: "Bank post date, or assumed until you confirm.",
+              },
+            }),
+          ]),
         }),
-        paymentHistoryHelper.accessor("paymentNumber", {
-          header: "No.",
-          cell: ({ getValue }) => (
-            <span className="font-medium tabular-nums">{Number(getValue())}</span>
-          ),
-          enableSorting: false,
-          meta: {
-            width: "4.5rem",
-            nowrap: true,
-            keepOpaque: true,
-            label: "No.",
-          },
-        }),
-        paymentHistoryHelper.accessor("description", {
-          header: "Description",
-          cell: ({ getValue }) => (
-            <span className="block text-sm font-medium leading-snug wrap-break-word">
-              {String(getValue())}
-            </span>
-          ),
-          meta: {
-            width: "28rem",
-            grow: true,
-            wrap: true,
-            cardTitle: true,
-            description: "Bank line when a payment matched, else the lookup.",
-          },
-        }),
-        paymentHistoryHelper.display({
-          id: "posted",
-          header: "Posted",
-          cell: ({ row }) => (
-            <span className="text-sm text-[var(--muted-foreground)]">
-              {postedLabel(row.original)}
-            </span>
-          ),
-          enableSorting: false,
-          meta: {
-            width: "14rem",
-            wrap: true,
-            description: "Bank post date, or assumed until you confirm.",
-          },
-        }),
-        paymentHistoryHelper.accessor("paymentAmount", {
-          header: "Payment",
-          cell: ({ getValue }) => (
-            <MoneyText
-              amount={Number(getValue())}
-              currency={currency}
-              tone="neutral"
-            />
-          ),
-          meta: { width: "8rem", nowrap: true },
-        }),
-        paymentHistoryHelper.accessor("interestPortion", {
-          header: "Interest",
-          cell: ({ getValue }) => (
-            <MoneyText
-              amount={Number(getValue())}
-              currency={currency}
-              tone="cost"
-            />
-          ),
-          meta: { width: "8rem", nowrap: true },
-        }),
-        paymentHistoryHelper.accessor("principalPortion", {
-          header: "Principal",
-          cell: ({ getValue }) => (
-            <MoneyText
-              amount={Number(getValue())}
-              currency={currency}
-              tone="neutral"
-            />
-          ),
-          meta: { width: "8rem", nowrap: true },
-        }),
-        paymentHistoryHelper.accessor("balanceAfter", {
-          header: "Balance",
-          cell: ({ getValue }) => (
-            <MoneyText
-              amount={Number(getValue())}
-              currency={currency}
-              tone={balanceTone(Number(getValue()), "liability")}
-            />
-          ),
-          meta: { width: "8.5rem", nowrap: true },
+        paymentHistoryHelper.group({
+          id: "money",
+          header: "Money",
+          columns: paymentHistoryHelper.columns([
+            paymentHistoryHelper.accessor("paymentAmount", {
+              header: "Payment",
+              cell: ({ getValue }) => (
+                <MoneyText
+                  amount={Number(getValue())}
+                  currency={currency}
+                  tone="neutral"
+                />
+              ),
+              meta: { width: "8rem", nowrap: true },
+            }),
+            paymentHistoryHelper.accessor("interestPortion", {
+              header: "Interest",
+              cell: ({ getValue }) => (
+                <MoneyText
+                  amount={Number(getValue())}
+                  currency={currency}
+                  tone="cost"
+                />
+              ),
+              meta: { width: "8rem", nowrap: true },
+            }),
+            paymentHistoryHelper.accessor("principalPortion", {
+              header: "Principal",
+              cell: ({ getValue }) => (
+                <MoneyText
+                  amount={Number(getValue())}
+                  currency={currency}
+                  tone="neutral"
+                />
+              ),
+              meta: { width: "8rem", nowrap: true },
+            }),
+            paymentHistoryHelper.accessor("balanceAfter", {
+              header: "Balance",
+              cell: ({ getValue }) => (
+                <MoneyText
+                  amount={Number(getValue())}
+                  currency={currency}
+                  tone={balanceTone(Number(getValue()), "liability")}
+                />
+              ),
+              meta: { width: "8.5rem", nowrap: true },
+            }),
+          ]),
         }),
       ]),
     [busyNumber, currency],
@@ -857,25 +787,6 @@ function AddLendingAccountButton({ onClick }: { onClick: () => void }) {
   );
 }
 
-function ChevronRight() {
-  return (
-    <svg
-      viewBox="0 0 16 16"
-      className="size-4 text-[var(--muted-foreground)]"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      aria-hidden
-    >
-      <path
-        d="M6 3.5 10.5 8 6 12.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
 /** Grouped account list, or a single account detail when `selectedAccountId` is set. */
 export function BankAccountsDashboard({
   accounts,
@@ -974,18 +885,14 @@ export function BankAccountsDashboard({
   return (
     <div className="space-y-8">
       {!hasNonLending && accounts.length === 0 ? (
-        <div className="flex flex-col gap-4 rounded-xl border border-dashed border-[var(--border)] bg-surface-elevated/70 px-5 py-8 sm:flex-row sm:items-center sm:justify-between">
-          <div className="space-y-1">
-            <h2 className="font-medium text-[var(--foreground)]">
-              Start by importing a statement
-            </h2>
-            <p className="max-w-lg text-sm text-[var(--muted-foreground)]">
-              Upload a bank statement PDF to create your accounts and import the
-              transactions automatically.
-            </p>
-          </div>
-          <StatementUpload />
-        </div>
+        <EmptyPrompt
+          className="bg-surface-elevated/70 py-6"
+          title="No accounts yet"
+          description="Upload a bank statement PDF to create accounts and import transactions."
+          action={
+            <StatementUpload triggerVariant="default" showCsvImport={false} />
+          }
+        />
       ) : null}
 
       {sections.map((section) => (

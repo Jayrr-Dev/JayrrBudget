@@ -28,7 +28,7 @@ import {
 import type { RowActionsMenuItem } from "@/components/ui/row-actions-menu";
 import { RowActionsMenu } from "@/components/ui/row-actions-menu";
 import { PageSpinner } from "@/components/ui/spinner";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { errorMessage } from "@/shared/lib/error-message";
 import { api } from "@convex/_generated/api";
@@ -49,6 +49,7 @@ type SectionRow = {
   name: string;
   description: string;
   categoryNames?: string[];
+  shared: boolean;
 };
 
 type CategoryRow = {
@@ -58,6 +59,7 @@ type CategoryRow = {
   sectionId: string | null;
   sectionName: string | null;
   subcategoryNames: string[];
+  shared: boolean;
 };
 
 type SubcategoryRow = {
@@ -67,6 +69,7 @@ type SubcategoryRow = {
   categoryId: string | null;
   categoryName: string | null;
   sectionName?: string | null;
+  shared: boolean;
 };
 
 type FormSub = {
@@ -167,8 +170,9 @@ function TitleInfo({ isAdmin }: { isAdmin: boolean }) {
         <PopoverHeader className="gap-1.5">
           <PopoverTitle>Classifications</PopoverTitle>
           <PopoverDescription>
-            Shared is the starter pack you get. User is any extra label that is
-            only yours.
+            {isAdmin
+              ? "Shared is the starter pack you get. User is any extra label that is only yours."
+              : "Labels for how you sort spending, starter set plus any you add."}
           </PopoverDescription>
           <ul className="mt-1.5 list-disc space-y-1 pl-4 text-muted-foreground">
             <li>
@@ -181,18 +185,22 @@ function TitleInfo({ isAdmin }: { isAdmin: boolean }) {
             <li>
               Subcategory is the specific flavor (Supermarket, Bars, Audiobooks)
             </li>
-            <li>Shared is the catalog every new user starts with</li>
-            <li>User is any label you added that is not in shared</li>
-            <li>
-              You can change your copy of a shared label. That stays on your
-              list
-            </li>
-            <li>Rename a shared label and it moves to User</li>
             {isAdmin ? (
-              <li>
-                Admins can add a liked user label to shared, or take one out
-              </li>
-            ) : null}
+              <>
+                <li>Shared is the catalog every new user starts with</li>
+                <li>User is any label you added that is not in shared</li>
+                <li>
+                  You can change your copy of a shared label. That stays on your
+                  list
+                </li>
+                <li>Rename a shared label and it moves to User</li>
+                <li>
+                  Admins can add a liked user label to shared, or take one out
+                </li>
+              </>
+            ) : (
+              <li>Edit a starter label to make your own copy</li>
+            )}
           </ul>
         </PopoverHeader>
       </PopoverContent>
@@ -248,9 +256,14 @@ export function ClassificationsPanel() {
   const [saving, setSaving] = useState(false);
 
   const isAdmin = catalog?.isAdmin ?? false;
-  const isUserScope = scope === "user";
-  const canEditOwn = isUserScope;
+  const isCombined = !isAdmin;
+  const isUserScope = !isCombined && scope === "user";
+  const canAdd = isCombined || isUserScope;
   const mine = catalog?.mine;
+
+  function editAsOwn(shared: boolean) {
+    return isUserScope || (isCombined && !shared);
+  }
 
   function findMineSection(name: string) {
     return mine?.sections.find((row) => sameLabel(row.name, name));
@@ -436,7 +449,7 @@ export function ClassificationsPanel() {
   }
 
   async function editSection(row: SectionRow) {
-    if (isUserScope) {
+    if (editAsOwn(row.shared)) {
       setForm({
         tab: "sections",
         mode: "edit",
@@ -470,7 +483,7 @@ export function ClassificationsPanel() {
   }
 
   async function deleteSectionCopy(row: SectionRow) {
-    if (isUserScope) {
+    if (editAsOwn(row.shared)) {
       void remove("section", row.id, row.name);
       return;
     }
@@ -483,7 +496,7 @@ export function ClassificationsPanel() {
   }
 
   async function editCategory(row: CategoryRow) {
-    if (isUserScope) {
+    if (editAsOwn(row.shared)) {
       setForm({
         tab: "categories",
         mode: "edit",
@@ -540,7 +553,7 @@ export function ClassificationsPanel() {
   }
 
   async function deleteCategoryCopy(row: CategoryRow) {
-    if (isUserScope) {
+    if (editAsOwn(row.shared)) {
       void remove("category", row.id, row.name);
       return;
     }
@@ -553,7 +566,7 @@ export function ClassificationsPanel() {
   }
 
   async function editSubcategory(row: SubcategoryRow) {
-    if (isUserScope) {
+    if (editAsOwn(row.shared)) {
       setForm({
         tab: "subcategories",
         mode: "edit",
@@ -610,7 +623,7 @@ export function ClassificationsPanel() {
   }
 
   async function deleteSubcategoryCopy(row: SubcategoryRow) {
-    if (isUserScope) {
+    if (editAsOwn(row.shared)) {
       void remove("subcategory", row.id, row.name);
       return;
     }
@@ -698,6 +711,7 @@ export function ClassificationsPanel() {
           id: "actions",
           header: ({ table }) => {
             const rows = table.getRowModel().rows.map((row) => row.original);
+            const owned = isCombined ? rows.filter((row) => !row.shared) : rows;
             const actions: RowActionsMenuItem[] = [
               isUserScope && isAdmin
                 ? {
@@ -711,18 +725,20 @@ export function ClassificationsPanel() {
                     onSelect: () => void unshareBulk("section", rows),
                   }
                 : null,
-              {
-                label: "Delete visible",
-                onSelect: () =>
-                  void removeBulk(
-                    "section",
-                    rows,
-                    isUserScope
-                      ? (row) => row.id
-                      : (row) => findMineSection(row.name)?.id ?? null,
-                  ),
-                variant: "destructive" as const,
-              },
+              owned.length > 0 || (!isCombined && !isUserScope)
+                ? {
+                    label: "Delete visible",
+                    onSelect: () =>
+                      void removeBulk(
+                        "section",
+                        isCombined ? owned : rows,
+                        isUserScope || isCombined
+                          ? (row) => row.id
+                          : (row) => findMineSection(row.name)?.id ?? null,
+                      ),
+                    variant: "destructive" as const,
+                  }
+                : null,
             ].filter((action) => action !== null);
             return (
               <BulkActionsMenu
@@ -737,7 +753,11 @@ export function ClassificationsPanel() {
               <RowActions
                 name={row.original.name}
                 onEdit={() => void editSection(row.original)}
-                onDelete={() => void deleteSectionCopy(row.original)}
+                onDelete={
+                  isCombined && row.original.shared
+                    ? undefined
+                    : () => void deleteSectionCopy(row.original)
+                }
                 onPromote={
                   isUserScope && isAdmin
                     ? () => void promote("section", row.original)
@@ -755,44 +775,52 @@ export function ClassificationsPanel() {
           enableHiding: true,
           meta: { label: "Actions", width: "2rem" },
         }),
-        sectionHelper.accessor("name", {
-          header: "Section",
-          cell: ({ getValue }) => (
-            <span className="font-medium">{getValue()}</span>
-          ),
-          filterFn: "includesString",
-          sortFn: "text",
-          meta: { width: "11rem", nowrap: true, cardTitle: true },
-        }),
-        sectionHelper.accessor("categoryNames", {
-          header: "Categories",
-          cell: ({ getValue }) =>
-            childNamesCell(getValue() ?? [], "No categories"),
-          meta: { wrap: true },
-          filterFn: (row, _columnId, filterValue) => {
-            const names = row.original.categoryNames ?? [];
-            const needle = String(filterValue ?? "")
-              .trim()
-              .toLowerCase();
-            if (!needle) return true;
-            return names.some((name) => name.toLowerCase().includes(needle));
-          },
-        }),
-        sectionHelper.accessor("description", {
-          header: "Description",
-          cell: ({ getValue }) => (
-            <span
-              className="block truncate text-sm text-[var(--muted-foreground)]"
-              title={getValue() || "-"}
-            >
-              {getValue() || "-"}
-            </span>
-          ),
-          filterFn: "includesString",
-          meta: { grow: true, cardSubtitle: true },
+        sectionHelper.group({
+          id: "main",
+          header: "Main",
+          columns: sectionHelper.columns([
+            sectionHelper.accessor("name", {
+              header: "Section",
+              cell: ({ getValue }) => (
+                <span className="font-medium">{getValue()}</span>
+              ),
+              filterFn: "includesString",
+              sortFn: "text",
+              meta: { width: "11rem", nowrap: true, cardTitle: true },
+            }),
+            sectionHelper.accessor("categoryNames", {
+              header: "Categories",
+              cell: ({ getValue }) =>
+                childNamesCell(getValue() ?? [], "No categories"),
+              meta: { wrap: true },
+              filterFn: (row, _columnId, filterValue) => {
+                const names = row.original.categoryNames ?? [];
+                const needle = String(filterValue ?? "")
+                  .trim()
+                  .toLowerCase();
+                if (!needle) return true;
+                return names.some((name) =>
+                  name.toLowerCase().includes(needle),
+                );
+              },
+            }),
+            sectionHelper.accessor("description", {
+              header: "Description",
+              cell: ({ getValue }) => (
+                <span
+                  className="block truncate text-sm text-[var(--muted-foreground)]"
+                  title={getValue() || "-"}
+                >
+                  {getValue() || "-"}
+                </span>
+              ),
+              filterFn: "includesString",
+              meta: { grow: true, cardSubtitle: true },
+            }),
+          ]),
         }),
       ]),
-    [isAdmin, isUserScope, mine],
+    [isAdmin, isCombined, isUserScope, mine],
   );
 
   const categoryColumns = useMemo(
@@ -802,6 +830,7 @@ export function ClassificationsPanel() {
           id: "actions",
           header: ({ table }) => {
             const rows = table.getRowModel().rows.map((row) => row.original);
+            const owned = isCombined ? rows.filter((row) => !row.shared) : rows;
             const actions: RowActionsMenuItem[] = [
               isUserScope && isAdmin
                 ? {
@@ -815,26 +844,24 @@ export function ClassificationsPanel() {
                     onSelect: () => void unshareBulk("category", rows),
                   }
                 : null,
-              {
-                label: "Delete visible",
-                onSelect: () =>
-                  void removeBulk(
-                    "category",
-                    rows,
-                    isUserScope
-                      ? (row) => row.id
-                      : (row) =>
-                          findMineCategory(
-                            (
-                              row as CategoryRow & {
-                                sectionName?: string | null;
-                              }
-                            ).sectionName ?? null,
-                            row.name,
-                          )?.id ?? null,
-                  ),
-                variant: "destructive" as const,
-              },
+              owned.length > 0 || (!isCombined && !isUserScope)
+                ? {
+                    label: "Delete visible",
+                    onSelect: () =>
+                      void removeBulk(
+                        "category",
+                        isCombined ? owned : rows,
+                        isUserScope || isCombined
+                          ? (row) => row.id
+                          : (row) =>
+                              findMineCategory(
+                                row.sectionName ?? null,
+                                row.name,
+                              )?.id ?? null,
+                      ),
+                    variant: "destructive" as const,
+                  }
+                : null,
             ].filter((action) => action !== null);
             return (
               <BulkActionsMenu
@@ -849,7 +876,11 @@ export function ClassificationsPanel() {
               <RowActions
                 name={row.original.name}
                 onEdit={() => void editCategory(row.original)}
-                onDelete={() => void deleteCategoryCopy(row.original)}
+                onDelete={
+                  isCombined && row.original.shared
+                    ? undefined
+                    : () => void deleteCategoryCopy(row.original)
+                }
                 onPromote={
                   isUserScope && isAdmin
                     ? () => void promote("category", row.original)
@@ -871,53 +902,61 @@ export function ClassificationsPanel() {
           enableHiding: true,
           meta: { label: "Actions", width: "2rem" },
         }),
-        categoryHelper.accessor("sectionName", {
-          header: "Section",
-          cell: ({ getValue }) => (
-            <span className="text-sm">{getValue() ?? "-"}</span>
-          ),
-          filterFn: "includesString",
-          sortFn: "text",
-          meta: { width: "11rem" },
-        }),
-        categoryHelper.accessor("name", {
-          header: "Category",
-          cell: ({ getValue }) => (
-            <span className="font-medium">{getValue()}</span>
-          ),
-          filterFn: "includesString",
-          sortFn: "text",
-          meta: { cardTitle: true },
-        }),
-        categoryHelper.accessor("subcategoryNames", {
-          header: "Sub",
-          cell: ({ getValue }) =>
-            childNamesCell(getValue() ?? [], "Needs a subcategory"),
-          meta: { wrap: true },
-          filterFn: (row, _columnId, filterValue) => {
-            const names = row.original.subcategoryNames ?? [];
-            const needle = String(filterValue ?? "")
-              .trim()
-              .toLowerCase();
-            if (!needle) return true;
-            return names.some((name) => name.toLowerCase().includes(needle));
-          },
-        }),
-        categoryHelper.accessor("description", {
-          header: "Description",
-          cell: ({ getValue }) => (
-            <span
-              className="block truncate text-sm text-[var(--muted-foreground)]"
-              title={getValue() || "-"}
-            >
-              {getValue() || "-"}
-            </span>
-          ),
-          filterFn: "includesString",
-          meta: { grow: true, cardSubtitle: true },
+        categoryHelper.group({
+          id: "main",
+          header: "Main",
+          columns: categoryHelper.columns([
+            categoryHelper.accessor("sectionName", {
+              header: "Section",
+              cell: ({ getValue }) => (
+                <span className="text-sm">{getValue() ?? "-"}</span>
+              ),
+              filterFn: "includesString",
+              sortFn: "text",
+              meta: { width: "11rem" },
+            }),
+            categoryHelper.accessor("name", {
+              header: "Category",
+              cell: ({ getValue }) => (
+                <span className="font-medium">{getValue()}</span>
+              ),
+              filterFn: "includesString",
+              sortFn: "text",
+              meta: { cardTitle: true },
+            }),
+            categoryHelper.accessor("subcategoryNames", {
+              header: "Sub",
+              cell: ({ getValue }) =>
+                childNamesCell(getValue() ?? [], "Needs a subcategory"),
+              meta: { wrap: true },
+              filterFn: (row, _columnId, filterValue) => {
+                const names = row.original.subcategoryNames ?? [];
+                const needle = String(filterValue ?? "")
+                  .trim()
+                  .toLowerCase();
+                if (!needle) return true;
+                return names.some((name) =>
+                  name.toLowerCase().includes(needle),
+                );
+              },
+            }),
+            categoryHelper.accessor("description", {
+              header: "Description",
+              cell: ({ getValue }) => (
+                <span
+                  className="block truncate text-sm text-[var(--muted-foreground)]"
+                  title={getValue() || "-"}
+                >
+                  {getValue() || "-"}
+                </span>
+              ),
+              filterFn: "includesString",
+              meta: { grow: true, cardSubtitle: true },
+            }),
+          ]),
         }),
       ]),
-    [isAdmin, isUserScope, mine],
+    [isAdmin, isCombined, isUserScope, mine],
   );
 
   const subcategoryColumns = useMemo(
@@ -927,6 +966,7 @@ export function ClassificationsPanel() {
           id: "actions",
           header: ({ table }) => {
             const rows = table.getRowModel().rows.map((row) => row.original);
+            const owned = isCombined ? rows.filter((row) => !row.shared) : rows;
             const actions: RowActionsMenuItem[] = [
               isUserScope && isAdmin
                 ? {
@@ -940,26 +980,24 @@ export function ClassificationsPanel() {
                     onSelect: () => void unshareBulk("subcategory", rows),
                   }
                 : null,
-              {
-                label: "Delete visible",
-                onSelect: () =>
-                  void removeBulk(
-                    "subcategory",
-                    rows,
-                    isUserScope
-                      ? (row) => row.id
-                      : (row) =>
-                          findMineSubcategory(
-                            (
-                              row as SubcategoryRow & {
-                                categoryName?: string | null;
-                              }
-                            ).categoryName ?? null,
-                            row.name,
-                          )?.id ?? null,
-                  ),
-                variant: "destructive" as const,
-              },
+              owned.length > 0 || (!isCombined && !isUserScope)
+                ? {
+                    label: "Delete visible",
+                    onSelect: () =>
+                      void removeBulk(
+                        "subcategory",
+                        isCombined ? owned : rows,
+                        isUserScope || isCombined
+                          ? (row) => row.id
+                          : (row) =>
+                              findMineSubcategory(
+                                row.categoryName ?? null,
+                                row.name,
+                              )?.id ?? null,
+                      ),
+                    variant: "destructive" as const,
+                  }
+                : null,
             ].filter((action) => action !== null);
             return (
               <BulkActionsMenu
@@ -974,7 +1012,11 @@ export function ClassificationsPanel() {
               <RowActions
                 name={row.original.name}
                 onEdit={() => void editSubcategory(row.original)}
-                onDelete={() => void deleteSubcategoryCopy(row.original)}
+                onDelete={
+                  isCombined && row.original.shared
+                    ? undefined
+                    : () => void deleteSubcategoryCopy(row.original)
+                }
                 onPromote={
                   isUserScope && isAdmin
                     ? () => void promote("subcategory", row.original)
@@ -997,47 +1039,53 @@ export function ClassificationsPanel() {
           enableHiding: true,
           meta: { label: "Actions", width: "2rem" },
         }),
-        subcategoryHelper.accessor("sectionName", {
-          header: "Section",
-          cell: ({ getValue }) => (
-            <span className="text-sm">{getValue() ?? "-"}</span>
-          ),
-          filterFn: "includesString",
-          sortFn: "text",
-          meta: { width: "11rem" },
-        }),
-        subcategoryHelper.accessor("categoryName", {
-          header: "Category",
-          cell: ({ getValue }) => (
-            <span className="text-sm">{getValue() ?? "-"}</span>
-          ),
-          filterFn: "includesString",
-          sortFn: "text",
-        }),
-        subcategoryHelper.accessor("name", {
-          header: "Sub",
-          cell: ({ getValue }) => (
-            <span className="font-medium">{getValue()}</span>
-          ),
-          filterFn: "includesString",
-          sortFn: "text",
-          meta: { cardTitle: true },
-        }),
-        subcategoryHelper.accessor("description", {
-          header: "Description",
-          cell: ({ getValue }) => (
-            <span
-              className="block truncate text-sm text-[var(--muted-foreground)]"
-              title={getValue() || "-"}
-            >
-              {getValue() || "-"}
-            </span>
-          ),
-          filterFn: "includesString",
-          meta: { grow: true, cardSubtitle: true },
+        subcategoryHelper.group({
+          id: "main",
+          header: "Main",
+          columns: subcategoryHelper.columns([
+            subcategoryHelper.accessor("sectionName", {
+              header: "Section",
+              cell: ({ getValue }) => (
+                <span className="text-sm">{getValue() ?? "-"}</span>
+              ),
+              filterFn: "includesString",
+              sortFn: "text",
+              meta: { width: "11rem" },
+            }),
+            subcategoryHelper.accessor("categoryName", {
+              header: "Category",
+              cell: ({ getValue }) => (
+                <span className="text-sm">{getValue() ?? "-"}</span>
+              ),
+              filterFn: "includesString",
+              sortFn: "text",
+            }),
+            subcategoryHelper.accessor("name", {
+              header: "Sub",
+              cell: ({ getValue }) => (
+                <span className="font-medium">{getValue()}</span>
+              ),
+              filterFn: "includesString",
+              sortFn: "text",
+              meta: { cardTitle: true },
+            }),
+            subcategoryHelper.accessor("description", {
+              header: "Description",
+              cell: ({ getValue }) => (
+                <span
+                  className="block truncate text-sm text-[var(--muted-foreground)]"
+                  title={getValue() || "-"}
+                >
+                  {getValue() || "-"}
+                </span>
+              ),
+              filterFn: "includesString",
+              meta: { grow: true, cardSubtitle: true },
+            }),
+          ]),
         }),
       ]),
-    [isAdmin, isUserScope, mine],
+    [isAdmin, isCombined, isUserScope, mine],
   );
 
   async function onSubmit(event: FormEvent) {
@@ -1141,6 +1189,7 @@ export function ClassificationsPanel() {
       name: row.name,
       description: mineRow?.description ?? row.description,
       categoryNames,
+      shared: true,
     };
   });
   const sharedCategories = (catalog?.shared.categories ?? []).map((row) => {
@@ -1155,6 +1204,7 @@ export function ClassificationsPanel() {
         row.subcategoryNames,
         mineRow?.subcategoryNames,
       ),
+      shared: true,
     };
   });
   const sharedSubs = (catalog?.shared.subcategories ?? []).map((row) => {
@@ -1166,6 +1216,7 @@ export function ClassificationsPanel() {
       categoryId: mineRow?.categoryId ?? null,
       categoryName: row.categoryName,
       sectionName: row.sectionName,
+      shared: true,
     };
   });
 
@@ -1173,18 +1224,56 @@ export function ClassificationsPanel() {
   const userCategories = (own?.categories ?? []).map((row) => ({
     ...row,
     subcategoryNames: row.subcategoryNames ?? [],
+    shared: false,
   }));
   const userSections = (own?.sections ?? []).map((row) => ({
     ...row,
     categoryNames: userCategories
       .filter((category) => sameLabel(category.sectionName ?? "", row.name))
       .map((category) => category.name),
+    shared: false,
   }));
-  const userSubs = own?.subcategories ?? [];
+  const userSubs = (own?.subcategories ?? []).map((row) => ({
+    ...row,
+    shared: false,
+  }));
 
-  const sections = isUserScope ? userSections : sharedSections;
-  const categories = isUserScope ? userCategories : sharedCategories;
-  const subcategories = isUserScope ? userSubs : sharedSubs;
+  const combinedCategories = [...sharedCategories, ...userCategories];
+  const combinedSubs = [...sharedSubs, ...userSubs];
+  const combinedSections = [...sharedSections, ...userSections].map((row) => ({
+    ...row,
+    categoryNames: combinedCategories
+      .filter((category) => sameLabel(category.sectionName ?? "", row.name))
+      .map((category) => category.name),
+  }));
+
+  const sections = isCombined
+    ? combinedSections.slice().sort((a, b) => a.name.localeCompare(b.name))
+    : isUserScope
+      ? userSections
+      : sharedSections;
+  const categories = isCombined
+    ? combinedCategories.slice().sort((a, b) => {
+        const sectionCmp = (a.sectionName ?? "").localeCompare(
+          b.sectionName ?? "",
+        );
+        if (sectionCmp !== 0) return sectionCmp;
+        return a.name.localeCompare(b.name);
+      })
+    : isUserScope
+      ? userCategories
+      : sharedCategories;
+  const subcategories = isCombined
+    ? combinedSubs.slice().sort((a, b) => {
+        const categoryCmp = (a.categoryName ?? "").localeCompare(
+          b.categoryName ?? "",
+        );
+        if (categoryCmp !== 0) return categoryCmp;
+        return a.name.localeCompare(b.name);
+      })
+    : isUserScope
+      ? userSubs
+      : sharedSubs;
 
   const sectionFilters = useMemo(
     () => [
@@ -1268,26 +1357,28 @@ export function ClassificationsPanel() {
         <PageSpinner className="min-h-40 py-8" />
       ) : (
         <div className="space-y-4">
-          <ButtonGroup className="max-w-full [&>button]:min-w-0 [&>button]:whitespace-normal">
-            <Button
-              type="button"
-              size="sm"
-              variant={scope === "shared" ? "default" : "outline"}
-              onClick={() => setScope("shared")}
-              aria-pressed={scope === "shared"}
-            >
-              Shared Classifications
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant={scope === "user" ? "default" : "outline"}
-              onClick={() => setScope("user")}
-              aria-pressed={scope === "user"}
-            >
-              User Classification
-            </Button>
-          </ButtonGroup>
+          {isAdmin ? (
+            <ButtonGroup className="max-w-full [&>button]:min-w-0 [&>button]:whitespace-normal">
+              <Button
+                type="button"
+                size="sm"
+                variant={scope === "shared" ? "default" : "outline"}
+                onClick={() => setScope("shared")}
+                aria-pressed={scope === "shared"}
+              >
+                Shared Classifications
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant={scope === "user" ? "default" : "outline"}
+                onClick={() => setScope("user")}
+                aria-pressed={scope === "user"}
+              >
+                User Classification
+              </Button>
+            </ButtonGroup>
+          ) : null}
 
           <Tabs
             value={tab}
@@ -1295,12 +1386,39 @@ export function ClassificationsPanel() {
             className="gap-4"
           >
             <div className="flex flex-wrap items-center justify-between gap-4">
-              <TabsList className="w-full justify-start sm:w-fit">
-                <TabsTrigger value="sections">Sections</TabsTrigger>
-                <TabsTrigger value="categories">Categories</TabsTrigger>
-                <TabsTrigger value="subcategories">Subcategories</TabsTrigger>
-              </TabsList>
-              {canEditOwn ? (
+              <ButtonGroup
+                className="max-w-full [&>button]:min-w-0 [&>button]:whitespace-normal"
+                aria-label="Classification type"
+              >
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={tab === "sections" ? "default" : "outline"}
+                  onClick={() => setTab("sections")}
+                  aria-pressed={tab === "sections"}
+                >
+                  Sections
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={tab === "categories" ? "default" : "outline"}
+                  onClick={() => setTab("categories")}
+                  aria-pressed={tab === "categories"}
+                >
+                  Categories
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={tab === "subcategories" ? "default" : "outline"}
+                  onClick={() => setTab("subcategories")}
+                  aria-pressed={tab === "subcategories"}
+                >
+                  Subcategories
+                </Button>
+              </ButtonGroup>
+              {canAdd ? (
                 <Button
                   type="button"
                   size="sm"
@@ -1316,14 +1434,18 @@ export function ClassificationsPanel() {
                 <EmptyPrompt
                   className="py-10"
                   title={
-                    isUserScope
-                      ? "No user-only sections"
-                      : "No shared sections yet"
+                    isCombined
+                      ? "No sections yet"
+                      : isUserScope
+                        ? "No user-only sections"
+                        : "No shared sections yet"
                   }
                   description={
-                    isUserScope
-                      ? "Names that match shared stay under Shared."
-                      : "Add one on your User list."
+                    isCombined
+                      ? "Add a section to start grouping spend."
+                      : isUserScope
+                        ? "Names that match shared stay under Shared."
+                        : "Add one on your User list."
                   }
                   action={
                     <Button
@@ -1344,7 +1466,11 @@ export function ClassificationsPanel() {
                   filters={sectionFilters}
                   pageSize={25}
                   enableColumnToggle
-                  csvFilename={`${scope}-sections.csv`}
+                  csvFilename={
+                    isCombined
+                      ? "classifications-sections.csv"
+                      : `${scope}-sections.csv`
+                  }
                 />
               )}
             </TabsContent>
@@ -1354,14 +1480,18 @@ export function ClassificationsPanel() {
                 <EmptyPrompt
                   className="py-10"
                   title={
-                    isUserScope
-                      ? "No user-only categories"
-                      : "No shared categories yet"
+                    isCombined
+                      ? "No categories yet"
+                      : isUserScope
+                        ? "No user-only categories"
+                        : "No shared categories yet"
                   }
                   description={
-                    isUserScope
-                      ? "Names that match shared stay under Shared."
-                      : "Add one on your User list."
+                    isCombined
+                      ? "Add a category under a section."
+                      : isUserScope
+                        ? "Names that match shared stay under Shared."
+                        : "Add one on your User list."
                   }
                   action={
                     <Button
@@ -1382,7 +1512,11 @@ export function ClassificationsPanel() {
                   filters={categoryFilters}
                   pageSize={25}
                   enableColumnToggle
-                  csvFilename={`${scope}-categories.csv`}
+                  csvFilename={
+                    isCombined
+                      ? "classifications-categories.csv"
+                      : `${scope}-categories.csv`
+                  }
                 />
               )}
             </TabsContent>
@@ -1392,14 +1526,18 @@ export function ClassificationsPanel() {
                 <EmptyPrompt
                   className="py-10"
                   title={
-                    isUserScope
-                      ? "No user-only subcategories"
-                      : "No shared subcategories yet"
+                    isCombined
+                      ? "No subcategories yet"
+                      : isUserScope
+                        ? "No user-only subcategories"
+                        : "No shared subcategories yet"
                   }
                   description={
-                    isUserScope
-                      ? "Names that match shared stay under Shared."
-                      : "Add one on your User list."
+                    isCombined
+                      ? "Add a subcategory under a category."
+                      : isUserScope
+                        ? "Names that match shared stay under Shared."
+                        : "Add one on your User list."
                   }
                   action={
                     <Button
@@ -1420,7 +1558,11 @@ export function ClassificationsPanel() {
                   filters={subcategoryFilters}
                   pageSize={25}
                   enableColumnToggle
-                  csvFilename={`${scope}-subcategories.csv`}
+                  csvFilename={
+                    isCombined
+                      ? "classifications-subcategories.csv"
+                      : `${scope}-subcategories.csv`
+                  }
                 />
               )}
             </TabsContent>

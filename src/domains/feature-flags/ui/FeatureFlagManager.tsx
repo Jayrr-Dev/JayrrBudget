@@ -1,10 +1,5 @@
 "use client";
 
-import { PageSpinner } from "@/components/ui/spinner";
-import { api } from "@convex/_generated/api";
-import { useMutation, useQuery } from "convex/react";
-import { Info } from "lucide-react";
-import { Switch } from "@/components/ui/switch";
 import {
   Popover,
   PopoverContent,
@@ -13,21 +8,40 @@ import {
   PopoverTitle,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { FEATURE_FLAG_COPY, FEATURE_FLAG_KEYS, type FeatureFlagKey } from "@/domains/feature-flags/domain/keys";
+import { PageSpinner } from "@/components/ui/spinner";
+import { Switch } from "@/components/ui/switch";
+import {
+  FEATURE_FLAG_COPY,
+  FEATURE_FLAG_KEYS,
+  type FeatureFlagKey,
+} from "@/domains/feature-flags/domain/keys";
+import { api } from "@convex/_generated/api";
+import { useMutation, useQuery } from "convex/react";
+import { Info } from "lucide-react";
 
-function FlagRow({ flagKey, enabled }: { flagKey: FeatureFlagKey; enabled: boolean }) {
+function FlagRow({
+  flagKey,
+  enabled,
+}: {
+  flagKey: FeatureFlagKey;
+  enabled: boolean;
+}) {
   const setFlag = useMutation(api.featureFlags.set);
   const copy = FEATURE_FLAG_COPY[flagKey];
   return (
     <div className="flex items-start justify-between gap-4 rounded-lg border border-[var(--border)] bg-[var(--background)] px-4 py-3">
       <div className="min-w-0 space-y-1">
         <p className="font-medium">{copy.name}</p>
-        <p className="text-sm text-[var(--muted-foreground)]">{copy.description}</p>
+        <p className="text-sm text-[var(--muted-foreground)]">
+          {copy.description}
+        </p>
       </div>
       <Switch
         size="lg"
         checked={enabled}
-        onCheckedChange={(checked) => void setFlag({ key: flagKey, enabled: Boolean(checked) })}
+        onCheckedChange={(checked) =>
+          void setFlag({ key: flagKey, enabled: Boolean(checked) })
+        }
       />
     </div>
   );
@@ -72,9 +86,15 @@ export function FeatureFlagManager() {
         </h2>
       </div>
       <div className="space-y-2">
-        {FEATURE_FLAG_KEYS.map((key) => (
-          <FlagRow key={key} flagKey={key} enabled={Boolean(byKey.get(key))} />
-        ))}
+        {FEATURE_FLAG_KEYS.filter((key) => key !== "cloudProcessing").map(
+          (key) => (
+            <FlagRow
+              key={key}
+              flagKey={key}
+              enabled={Boolean(byKey.get(key))}
+            />
+          ),
+        )}
       </div>
     </section>
   );

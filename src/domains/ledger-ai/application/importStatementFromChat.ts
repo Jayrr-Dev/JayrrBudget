@@ -29,7 +29,7 @@ export async function importStatementFromChat(options: {
     return {
       ok: false,
       error:
-        "Turn on Cloud Processing in Modules before importing a statement.",
+        "Turn on Cloud Processing, then retry.",
     };
   }
 

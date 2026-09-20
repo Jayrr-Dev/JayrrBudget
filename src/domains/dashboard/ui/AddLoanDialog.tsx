@@ -277,6 +277,9 @@ export function AddLoanDialog({
     toast.loading("Uploading document…", { id: UPLOAD_TOAST });
 
     try {
+      if (!flags.cloudProcessing) {
+        throw new Error("Turn on Cloud Processing, then retry.");
+      }
       const result = await uploadLoanDocument(file, {
         persistMode: "vault",
         ocrMode,
@@ -288,11 +291,6 @@ export function AddLoanDialog({
         },
       });
 
-      if (!flags.cloudProcessing) {
-        throw new Error(
-          "Turn on Cloud Processing in Modules before uploading a document.",
-        );
-      }
       const opened = await hydrateVaultSession(
         client as unknown as VaultClient,
       );

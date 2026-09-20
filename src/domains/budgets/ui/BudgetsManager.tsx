@@ -37,7 +37,10 @@ import {
   todayBudgetYmd,
   type BudgetCycle,
 } from "@/domains/budgets/domain/budgetCycle";
-import { BudgetPingLinksField, type BudgetPingLinkDraft } from "@/domains/budgets/ui/BudgetPingLinksField";
+import {
+  BudgetPingLinksField,
+  type BudgetPingLinkDraft,
+} from "@/domains/budgets/ui/BudgetPingLinksField";
 import { BudgetProgressCards } from "@/domains/budgets/ui/BudgetProgressCards";
 import { ClassLookupCombobox } from "@/domains/budgets/ui/ClassLookupCombobox";
 import {
@@ -304,116 +307,147 @@ function BudgetActions({ budget }: { budget: BudgetRow }) {
 }
 
 const columns = columnHelper.columns([
-  columnHelper.accessor("isActive", {
-    header: () => (
-      <span className="flex w-full items-center justify-center">Status</span>
-    ),
-    cell: ({ row }) => (
-      <div className="flex items-center justify-center">
-        <ActiveToggle budget={row.original} />
-      </div>
-    ),
-    enableSorting: false,
-    meta: { label: "Status", width: "5.5rem", keepOpaque: true },
+  columnHelper.group({
+    id: "main",
+    header: "Main",
+    columns: columnHelper.columns([
+      columnHelper.accessor("isActive", {
+        header: () => (
+          <span className="flex w-full items-center justify-center">
+            Status
+          </span>
+        ),
+        cell: ({ row }) => (
+          <div className="flex items-center justify-center">
+            <ActiveToggle budget={row.original} />
+          </div>
+        ),
+        enableSorting: false,
+        meta: { label: "Status", width: "5.5rem", keepOpaque: true },
+      }),
+      columnHelper.accessor("name", {
+        header: "Name",
+        cell: ({ getValue }) => (
+          <span className="block truncate font-medium">
+            {String(getValue())}
+          </span>
+        ),
+        meta: { width: "7.5rem", nowrap: true, cardTitle: true },
+      }),
+      columnHelper.accessor("amount", {
+        header: "Amount",
+        cell: ({ getValue }) => (
+          <span className="text-sm tabular-nums">
+            {money.format(Number(getValue()))}
+          </span>
+        ),
+        meta: { width: "6.5rem", nowrap: true },
+      }),
+    ]),
   }),
-  columnHelper.accessor("id", {
-    header: "Id",
-    cell: ({ getValue }) => (
-      <span
-        className="block max-w-[7rem] truncate font-mono text-xs"
-        title={String(getValue())}
-      >
-        {String(getValue())}
-      </span>
-    ),
-    meta: { width: "8rem", nowrap: true },
+  columnHelper.group({
+    id: "class",
+    header: "Class",
+    columns: columnHelper.columns([
+      columnHelper.accessor("classLookup", {
+        header: "Class lookup",
+        cell: ({ row }) => <ClassLookupCell budget={row.original} />,
+        meta: { width: "9rem", nowrap: true },
+      }),
+      columnHelper.accessor("lookupTable", {
+        header: "Lookup table",
+        cell: ({ getValue }) => (
+          <span className="block truncate text-sm">{String(getValue())}</span>
+        ),
+        meta: { width: "7.5rem", nowrap: true },
+      }),
+      columnHelper.accessor("descriptionLookup", {
+        header: "Desc. lookup",
+        cell: ({ getValue }) => (
+          <span
+            className="block truncate text-sm text-[var(--muted-foreground)]"
+            title={getValue() ? String(getValue()) : ""}
+          >
+            {getValue() ? String(getValue()) : "—"}
+          </span>
+        ),
+        meta: { width: "7.5rem", nowrap: true },
+      }),
+    ]),
   }),
-  columnHelper.accessor("name", {
-    header: "Name",
-    cell: ({ getValue }) => (
-      <span className="block truncate font-medium">{String(getValue())}</span>
-    ),
-    meta: { width: "7.5rem", nowrap: true, cardTitle: true },
+  columnHelper.group({
+    id: "schedule",
+    header: "Schedule",
+    columns: columnHelper.columns([
+      columnHelper.accessor("cycle", {
+        header: "Cycle",
+        cell: ({ getValue }) => (
+          <span className="text-sm">
+            {BUDGET_CYCLE_LABELS[getValue() as BudgetCycle] ??
+              String(getValue())}
+          </span>
+        ),
+        meta: { width: "5.75rem", nowrap: true },
+      }),
+      columnHelper.accessor("startDate", {
+        header: "Start",
+        cell: ({ getValue }) => (
+          <span className="text-sm">
+            {formatCompactDisplayDate(String(getValue()))}
+          </span>
+        ),
+        meta: { width: "6.5rem", nowrap: true },
+      }),
+      columnHelper.accessor("warningThreshold", {
+        header: "Warn %",
+        cell: ({ getValue }) => (
+          <span className="text-sm tabular-nums">{Number(getValue())}</span>
+        ),
+        meta: { width: "4.5rem", nowrap: true },
+      }),
+      columnHelper.accessor("overageThreshold", {
+        header: "Over %",
+        cell: ({ getValue }) => (
+          <span className="text-sm tabular-nums">{Number(getValue())}</span>
+        ),
+        meta: { width: "4.5rem", nowrap: true },
+      }),
+    ]),
   }),
-  columnHelper.accessor("classLookup", {
-    header: "Class lookup",
-    cell: ({ row }) => <ClassLookupCell budget={row.original} />,
-    meta: { width: "9rem", nowrap: true },
-  }),
-  columnHelper.accessor("lookupTable", {
-    header: "Lookup table",
-    cell: ({ getValue }) => (
-      <span className="block truncate text-sm">{String(getValue())}</span>
-    ),
-    meta: { width: "7.5rem", nowrap: true },
-  }),
-  columnHelper.accessor("descriptionLookup", {
-    header: "Desc. lookup",
-    cell: ({ getValue }) => (
-      <span
-        className="block truncate text-sm text-[var(--muted-foreground)]"
-        title={getValue() ? String(getValue()) : ""}
-      >
-        {getValue() ? String(getValue()) : "—"}
-      </span>
-    ),
-    meta: { width: "7.5rem", nowrap: true },
-  }),
-  columnHelper.accessor("amount", {
-    header: "Amount",
-    cell: ({ getValue }) => (
-      <span className="text-sm tabular-nums">
-        {money.format(Number(getValue()))}
-      </span>
-    ),
-    meta: { width: "6.5rem", nowrap: true },
-  }),
-  columnHelper.accessor("cycle", {
-    header: "Cycle",
-    cell: ({ getValue }) => (
-      <span className="text-sm">
-        {BUDGET_CYCLE_LABELS[getValue() as BudgetCycle] ?? String(getValue())}
-      </span>
-    ),
-    meta: { width: "5.75rem", nowrap: true },
-  }),
-  columnHelper.accessor("startDate", {
-    header: "Start",
-    cell: ({ getValue }) => (
-      <span className="text-sm">
-        {formatCompactDisplayDate(String(getValue()))}
-      </span>
-    ),
-    meta: { width: "6.5rem", nowrap: true },
-  }),
-  columnHelper.accessor("warningThreshold", {
-    header: "Warn %",
-    cell: ({ getValue }) => (
-      <span className="text-sm tabular-nums">{Number(getValue())}</span>
-    ),
-    meta: { width: "4.5rem", nowrap: true },
-  }),
-  columnHelper.accessor("overageThreshold", {
-    header: "Over %",
-    cell: ({ getValue }) => (
-      <span className="text-sm tabular-nums">{Number(getValue())}</span>
-    ),
-    meta: { width: "4.5rem", nowrap: true },
-  }),
-  columnHelper.accessor("createdAt", {
-    header: "Created",
-    cell: ({ getValue }) => (
-      <span className="text-xs text-[var(--muted-foreground)]">
-        {formatCompactDisplayDate(toBudgetYmd(new Date(Number(getValue()))))}
-      </span>
-    ),
-    meta: { width: "6.5rem", nowrap: true },
-  }),
-  columnHelper.display({
-    id: "pingLinks",
-    header: "Ping attached",
-    cell: ({ row }) => <PingAttachedCell links={row.original.pingLinks} />,
-    meta: { width: "6.5rem", nowrap: true },
+  columnHelper.group({
+    id: "meta",
+    header: "Meta",
+    columns: columnHelper.columns([
+      columnHelper.accessor("id", {
+        header: "Id",
+        cell: ({ getValue }) => (
+          <span
+            className="block max-w-[7rem] truncate font-mono text-xs"
+            title={String(getValue())}
+          >
+            {String(getValue())}
+          </span>
+        ),
+        meta: { width: "8rem", nowrap: true },
+      }),
+      columnHelper.accessor("createdAt", {
+        header: "Created",
+        cell: ({ getValue }) => (
+          <span className="text-xs text-[var(--muted-foreground)]">
+            {formatCompactDisplayDate(
+              toBudgetYmd(new Date(Number(getValue()))),
+            )}
+          </span>
+        ),
+        meta: { width: "6.5rem", nowrap: true },
+      }),
+      columnHelper.display({
+        id: "pingLinks",
+        header: "Ping attached",
+        cell: ({ row }) => <PingAttachedCell links={row.original.pingLinks} />,
+        meta: { width: "6.5rem", nowrap: true },
+      }),
+    ]),
   }),
   columnHelper.display({
     id: "actions",
@@ -483,9 +517,7 @@ function defaultPingTypeLabel(): string {
 
 function attachedPingTypeLabel(
   links: { pingId: string }[],
-  pings:
-    | { id: string; pingTypes: PingType[] }[]
-    | undefined,
+  pings: { id: string; pingTypes: PingType[] }[] | undefined,
 ): string {
   if (links.length === 0) return defaultPingTypeLabel();
   if (!pings) return linkedPingLabel(links.length);
@@ -504,11 +536,7 @@ function attachedPingTypeLabel(
   return labels.join(", ");
 }
 
-function PingAttachedCell({
-  links,
-}: {
-  links: BudgetTableRow["pingLinks"];
-}) {
+function PingAttachedCell({ links }: { links: BudgetTableRow["pingLinks"] }) {
   const pings = useQuery(api.piggyPings.list, {});
   return (
     <span className="text-xs text-muted-foreground">
@@ -711,7 +739,9 @@ function BudgetForm({
               />
             </div>
             <div className="grid gap-1.5">
-              <Label htmlFor={`${fieldId}-description`}>Description lookup</Label>
+              <Label htmlFor={`${fieldId}-description`}>
+                Description lookup
+              </Label>
               <Input
                 id={`${fieldId}-description`}
                 value={descriptionLookup}
@@ -863,7 +893,9 @@ function BudgetForm({
             <Button
               className="ml-auto"
               type="submit"
-              disabled={submitting || (step === "basics" ? basicsBlocked : false)}
+              disabled={
+                submitting || (step === "basics" ? basicsBlocked : false)
+              }
             >
               Next
             </Button>

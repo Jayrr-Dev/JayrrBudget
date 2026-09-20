@@ -1,6 +1,6 @@
 "use client";
 
-import { CameraIcon, FileUpIcon, FolderUpIcon } from "lucide-react";
+import { CameraIcon, FileUpIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -21,6 +21,7 @@ export const OCR_UPLOAD_HINT_POINTER = "Drag & drop or choose files";
 type PickerOptions = {
   multiple?: boolean;
   disabled?: boolean;
+  accept?: string;
   onFiles: (files: FileList | File[]) => void;
 };
 
@@ -68,7 +69,6 @@ function useOcrCameraAvailable() {
 
 function useOcrDocumentInputRefs(options: PickerOptions) {
   const fileRef = useRef<HTMLInputElement>(null);
-  const folderRef = useRef<HTMLInputElement>(null);
   const cameraRef = useRef<HTMLInputElement>(null);
 
   function emitFromInput(input: HTMLInputElement | null) {
@@ -82,20 +82,11 @@ function useOcrDocumentInputRefs(options: PickerOptions) {
       <input
         ref={fileRef}
         type="file"
-        accept={OCR_DOCUMENT_ACCEPT}
+        accept={options.accept ?? OCR_DOCUMENT_ACCEPT}
         multiple={options.multiple}
         className="hidden"
         disabled={options.disabled}
         onChange={() => emitFromInput(fileRef.current)}
-      />
-      <input
-        ref={folderRef}
-        type="file"
-        className="hidden"
-        disabled={options.disabled}
-        multiple
-        {...({ webkitdirectory: "", directory: "" } as Record<string, string>)}
-        onChange={() => emitFromInput(folderRef.current)}
       />
       <input
         ref={cameraRef}
@@ -112,7 +103,6 @@ function useOcrDocumentInputRefs(options: PickerOptions) {
   return {
     inputs,
     openFilePicker: () => fileRef.current?.click(),
-    openFolderPicker: () => folderRef.current?.click(),
     openCamera: () => cameraRef.current?.click(),
   };
 }
@@ -143,12 +133,11 @@ export function OcrDocumentPickerButton({
   onFiles,
 }: Props) {
   const { isMobile, cameraAvailable } = useOcrCameraAvailable();
-  const { inputs, openFilePicker, openFolderPicker, openCamera } =
-    useOcrDocumentInputRefs({
-      multiple,
-      disabled,
-      onFiles,
-    });
+  const { inputs, openFilePicker, openCamera } = useOcrDocumentInputRefs({
+    multiple,
+    disabled,
+    onFiles,
+  });
 
   const showCameraMenu = cameraAvailable && !isMobile;
 
@@ -196,13 +185,6 @@ export function OcrDocumentPickerButton({
           <DropdownMenuItem className="cursor-pointer" onClick={openFilePicker}>
             <FileUpIcon className="size-4" />
             Choose file
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            className="cursor-pointer"
-            onClick={openFolderPicker}
-          >
-            <FolderUpIcon className="size-4" />
-            Choose folder
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>

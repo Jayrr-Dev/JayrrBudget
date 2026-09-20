@@ -5,6 +5,7 @@ import {
 } from "@/domains/statements/domain/importProgress";
 import type { ImportBankStatementSuccess } from "@/domains/statements/domain/importResult";
 import type { OcrMode } from "@/domains/statements/domain/ocrMode";
+import { isStatementTextSource } from "@/domains/statements/domain/ocrDocumentTypes";
 import { ocrDocumentLocally } from "@/domains/statements/infrastructure/localOcr";
 import { assertOnlineForWrite } from "@/shared/offline/offlineWriteGuard";
 
@@ -41,7 +42,8 @@ export async function uploadBankStatement(
     ...STATEMENT_IMPORT_STEPS.receive,
   });
 
-  if (options?.ocrMode === "local") {
+  const skipLocalOcr = isStatementTextSource(file.name, file.type);
+  if (options?.ocrMode === "local" && !skipLocalOcr) {
     options.onProgress?.({
       step: "ocr",
       percent: STATEMENT_IMPORT_STEPS.ocr.percent,
