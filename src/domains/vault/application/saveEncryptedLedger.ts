@@ -424,14 +424,12 @@ export async function saveEncryptedScratchPad(
 
 /** Ensure vault write context exists for encrypted edits. */
 export function vaultWriteReady(input: {
-  encryptedLedger: boolean;
   userId: string | null;
   vaultId: string | null;
   keyId: string | null;
   client: ConvexReactClient;
 }): VaultWriteContext | null {
-  if (!input.encryptedLedger || !input.userId || !input.vaultId || !input.keyId)
-    return null;
+  if (!input.userId || !input.vaultId || !input.keyId) return null;
   if (!getVaultMasterKey()) return null;
   return {
     client: input.client,

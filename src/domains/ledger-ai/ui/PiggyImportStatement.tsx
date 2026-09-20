@@ -75,7 +75,6 @@ export function PiggyImportStatement({
     reported.current = true;
     void importStatementFromChat({
       file,
-      persistMode: "vault",
       cloudProcessing,
       convex,
       userId,

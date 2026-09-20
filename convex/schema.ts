@@ -567,7 +567,7 @@ export default defineSchema({
   }).index("by_userId", ["userId"]),
 
   /**
-    * Piggy Pings: owner-scoped reminders. Empty startDate or endDate means
+   * Pings: owner-scoped reminders. Empty startDate or endDate means
    * that bound is indefinite. trigger names budget events
    * (`Name + Warn`, `Name + Warn + Over`). Cycle `None` has no calendar
    * date; linked budget events can still fire it.
@@ -611,7 +611,7 @@ export default defineSchema({
    * Spend caps. classLookup / descriptionLookup are name fragments for
    * later matching against classifications and ledger descriptions.
    * warningThreshold / overageThreshold are percent of amount (0–100+).
-   * pingLinks: Piggy Pings that fire on warn / over.
+   * pingLinks: Pings that fire on warn / over.
    */
   budgets: defineTable({
     userId: v.id("users"),

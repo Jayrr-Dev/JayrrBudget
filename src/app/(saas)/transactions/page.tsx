@@ -1,5 +1,6 @@
 "use client";
 
+import { ButtonGroup } from "@/components/ui/button-group";
 import {
   Popover,
   PopoverContent,
@@ -8,11 +9,11 @@ import {
   PopoverTitle,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { ButtonGroup } from "@/components/ui/button-group";
 import { useDashboard } from "@/domains/dashboard/ui/DashboardPanels";
 import { StatementAiRulesButton } from "@/domains/statements/ui/StatementAiRulesButton";
 import { AddTransactionButton } from "@/domains/transactions/ui/AddTransactionDialog";
 import { ClassifyTransactionsButton } from "@/domains/transactions/ui/ClassifyTransactionsButton";
+import { ClassifyUnclassifiedNudge } from "@/domains/transactions/ui/ClassifyUnclassifiedNudge";
 import { TransactionsDataTable } from "@/domains/transactions/ui/TransactionsDataTable";
 import { Info } from "lucide-react";
 
@@ -42,8 +43,10 @@ function TransactionsTitleInfo() {
           <ul className="mt-1.5 list-disc space-y-1 pl-4 text-muted-foreground">
             <li>Bank details on the left; category and labels on the right</li>
             <li>Search, month, and date range filter the list</li>
-            <li>Add a row by hand, or import statements on Statement imports</li>
-            <li>Upload Rules guide Classify for rows that still need a category</li>
+            <li>
+              Add a row by hand, or import statements on Statement imports
+            </li>
+            <li>Classify Rules guide Jev when a row still needs a category</li>
           </ul>
         </PopoverHeader>
       </PopoverContent>
@@ -63,6 +66,7 @@ export default function TransactionsPage() {
 
   return (
     <div className="space-y-4 sm:space-y-8">
+      <ClassifyUnclassifiedNudge sure="classify" />
       <header className="flex flex-nowrap items-center justify-between gap-2 border-b border-border pb-4 sm:gap-4 sm:pb-6">
         <div className="min-w-0">
           <h1 className="type-kicker flex items-center gap-2 text-[20px] whitespace-nowrap">
@@ -77,11 +81,11 @@ export default function TransactionsPage() {
         </div>
         <div className="flex shrink-0 flex-nowrap items-center justify-end gap-2">
           <ButtonGroup>
-            <AddTransactionButton />
-            <StatementAiRulesButton />
             <ClassifyTransactionsButton
               transactions={data?.transactions ?? []}
             />
+            <StatementAiRulesButton />
+            <AddTransactionButton />
           </ButtonGroup>
         </div>
       </header>

@@ -2,6 +2,7 @@
 
 import { Toaster } from "@/components/ui/sonner";
 import { SetGooglePasswordDialog } from "@/domains/auth/ui/SetGooglePasswordDialog";
+import { UpgradePromptDialog } from "@/domains/billing/ui/UpgradePromptDialog";
 import { ConvexClientProvider } from "@/shared/convex/ConvexClientProvider";
 import { EnsureUserBootstrap } from "@/shared/convex/EnsureUserBootstrap";
 import { ErrorBoundary } from "@/shared/errors/ErrorBoundary";
@@ -32,6 +33,7 @@ export function Providers({ children }: { children: ReactNode }) {
         <QueryClientProvider client={queryClient}>
           <ErrorBoundary>
             <SetGooglePasswordDialog />
+            <UpgradePromptDialog />
             {children}
           </ErrorBoundary>
           <Toaster />

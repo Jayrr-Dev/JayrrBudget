@@ -12,7 +12,7 @@ export function StatementAiRulesButton() {
     <>
       <Button type="button" variant="outline" onClick={() => setOpen(true)}>
         <ListChecks data-icon="inline-start" />
-        Upload Rules
+        Classify Rules
       </Button>
       <StatementAiRulesDialog open={open} onOpenChange={setOpen} />
     </>

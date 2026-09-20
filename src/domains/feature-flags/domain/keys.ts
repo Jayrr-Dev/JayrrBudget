@@ -1,5 +1,4 @@
 export const FEATURE_FLAG_KEYS = [
-  "encryptedLedger",
   "cloudProcessing",
   "jevCategorization",
   "jevPiggy",
@@ -11,11 +10,6 @@ export const FEATURE_FLAG_COPY: Record<
   FeatureFlagKey,
   { name: string; description: string }
 > = {
-  encryptedLedger: {
-    name: "Private ledger",
-    description:
-      "Money store is encrypted on this device. Only you can read it. Required for loans, statements, and transactions.",
-  },
   cloudProcessing: {
     name: "Cloud Processing",
     description:
@@ -24,7 +18,7 @@ export const FEATURE_FLAG_COPY: Record<
   jevCategorization: {
     name: "Jev categorization (beta)",
     description:
-      "Picks section, then category, then subcategory with TypeSafe Jev from your classification catalog, using each bank line's description.",
+      "Picks section, then category, then subcategory with TypeSafe Jev from your classification catalog, using each bank line and your Classify Rules.",
   },
   jevPiggy: {
     name: "Typed votes for Jev (beta)",

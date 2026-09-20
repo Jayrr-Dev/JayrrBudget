@@ -84,7 +84,6 @@ export function PiggyVaultLedgerWrite({
     if (encrypted && (loading || !unlocked)) return;
 
     const write = vaultWriteReady({
-      encryptedLedger: encrypted,
       userId,
       vaultId,
       keyId,

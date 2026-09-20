@@ -22,8 +22,10 @@ export type {
   SquareTimelineTone,
 } from "@/components/ui/square-timeline.types";
 
+const CELL_INSET_SHADOW = "shadow-[inset_0_0_0_1px_rgba(46,42,37,0.08)]";
+
 const LEVEL_CLASS: Record<SquareTimelineLevel, string> = {
-  0: "bg-border shadow-[inset_0_0_0_1px_rgba(46,42,37,0.08)]",
+  0: cn("bg-border", CELL_INSET_SHADOW),
   1: "bg-evergreen-300",
   2: "bg-evergreen-400",
   3: "bg-evergreen-600",
@@ -34,7 +36,26 @@ const TONE_CLASS: Record<SquareTimelineTone, string> = {
   empty: LEVEL_CLASS[0],
   due: "bg-accent",
   paid: "bg-evergreen-800",
-  missed: "bg-destructive",
+  missed: "bg-danger",
+  "paid-tail": "bg-evergreen-300",
+  "missed-tail": "bg-danger",
+};
+
+const PAID_FILL = "#5aa888";
+const MISSED_FILL = "#f5b4ae";
+const TODAY_PIP = "#1e3a8a";
+const EMPTY_FILL = "#d7cdbd";
+
+const TONE_CELL_FILL: Partial<Record<SquareTimelineTone, string>> = {
+  paid: PAID_FILL,
+  missed: MISSED_FILL,
+  "paid-tail": PAID_FILL,
+  "missed-tail": MISSED_FILL,
+};
+
+const TONE_PIP_FILL: Partial<Record<SquareTimelineTone, string>> = {
+  paid: "#0d4435",
+  missed: "#b42318",
 };
 
 const LOAN_LEGEND: Array<{ tone: SquareTimelineTone; label: string }> = [
@@ -54,6 +75,58 @@ function cellFillClass(cell: SquareTimelineCell) {
   const fill = cell.tone ? TONE_CLASS[cell.tone] : LEVEL_CLASS[cell.level];
   if (cell.faded) return cn(fill, "opacity-35");
   return fill;
+}
+
+function SquareTimelineCellMark({ cell }: { cell: SquareTimelineCell }) {
+  const tone = cell.tone;
+  const litFill = tone ? TONE_CELL_FILL[tone] : undefined;
+  const pipFill = cell.today
+    ? TODAY_PIP
+    : tone
+      ? TONE_PIP_FILL[tone]
+      : undefined;
+  const backFill = litFill ?? (cell.today ? EMPTY_FILL : undefined);
+
+  if (backFill) {
+    return (
+      <span
+        title={cell.title}
+        data-level={cell.level}
+        data-tone={tone}
+        data-today={cell.today ? "true" : undefined}
+        data-faded={cell.faded ? "true" : undefined}
+        style={{
+          backgroundColor: backFill,
+          opacity: cell.faded ? 0.35 : 1,
+        }}
+        className={cn(
+          "relative block size-(--st-size) rounded-xs",
+          CELL_INSET_SHADOW,
+        )}
+      >
+        {pipFill ? (
+          <span
+            style={{
+              position: "absolute",
+              inset: "22%",
+              borderRadius: 2,
+              backgroundColor: pipFill,
+            }}
+          />
+        ) : null}
+      </span>
+    );
+  }
+
+  return (
+    <span
+      title={cell.title}
+      data-level={cell.level}
+      data-tone={cell.tone}
+      data-faded={cell.faded ? "true" : undefined}
+      className={cn("block size-(--st-size) rounded-xs", cellFillClass(cell))}
+    />
+  );
 }
 
 const SIZE_VARS = {
@@ -173,17 +246,7 @@ function SquareTimelineBand({
         }}
       >
         {cells.map((cell) => (
-          <span
-            key={cell.id}
-            title={cell.title}
-            data-level={cell.level}
-            data-tone={cell.tone}
-            data-faded={cell.faded ? "true" : undefined}
-            className={cn(
-              "block size-(--st-size) rounded-xs",
-              cellFillClass(cell),
-            )}
-          />
+          <SquareTimelineCellMark key={cell.id} cell={cell} />
         ))}
       </div>
     </div>
@@ -381,14 +444,58 @@ export function SquareTimeline({
       {showLegend ? (
         <div className="mt-2 flex flex-wrap items-center justify-end gap-2 text-[10px] text-muted-foreground">
           {usesLoanTones ? (
-            LOAN_LEGEND.map((item) => (
-              <span key={item.tone} className="inline-flex items-center gap-1">
+            <>
+              {LOAN_LEGEND.map((item) => (
                 <span
-                  className={cn("size-2.5 rounded-xs", TONE_CLASS[item.tone])}
-                />
-                {item.label}
+                  key={item.tone}
+                  className="inline-flex items-center gap-1"
+                >
+                  <span
+                    style={
+                      TONE_CELL_FILL[item.tone]
+                        ? { backgroundColor: TONE_CELL_FILL[item.tone] }
+                        : undefined
+                    }
+                    className={cn(
+                      "relative block size-2.5 rounded-xs",
+                      CELL_INSET_SHADOW,
+                      TONE_CELL_FILL[item.tone] ? null : TONE_CLASS[item.tone],
+                    )}
+                  >
+                    {TONE_PIP_FILL[item.tone] ? (
+                      <span
+                        style={{
+                          position: "absolute",
+                          inset: "22%",
+                          borderRadius: 2,
+                          backgroundColor: TONE_PIP_FILL[item.tone],
+                        }}
+                      />
+                    ) : null}
+                  </span>
+                  {item.label}
+                </span>
+              ))}
+              <span className="inline-flex items-center gap-1">
+                <span
+                  className={cn(
+                    "relative block size-2.5 rounded-xs",
+                    CELL_INSET_SHADOW,
+                    LEVEL_CLASS[0],
+                  )}
+                >
+                  <span
+                    style={{
+                      position: "absolute",
+                      inset: "22%",
+                      borderRadius: 2,
+                      backgroundColor: TODAY_PIP,
+                    }}
+                  />
+                </span>
+                Today
               </span>
-            ))
+            </>
           ) : (
             <>
               <span>Less</span>

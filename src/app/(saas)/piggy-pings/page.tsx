@@ -22,7 +22,7 @@ function PiggyPingsTitleInfo() {
         <button
           type="button"
           className="inline-flex size-11 sm:size-6 shrink-0 items-center justify-center rounded-full text-accent hover:text-primary"
-          aria-label="About Piggy Pings"
+          aria-label="About Pings"
         >
           <Info className="size-3.5" />
         </button>
@@ -34,15 +34,18 @@ function PiggyPingsTitleInfo() {
         className="w-80 max-w-[calc(100vw-2rem)] gap-0 p-3.5"
       >
         <PopoverHeader className="gap-1.5">
-          <PopoverTitle>Piggy Pings</PopoverTitle>
+          <PopoverTitle>Pings</PopoverTitle>
           <PopoverDescription>
             Reminders for you, or ones Jev creates in chat.
           </PopoverDescription>
           <ul className="mt-1.5 list-disc space-y-1 pl-4 text-muted-foreground">
             <li>
-              Toast, email, dialog, and banner. Toast is the default. One ping can use more than one
+              Toast, email, dialog, and banner. Toast is the default. One ping
+              can use more than one
             </li>
-            <li>Budget links from the Budgets page land here too, ready to edit</li>
+            <li>
+              Budget links from the Budgets page land here too, ready to edit
+            </li>
             <li>
               Cycle from the start date: weekly, weekdays, a date, monthly, EOM,
               or SOM
@@ -64,12 +67,12 @@ export default function PiggyPingsPage() {
       <header className="flex flex-wrap items-center justify-between gap-4 border-b border-border pb-6">
         <div>
           <h1 className="type-kicker text-[20px] flex items-center gap-2">
-            Piggy Pings
+            Pings
             <PiggyPingsTitleInfo />
           </h1>
           <p className="sr-only">
-            Reminders for you, or ones Jev creates in chat. Toast, email,
-            popup, and banner. Blank start or end means that side never closes.
+            Reminders for you, or ones Jev creates in chat. Toast, email, popup,
+            and banner. Blank start or end means that side never closes.
           </p>
         </div>
         <CreatePingDialog open={createOpen} onOpenChange={setCreateOpen} />

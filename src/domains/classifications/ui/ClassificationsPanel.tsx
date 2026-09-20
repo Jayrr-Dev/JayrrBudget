@@ -331,10 +331,10 @@ export function ClassificationsPanel() {
     }
   }
 
-  async function removeBulk(
+  async function removeBulk<T extends { id: string; name: string }>(
     kind: "section" | "category" | "subcategory",
-    rows: Array<{ id: string; name: string }>,
-    resolveId?: (row: { id: string; name: string }) => string | null,
+    rows: T[],
+    resolveId?: (row: T) => string | null,
   ) {
     if (rows.length === 0) return;
     const ok = window.confirm(

@@ -156,7 +156,6 @@ export function EditMerchantDialog({ merchant, open, onOpenChange }: Props) {
     setBusy(true);
     try {
       const write = vaultWriteReady({
-        encryptedLedger: privateLedger.encryptedLedger,
         userId: privateLedger.userId,
         vaultId: privateLedger.vaultId,
         keyId: privateLedger.keyId,

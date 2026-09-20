@@ -362,7 +362,6 @@ function CanvasAiChatSession({
   const [dockReady, setDockReady] = useState(false);
   const [input, setInput] = useState(initialHistory.draft);
   const [inputFocused, setInputFocused] = useState(false);
-  const encryptedLedger = useFeatureFlag("encryptedLedger");
   const cloudProcessing = useFeatureFlag("cloudProcessing");
   const privateLedger = usePrivateLedger();
 
@@ -371,27 +370,24 @@ function CanvasAiChatSession({
       new DefaultChatTransport({
         api: "/api/canvas/chat",
         prepareSendMessagesRequest: ({ messages, id, body }) => {
-          const useClientBudget = encryptedLedger;
-          const budget = useClientBudget
-            ? privateLedger.unlocked
-              ? buildBudgetContextFromDashboard(
-                  dashboardFromPrivateLedger(privateLedger.ledger),
-                )
-              : { error: "Sign in again, then try chat." }
-            : undefined;
+          const budget = privateLedger.unlocked
+            ? buildBudgetContextFromDashboard(
+                dashboardFromPrivateLedger(privateLedger.ledger),
+              )
+            : { error: "Sign in again, then try chat." };
           return {
             body: {
               ...body,
               id,
               messages,
               canvas: api ? getCanvasSnapshot(api) : null,
-              useClientBudget,
+              useClientBudget: true,
               budget,
             },
           };
         },
       }),
-    [api, encryptedLedger, privateLedger.ledger, privateLedger.unlocked],
+    [api, privateLedger.ledger, privateLedger.unlocked],
   );
 
   // ref -> element id for this chat, so Piggy can point later arrows/frames/edits
@@ -477,7 +473,7 @@ function CanvasAiChatSession({
 
   const bornMessageIds = useRef(new Set(messages.map((message) => message.id)));
   const busy = status === "submitted" || status === "streaming";
-  const blocked = encryptedLedger && !cloudProcessing;
+  const blocked = !cloudProcessing;
   const last = messages.at(-1);
   const showThinking = busy && !hasVisibleParts(last);
   const mood = piggyMoodFromChat({
@@ -574,8 +570,7 @@ function CanvasAiChatSession({
 
       {blocked ? (
         <p className="border-b border-border bg-warning-subtle px-3 py-2 text-xs text-warning">
-          Turn on Cloud Processing in Modules before sending budget data to
-          Jev.
+          Turn on Cloud Processing in Modules before sending budget data to Jev.
         </p>
       ) : null}
 

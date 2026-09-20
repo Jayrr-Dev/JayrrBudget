@@ -3,16 +3,13 @@
 import { Badge } from "@/components/ui/badge";
 import { DataTable } from "@/components/ui/data-table";
 import type { DataTableFeatures } from "@/components/ui/data-table-features";
-import { PageSpinner } from "@/components/ui/spinner";
 import type { StatementUploadLog } from "@/domains/statements/domain/types";
 import { StatementUploadBulkActions } from "@/domains/statements/ui/StatementUploadBulkActions";
 import { StatementUploadRowActions } from "@/domains/statements/ui/StatementUploadRowActions";
 import type { PrivateStatementLog } from "@/domains/vault/domain/privateLedger";
 import { DecryptingStatus } from "@/domains/vault/ui/DecryptingStatus";
 import { usePrivateLedger } from "@/domains/vault/ui/usePrivateLedger";
-import { api } from "@convex/_generated/api";
 import { createColumnHelper } from "@tanstack/react-table";
-import { useConvexAuth, useQuery } from "convex/react";
 
 const columnHelper = createColumnHelper<
   DataTableFeatures,
@@ -296,55 +293,25 @@ function StatementUploadLogsTable({ data }: { data: StatementUploadLog[] }) {
 }
 
 export function StatementUploadLogs() {
-  const { isAuthenticated } = useConvexAuth();
   const privateLedger = usePrivateLedger();
-  const result = useQuery(
-    api.statements.list,
-    isAuthenticated && !privateLedger.encryptedLedger ? {} : "skip",
-  );
 
-  if (privateLedger.encryptedLedger) {
-    if (privateLedger.loading || !privateLedger.unlocked) {
-      return (
-        <div className="flex justify-center py-10">
-          <DecryptingStatus />
-        </div>
-      );
-    }
-    const uploads = privateLedger.ledger.statementLogs.map((log) =>
-      fromVaultLog(log, privateLedger.ledger.transactions),
-    );
-    if (uploads.length === 0) {
-      return (
-        <p className="text-sm text-[var(--muted-foreground)]">
-          No parsed PDFs yet. Upload a statement above.
-        </p>
-      );
-    }
-    return <StatementUploadLogsTable data={uploads} />;
-  }
-
-  if (result === undefined) {
-    return <PageSpinner className="min-h-40 py-8" />;
-  }
-
-  if (!result.ok) {
+  if (privateLedger.loading || !privateLedger.unlocked) {
     return (
-      <div className="rounded-xl border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-800">
-        {result.error}
+      <div className="flex justify-center py-10">
+        <DecryptingStatus />
       </div>
     );
   }
 
-  if (result.uploads.length === 0) {
+  const uploads = privateLedger.ledger.statementLogs.map((log) =>
+    fromVaultLog(log, privateLedger.ledger.transactions),
+  );
+  if (uploads.length === 0) {
     return (
       <p className="text-sm text-[var(--muted-foreground)]">
         No parsed PDFs yet. Upload a statement above.
       </p>
     );
   }
-
-  return (
-    <StatementUploadLogsTable data={result.uploads as StatementUploadLog[]} />
-  );
+  return <StatementUploadLogsTable data={uploads} />;
 }

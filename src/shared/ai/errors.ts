@@ -1,5 +1,5 @@
-import { APICallError } from "ai";
 import { errorMessage } from "@/shared/lib/error-message";
+import { APICallError } from "ai";
 
 export { errorMessage };
 
@@ -48,7 +48,7 @@ export function isRetryableAiError(error: unknown): boolean {
 
   if (
     isSchemaOrParseFailure(message) ||
-    /rate-limited|overloaded|timeout|temporar|ECONNRESET|fetch failed|network|unavailable|aborted|AbortError/i.test(
+    /rate-limited|overloaded|timed?\s*out|timeout|temporar|ECONNRESET|fetch failed|network|unavailable|aborted|AbortError/i.test(
       message,
     )
   ) {

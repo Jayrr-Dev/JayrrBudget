@@ -91,7 +91,7 @@ import {
   UploadIcon,
   XIcon,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 
 const UPLOAD_TOAST = "statement-upload";
@@ -129,6 +129,8 @@ type Props = {
   onImported?: () => void | Promise<void>;
   triggerVariant?: "outline" | "default";
   showCsvImport?: boolean;
+  /** Extra button(s) rendered at the left of the button group. */
+  leading?: ReactNode;
 };
 
 function isQueuedStatementFile(file: File) {
@@ -202,6 +204,7 @@ export function StatementUpload({
   onImported,
   triggerVariant = "outline",
   showCsvImport = true,
+  leading,
 }: Props) {
   const busyRef = useRef(false);
   const abortRef = useRef<AbortController | null>(null);
@@ -486,7 +489,6 @@ export function StatementUpload({
       try {
         const result = await uploadBankStatement(item.file, {
           signal: controller.signal,
-          persistMode: "vault",
           ocrMode,
           onProgress: (progress) => {
             const state: ItemState =
@@ -726,6 +728,7 @@ export function StatementUpload({
     <div className="flex flex-col items-start gap-1.5">
       {showCsvImport ? (
         <ButtonGroup>
+          {leading}
           <ImportLedgerCsv onImported={onImported} />
           {uploadButton}
         </ButtonGroup>

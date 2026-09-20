@@ -16,7 +16,6 @@ type StreamEvent =
 export type UploadLoanDocumentOptions = {
   onProgress?: (progress: LoanDocumentProgress) => void;
   signal?: AbortSignal;
-  persistMode?: "convex" | "vault";
   ocrMode?: OcrMode;
 };
 
@@ -34,7 +33,6 @@ export async function uploadLoanDocument(
   assertOnlineForWrite();
   const form = new FormData();
   form.append("file", file);
-  if (options?.persistMode === "vault") form.append("persistMode", "vault");
 
   options?.onProgress?.({
     step: "receive",

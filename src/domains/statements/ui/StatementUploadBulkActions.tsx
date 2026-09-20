@@ -96,9 +96,6 @@ export function StatementUploadBulkActions({
       const vaultUploads = visible.filter(
         (upload) => upload.source === "vault",
       );
-      const convexUploads = visible.filter(
-        (upload) => upload.source !== "vault",
-      );
       let summary = emptySummary();
 
       if (vaultUploads.length > 0) {
@@ -149,22 +146,6 @@ export function StatementUploadBulkActions({
           summary,
           result.summary as CategorizationSummary,
         );
-      }
-
-      for (const upload of convexUploads) {
-        const response = await fetch(
-          `/api/statements/${upload.id}/categorize`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ force: upload.categorized }),
-          },
-        );
-        const result = await response.json();
-        if (!response.ok) {
-          throw new Error(result.error ?? "Categorization failed");
-        }
-        summary = addSummaries(summary, result as CategorizationSummary);
       }
 
       return summary;

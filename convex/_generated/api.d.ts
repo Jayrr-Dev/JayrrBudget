@@ -24,6 +24,7 @@ import type * as email from "../email.js";
 import type * as featureFlags from "../featureFlags.js";
 import type * as http from "../http.js";
 import type * as issues from "../issues.js";
+import type * as lib_aiCap from "../lib/aiCap.js";
 import type * as lib_aiCostTable from "../lib/aiCostTable.js";
 import type * as lib_amortize from "../lib/amortize.js";
 import type * as lib_analysisTypes from "../lib/analysisTypes.js";
@@ -103,6 +104,7 @@ declare const fullApi: ApiFromModules<{
   featureFlags: typeof featureFlags;
   http: typeof http;
   issues: typeof issues;
+  "lib/aiCap": typeof lib_aiCap;
   "lib/aiCostTable": typeof lib_aiCostTable;
   "lib/amortize": typeof lib_amortize;
   "lib/analysisTypes": typeof lib_analysisTypes;

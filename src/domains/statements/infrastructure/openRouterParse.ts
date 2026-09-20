@@ -5,6 +5,10 @@ import {
   type CategoryVocabulary,
 } from "@/domains/statements/application/categoryVocabulary";
 import {
+  paperFactsParseProgress,
+  type StatementImportProgress,
+} from "@/domains/statements/domain/importProgress";
+import {
   paperFactsMetaSchema,
   paperFactsToParsed,
   paperFactsTransactionSchemaFor,
@@ -14,16 +18,8 @@ import {
   parsedStatementSchema,
   type ParsedStatement,
 } from "@/domains/statements/domain/parsedStatement";
-import {
-  paperFactsParseProgress,
-  type StatementImportProgress,
-} from "@/domains/statements/domain/importProgress";
 import { formatUserAiRulesPromptBlock } from "@/domains/statements/domain/userAiRules";
-import {
-  generateObjectWithFallback,
-  mapPool,
-  runWithModelChain,
-} from "@/shared/ai/openRouter";
+import { generateObjectWithFallback, mapPool } from "@/shared/ai/openRouter";
 import { z } from "zod";
 
 export {
@@ -45,9 +41,6 @@ const paperFactsLineSchema = paperFactsTransactionSchemaFor({
 const paperFactsBatchSchema = z.object({
   transactions: z.array(paperFactsLineSchema),
 });
-
-/** Flash models only. Page-parallel extract should not wait on the Service chat pick. */
-const PAPER_FACTS_MODELS = ["deepseek/deepseek-v4-flash", "z-ai/glm-5.3-flash"];
 
 function splitOcrPages(ocrMarkdown: string) {
   const parts = ocrMarkdown
@@ -81,6 +74,8 @@ const LINE_DEDUP_RULES = [
   "Never use month-day text like 'Jul 24'. Always use YYYY-MM-DD with the statement year.",
   "Skip CreditSmart / spend-category summary tables, payment slips, ads, and page footers.",
   "Skip section total rows (Total payments, Total for card, etc.).",
+  "Many chequing PDFs print the daily register, then a later 'transaction details' / Housing / Groceries recap of the SAME lines. Extract the register once. Do not emit the recap as extra transactions.",
+  "Never emit a description that is only a date ('Jan 01', 'January 1'). That is the date column, not a payee.",
   "openingBalance = Previous balance. closingBalance = Total balance / New balance.",
   "Strip OCR dingbats (arrows, stars, warning marks) from description.",
   "WRAPPED LINES: chequing statements often print the rail on one OCR line and the payee on the next ('ONLINE PURCHASE -' then 'AMAZON.CA'; 'PAD -' then 'SPOTIFY'; 'BILL PAYMENT -' then 'CIBC VISA'). Join them into ONE description: 'ONLINE PURCHASE - AMAZON.CA'.",
@@ -108,6 +103,8 @@ const CATEGORY_HARD_RULES = [
   "INTERNET TRANSFER (plain, no GLOBAL, no person name) → Transfers / Account Transfers / Self Transfers. Not spending.",
   "INTERNET GLOBAL MONEY TRANSFER / remittance / PHP → Transfers / External Transfers / Remittances. Real money out.",
   "E-TRANSFER + a person's name → Transfers / External Transfers / Interac e-Transfer. Out is spend; in is income.",
+  "CHEQUE # / CHEQUE … CLEARED THROUGH TRANSIT → Transfers / External Transfers / Cheques. Money to someone else, not a self-transfer.",
+  "WIRE TRANSFER / bank wire → Transfers / External Transfers / Wire Transfers.",
   "PREAUTHORIZED DEBIT student loan / ABDL / BNPL → Finance / Loans / Student Loans.",
   "OpenAI, ChatGPT, T3 Chat, Cursor, Anthropic → Technology / AI Services / Assistants.",
   "Wealthsimple Tax → Technology / Software / Productivity.",
@@ -289,24 +286,12 @@ export async function rebalanceParsedStatement(
 }
 
 /**
- * Faster paper-facts parse: dates, description, amounts, account meta.
+ * Paper-facts parse: dates, description, amounts, account meta.
+ * Uses the Service model chain from Convex (same as chat).
  * Pages run in parallel. Location/FX are filled in polish, not by the model.
  * Optional owner preferences apply only to this PDF extract (never other AI paths).
  */
 export async function parseStatementPaperFacts(
-  ocrMarkdown: string,
-  options?: {
-    sourceHint?: string;
-    userRules?: string[];
-    onProgress?: (progress: StatementImportProgress) => void;
-  },
-): Promise<ParsedStatement> {
-  return runWithModelChain(PAPER_FACTS_MODELS, () =>
-    parseStatementPaperFactsWithModels(ocrMarkdown, options),
-  );
-}
-
-async function parseStatementPaperFactsWithModels(
   ocrMarkdown: string,
   options?: {
     sourceHint?: string;
@@ -346,76 +331,74 @@ async function parseStatementPaperFactsWithModels(
   const preview = ocrMarkdown.slice(0, 24_000);
 
   try {
-  const metaPromise = generateObjectWithFallback({
-    schema: paperFactsMetaSchema,
-    logLabel: "statements-paper-meta",
-    timeoutMs: 40_000,
-    prompt: [
-      "Extract statement metadata only from this Canadian bank/credit-card OCR.",
-      "No transactions. Prefer CAD.",
-      "accountType (pick one): chequing|checking, savings, credit|credit_card, lending|line_of_credit, other.",
-      ...hintBlock,
-      MASK_RULES,
-      "openingBalance = Previous balance. closingBalance = Total balance / New balance.",
-      "Fill statementPeriodStart/End when present.",
-      ...userBlock,
-      "",
-      preview,
-    ].join("\n"),
-  });
-
-  const pageResults = await mapPool(pages, 4, async (pageText, index) => {
-    emit(
-      paperFactsParseProgress({
-        pageCount,
-        pagesDone,
-        label: `Reading page ${index + 1} of ${pageCount}…`,
-      }),
-    );
-    const { object } = await generateObjectWithFallback({
-      schema: paperFactsBatchSchema,
-      logLabel: "statements-paper-page",
-      timeoutMs: 40_000,
+    const metaPromise = generateObjectWithFallback({
+      schema: paperFactsMetaSchema,
+      logLabel: "statements-paper-meta",
       prompt: [
-        "Extract EVERY posted transaction LINE on this statement page OCR.",
-        "Canadian bank/credit card statement (often CIBC Visa).",
+        "Extract statement metadata only from this Canadian bank/credit-card OCR.",
+        "No transactions. Prefer CAD.",
+        "accountType (pick one): chequing|checking, savings, credit|credit_card, lending|line_of_credit, other.",
         ...hintBlock,
-        rules,
+        MASK_RULES,
+        "openingBalance = Previous balance. closingBalance = Total balance / New balance.",
+        "Fill statementPeriodStart/End when present.",
         ...userBlock,
-        `This is page ${index + 1} of ${pageCount}.`,
-        pageText.slice(0, 40_000),
+        "",
+        preview,
       ].join("\n"),
     });
 
-    pagesDone += 1;
+    const pageResults = await mapPool(pages, 4, async (pageText, index) => {
+      emit(
+        paperFactsParseProgress({
+          pageCount,
+          pagesDone,
+          label: `Reading page ${index + 1} of ${pageCount}…`,
+        }),
+      );
+      const { object } = await generateObjectWithFallback({
+        schema: paperFactsBatchSchema,
+        logLabel: "statements-paper-page",
+        prompt: [
+          "Extract EVERY posted transaction LINE on this statement page OCR.",
+          "Canadian bank/credit card statement (often CIBC Visa).",
+          ...hintBlock,
+          rules,
+          ...userBlock,
+          `This is page ${index + 1} of ${pageCount}.`,
+          pageText.slice(0, 40_000),
+        ].join("\n"),
+      });
+
+      pagesDone += 1;
+      emit(
+        paperFactsParseProgress({
+          pageCount,
+          pagesDone,
+          label: `Read page ${index + 1} of ${pageCount} · ${object.transactions.length} lines`,
+        }),
+      );
+      return object.transactions;
+    });
+
+    const { object: meta } = await metaPromise;
     emit(
       paperFactsParseProgress({
         pageCount,
-        pagesDone,
-        label: `Read page ${index + 1} of ${pageCount} · ${object.transactions.length} lines`,
+        pagesDone: pageCount,
+        label: "Checking balances…",
       }),
     );
-    return object.transactions;
-  });
+    const paper: PaperFactsStatementInput = {
+      ...meta,
+      transactions: pageResults.flat(),
+    };
 
-  const { object: meta } = await metaPromise;
-  emit(
-    paperFactsParseProgress({
-      pageCount,
-      pagesDone: pageCount,
-      label: "Checking balances…",
-    }),
-  );
-  const paper: PaperFactsStatementInput = {
-    ...meta,
-    transactions: pageResults.flat(),
-  };
+    console.info(
+      `[statements] paper-facts ${paper.transactions.length} txns across ${pageCount} pages in ${Date.now() - started}ms`,
+    );
 
-  console.info(
-    `[statements] paper-facts ${paper.transactions.length} txns across ${pageCount} pages in ${Date.now() - started}ms`,
-  );
-
-  return paperFactsToParsed(paper);
+    return paperFactsToParsed(paper);
   } finally {
     clearInterval(beat);
   }

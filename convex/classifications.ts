@@ -119,6 +119,62 @@ async function userTransactions(
     .collect();
 }
 
+async function applyTaxonomyRenamesForUser(
+  ctx: MutationCtx,
+  userId: Id<"users">,
+) {
+  const categories = await ctx.db
+    .query("transactionCategories")
+    .withIndex("by_userId", (q) => q.eq("userId", userId))
+    .collect();
+  for (const category of categories) {
+    const rename = CATEGORY_RENAMES.find(
+      (row) => norm(row.from) === norm(category.name),
+    );
+    if (!rename) continue;
+    await ctx.db.patch(category._id, {
+      name: rename.to,
+      description: taxonomyDescription("category", rename.to),
+    });
+    category.name = rename.to;
+  }
+  const subs = await ctx.db
+    .query("transactionSubcategories")
+    .withIndex("by_userId", (q) => q.eq("userId", userId))
+    .collect();
+  for (const sub of subs) {
+    const rename = SUBCATEGORY_RENAMES.find(
+      (row) => norm(row.from) === norm(sub.name),
+    );
+    if (!rename) continue;
+    const duplicate = subs.find(
+      (other) =>
+        other._id !== sub._id &&
+        other.categoryLegacyId === sub.categoryLegacyId &&
+        norm(other.name) === norm(rename.to),
+    );
+    if (duplicate) {
+      const txs = await userTransactions(ctx, userId);
+      const now = Date.now();
+      for (const tx of txs) {
+        if (tx.subcategoryLegacyId !== sub.legacyId) continue;
+        await ctx.db.patch(tx._id, {
+          subcategory: duplicate.name,
+          subcategoryLegacyId: duplicate.legacyId,
+          updatedAt: now,
+        });
+      }
+      await ctx.db.delete(sub._id);
+      continue;
+    }
+    await ctx.db.patch(sub._id, {
+      name: rename.to,
+      description: taxonomyDescription("subcategory", rename.to),
+    });
+    sub.name = rename.to;
+  }
+}
+
 async function ownedSection(
   ctx: QueryCtx | MutationCtx,
   userId: Id<"users">,
@@ -444,7 +500,9 @@ export const ensureStarter = mutation({
   handler: async (ctx) => {
     const user = await requireUser(ctx);
     await ensureSeedSharedTags(ctx);
-    return await seedStarterTaxonomyForUser(ctx, user);
+    const seeded = await seedStarterTaxonomyForUser(ctx, user);
+    await applyTaxonomyRenamesForUser(ctx, user._id);
+    return seeded;
   },
 });
 
@@ -467,36 +525,7 @@ export const reconcileSharedPaths = internalMutation({
     await ensureSeedSharedTags(ctx);
     const users = await ctx.db.query("users").collect();
     for (const user of users) {
-      const categories = await ctx.db
-        .query("transactionCategories")
-        .withIndex("by_userId", (q) => q.eq("userId", user._id))
-        .collect();
-      for (const category of categories) {
-        const rename = CATEGORY_RENAMES.find(
-          (row) => norm(row.from) === norm(category.name),
-        );
-        if (!rename) continue;
-        await ctx.db.patch(category._id, {
-          name: rename.to,
-          description: taxonomyDescription("category", rename.to),
-        });
-        category.name = rename.to;
-      }
-      const subs = await ctx.db
-        .query("transactionSubcategories")
-        .withIndex("by_userId", (q) => q.eq("userId", user._id))
-        .collect();
-      for (const sub of subs) {
-        const rename = SUBCATEGORY_RENAMES.find(
-          (row) => norm(row.from) === norm(sub.name),
-        );
-        if (!rename) continue;
-        await ctx.db.patch(sub._id, {
-          name: rename.to,
-          description: taxonomyDescription("subcategory", rename.to),
-        });
-        sub.name = rename.to;
-      }
+      await applyTaxonomyRenamesForUser(ctx, user._id);
       await remountFoodSectionForUser(ctx, user._id);
       await remountCategorySectionsForUser(ctx, user._id);
     }
@@ -833,7 +862,16 @@ function catalogKey(parts: Array<string | null | undefined>) {
 }
 
 async function loadSharedPaths(ctx: QueryCtx | MutationCtx) {
-  return await ctx.db.query("sharedCategoryPaths").collect();
+  const rows = await ctx.db.query("sharedCategoryPaths").collect();
+  return rows.map((row) => ({
+    ...row,
+    category: rewriteTaxonomyLabel("category", row.category) ?? row.category,
+    subcategory:
+      row.subcategory == null
+        ? null
+        : (rewriteTaxonomyLabel("subcategory", row.subcategory) ??
+          row.subcategory),
+  }));
 }
 
 async function publishSharedPath(

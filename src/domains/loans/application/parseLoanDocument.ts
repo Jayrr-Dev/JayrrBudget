@@ -10,9 +10,9 @@ import {
   isMistralConfigured,
   ocrDocument,
 } from "@/domains/statements/infrastructure/mistralOcr";
-import { OPENROUTER_NOT_CONFIGURED } from "@/shared/ai/openRouter";
 import { runMeteredOpenRouter } from "@/shared/ai/aiMeter.server";
 import { checkAiCall } from "@/shared/ai/enforceAiCall.server";
+import { OPENROUTER_NOT_CONFIGURED } from "@/shared/ai/openRouter";
 import { resolveOpenRouterApiKey } from "@/shared/ai/resolveOpenRouter.server";
 import { errorMessage } from "@/shared/lib/error-message";
 import type { ConvexHttpClient } from "convex/browser";
@@ -30,14 +30,13 @@ function emitProgress(
  * 1. SHA-256 of file bytes
  * 2. OCR (server, or local markdown from the browser)
  * 3. OpenRouter structured loan terms
- * 4. convex = persist OCR + fields; vault = return payload for client encrypt
+ * 4. Return payload for client encrypt
  */
 export async function parseLoanDocument(params: {
   filename: string;
   bytes: Buffer;
   client: ConvexHttpClient;
   mimeType?: string | null;
-  persistMode?: "convex" | "vault";
   clientOcr?: { markdown: string; pageCount: number } | null;
   onProgress?: (progress: LoanDocumentProgress) => void;
 }): Promise<ParseLoanDocumentResult> {
@@ -83,7 +82,6 @@ type ParseLoanParams = {
   bytes: Buffer;
   client: ConvexHttpClient;
   mimeType?: string | null;
-  persistMode?: "convex" | "vault";
   clientOcr?: { markdown: string; pageCount: number } | null;
   onProgress?: (progress: LoanDocumentProgress) => void;
 };
@@ -115,15 +113,6 @@ async function parseLoanDocumentWithKey(
   try {
     emitProgress(params.onProgress, "receive");
     const fileHash = statementFileHash(params.bytes);
-    const persistMode = params.persistMode ?? "vault";
-    if (persistMode !== "vault") {
-      return {
-        ok: false,
-        status: 410,
-        error:
-          "Plaintext loan document save is retired. Unlock the private ledger.",
-      };
-    }
 
     emitProgress(params.onProgress, "ocr");
     const ocr = params.clientOcr

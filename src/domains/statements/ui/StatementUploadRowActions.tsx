@@ -40,7 +40,6 @@ import type { StatementUploadLog } from "@/domains/statements/domain/types";
 import { fetchStatementUpload } from "@/domains/statements/queries/fetchStatementUploads";
 import { statementQueryKeys } from "@/domains/statements/queries/query-keys";
 import { OcrMarkdownView } from "@/domains/statements/ui/OcrMarkdownView";
-import { applyVaultCategorization } from "@/domains/vault/application/applyVaultCategorization";
 import { deleteVaultStatement } from "@/domains/vault/application/deleteVaultStatement";
 import {
   skipNextPrivateLedgerReload,
@@ -65,99 +64,8 @@ export function StatementUploadRowActions({
   const client = useConvex();
   const privateLedger = usePrivateLedger();
   const vault = upload.source === "vault";
-  const alreadyCategorized = upload.categorized;
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
-  const [confirmCategorizeOpen, setConfirmCategorizeOpen] = useState(false);
   const [ocrOpen, setOcrOpen] = useState(false);
-  const categorize = useMutation({
-    mutationFn: async () => {
-      if (vault) {
-        const txs = privateLedger.ledger.transactions.filter((tx) =>
-          upload.transactionIds?.length
-            ? upload.transactionIds.includes(tx.recordId)
-            : tx.statementRecordId === upload.recordId,
-        );
-        const response = await fetch("/api/statements/categorize-vault", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            skipCache: alreadyCategorized,
-            transactions: txs.map((tx) => ({
-              transactionId: tx.recordId,
-              description: tx.description,
-              amount: tx.amount,
-            })),
-          }),
-        });
-        const result = await response.json();
-        if (!response.ok)
-          throw new Error(result.error ?? "Categorization failed");
-        const masterKey = getVaultMasterKey();
-        if (
-          !privateLedger.userId ||
-          !privateLedger.vaultId ||
-          !privateLedger.keyId ||
-          !masterKey
-        ) {
-          throw new Error("Sign in again, then categorize.");
-        }
-        await applyVaultCategorization({
-          client: client as unknown as MutationClient,
-          userId: privateLedger.userId,
-          vaultId: privateLedger.vaultId,
-          keyId: privateLedger.keyId,
-          masterKey,
-          ledger: privateLedger.ledger,
-          labeled: result.labeled,
-        });
-        privateLedger.reload();
-        return result.summary as import("../domain/importResult").CategorizationSummary;
-      }
-      const response = await fetch(`/api/statements/${upload.id}/categorize`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ force: alreadyCategorized }),
-      });
-      const result = await response.json();
-      if (!response.ok)
-        throw new Error(result.error ?? "Categorization failed");
-      return result as import("../domain/importResult").CategorizationSummary;
-    },
-    onSuccess: async (result) => {
-      setConfirmCategorizeOpen(false);
-      const description = `${result.cached} reused, ${result.ai} categorized, ${result.pending} pending.`;
-      if (result.ok) {
-        toast.success(
-          alreadyCategorized
-            ? "Recategorization complete"
-            : "Categorization complete",
-          {
-            description,
-          },
-        );
-      } else {
-        toast.warning(
-          alreadyCategorized
-            ? "Recategorization needs attention"
-            : "Categorization needs attention",
-          { description: result.error ?? description },
-        );
-      }
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: statementQueryKeys.uploads }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.dashboard }),
-        queryClient.invalidateQueries({ queryKey: dbExplorerQueryKeys.all }),
-        queryClient.invalidateQueries({ queryKey: analysisQueryKeys.all }),
-      ]);
-    },
-    onError: (error) =>
-      toast.error(
-        alreadyCategorized
-          ? "Recategorization failed"
-          : "Categorization failed",
-        { description: error.message },
-      ),
-  });
   const detail = useQuery({
     queryKey: statementQueryKeys.upload(upload.id),
     queryFn: () => fetchStatementUpload(upload.id),
@@ -217,14 +125,6 @@ export function StatementUploadRowActions({
     },
   });
 
-  const categorizeLabel = categorize.isPending
-    ? alreadyCategorized
-      ? "Recategorizing..."
-      : "Categorizing..."
-    : alreadyCategorized
-      ? "Recategorize?"
-      : "Categorize transactions";
-
   return (
     <>
       <DropdownMenu>
@@ -235,12 +135,6 @@ export function StatementUploadRowActions({
           <Icon icon="basil:menu-outline" className="size-4" />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-auto min-w-36">
-          <DropdownMenuItem
-            disabled={categorize.isPending || remove.isPending}
-            onClick={() => setConfirmCategorizeOpen(true)}
-          >
-            {categorizeLabel}
-          </DropdownMenuItem>
           <DropdownMenuItem
             className="cursor-pointer"
             disabled={!upload.hasOcr}
@@ -316,46 +210,6 @@ export function StatementUploadRowActions({
           )}
         </DialogContent>
       </Dialog>
-      <AlertDialog
-        open={confirmCategorizeOpen}
-        onOpenChange={setConfirmCategorizeOpen}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>
-              {alreadyCategorized
-                ? "Recategorize this statement?"
-                : "Categorize this statement?"}
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              {alreadyCategorized
-                ? `Re-labels transactions from ${upload.filename} using your current upload rules. Existing categories can change.`
-                : `Labels transactions from ${upload.filename} using your upload rules.`}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <Button
-              variant="outline"
-              disabled={categorize.isPending}
-              onClick={() => setConfirmCategorizeOpen(false)}
-            >
-              Cancel
-            </Button>
-            <Button
-              disabled={categorize.isPending}
-              onClick={() => categorize.mutate()}
-            >
-              {categorize.isPending
-                ? alreadyCategorized
-                  ? "Recategorizing…"
-                  : "Categorizing…"
-                : alreadyCategorized
-                  ? "Recategorize"
-                  : "Categorize"}
-            </Button>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
       <AlertDialog open={confirmDeleteOpen} onOpenChange={setConfirmDeleteOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>

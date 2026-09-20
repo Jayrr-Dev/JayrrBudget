@@ -281,7 +281,6 @@ export function AddLoanDialog({
         throw new Error("Turn on Cloud Processing, then retry.");
       }
       const result = await uploadLoanDocument(file, {
-        persistMode: "vault",
         ocrMode,
         onProgress: (progress) => {
           toast.loading(formatLoanDocumentProgress(progress), {
@@ -382,7 +381,6 @@ export function AddLoanDialog({
     setSaving(true);
     try {
       const write = vaultWriteReady({
-        encryptedLedger: privateLedger.encryptedLedger,
         userId: privateLedger.userId,
         vaultId: privateLedger.vaultId,
         keyId: privateLedger.keyId,
@@ -390,11 +388,9 @@ export function AddLoanDialog({
       });
       if (!write) {
         throw new Error(
-          privateLedger.encryptedLedger
-            ? isEditing
-              ? "Unlock the vault to edit this lending account."
-              : "Unlock the vault to register a lending account."
-            : "Turn on Private ledger in Modules, unlock the vault, then register the loan.",
+          isEditing
+            ? "Unlock the vault to edit this lending account."
+            : "Unlock the vault to register a lending account.",
         );
       }
       const existingAccount = accountId

@@ -222,4 +222,75 @@ assert(usdFx.foreignCurrency === "USD", "usd currency");
 assert(usdFx.foreignAmount === 12, `usd amount was ${usdFx.foreignAmount}`);
 assert(usdFx.exchangeRate === 1.42, `usd rate was ${usdFx.exchangeRate}`);
 
+const recapTwins: ParsedStatement = {
+  ...chequingCash,
+  openingBalance: 4850,
+  closingBalance: 4207.34,
+  transactions: [
+    txn({
+      date: "2026-01-01",
+      description: "PAD - NORTHSTAR MORTGAGE",
+      amount: 642.66,
+      section: "Home",
+      category: "Housing",
+      subcategory: "Mortgage",
+    }),
+    txn({
+      date: "2026-01-01",
+      description: "Jan 01",
+      amount: 642.66,
+      section: "Finance",
+      category: "Banking Fees",
+    }),
+    txn({
+      date: "2026-01-05",
+      description: "PAD - TELUS MOBILITY",
+      amount: 74.5,
+      section: "Home",
+      category: "Utilities",
+      subcategory: "Mobile",
+    }),
+    txn({
+      date: "2026-01-05",
+      description: "EPCOR UTILITIES INC PAD AGREEMENT 9748880 Jan 05",
+      amount: 74.5,
+      section: "Home",
+      category: "Utilities",
+      subcategory: "Electricity",
+    }),
+    txn({
+      date: "2026-01-10",
+      description: "POS DEBIT - STARBUCKS",
+      amount: 5.47,
+    }),
+    txn({
+      date: "2026-01-10",
+      description: "POS DEBIT - TIM HORTONS",
+      amount: 5.47,
+    }),
+  ],
+};
+const recapDeduped = dedupeParsedTransactions(recapTwins);
+assert(
+  recapDeduped.transactions.length === 4,
+  `register recap twins collapsed to ${recapDeduped.transactions.length}`,
+);
+const mortgage = recapDeduped.transactions.find((row) =>
+  row.description.includes("NORTHSTAR"),
+);
+assert(mortgage?.subcategory === "Mortgage", "kept mortgage register line");
+assert(
+  !recapDeduped.transactions.some((row) => row.description === "Jan 01"),
+  "dropped date-only recap row",
+);
+assert(
+  recapDeduped.transactions.some((row) =>
+    row.description.includes("STARBUCKS"),
+  ) &&
+    recapDeduped.transactions.some((row) =>
+      row.description.includes("TIM HORTONS"),
+    ),
+  "kept two different same-day same-amount rails",
+);
+
 console.log("parse polish asserts ok");

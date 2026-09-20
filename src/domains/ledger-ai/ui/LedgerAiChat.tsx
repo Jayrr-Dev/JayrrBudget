@@ -419,8 +419,7 @@ function PiggyChatPaneSession({
       ) : null}
       {blocked ? (
         <p className="shrink-0 border-b border-border bg-warning-subtle px-3 py-2 text-xs text-warning">
-          Turn on Cloud Processing in Modules before sending budget data to
-          Jev.
+          Turn on Cloud Processing in Modules before sending budget data to Jev.
         </p>
       ) : null}
 
@@ -820,29 +819,21 @@ function LedgerAiChatSession({
   useEffect(() => {
     saveIndex({ tabs, activeId });
   }, [tabs, activeId, saveIndex]);
-  const encryptedLedger = useFeatureFlag("encryptedLedger");
   const cloudProcessing = useFeatureFlag("cloudProcessing");
   const privateLedger = usePrivateLedger();
   const storeSheet = useScratchNote();
-  const blocked = encryptedLedger && !cloudProcessing;
+  const blocked = !cloudProcessing;
 
   const transport = useMemo(
     () =>
       new DefaultChatTransport<PiggyUIMessage>({
         api: "/api/ledger/chat",
         prepareSendMessagesRequest: ({ messages, id, body }) => {
-          const useClientBudget = encryptedLedger;
-          let budget:
-            | ReturnType<typeof buildBudgetContextFromDashboard>
-            | { error: string }
-            | undefined;
-          if (useClientBudget) {
-            budget = privateLedger.unlocked
-              ? buildBudgetContextFromDashboard(
-                  dashboardFromPrivateLedger(privateLedger.ledger),
-                )
-              : { error: "Unlock the vault, then try chat." };
-          }
+          const budget = privateLedger.unlocked
+            ? buildBudgetContextFromDashboard(
+                dashboardFromPrivateLedger(privateLedger.ledger),
+              )
+            : { error: "Unlock the vault, then try chat." };
           // Only the newest user message carries file bytes; older ones keep
           // a text note so the request stays small and the context stays clear.
           const lastUserIndex = messages.findLastIndex(
@@ -871,14 +862,14 @@ function LedgerAiChatSession({
               ...body,
               id,
               messages: slimMessages,
-              useClientBudget,
+              useClientBudget: true,
               budget,
               storeSheet,
             },
           };
         },
       }),
-    [encryptedLedger, privateLedger.ledger, privateLedger.unlocked, storeSheet],
+    [privateLedger.ledger, privateLedger.unlocked, storeSheet],
   );
 
   const addTab = () => {

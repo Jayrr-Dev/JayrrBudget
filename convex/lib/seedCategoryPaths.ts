@@ -61,7 +61,11 @@ const TREE: Array<
   ],
   ["Finance", "Tax Payments", ["Income Tax", "Property Tax"]],
 
-  ["Income", "Employment", ["Salary", "Bonus", "Contractor Pay"]],
+  [
+    "Income",
+    "Employment",
+    ["Salary", "Wages", "Bonus", "Contractor Pay"],
+  ],
   ["Income", "Tax", ["Tax Credits", "Tax Refunds"]],
   [
     "Income",
@@ -84,7 +88,7 @@ const TREE: Array<
   [
     "Transfers",
     "External Transfers",
-    ["Interac e-Transfer", "Remittances", "P2P Apps"],
+    ["Interac e-Transfer", "Remittances", "P2P Apps", "Cheques", "Wire Transfers"],
   ],
   ["Transfers", "ATM", ["ATM Withdrawals", "Cash Advances", "Cash Deposits"]],
 
@@ -264,6 +268,8 @@ export const SUBCATEGORY_RENAMES: Array<{ from: string; to: string }> = [
   { from: "Property & Auto Insurance", to: "Home Insurance" },
   { from: "Brokerage & Crypto", to: "Brokerage" },
   { from: "Salary & Wages", to: "Salary" },
+  { from: "Hourly Wages", to: "Wages" },
+  { from: "Hourly Wage", to: "Wages" },
   { from: "Tax Credits & GST", to: "Tax Credits" },
   { from: "Mobile & Wireless", to: "Mobile" },
   { from: "Hardware & Tools", to: "Hardware" },
@@ -295,6 +301,7 @@ export const SUBCATEGORY_RENAMES: Array<{ from: string; to: string }> = [
   { from: "Service & Sales", to: "Service" },
   { from: "Bike & Scooter", to: "Scooter" },
   { from: "Clinics & Telehealth", to: "Clinics" },
+  { from: "Wire Transfer", to: "Wire Transfers" },
   { from: "Checkup & Cleaning", to: "Checkup" },
   { from: "Glasses & Contacts", to: "Glasses" },
 ];

@@ -11,7 +11,6 @@ import {
 } from "@/domains/db-explorer/queries/dbExplorer";
 import { dbExplorerQueryKeys } from "@/domains/db-explorer/queries/query-keys";
 import { SchemaDiagram } from "@/domains/db-explorer/ui/SchemaDiagram";
-import { useFeatureFlag } from "@/domains/feature-flags/ui/useFeatureFlag";
 import { cn } from "@/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
@@ -132,7 +131,6 @@ function TableBrowser({ table }: { table: string }) {
 }
 
 export function DbExplorer() {
-  const encryptedLedger = useFeatureFlag("encryptedLedger");
   const schemaQuery = useQuery({
     queryKey: dbExplorerQueryKeys.schema,
     queryFn: fetchDbSchema,
@@ -143,11 +141,8 @@ export function DbExplorer() {
   const [tab, setTab] = useState("schema");
 
   const visibleTables = useMemo(
-    () =>
-      encryptedLedger
-        ? tables.filter((t) => !PLAINTEXT_LEDGER_TABLES.has(t.name))
-        : tables,
-    [encryptedLedger, tables],
+    () => tables.filter((t) => !PLAINTEXT_LEDGER_TABLES.has(t.name)),
+    [tables],
   );
 
   const activeTable = selected ?? visibleTables[0]?.name ?? null;
@@ -158,14 +153,12 @@ export function DbExplorer() {
 
   const visibleForeignKeys = useMemo(
     () =>
-      encryptedLedger
-        ? foreignKeys.filter(
-            (fk) =>
-              !PLAINTEXT_LEDGER_TABLES.has(fk.fromTable) &&
-              !PLAINTEXT_LEDGER_TABLES.has(fk.toTable),
-          )
-        : foreignKeys,
-    [encryptedLedger, foreignKeys],
+      foreignKeys.filter(
+        (fk) =>
+          !PLAINTEXT_LEDGER_TABLES.has(fk.fromTable) &&
+          !PLAINTEXT_LEDGER_TABLES.has(fk.toTable),
+      ),
+    [foreignKeys],
   );
   const ledgerTables = useMemo(
     () => visibleTables.filter((t) => t.scope !== "auth"),
@@ -229,9 +222,8 @@ export function DbExplorer() {
         <div className="space-y-0.5">
           <h1 className="type-kicker text-[20px]">Database</h1>
           <p className="type-lead">
-            {encryptedLedger
-              ? "Private ledger is on — money rows live in encrypted vault records, not these plaintext tables."
-              : "Browse tables and their rows. Click a table name to open it."}
+            Private ledger money rows live in encrypted vault records, not these
+            plaintext tables.
           </p>
         </div>
         {activeMeta ? (

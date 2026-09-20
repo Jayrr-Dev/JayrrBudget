@@ -3,6 +3,7 @@
 import { BankAccountsDashboard } from "@/domains/dashboard/ui/BankAccountsDashboard";
 import { useDashboard } from "@/domains/dashboard/ui/DashboardPanels";
 import { TitleInfo } from "@/domains/ops/ui/TitleInfo";
+import { ClassifyUnclassifiedNudge } from "@/domains/transactions/ui/ClassifyUnclassifiedNudge";
 import { TransactionsDataTable } from "@/domains/transactions/ui/TransactionsDataTable";
 import {
   formatDisplayDate,
@@ -33,6 +34,7 @@ export default function OverviewPage() {
 
   return (
     <div className="space-y-8">
+      <ClassifyUnclassifiedNudge sure="go-transactions" />
       <header className="flex items-center justify-between gap-3 border-b border-[var(--border)] pb-6 sm:items-start sm:gap-6">
         <div>
           <TitleInfo

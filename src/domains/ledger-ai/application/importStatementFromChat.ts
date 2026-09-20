@@ -17,7 +17,6 @@ import type { ConvexReactClient } from "convex/react";
 
 export async function importStatementFromChat(options: {
   file: File;
-  persistMode: "convex" | "vault";
   cloudProcessing: boolean;
   convex: ConvexReactClient;
   userId: string | null;
@@ -25,48 +24,43 @@ export async function importStatementFromChat(options: {
   keyId: string | null;
   ledger?: PrivateLedger;
 }): Promise<ImportStatementDocumentOutput> {
-  if (options.persistMode === "vault" && !options.cloudProcessing) {
+  if (!options.cloudProcessing) {
     return {
       ok: false,
-      error:
-        "Turn on Cloud Processing, then retry.",
+      error: "Turn on Cloud Processing, then retry.",
     };
   }
 
   try {
-    const result = await uploadBankStatement(options.file, {
-      persistMode: options.persistMode,
-    });
+    const result = await uploadBankStatement(options.file);
 
-    if (options.persistMode === "vault") {
-      const opened = await hydrateVaultSession(
-        options.convex as unknown as VaultClient,
-      );
-      const masterKey = getVaultMasterKey();
-      const vaultId = options.vaultId ?? opened?.vaultId ?? null;
-      const keyId = options.keyId ?? opened?.keyId ?? null;
-      if (!options.userId || !vaultId || !keyId || !masterKey) {
-        return {
-          ok: false,
-          error: "Unlock the vault, then ask Jev to import again.",
-        };
-      }
-      const ledger =
-        options.ledger ??
-        (await loadPrivateLedger(options.convex as unknown as VaultListClient, {
-          userId: options.userId,
-          vaultId,
-        }));
-      await encryptStatementImportToVault({
-        client: options.convex as unknown as MutationClient,
+    const opened = await hydrateVaultSession(
+      options.convex as unknown as VaultClient,
+    );
+    const masterKey = getVaultMasterKey();
+    const vaultId = options.vaultId ?? opened?.vaultId ?? null;
+    const keyId = options.keyId ?? opened?.keyId ?? null;
+    if (!options.userId || !vaultId || !keyId || !masterKey) {
+      return {
+        ok: false,
+        error: "Unlock the vault, then ask Jev to import again.",
+      };
+    }
+    const ledger =
+      options.ledger ??
+      (await loadPrivateLedger(options.convex as unknown as VaultListClient, {
         userId: options.userId,
         vaultId,
-        keyId,
-        masterKey,
-        result,
-        ledger,
-      });
-    }
+      }));
+    await encryptStatementImportToVault({
+      client: options.convex as unknown as MutationClient,
+      userId: options.userId,
+      vaultId,
+      keyId,
+      masterKey,
+      result,
+      ledger,
+    });
 
     return {
       ok: true,

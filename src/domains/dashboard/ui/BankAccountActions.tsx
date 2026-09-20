@@ -20,12 +20,12 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { RowActionsMenu } from "@/components/ui/row-actions-menu";
-import { queryKeys } from "@/domains/dashboard/queries/query-keys";
 import {
   displayAccountName,
   normalizeAccountLabel,
 } from "@/domains/dashboard/domain/accountName";
 import type { DashboardAccount } from "@/domains/dashboard/domain/types";
+import { queryKeys } from "@/domains/dashboard/queries/query-keys";
 import {
   saveEncryptedAccountLabel,
   vaultWriteReady,
@@ -95,7 +95,6 @@ function EditAccountLabelDialog({
     mutationFn: async () => {
       const nextLabel = normalizeAccountLabel(label);
       const write = vaultWriteReady({
-        encryptedLedger: privateLedger.encryptedLedger,
         userId: privateLedger.userId,
         vaultId: privateLedger.vaultId,
         keyId: privateLedger.keyId,

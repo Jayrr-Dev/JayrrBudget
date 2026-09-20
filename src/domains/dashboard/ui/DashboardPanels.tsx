@@ -1,7 +1,6 @@
 "use client";
 
 import { EmptyPrompt } from "@/components/ui/empty-prompt";
-import { PageSpinner } from "@/components/ui/spinner";
 import { displayAccountName } from "@/domains/dashboard/domain/accountName";
 import { formatMoney } from "@/domains/dashboard/domain/money";
 import {
@@ -14,21 +13,7 @@ import type {
   DashboardData,
   DashboardTransaction,
 } from "@/domains/dashboard/domain/types";
-import {
-  peekEncryptedLedgerLocal,
-  readLastUserId,
-  upsertLastView,
-} from "@/domains/dashboard/ui/lastViewCache";
-import {
-  getLedgerSnapshotVersion,
-  isLastViewHydrateDone,
-  peekDashboard,
-  rememberDashboard,
-  rememberLastViewSavedAt,
-  subscribeLedgerSnapshots,
-} from "@/domains/dashboard/ui/ledgerQuerySnapshot";
 import { MoneyText, moneyToneClass } from "@/domains/dashboard/ui/MoneyText";
-import { useFeatureFlags } from "@/domains/feature-flags/ui/useFeatureFlag";
 import { MerchantLabel } from "@/domains/merchants/ui/MerchantLabel";
 import { StatementUpload } from "@/domains/statements/ui/StatementUpload";
 import { dashboardFromPrivateLedger } from "@/domains/vault/application/dashboardFromPrivateLedger";
@@ -36,123 +21,62 @@ import { DecryptingPage } from "@/domains/vault/ui/DecryptingStatus";
 import { usePrivateLedger } from "@/domains/vault/ui/usePrivateLedger";
 import { cn } from "@/lib/utils";
 import { formatDisplayDate } from "@/shared/lib/format-date";
-import { api } from "@convex/_generated/api";
-import { useConvexAuth, useQuery } from "convex/react";
-import { useEffect, useMemo, useSyncExternalStore } from "react";
+import { useConvexAuth } from "convex/react";
+import { useMemo, type ReactNode } from "react";
 
 export function useDashboard(transactionLimit: number | null = 250) {
-  const { isAuthenticated, isLoading: authLoading } = useConvexAuth();
-  const flags = useFeatureFlags();
+  const { isLoading: authLoading } = useConvexAuth();
   const privateLedger = usePrivateLedger();
-  useSyncExternalStore(
-    subscribeLedgerSnapshots,
-    getLedgerSnapshotVersion,
-    getLedgerSnapshotVersion,
-  );
-  const result = useQuery(
-    api.dashboard.get,
-    isAuthenticated && !flags.loading && !privateLedger.encryptedLedger
-      ? { transactionLimit }
-      : "skip",
-  );
 
-  const encryptedData = useMemo(() => {
-    if (!privateLedger.encryptedLedger || !privateLedger.unlocked)
-      return undefined;
-    const data = dashboardFromPrivateLedger(privateLedger.ledger);
-    if (transactionLimit == null) return data;
+  const data = useMemo(() => {
+    if (!privateLedger.unlocked) return undefined;
+    const next = dashboardFromPrivateLedger(privateLedger.ledger);
+    if (transactionLimit == null) return next;
     return {
-      ...data,
-      transactions: data.transactions.slice(0, transactionLimit),
-      hasMoreTransactions: data.transactions.length > transactionLimit,
+      ...next,
+      transactions: next.transactions.slice(0, transactionLimit),
+      hasMoreTransactions: next.transactions.length > transactionLimit,
     };
-  }, [
-    privateLedger.encryptedLedger,
-    privateLedger.ledger,
-    privateLedger.unlocked,
-    transactionLimit,
-  ]);
+  }, [privateLedger.ledger, privateLedger.unlocked, transactionLimit]);
 
-  const liveDashboard = result?.ok ? result.data : undefined;
-  useEffect(() => {
-    if (authLoading || flags.loading || privateLedger.encryptedLedger) return;
-    if (!liveDashboard || transactionLimit !== 250) return;
-    if (peekEncryptedLedgerLocal()) return;
-    const userId = readLastUserId();
-    if (!userId) return;
-    rememberLastViewSavedAt(Date.now());
-    void upsertLastView({ userId, dashboard: liveDashboard });
-  }, [
-    authLoading,
-    flags.loading,
-    liveDashboard,
-    privateLedger.encryptedLedger,
-    transactionLimit,
-  ]);
-
-  if (authLoading || flags.loading) {
-    const cached = privateLedger.encryptedLedger
-      ? undefined
-      : peekDashboard(transactionLimit);
+  if (authLoading) {
     return {
-      data: cached,
+      data: undefined,
       error: null,
-      isPending: cached === undefined,
+      isPending: true,
       isError: false,
-      isSuccess: Boolean(cached),
-      encryptedLedger: privateLedger.encryptedLedger,
+      isSuccess: false,
+      encryptedLedger: true as const,
       locked: false,
       reload: privateLedger.reload,
     };
   }
 
-  if (privateLedger.encryptedLedger) {
-    const locked = !privateLedger.vaultReady || !privateLedger.unlocked;
-    const pending = privateLedger.loading || locked;
-    return {
-      data: locked || privateLedger.loading ? undefined : encryptedData,
-      error: privateLedger.error ? new Error(privateLedger.error) : null,
-      isPending: pending,
-      isError: Boolean(privateLedger.error),
-      isSuccess: Boolean(encryptedData) && !locked && !pending,
-      encryptedLedger: true as const,
-      locked,
-      reload: privateLedger.reload,
-    };
-  }
-
-  const live = result?.ok ? result.data : undefined;
-  if (live) {
-    rememberDashboard(transactionLimit, live);
-  }
-  const cached =
-    live ??
-    (result === undefined ? peekDashboard(transactionLimit) : undefined);
-  const hydratePending =
-    !isAuthenticated && cached === undefined && !isLastViewHydrateDone();
-
+  const locked = !privateLedger.vaultReady || !privateLedger.unlocked;
+  const pending = privateLedger.loading || locked;
   return {
-    data: cached,
-    error: result && !result.ok ? new Error(result.error) : null,
-    isPending:
-      (isAuthenticated && result === undefined && cached === undefined) ||
-      hydratePending,
-    isError: Boolean(result && !result.ok),
-    isSuccess: Boolean(live ?? cached),
-    encryptedLedger: false as const,
-    locked: false,
-    reload: undefined as undefined | (() => void),
+    data: locked || privateLedger.loading ? undefined : data,
+    error: privateLedger.error ? new Error(privateLedger.error) : null,
+    isPending: pending,
+    isError: Boolean(privateLedger.error),
+    isSuccess: Boolean(data) && !locked && !pending,
+    encryptedLedger: true as const,
+    locked,
+    reload: privateLedger.reload,
   };
 }
 
 export function DashboardToolbar({
   onImported,
+  leading,
 }: {
   onImported?: () => Promise<void> | void;
+  leading?: ReactNode;
 } = {}) {
   return (
     <div className="flex shrink-0 flex-nowrap items-center justify-end gap-2">
       <StatementUpload
+        leading={leading}
         onImported={async () => {
           await onImported?.();
         }}
@@ -357,9 +281,5 @@ function StatBadge({ label, value }: { label: string; value: string }) {
 }
 
 export function OverviewBadgesSkeleton() {
-  const privateLedger = usePrivateLedger();
-  if (privateLedger.encryptedLedger) {
-    return <DecryptingPage className="min-h-16 py-8" />;
-  }
-  return <PageSpinner className="min-h-16 py-8" />;
+  return <DecryptingPage className="min-h-16 py-8" />;
 }

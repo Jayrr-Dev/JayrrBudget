@@ -45,9 +45,9 @@ import { BankAccountActions } from "@/domains/dashboard/ui/BankAccountActions";
 import {
   LoanAccountRow,
   LoanRowChevron,
+  loanNextPaymentLine,
 } from "@/domains/dashboard/ui/LoanAccountRow";
 import { MoneyText, moneyToneClass } from "@/domains/dashboard/ui/MoneyText";
-import { PiggyPageStatus } from "@/domains/ledger-ai/ui/PiggyPageStatus";
 import {
   LOAN_TYPES,
   formatLoanRate,
@@ -259,7 +259,6 @@ function LoanPaymentHistory({
   ) {
     if (toastIfOffline()) return;
     const write = vaultWriteReady({
-      encryptedLedger: privateLedger.encryptedLedger,
       userId: privateLedger.userId,
       vaultId: privateLedger.vaultId,
       keyId: privateLedger.keyId,
@@ -762,10 +761,9 @@ function AccountDetailView({
 }
 
 function SectionCardSpinner() {
-  const encrypted = usePrivateLedger().encryptedLedger;
   return (
     <div className="flex min-h-32 items-center justify-center rounded-xl border border-[var(--border)] bg-surface-elevated">
-      {encrypted ? <DecryptingStatus /> : <PiggyPageStatus />}
+      <DecryptingStatus />
     </div>
   );
 }
@@ -805,7 +803,6 @@ export function BankAccountsDashboard({
 }) {
   const router = useRouter();
   const [addLoanOpen, setAddLoanOpen] = useState(false);
-  const encrypted = usePrivateLedger().encryptedLedger;
 
   const sections = useMemo(() => {
     const grouped = groupAccountsBySection(accounts);
@@ -840,7 +837,7 @@ export function BankAccountsDashboard({
       <div className="space-y-8">
         <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-surface-elevated">
           <div className="flex min-h-64 items-center justify-center">
-            {encrypted ? <DecryptingStatus /> : <PiggyPageStatus />}
+            <DecryptingStatus />
           </div>
         </div>
       </div>

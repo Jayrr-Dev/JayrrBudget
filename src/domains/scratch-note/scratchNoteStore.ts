@@ -9,9 +9,8 @@ import {
   skipNextPrivateLedgerReload,
   usePrivateLedger,
 } from "@/domains/vault/ui/usePrivateLedger";
-import { api } from "@convex/_generated/api";
-import { useConvex, useConvexAuth, useMutation, useQuery } from "convex/react";
-import { useEffect, useRef, useState } from "react";
+import { useConvex } from "convex/react";
+import { useEffect, useState } from "react";
 
 export type ScratchNoteRow = {
   id: string;
@@ -204,14 +203,9 @@ function applyAddRow(
   };
 }
 
-/** Live note pad from Convex, or encrypted rows when the ledger flag is on. */
+/** Live note pad from encrypted vault rows. */
 export function useScratchNote(): ScratchNoteState {
-  const { isAuthenticated } = useConvexAuth();
   const privateLedger = usePrivateLedger();
-  const data = useQuery(
-    api.scratchNotes.get,
-    !isAuthenticated || privateLedger.encryptedLedger ? "skip" : {},
-  );
   const [, setTick] = useState(0);
   useEffect(() => {
     const onChange = () => setTick((n) => n + 1);
@@ -228,51 +222,19 @@ export function useScratchNote(): ScratchNoteState {
     pendingScratch = null;
     notifyScratchUi();
   }, [privateLedger.ledger, privateLedger.version]);
-  if (privateLedger.encryptedLedger) {
-    if (pendingScratch) return pendingScratch;
-    const pad = privateLedger.ledger.scratchPads[0];
-    if (pad)
-      return {
-        tabs: pad.tabs,
-        activeId: pad.activeId,
-        receiveId: pad.receiveId,
-      };
-    return EMPTY_STATE;
-  }
-  return data ?? EMPTY_STATE;
+  if (pendingScratch) return pendingScratch;
+  const pad = privateLedger.ledger.scratchPads[0];
+  if (pad)
+    return {
+      tabs: pad.tabs,
+      activeId: pad.activeId,
+      receiveId: pad.receiveId,
+    };
+  return EMPTY_STATE;
 }
 
-/** One-shot localStorage → Convex when cloud pad still empty. */
-export function useScratchNoteLocalMigration() {
-  const importIfEmpty = useMutation(api.scratchNotes.importIfEmpty);
-  const privateLedger = usePrivateLedger();
-  const ran = useRef(false);
-
-  useEffect(() => {
-    if (privateLedger.encryptedLedger) return;
-    if (ran.current || typeof window === "undefined") return;
-    if (localStorage.getItem(MIGRATED_KEY) === "1") {
-      ran.current = true;
-      return;
-    }
-    const local = readLocalStorageState();
-    if (!local) {
-      try {
-        localStorage.setItem(MIGRATED_KEY, "1");
-      } catch {
-        // ignore
-      }
-      ran.current = true;
-      return;
-    }
-    ran.current = true;
-    void importIfEmpty(local)
-      .then(() => clearLocalStorageNotes())
-      .catch(() => {
-        ran.current = false;
-      });
-  }, [importIfEmpty, privateLedger.encryptedLedger]);
-}
+/** Plaintext scratch migration is retired. */
+export function useScratchNoteLocalMigration() {}
 
 async function flushEncryptedScratch() {
   while (scratchDirty) {
@@ -312,27 +274,12 @@ function queueEncryptedScratch(next: ScratchNoteState) {
 export function useScratchNoteActions() {
   const client = useConvex();
   const privateLedger = usePrivateLedger();
-  const addRowMut = useMutation(api.scratchNotes.addRow).withOptimisticUpdate(
-    (localStore, args) => {
-      const current = localStore.getQuery(api.scratchNotes.get, {});
-      if (!current) return;
-      localStore.setQuery(api.scratchNotes.get, {}, applyAddRow(current, args));
-    },
-  );
-  const removeRowMut = useMutation(api.scratchNotes.removeRow);
-  const clearActiveMut = useMutation(api.scratchNotes.clearActive);
-  const selectTabMut = useMutation(api.scratchNotes.selectTab);
-  const setReceiveTabMut = useMutation(api.scratchNotes.setReceiveTab);
-  const addTabMut = useMutation(api.scratchNotes.addTab);
-  const closeTabMut = useMutation(api.scratchNotes.closeTab);
-  const renameTabMut = useMutation(api.scratchNotes.renameTab);
 
   scratchWriteDepsRef.current = {
     ledgerRevision: privateLedger.ledger.scratchPads[0]?.revision ?? null,
     reload: privateLedger.reload,
     persist: async (state, expectedRevision) => {
       const write = vaultWriteReady({
-        encryptedLedger: privateLedger.encryptedLedger,
         userId: privateLedger.userId,
         vaultId: privateLedger.vaultId,
         keyId: privateLedger.keyId,
@@ -363,102 +310,63 @@ export function useScratchNoteActions() {
   return {
     addRow: async (input: Omit<ScratchNoteRow, "id"> & { id?: string }) => {
       openNotePopover();
-      if (privateLedger.encryptedLedger) {
-        persistEncrypted(applyAddRow(currentState(), input));
-        return;
-      }
-      await addRowMut({
-        name: input.name,
-        spend: input.spend,
-        count: input.count,
-        currency: input.currency,
-        parent: input.parent,
-        id: input.id,
-      });
+      persistEncrypted(applyAddRow(currentState(), input));
     },
     removeRow: (rowId: string) => {
-      if (privateLedger.encryptedLedger) {
-        const state = currentState();
-        void persistEncrypted({
-          ...state,
-          tabs: state.tabs.map((tab) => ({
-            ...tab,
-            rows: tab.rows.filter((row) => row.id !== rowId),
-          })),
-        });
-        return;
-      }
-      void removeRowMut({ rowId });
+      const state = currentState();
+      void persistEncrypted({
+        ...state,
+        tabs: state.tabs.map((tab) => ({
+          ...tab,
+          rows: tab.rows.filter((row) => row.id !== rowId),
+        })),
+      });
     },
     clearActive: () => {
-      if (privateLedger.encryptedLedger) {
-        const state = currentState();
-        void persistEncrypted({
-          ...state,
-          tabs: state.tabs.map((tab) =>
-            tab.id === state.activeId ? { ...tab, rows: [] } : tab,
-          ),
-        });
-        return;
-      }
-      void clearActiveMut({});
+      const state = currentState();
+      void persistEncrypted({
+        ...state,
+        tabs: state.tabs.map((tab) =>
+          tab.id === state.activeId ? { ...tab, rows: [] } : tab,
+        ),
+      });
     },
     selectTab: (tabId: string) => {
-      if (privateLedger.encryptedLedger) {
-        void persistEncrypted({ ...currentState(), activeId: tabId });
-        return;
-      }
-      void selectTabMut({ tabId });
+      void persistEncrypted({ ...currentState(), activeId: tabId });
     },
     setReceiveTab: (tabId: string) => {
-      if (privateLedger.encryptedLedger) {
-        void persistEncrypted({ ...currentState(), receiveId: tabId });
-        return;
-      }
-      void setReceiveTabMut({ tabId });
+      void persistEncrypted({ ...currentState(), receiveId: tabId });
     },
     addTab: () => {
-      if (privateLedger.encryptedLedger) {
-        const state = currentState();
-        const id = crypto.randomUUID();
-        void persistEncrypted({
-          ...state,
-          tabs: [
-            ...state.tabs,
-            { id, name: `Sheet ${state.tabs.length + 1}`, rows: [] },
-          ],
-          activeId: id,
-        });
-        return;
-      }
-      void addTabMut({});
+      const state = currentState();
+      const id = crypto.randomUUID();
+      void persistEncrypted({
+        ...state,
+        tabs: [
+          ...state.tabs,
+          { id, name: `Sheet ${state.tabs.length + 1}`, rows: [] },
+        ],
+        activeId: id,
+      });
     },
     closeTab: (tabId: string) => {
-      if (privateLedger.encryptedLedger) {
-        const state = currentState();
-        if (state.tabs.length <= 1) return;
-        const tabs = state.tabs.filter((tab) => tab.id !== tabId);
-        void persistEncrypted({
-          tabs,
-          activeId: state.activeId === tabId ? tabs[0]!.id : state.activeId,
-          receiveId: state.receiveId === tabId ? tabs[0]!.id : state.receiveId,
-        });
-        return;
-      }
-      void closeTabMut({ tabId });
+      const state = currentState();
+      if (state.tabs.length <= 1) return;
+      const tabs = state.tabs.filter((tab) => tab.id !== tabId);
+      void persistEncrypted({
+        tabs,
+        activeId: state.activeId === tabId ? tabs[0]!.id : state.activeId,
+        receiveId: state.receiveId === tabId ? tabs[0]!.id : state.receiveId,
+      });
     },
     renameTab: (tabId: string, name: string) => {
-      if (privateLedger.encryptedLedger) {
-        const state = currentState();
-        void persistEncrypted({
-          ...state,
-          tabs: state.tabs.map((tab) =>
-            tab.id === tabId ? { ...tab, name } : tab,
-          ),
-        });
-        return;
-      }
-      void renameTabMut({ tabId, name });
+      const state = currentState();
+      void persistEncrypted({
+        ...state,
+        tabs: state.tabs.map((tab) =>
+          tab.id === tabId ? { ...tab, name } : tab,
+        ),
+      });
     },
   };
 }

@@ -110,6 +110,22 @@ const CATEGORY_FIXES: CategoryFix[] = [
     subcategory: "Interac e-Transfer",
   },
   {
+    test: (text) =>
+      /cleared\s+through\s+transit/i.test(text) ||
+      /cheque\s*#?\s*\d/i.test(text) ||
+      /\bchq\s*#?\s*\d/i.test(text),
+    section: "Transfers",
+    category: "External Transfers",
+    subcategory: "Cheques",
+  },
+  {
+    test: (text) =>
+      /\bwire\s+transfer/i.test(text) || /\bbank\s+wire\b/i.test(text),
+    section: "Transfers",
+    category: "External Transfers",
+    subcategory: "Wire Transfers",
+  },
+  {
     test: (text) => /^internet\s+transfer\b/i.test(text),
     section: "Transfers",
     category: "Account Transfers",

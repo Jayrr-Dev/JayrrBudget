@@ -46,7 +46,7 @@ export type ImportBankStatementSuccess = {
   hygiene?: ImportHygieneSummary;
   enrichment?: ImportEnrichmentSummary;
   categorization?: CategorizationSummary;
-  /** Present when persistMode is vault: client encrypts these rows. */
+  /** Client encrypts these rows into the vault. */
   vaultPayload?: {
     accountId: string;
     accountName: string | null;

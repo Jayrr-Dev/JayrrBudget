@@ -20,9 +20,6 @@ export function useFeatureFlags() {
   return {
     loading: isAuthenticated && rows === undefined,
     flags: rows ?? [],
-    encryptedLedger: Boolean(
-      rows?.find((row) => row.key === "encryptedLedger")?.enabled,
-    ),
     cloudProcessing: Boolean(
       rows?.find((row) => row.key === "cloudProcessing")?.enabled,
     ),

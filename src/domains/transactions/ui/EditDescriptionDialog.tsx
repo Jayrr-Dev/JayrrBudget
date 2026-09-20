@@ -292,7 +292,6 @@ export function EditDescriptionDialog({
       const taxonomyChanged = !sameTaxonomy(taxonomyPatch, taxonomySnapshot);
       if (!descriptionChanged && !taxonomyChanged) return 0;
       const write = vaultWriteReady({
-        encryptedLedger: privateLedger.encryptedLedger,
         userId: privateLedger.userId,
         vaultId: privateLedger.vaultId,
         keyId: privateLedger.keyId,

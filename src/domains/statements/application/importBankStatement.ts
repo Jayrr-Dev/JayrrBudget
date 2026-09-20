@@ -69,8 +69,6 @@ export async function importBankStatement(params: {
   client: ConvexHttpClient;
   sourceHint?: string;
   mimeType?: string | null;
-  /** convex = write plaintext ledger; vault = return facts for client encrypt. */
-  persistMode?: "convex" | "vault";
   /** Browser Tesseract scan; skips server OCR when present. */
   clientOcr?: { markdown: string; pageCount: number } | null;
   onProgress?: (progress: StatementImportProgress) => void;
@@ -146,17 +144,6 @@ async function importBankStatementWithKey(
     emitProgress(params.onProgress, "receive");
     const fileHash = statementFileHash(params.bytes);
 
-    // Same file bytes already imported → skip Mistral OCR + OpenRouter parse.
-    const persistMode = params.persistMode ?? "vault";
-    if (persistMode !== "vault") {
-      return {
-        ok: false,
-        status: 410,
-        error:
-          "Plaintext statement import is retired. Unlock the private ledger and import into the vault.",
-      };
-    }
-
     const textExport = isStatementTextSource(params.filename, params.mimeType);
     emitProgress(params.onProgress, "ocr");
     const ocrStarted = Date.now();
@@ -206,6 +193,10 @@ async function importBankStatementWithKey(
       sourceHint,
       dedupe: dedupeParsedTransactions,
     });
+    const removedTwinCount = Math.max(
+      0,
+      rawParsed.transactions.length - parsed.transactions.length,
+    );
     const balance = checkStatementBalance(parsed);
 
     const normalizedAccountType = normalizeStatementAccountType(
@@ -263,7 +254,7 @@ async function importBankStatementWithKey(
       insertedCount: transactions.length,
       updatedCount: 0,
       skippedCount: 0,
-      removedTwinCount: 0,
+      removedTwinCount,
       duplicateFile: false,
       institutionName: parsed.institutionName,
       accountName: parsed.accountName,

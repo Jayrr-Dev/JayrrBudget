@@ -74,7 +74,6 @@ export function CleanMerchantsButton() {
         throw new Error("Unlock your private ledger to edit.");
       }
       const ctx = vaultWriteReady({
-        encryptedLedger: true,
         userId: privateLedger.userId,
         vaultId: privateLedger.vaultId,
         keyId: privateLedger.keyId,

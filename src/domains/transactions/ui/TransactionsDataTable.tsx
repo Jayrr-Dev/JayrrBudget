@@ -68,12 +68,32 @@ function uniqueSorted(values: Array<string | null | undefined>) {
     .map((value) => ({ value, label: value }));
 }
 
+function needsClassify(txn: DashboardTransaction) {
+  return !txn.categoryName?.trim();
+}
+
+function unclassifiedFirst(transactions: DashboardTransaction[]) {
+  return [...transactions].sort((left, right) => {
+    const leftOpen = needsClassify(left);
+    const rightOpen = needsClassify(right);
+    if (leftOpen !== rightOpen) return leftOpen ? -1 : 1;
+    return right.date.localeCompare(left.date);
+  });
+}
+
 function buildColumns(
   accountNameById: Map<string, string>,
   accountTypeById: Map<string, string | null>,
 ) {
   // Left = paper facts (AI read from statement). Right = AI invent / labels.
   return columnHelper.columns([
+    columnHelper.accessor((row) => (needsClassify(row) ? 0 : 1), {
+      id: "classifyRank",
+      header: "Needs classify",
+      enableColumnFilter: false,
+      sortFn: "basic",
+      meta: { label: "Needs classify" },
+    }),
     columnHelper.display({
       id: "actions",
       header: ({ table }) => (
@@ -708,12 +728,17 @@ export function TransactionsDataTable({
     () => uniqueSorted(transactions.flatMap((txn) => txn.tagNames ?? [])),
     [transactions],
   );
+  const orderedTransactions = useMemo(
+    () => unclassifiedFirst(transactions),
+    [transactions],
+  );
 
   return (
     <DataTable
       columns={columns}
-      data={transactions}
+      data={orderedTransactions}
       initialColumnVisibility={{
+        classifyRank: false,
         account: false,
         accountId: false,
         authorizedDate: false,
@@ -737,7 +762,10 @@ export function TransactionsDataTable({
         historyMatch: false,
         enrichmentStatus: false,
       }}
-      initialSorting={[{ id: "date", desc: true }]}
+      initialSorting={[
+        { id: "classifyRank", desc: false },
+        { id: "date", desc: true },
+      ]}
       enableGlobalFilter
       globalFilterFn="fuzzy"
       searchPlaceholder="Search…"

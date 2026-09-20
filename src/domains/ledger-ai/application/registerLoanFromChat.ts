@@ -8,7 +8,6 @@ import {
   encryptLoanDocumentToVault,
   linkEncryptedLoanDocument,
 } from "@/domains/loans/application/encryptLoanDocument";
-import { uploadLoanDocument } from "@/domains/loans/queries/uploadLoanDocument";
 import {
   loanTypeMeta,
   normalizeLoanType,
@@ -16,6 +15,7 @@ import {
   officialLoanName,
 } from "@/domains/loans/domain/loanTypes";
 import { normalizePaymentFrequency } from "@/domains/loans/domain/paymentFrequency";
+import { uploadLoanDocument } from "@/domains/loans/queries/uploadLoanDocument";
 import {
   hydrateVaultSession,
   type VaultClient,
@@ -69,9 +69,7 @@ export async function registerLoanFromChat(options: {
   }
 
   try {
-    const parsed = await uploadLoanDocument(options.file, {
-      persistMode: "vault",
-    });
+    const parsed = await uploadLoanDocument(options.file);
 
     const terms = {
       ...parsed.fields,
@@ -137,7 +135,9 @@ export async function registerLoanFromChat(options: {
     const paymentCount = Math.floor(Number(terms.paymentCount));
     const firstPaymentDate = String(terms.firstPaymentDate);
     const vehicleLabel =
-      terms.vehicleLabel == null ? null : String(terms.vehicleLabel).trim() || null;
+      terms.vehicleLabel == null
+        ? null
+        : String(terms.vehicleLabel).trim() || null;
     const txnDescriptionLookup =
       terms.txnDescriptionLookup == null
         ? terms.matchMerchantClean == null

@@ -1,5 +1,6 @@
 "use client";
 
+import { Button } from "@/components/ui/button";
 import {
   Popover,
   PopoverContent,
@@ -21,6 +22,7 @@ import { statementQueryKeys } from "@/domains/statements/queries/query-keys";
 import { StatementUploadLogs } from "@/domains/statements/ui/StatementUploadLogs";
 import { useQueryClient } from "@tanstack/react-query";
 import { Info } from "lucide-react";
+import Link from "next/link";
 
 export default function StatementsPage() {
   const dashboard = useDashboard();
@@ -38,7 +40,7 @@ export default function StatementsPage() {
             bullets={[
               "Upload PDFs or photos to pull ledger rows",
               "Parse logs show status, counts, and OCR text",
-              "Upload Rules live next to Classify on Transactions",
+              "Classify Rules live next to Classify on Transactions",
             ]}
           />
           <p className="sr-only">
@@ -46,6 +48,11 @@ export default function StatementsPage() {
           </p>
         </div>
         <DashboardToolbar
+          leading={
+            <Button type="button" variant="outline" asChild>
+              <Link href="/transactions">View transactions</Link>
+            </Button>
+          }
           onImported={async () => {
             await Promise.all([
               queryClient.invalidateQueries({

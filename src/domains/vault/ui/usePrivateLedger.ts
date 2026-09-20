@@ -1,7 +1,6 @@
 "use client";
 
 import { getVaultMasterKey, subscribeVaultSession } from "@/crypto/session";
-import { useFeatureFlag } from "@/domains/feature-flags/ui/useFeatureFlag";
 import {
   hydrateVaultSession,
   type VaultClient,
@@ -56,14 +55,10 @@ function consumeSkipNextVaultReload() {
 }
 
 export function usePrivateLedger() {
-  const encryptedLedger = useFeatureFlag("encryptedLedger");
   const { isAuthenticated } = useConvexAuth();
   const client = useConvex();
   const me = useQuery(api.users.me, isAuthenticated ? {} : "skip");
-  const vault = useQuery(
-    api.vaults.get,
-    isAuthenticated && encryptedLedger ? {} : "skip",
-  );
+  const vault = useQuery(api.vaults.get, isAuthenticated ? {} : "skip");
   const [unlocked, setUnlocked] = useState(Boolean(getVaultMasterKey()));
   const [ledger, setLedger] = useState<PrivateLedger>(EMPTY);
   const [loading, setLoading] = useState(false);
@@ -93,7 +88,7 @@ export function usePrivateLedger() {
   }, []);
 
   useEffect(() => {
-    if (!encryptedLedger || !isAuthenticated) return;
+    if (!isAuthenticated) return;
     if (getVaultMasterKey()) {
       setHydrating(false);
       return;
@@ -106,12 +101,12 @@ export function usePrivateLedger() {
     return () => {
       cancelled = true;
     };
-  }, [client, encryptedLedger, isAuthenticated, vaultId]);
+  }, [client, isAuthenticated, vaultId]);
 
   useEffect(() => {
     let cancelled = false;
     async function run() {
-      if (!encryptedLedger || !me || !vaultId || !unlocked) {
+      if (!isAuthenticated || !me || !vaultId || !unlocked) {
         hasLedger.current = false;
         setLedger(EMPTY);
         setLoading(false);
@@ -136,7 +131,6 @@ export function usePrivateLedger() {
           hasLedger.current = true;
           setLedger(next);
           const write = vaultWriteReady({
-            encryptedLedger: true,
             userId: String(me.userId),
             vaultId,
             keyId: vault?.currentKeyId ?? null,
@@ -182,19 +176,28 @@ export function usePrivateLedger() {
     return () => {
       cancelled = true;
     };
-  }, [client, encryptedLedger, me, unlocked, vaultId, vaultUpdatedAt, version]);
+  }, [
+    client,
+    isAuthenticated,
+    me,
+    unlocked,
+    vault,
+    vaultId,
+    vaultUpdatedAt,
+    version,
+  ]);
 
   const decrypting = Boolean(unlocked && vaultId && !hasLedger.current);
 
   return {
-    encryptedLedger,
+    encryptedLedger: isAuthenticated,
     unlocked,
     vaultReady: Boolean(vault),
     vaultId: vault?.vaultId ?? null,
     keyId: vault?.currentKeyId ?? null,
     userId: me ? String(me.userId) : null,
     loading:
-      encryptedLedger &&
+      isAuthenticated &&
       (me === undefined ||
         vault === undefined ||
         loading ||

@@ -31,7 +31,6 @@ import {
   readLastUserId,
   readLastView,
   rememberEncryptedLedgerLocal,
-  upsertLastView,
   writeLastUserId,
 } from "@/domains/dashboard/ui/lastViewCache";
 import {
@@ -44,13 +43,12 @@ import {
   rememberModules,
   subscribeLedgerSnapshots,
 } from "@/domains/dashboard/ui/ledgerQuerySnapshot";
-import { useFeatureFlags } from "@/domains/feature-flags/ui/useFeatureFlag";
 import { PiggyMascot } from "@/domains/ledger-ai/ui/PiggyMascot";
 import type { AppModuleRecord } from "@/domains/modules/domain/types";
 import { resolveModuleIcon } from "@/domains/modules/ui/moduleIcons";
-import { TrackingUsageHeartbeat } from "@/domains/user-metrics/ui/TrackingUsageHeartbeat";
 import { BudgetThresholdPingWatcher } from "@/domains/piggy-pings/ui/BudgetThresholdPingWatcher";
 import { PiggyPingRuntime } from "@/domains/piggy-pings/ui/PiggyPingRuntime";
+import { TrackingUsageHeartbeat } from "@/domains/user-metrics/ui/TrackingUsageHeartbeat";
 import {
   useVaultPageLocked,
   VaultLockedGate,
@@ -468,7 +466,6 @@ export function AppShell({
   const brandLabel = useBrandLabel();
   const { isAuthenticated } = useConvexAuth();
   const { isOffline } = useConnectionState();
-  const flags = useFeatureFlags();
   const me = useQuery(api.users.me, isAuthenticated ? {} : "skip");
   useSyncExternalStore(
     subscribeLedgerSnapshots,
@@ -509,22 +506,9 @@ export function AppShell({
   useEffect(() => {
     if (!isAuthenticated || !me?.userId) return;
     writeLastUserId(me.userId);
-    if (flags.loading) return;
-    rememberEncryptedLedgerLocal(flags.encryptedLedger);
-    if (flags.encryptedLedger) {
-      void clearLastView(me.userId);
-      return;
-    }
-    if (!modulesList) return;
-    rememberModules(modulesList);
-    void upsertLastView({ userId: me.userId, modules: modulesList });
-  }, [
-    flags.encryptedLedger,
-    flags.loading,
-    isAuthenticated,
-    me?.userId,
-    modulesList,
-  ]);
+    rememberEncryptedLedgerLocal(true);
+    void clearLastView(me.userId);
+  }, [isAuthenticated, me?.userId]);
 
   const cachedModules = peekModules();
   const modulesQuery = {
@@ -551,62 +535,62 @@ export function AppShell({
   return (
     <ProvidesMinimizedDialogs>
       <PiggyPingRuntime>
-      <div
-        className={cn(
-          "fixed inset-0 flex min-h-0 w-full min-w-0 flex-col overflow-hidden bg-[var(--background)] pt-[env(safe-area-inset-top)] pr-[env(safe-area-inset-right)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] md:flex-row",
-          className,
-        )}
-      >
-        <WarmSaasQueries />
-        <TrackingUsageHeartbeat />
-        <Sidebar open={open} setOpen={setOpen} animate>
-          <SidebarBody
-            className="justify-between gap-3"
-            title={brandLabel}
-            headerActions={isMobile ? workspaceTools : undefined}
-          >
-            <div className="flex min-h-0 w-full flex-1 flex-col gap-2 overflow-hidden">
-              <Brand label={brandLabel} />
-              {modulesQuery.isPending ? (
-                <ModulesLoading />
-              ) : (
-                <ModuleNav modules={navModules} />
-              )}
-            </div>
-            <SidebarFooterLink />
-          </SidebarBody>
-        </Sidebar>
-        <main
+        <div
           className={cn(
-            "flex min-h-0 min-w-0 w-full flex-1 flex-col bg-background text-foreground",
-            fullBleedDatabase || contentClassName
-              ? "overflow-hidden"
-              : "overflow-x-hidden overflow-y-auto overscroll-y-contain [-webkit-overflow-scrolling:touch]",
+            "fixed inset-0 flex min-h-0 w-full min-w-0 flex-col overflow-hidden bg-[var(--background)] pt-[env(safe-area-inset-top)] pr-[env(safe-area-inset-right)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] md:flex-row",
+            className,
           )}
         >
-          {isOffline ? (
-            <OfflineLastViewBanner savedAt={lastViewSavedAt} />
-          ) : null}
-          <div
+          <WarmSaasQueries />
+          <TrackingUsageHeartbeat />
+          <Sidebar open={open} setOpen={setOpen} animate>
+            <SidebarBody
+              className="justify-between gap-3"
+              title={brandLabel}
+              headerActions={isMobile ? workspaceTools : undefined}
+            >
+              <div className="flex min-h-0 w-full flex-1 flex-col gap-2 overflow-hidden">
+                <Brand label={brandLabel} />
+                {modulesQuery.isPending ? (
+                  <ModulesLoading />
+                ) : (
+                  <ModuleNav modules={navModules} />
+                )}
+              </div>
+              <SidebarFooterLink />
+            </SidebarBody>
+          </Sidebar>
+          <main
             className={cn(
-              "w-full min-w-0",
+              "flex min-h-0 min-w-0 w-full flex-1 flex-col bg-background text-foreground",
               fullBleedDatabase || contentClassName
-                ? "flex h-full min-h-0 max-w-none flex-1 flex-col"
-                : "max-w-none px-4 py-6 sm:px-8 sm:py-8",
-              fullBleedDatabase && "overflow-hidden p-2 sm:p-3",
-              vaultLocked && "flex min-h-full flex-1 flex-col",
-              contentClassName,
+                ? "overflow-hidden"
+                : "overflow-x-hidden overflow-y-auto overscroll-y-contain [-webkit-overflow-scrolling:touch]",
             )}
           >
-            <VaultLockedGate>
-              <BudgetThresholdPingWatcher />
-              {children}
-            </VaultLockedGate>
-          </div>
-        </main>
-        {isMobile ? null : workspaceTools}
-        <MinimizedDialogStack />
-      </div>
+            {isOffline ? (
+              <OfflineLastViewBanner savedAt={lastViewSavedAt} />
+            ) : null}
+            <div
+              className={cn(
+                "w-full min-w-0",
+                fullBleedDatabase || contentClassName
+                  ? "flex h-full min-h-0 max-w-none flex-1 flex-col"
+                  : "max-w-none px-4 py-6 sm:px-8 sm:py-8",
+                fullBleedDatabase && "overflow-hidden p-2 sm:p-3",
+                vaultLocked && "flex min-h-full flex-1 flex-col",
+                contentClassName,
+              )}
+            >
+              <VaultLockedGate>
+                <BudgetThresholdPingWatcher />
+                {children}
+              </VaultLockedGate>
+            </div>
+          </main>
+          {isMobile ? null : workspaceTools}
+          <MinimizedDialogStack />
+        </div>
       </PiggyPingRuntime>
     </ProvidesMinimizedDialogs>
   );

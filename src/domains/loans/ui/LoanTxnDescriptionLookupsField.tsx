@@ -24,7 +24,6 @@ export function LoanTxnDescriptionLookupsField({ accountId }: Props) {
     (row) => row.accountId === accountId,
   );
   const write = vaultWriteReady({
-    encryptedLedger: privateLedger.encryptedLedger,
     userId: privateLedger.userId,
     vaultId: privateLedger.vaultId,
     keyId: privateLedger.keyId,

@@ -1,7 +1,7 @@
 import { parseLoanDocument } from "@/domains/loans/application/parseLoanDocument";
-import { parseClientOcrForm } from "@/domains/statements/domain/ocrMode";
 import type { LoanDocumentProgress } from "@/domains/loans/domain/loanDocumentProgress";
 import type { ParseLoanDocumentSuccess } from "@/domains/loans/domain/loanDocumentResult";
+import { parseClientOcrForm } from "@/domains/statements/domain/ocrMode";
 import {
   AuthRequiredError,
   getAuthenticatedConvexClient,
@@ -42,7 +42,6 @@ export async function POST(request: Request) {
   }
 
   const file = form.get("file");
-  const persistMode = form.get("persistMode") === "vault" ? "vault" : "convex";
   let clientOcr;
   try {
     clientOcr = parseClientOcrForm(form);
@@ -77,7 +76,6 @@ export async function POST(request: Request) {
           bytes,
           mimeType,
           client,
-          persistMode,
           clientOcr,
           onProgress: (progress) => {
             send({ type: "progress", progress });

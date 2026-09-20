@@ -80,8 +80,12 @@ export function LoanPaymentTimeline({
               <ul className="mt-1.5 list-disc space-y-1 pl-4 text-muted-foreground">
                 <li>The bright pink square is the next pay date</li>
                 <li>Later pay dates stay faded pink</li>
-                <li>Dark green squares are posted payments</li>
-                <li>Red squares are missed pay dates</li>
+                <li>Dark green on light green is a posted payment</li>
+                <li>Dark red on light red is a missed pay date</li>
+                <li>Days leading up to a payment take its green or red</li>
+                <li>That color continues through today</li>
+                <li>The dark blue mark is today</li>
+                <li>Days after today stay plain</li>
                 <li>A payment counts if it posts the day before or after</li>
               </ul>
             </PopoverHeader>

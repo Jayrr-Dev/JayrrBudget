@@ -43,7 +43,7 @@ npm run dev
 | Modules / tags / statements | `convex/modules.ts`, `transactions.ts`, `statements.ts`     |
 | Scratch notes / store sheet | `convex/scratchNotes.ts`                                    |
 | Canvas scenes               | `convex/canvasScenes.ts`                                    |
-| Piggy Pings                 | `convex/piggyPings.ts`                                      |
+| Pings                       | `convex/piggyPings.ts`                                      |
 | Budgets                     | `convex/budgets.ts`                                         |
 | Freeform notes              | `convex/userNotes.ts`                                       |
 

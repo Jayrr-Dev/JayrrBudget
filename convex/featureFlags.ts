@@ -3,7 +3,6 @@ import { mutation, query } from "./_generated/server";
 import { requireUser } from "./lib/auth";
 
 export const FEATURE_FLAG_KEYS = [
-  "encryptedLedger",
   "cloudProcessing",
   "jevCategorization",
   "jevPiggy",
@@ -11,7 +10,6 @@ export const FEATURE_FLAG_KEYS = [
 export type FeatureFlagKey = (typeof FEATURE_FLAG_KEYS)[number];
 
 const keyValidator = v.union(
-  v.literal("encryptedLedger"),
   v.literal("cloudProcessing"),
   v.literal("jevCategorization"),
   v.literal("jevPiggy"),

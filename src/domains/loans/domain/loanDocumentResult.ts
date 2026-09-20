@@ -8,7 +8,7 @@ export type ParseLoanDocumentSuccess = {
   fields: LoanDocumentFields;
   /** Present for client-side vault encrypt; also returned in convex mode for UI. */
   ocrMarkdown: string;
-  /** Convex upload id when persistMode is convex; 0 for vault. */
+  /** Always 0; OCR is returned for client encrypt. */
   uploadId: number;
 };
 

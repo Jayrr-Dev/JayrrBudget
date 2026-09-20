@@ -1,7 +1,7 @@
 import { importBankStatement } from "@/domains/statements/application/importBankStatement";
-import { parseClientOcrForm } from "@/domains/statements/domain/ocrMode";
 import type { StatementImportProgress } from "@/domains/statements/domain/importProgress";
 import type { ImportBankStatementSuccess } from "@/domains/statements/domain/importResult";
+import { parseClientOcrForm } from "@/domains/statements/domain/ocrMode";
 import {
   AuthRequiredError,
   getAuthenticatedConvexClient,
@@ -43,7 +43,6 @@ export async function POST(request: Request) {
   }
 
   const file = form.get("file");
-  const persistMode = form.get("persistMode") === "vault" ? "vault" : "convex";
   let clientOcr;
   try {
     clientOcr = parseClientOcrForm(form);
@@ -91,7 +90,6 @@ export async function POST(request: Request) {
           bytes,
           mimeType,
           client,
-          persistMode,
           clientOcr,
           onProgress: (progress) => {
             send({ type: "progress", progress });
@@ -125,8 +123,8 @@ export async function POST(request: Request) {
   return new Response(stream, {
     headers: {
       "Content-Type": "application/x-ndjson; charset=utf-8",
-        "Cache-Control": "no-cache, no-transform",
-        "X-Accel-Buffering": "no",
+      "Cache-Control": "no-cache, no-transform",
+      "X-Accel-Buffering": "no",
     },
   });
 }

@@ -4,8 +4,8 @@ import {
   type StatementImportProgress,
 } from "@/domains/statements/domain/importProgress";
 import type { ImportBankStatementSuccess } from "@/domains/statements/domain/importResult";
-import type { OcrMode } from "@/domains/statements/domain/ocrMode";
 import { isStatementTextSource } from "@/domains/statements/domain/ocrDocumentTypes";
+import type { OcrMode } from "@/domains/statements/domain/ocrMode";
 import { ocrDocumentLocally } from "@/domains/statements/infrastructure/localOcr";
 import { assertOnlineForWrite } from "@/shared/offline/offlineWriteGuard";
 
@@ -17,7 +17,6 @@ type StreamEvent =
 export type UploadBankStatementOptions = {
   onProgress?: (progress: StatementImportProgress) => void;
   signal?: AbortSignal;
-  persistMode?: "convex" | "vault";
   ocrMode?: OcrMode;
 };
 
@@ -35,7 +34,6 @@ export async function uploadBankStatement(
   assertOnlineForWrite();
   const form = new FormData();
   form.append("file", file);
-  if (options?.persistMode === "vault") form.append("persistMode", "vault");
 
   options?.onProgress?.({
     step: "receive",

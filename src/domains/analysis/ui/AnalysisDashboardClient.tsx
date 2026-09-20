@@ -1,6 +1,7 @@
 "use client";
 
 import { PageSpinner } from "@/components/ui/spinner";
+import { ClassifyUnclassifiedNudge } from "@/domains/transactions/ui/ClassifyUnclassifiedNudge";
 import dynamic from "next/dynamic";
 import { useEffect, useState } from "react";
 
@@ -26,5 +27,10 @@ export function AnalysisDashboardClient() {
     return <PageSpinner />;
   }
 
-  return <AnalysisDashboard />;
+  return (
+    <>
+      <ClassifyUnclassifiedNudge sure="go-transactions" />
+      <AnalysisDashboard />
+    </>
+  );
 }

@@ -1,7 +1,7 @@
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
+import { mutation, query } from "./_generated/server";
 import { requireUser } from "./lib/auth";
 
 /** Keep in sync with src/domains/statements/domain/userAiRules.ts */
@@ -38,17 +38,14 @@ function normalizeRules(raw: string[]): string[] {
   return cleaned;
 }
 
-async function getOwnedDoc(
-  ctx: QueryCtx | MutationCtx,
-  userId: Id<"users">,
-) {
+async function getOwnedDoc(ctx: QueryCtx | MutationCtx, userId: Id<"users">) {
   return await ctx.db
     .query("userAiRules")
     .withIndex("by_userId", (q) => q.eq("userId", userId))
     .unique();
 }
 
-/** Current user's AI rules for their own statement PDF imports. */
+/** Current user's classify rules for Jev / Classify. */
 export const get = query({
   args: {},
   returns: rulesReturn,
@@ -63,8 +60,8 @@ export const get = query({
 });
 
 /**
- * Replace the signed-in user's AI rule list.
- * Rules are owner-scoped and only used for that user's PDF statement parse.
+ * Replace the signed-in user's classify rule list.
+ * Rules are owner-scoped. Jev reads them on Classify.
  */
 export const set = mutation({
   args: {

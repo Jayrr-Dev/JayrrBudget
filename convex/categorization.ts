@@ -270,7 +270,7 @@ export const pendingPage = query({
   args: {
     uploadId: v.number(),
     paginationOpts: paginationOptsValidator,
-    /** When true, include already-labeled rows (recategorize / upload rules refresh). */
+    /** When true, include already-labeled rows (recategorize / classify rules refresh). */
     includeAll: v.optional(v.boolean()),
   },
   returns: v.object({

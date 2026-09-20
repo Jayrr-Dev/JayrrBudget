@@ -4,11 +4,6 @@ import { DataTable } from "@/components/ui/data-table";
 import type { DataTableFeatures } from "@/components/ui/data-table-features";
 import { EmptyPrompt } from "@/components/ui/empty-prompt";
 import { RowActionsMenu } from "@/components/ui/row-actions-menu";
-import { PageSpinner } from "@/components/ui/spinner";
-import {
-  peekMerchants,
-  rememberMerchants,
-} from "@/domains/dashboard/ui/ledgerQuerySnapshot";
 import { EditMerchantDialog } from "@/domains/merchants/ui/EditMerchantDialog";
 import { MerchantLabel } from "@/domains/merchants/ui/MerchantLabel";
 import {
@@ -19,10 +14,8 @@ import {
 import type { PrivateTransaction } from "@/domains/vault/domain/privateLedger";
 import { DecryptingPage } from "@/domains/vault/ui/DecryptingStatus";
 import { usePrivateLedger } from "@/domains/vault/ui/usePrivateLedger";
-import { api } from "@convex/_generated/api";
 import { Icon } from "@iconify/react";
 import { createColumnHelper } from "@tanstack/react-table";
-import { useQuery } from "convex/react";
 import { useMemo, useState } from "react";
 
 type MerchantRow = {
@@ -236,13 +229,8 @@ function MerchantsTable({
 
 export function MerchantsPanel() {
   const privateLedger = usePrivateLedger();
-  const merchants = useQuery(
-    api.merchants.list,
-    privateLedger.encryptedLedger ? "skip" : {},
-  );
   const encryptedRows = useMemo(() => {
-    if (!privateLedger.encryptedLedger || !privateLedger.unlocked)
-      return [] as MerchantRow[];
+    if (!privateLedger.unlocked) return [] as MerchantRow[];
     const counts = new Map<string, number>();
     for (const tx of privateLedger.ledger.transactions) {
       const name = tx.merchantClean ?? tx.merchantName ?? tx.description;
@@ -274,56 +262,19 @@ export function MerchantsPanel() {
       });
     }
     return [...names.values()];
-  }, [
-    privateLedger.encryptedLedger,
-    privateLedger.ledger,
-    privateLedger.unlocked,
-  ]);
+  }, [privateLedger.ledger, privateLedger.unlocked]);
 
   const encryptedPeeksByName = useMemo(() => {
-    if (!privateLedger.encryptedLedger || !privateLedger.unlocked) {
+    if (!privateLedger.unlocked) {
       return undefined;
     }
     return vaultPeeksByMerchantName(privateLedger.ledger.transactions);
-  }, [
-    privateLedger.encryptedLedger,
-    privateLedger.ledger.transactions,
-    privateLedger.unlocked,
-  ]);
+  }, [privateLedger.ledger.transactions, privateLedger.unlocked]);
 
-  if (privateLedger.encryptedLedger) {
-    if (privateLedger.loading || !privateLedger.unlocked) {
-      return <DecryptingPage />;
-    }
-    if (encryptedRows.length === 0) {
-      return (
-        <EmptyPrompt
-          className="py-10"
-          title="No merchants yet"
-          description="They appear after ledger rows have merchant labels."
-          href="/statements"
-          actionLabel="Upload statement"
-        />
-      );
-    }
-    return (
-      <MerchantsTable
-        rows={encryptedRows}
-        vaultPeeksByName={encryptedPeeksByName}
-      />
-    );
+  if (privateLedger.loading || !privateLedger.unlocked) {
+    return <DecryptingPage />;
   }
-
-  if (merchants !== undefined) {
-    rememberMerchants(merchants as MerchantRow[]);
-  }
-  const merchantRows = merchants ?? peekMerchants<MerchantRow>();
-
-  if (merchantRows === undefined) {
-    return <PageSpinner />;
-  }
-
-  if (merchantRows.length === 0) {
+  if (encryptedRows.length === 0) {
     return (
       <EmptyPrompt
         className="py-10"
@@ -334,6 +285,10 @@ export function MerchantsPanel() {
       />
     );
   }
-
-  return <MerchantsTable rows={merchantRows} />;
+  return (
+    <MerchantsTable
+      rows={encryptedRows}
+      vaultPeeksByName={encryptedPeeksByName}
+    />
+  );
 }

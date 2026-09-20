@@ -37,7 +37,6 @@ import {
 import { RowActionsMenu } from "@/components/ui/row-actions-menu";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { toastCompact } from "@/components/ui/sonner";
-import { PageSpinner } from "@/components/ui/spinner";
 import {
   ScrollTopX,
   Table,
@@ -7158,13 +7157,7 @@ export function AnalysisDashboard() {
             </div>
           ) : null}
 
-          {query.isPending && !data ? (
-            query.encryptedLedger ? (
-              <DecryptingPage />
-            ) : (
-              <PageSpinner />
-            )
-          ) : null}
+          {query.isPending && !data ? <DecryptingPage /> : null}
 
           {data && data.transactionCount === 0 ? <EmptyState /> : null}
 

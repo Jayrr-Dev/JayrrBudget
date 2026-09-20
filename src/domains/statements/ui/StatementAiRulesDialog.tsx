@@ -5,7 +5,6 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -27,7 +26,7 @@ import { errorMessage } from "@/shared/lib/error-message";
 import { api } from "@convex/_generated/api";
 import { useMutation, useQuery } from "convex/react";
 import { Info, PlusIcon, Trash2Icon } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useRef, useState } from "react";
 import { toast } from "sonner";
 
 type Props = {
@@ -37,38 +36,31 @@ type Props = {
 
 export function StatementAiRulesDialog({ open, onOpenChange }: Props) {
   const saved = useQuery(api.aiRules.get, open ? {} : "skip");
-  const setRules = useMutation(api.aiRules.set);
-  const [draft, setDraft] = useState<string[]>([]);
+  const setRules = useMutation(api.aiRules.set).withOptimisticUpdate(
+    (localStore, args) => {
+      const current = localStore.getQuery(api.aiRules.get, {});
+      if (current === undefined) return;
+      localStore.setQuery(
+        api.aiRules.get,
+        {},
+        {
+          rules: args.rules,
+          updatedAt: current.updatedAt ?? Date.now(),
+        },
+      );
+    },
+  );
   const [nextRule, setNextRule] = useState("");
   const [saving, setSaving] = useState(false);
+  const rules = saved?.rules ?? [];
+  const rulesRef = useRef(rules);
+  rulesRef.current = rules;
 
-  useEffect(() => {
-    if (!open || !saved) return;
-    setDraft(saved.rules);
-    setNextRule("");
-  }, [open, saved]);
-
-  function addRule() {
-    const clipped = sanitizeUserAiRuleText(nextRule);
-    if (!clipped) return;
-    if (draft.length >= USER_AI_RULES_MAX) {
-      toast.error(`Max ${USER_AI_RULES_MAX} rules`);
-      return;
-    }
-    if (draft.some((rule) => rule.toLowerCase() === clipped.toLowerCase())) {
-      toast.error("That rule is already listed");
-      return;
-    }
-    setDraft((prev) => [...prev, clipped]);
-    setNextRule("");
-  }
-
-  async function save() {
+  async function persist(next: string[], success: string) {
     setSaving(true);
     try {
-      await setRules({ rules: draft });
-      toast.success("Upload rules saved");
-      onOpenChange(false);
+      await setRules({ rules: next });
+      toast.success(success);
     } catch (error) {
       toast.error("Could not save rules", {
         description: errorMessage(error, "Save failed"),
@@ -78,22 +70,49 @@ export function StatementAiRulesDialog({ open, onOpenChange }: Props) {
     }
   }
 
+  function addRule() {
+    const clipped = sanitizeUserAiRuleText(nextRule);
+    if (!clipped) return;
+    const current = rulesRef.current;
+    if (current.length >= USER_AI_RULES_MAX) {
+      toast.error(`Max ${USER_AI_RULES_MAX} rules`);
+      return;
+    }
+    if (current.some((rule) => rule.toLowerCase() === clipped.toLowerCase())) {
+      toast.error("That rule is already listed");
+      return;
+    }
+    setNextRule("");
+    void persist([...current, clipped], "Rule saved");
+  }
+
+  function removeRule(index: number) {
+    const next = rulesRef.current.filter((_, ruleIndex) => ruleIndex !== index);
+    void persist(next, "Rule removed");
+  }
+
   const loading = open && saved === undefined;
   const draftChars = nextRule.length;
-  const atRuleCap = draft.length >= USER_AI_RULES_MAX;
+  const atRuleCap = rules.length >= USER_AI_RULES_MAX;
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen) setNextRule("");
+        onOpenChange(nextOpen);
+      }}
+    >
       <DialogContent className="gap-6 p-6 sm:max-w-md">
         <DialogHeader className="gap-0 pr-8">
           <DialogTitle className="flex items-center gap-2">
-            Upload Rules
+            Classify Rules
             <Popover>
               <PopoverTrigger asChild>
                 <button
                   type="button"
                   className="inline-flex size-6 shrink-0 items-center justify-center rounded-full max-md:size-11 text-accent hover:text-primary"
-                  aria-label="About upload rules"
+                  aria-label="About classify rules"
                 >
                   <Info className="size-3.5" />
                 </button>
@@ -107,21 +126,21 @@ export function StatementAiRulesDialog({ open, onOpenChange }: Props) {
                 <PopoverHeader className="gap-1.5">
                   <PopoverTitle>What these do</PopoverTitle>
                   <PopoverDescription className="leading-relaxed">
-                    Tell the importer how to read your bank PDFs. Only used when
-                    you upload a statement.
+                    Hints Jev uses when Classify labels a bank line.
                   </PopoverDescription>
-                  <ul className="mt-1 space-y-1 text-sm leading-relaxed text-muted-foreground">
-                    <li>“ACME payroll is income”</li>
-                    <li>“Account ending 5192 is chequing”</li>
+                  <ul className="mt-1.5 list-disc space-y-1 pl-4 text-muted-foreground">
+                    <li>ACME payroll is income</li>
+                    <li>Costco is Groceries, not Shopping</li>
+                    <li>They do not add new sections or categories</li>
                   </ul>
                 </PopoverHeader>
               </PopoverContent>
             </Popover>
           </DialogTitle>
           <DialogDescription className="sr-only">
-            Extra instructions for statement PDF import. Up to{" "}
-            {USER_AI_RULES_MAX} rules, {USER_AI_RULE_MAX_LENGTH} characters
-            each.
+            Extra instructions for Classify. Up to {USER_AI_RULES_MAX} rules,{" "}
+            {USER_AI_RULE_MAX_LENGTH} characters each. Rules save as you add or
+            remove them.
           </DialogDescription>
         </DialogHeader>
 
@@ -132,12 +151,12 @@ export function StatementAiRulesDialog({ open, onOpenChange }: Props) {
             <div className="space-y-2">
               <div className="flex items-center gap-2">
                 <Input
-                  id="upload-rule-input"
+                  id="classify-rule-input"
                   value={nextRule}
                   onChange={(event) => setNextRule(event.target.value)}
                   placeholder="Add a rule…"
                   maxLength={USER_AI_RULE_MAX_LENGTH}
-                  disabled={atRuleCap}
+                  disabled={atRuleCap || saving}
                   onKeyDown={(event) => {
                     if (event.key === "Enter") {
                       event.preventDefault();
@@ -151,14 +170,14 @@ export function StatementAiRulesDialog({ open, onOpenChange }: Props) {
                   size="icon"
                   aria-label="Add rule"
                   onClick={addRule}
-                  disabled={!nextRule.trim() || atRuleCap}
+                  disabled={!nextRule.trim() || atRuleCap || saving}
                 >
                   <PlusIcon className="text-accent" />
                 </Button>
               </div>
               <div className="flex items-center justify-between px-1 text-xs tabular-nums text-muted-foreground">
                 <span>
-                  {draft.length}/{USER_AI_RULES_MAX} rules
+                  {rules.length}/{USER_AI_RULES_MAX} rules
                   {atRuleCap ? " · full" : null}
                 </span>
                 <span
@@ -173,15 +192,15 @@ export function StatementAiRulesDialog({ open, onOpenChange }: Props) {
               </div>
             </div>
 
-            {draft.length === 0 ? (
+            {rules.length === 0 ? (
               <div className="flex min-h-24 flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-border/70 px-4 py-6">
                 <p className="text-sm text-muted-foreground">No rules yet</p>
                 <Button
                   type="button"
-                  size="sm"
                   variant="outline"
+                  size="sm"
                   onClick={() =>
-                    document.getElementById("upload-rule-input")?.focus()
+                    document.getElementById("classify-rule-input")?.focus()
                   }
                 >
                   Add a rule
@@ -189,7 +208,7 @@ export function StatementAiRulesDialog({ open, onOpenChange }: Props) {
               </div>
             ) : (
               <ul className="max-h-56 space-y-1 overflow-y-auto rounded-lg border border-border/60 p-1.5">
-                {draft.map((rule, index) => (
+                {rules.map((rule, index) => (
                   <li
                     key={`${index}-${rule.slice(0, 24)}`}
                     className="flex items-start gap-2 rounded-md px-2.5 py-2 hover:bg-muted/60"
@@ -202,11 +221,8 @@ export function StatementAiRulesDialog({ open, onOpenChange }: Props) {
                       variant="ghost"
                       size="icon-sm"
                       aria-label={`Remove rule ${index + 1}`}
-                      onClick={() =>
-                        setDraft((prev) =>
-                          prev.filter((_, ruleIndex) => ruleIndex !== index),
-                        )
-                      }
+                      disabled={saving}
+                      onClick={() => removeRule(index)}
                     >
                       <Trash2Icon />
                     </Button>
@@ -216,24 +232,6 @@ export function StatementAiRulesDialog({ open, onOpenChange }: Props) {
             )}
           </div>
         )}
-
-        <DialogFooter className="-mx-5 -mb-5 mt-1">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => onOpenChange(false)}
-            disabled={saving}
-          >
-            Cancel
-          </Button>
-          <Button
-            type="button"
-            onClick={() => void save()}
-            disabled={loading || saving}
-          >
-            {saving ? "Saving…" : "Save rules"}
-          </Button>
-        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

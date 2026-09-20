@@ -17,11 +17,11 @@ import {
   vaultWriteReady,
 } from "@/domains/vault/application/saveEncryptedLedger";
 import { usePrivateLedger } from "@/domains/vault/ui/usePrivateLedger";
+import { assertOnlineForWrite } from "@/shared/offline/offlineWriteGuard";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useConvex } from "convex/react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { assertOnlineForWrite } from "@/shared/offline/offlineWriteGuard";
 
 type TaxonomyResponse =
   | { ok: true; data: TransactionTaxonomy }
@@ -198,7 +198,6 @@ export function TaxonomyCell({
     }) => {
       assertOnlineForWrite();
       const write = vaultWriteReady({
-        encryptedLedger: privateLedger.encryptedLedger,
         userId: privateLedger.userId,
         vaultId: privateLedger.vaultId,
         keyId: privateLedger.keyId,

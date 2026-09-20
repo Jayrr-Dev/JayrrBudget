@@ -46,7 +46,8 @@ export const COLUMN_HELP: Record<string, Record<string, string>> = {
     account_id: "Stable key for the account. Ledger rows point here.",
     institution_id: "Which bank this account belongs to.",
     name: "Stored account name from import. Usually the generated id.",
-    label: "Nickname you type. Shown on the dashboard instead of the stored name.",
+    label:
+      "Nickname you type. Shown on the dashboard instead of the stored name.",
     official_name: "The bank's longer product name.",
     mask: "Last four digits. Match statements and CSV files with this.",
     type: "Broad kind: depository, credit, loan.",
@@ -268,7 +269,7 @@ export const COLUMN_HELP: Record<string, Record<string, string>> = {
     warningThreshold: "Percent of amount that should warn.",
     overageThreshold: "Percent of amount that counts as over.",
     isActive: "Off pauses the budget without deleting it.",
-    pingLinks: "Piggy Pings that fire at warn and/or over.",
+    pingLinks: "Pings that fire at warn and/or over.",
     userId: "Who this budget belongs to.",
     createdAt: "When the budget was created.",
     updatedAt: "When we last changed it.",
@@ -281,7 +282,8 @@ export const COLUMN_HELP: Record<string, Record<string, string>> = {
     pingType: "Primary type. Kept for older rows.",
     pingTypes: "Toast, Email, Popup, and Banner. One ping can use several.",
     cycle: "When it repeats, or None for no calendar date.",
-    trigger: "Budget event, e.g. Groceries + Warn, Groceries + Over, or Groceries + Warn + Over.",
+    trigger:
+      "Budget event, e.g. Groceries + Warn, Groceries + Over, or Groceries + Warn + Over.",
     triggerCount: "How many times it has fired.",
     firedKeys: "Ids of budget warn/over fires already delivered.",
     isActive: "Off pauses the ping without deleting it.",

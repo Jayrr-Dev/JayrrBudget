@@ -6,38 +6,30 @@ import {
   subscribePendingPasscode,
 } from "@/crypto/pendingPasscode";
 import { getVaultMasterKey, lockVault } from "@/crypto/session";
-import { useFeatureFlag } from "@/domains/feature-flags/ui/useFeatureFlag";
+import { clearPersistedLastView } from "@/domains/dashboard/ui/lastViewCache";
+import { clearLedgerQuerySnapshots } from "@/domains/dashboard/ui/ledgerQuerySnapshot";
 import {
   ensureVaultFromPasscode,
   hydrateVaultSession,
   type VaultClient,
 } from "@/domains/vault/application/ensureVaultFromPasscode";
-import { clearLedgerQuerySnapshots } from "@/domains/dashboard/ui/ledgerQuerySnapshot";
-import { clearPersistedLastView } from "@/domains/dashboard/ui/lastViewCache";
 import { useConnectionState } from "@/shared/offline/useConnectionState";
 import { useAuthActions } from "@convex-dev/auth/react";
 import { api } from "@convex/_generated/api";
 import { useConvex, useConvexAuth, useMutation } from "convex/react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
-/** One-shot claim of pre-auth import rows (null userId). Never steals other users' ledgers. */
-const CLAIM_UNOWNED_KEY = "jayrr-budget.claimed-unowned-ledgers";
-
 /**
  * After Convex Auth sign-in:
  * - ensure role-based modules exist for this user
  * - seed starter taxonomy
- * - skip plaintext ledger claim/merchant backfill (private ledger is the money store)
  */
 export function EnsureUserBootstrap({ children }: { children: ReactNode }) {
   const { isAuthenticated, isLoading } = useConvexAuth();
   const { isOffline } = useConnectionState();
   const convex = useConvex();
-  const encryptedLedger = useFeatureFlag("encryptedLedger");
-  const claimUnowned = useMutation(api.migrations.claimUnownedData);
   const ensureModules = useMutation(api.modules.ensure);
   const ensureStarterTaxonomy = useMutation(api.classifications.ensureStarter);
-  const ranForSession = useRef(false);
   const vaultSyncForSession = useRef(false);
   const [hasPasscode, setHasPasscode] = useState(() =>
     Boolean(peekPendingPasscode()),
@@ -60,34 +52,6 @@ export function EnsureUserBootstrap({ children }: { children: ReactNode }) {
       console.warn("[auth] ensure starter taxonomy failed", error);
     });
   }, [ensureModules, ensureStarterTaxonomy, isAuthenticated, isLoading]);
-
-  useEffect(() => {
-    if (isLoading || !isAuthenticated || ranForSession.current) return;
-    // Private ledger is the money store: skip plaintext claim/merchant backfill.
-    ranForSession.current = true;
-    if (encryptedLedger) return;
-
-    void (async () => {
-      let alreadyClaimed = false;
-      try {
-        alreadyClaimed = localStorage.getItem(CLAIM_UNOWNED_KEY) === "1";
-      } catch {
-        // ignore
-      }
-      if (!alreadyClaimed) {
-        try {
-          await claimUnowned({});
-          try {
-            localStorage.setItem(CLAIM_UNOWNED_KEY, "1");
-          } catch {
-            // ignore
-          }
-        } catch (error) {
-          console.warn("[auth] claim unowned ledgers failed", error);
-        }
-      }
-    })();
-  }, [claimUnowned, encryptedLedger, isAuthenticated, isLoading]);
 
   useEffect(() => {
     if (isLoading || !isAuthenticated || vaultSyncForSession.current) return;
@@ -122,7 +86,6 @@ export function EnsureUserBootstrap({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (isLoading) return;
     if (!isAuthenticated && !isOffline) {
-      ranForSession.current = false;
       vaultSyncForSession.current = false;
       lockVault();
     }

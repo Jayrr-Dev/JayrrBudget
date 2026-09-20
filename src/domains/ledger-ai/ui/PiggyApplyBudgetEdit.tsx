@@ -39,7 +39,6 @@ export function PiggyApplyBudgetEdit({
     if (loading || !unlocked) return;
     let cancelled = false;
     const write = vaultWriteReady({
-      encryptedLedger: privateLedger.encryptedLedger,
       userId,
       vaultId,
       keyId,

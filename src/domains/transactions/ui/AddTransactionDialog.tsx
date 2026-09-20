@@ -92,7 +92,6 @@ export function AddTransactionButton() {
       if (parsed === null) throw new Error("Enter an amount other than zero.");
       if (!accountId) throw new Error("Pick an account.");
       const write = vaultWriteReady({
-        encryptedLedger: privateLedger.encryptedLedger,
         userId: privateLedger.userId,
         vaultId: privateLedger.vaultId,
         keyId: privateLedger.keyId,
@@ -199,7 +198,11 @@ export function AddTransactionButton() {
                 first, then add rows here.
               </p>
               <DialogFooter className="-mx-5 -mb-5 mt-1">
-                <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setOpen(false)}
+                >
                   Close
                 </Button>
               </DialogFooter>

@@ -14,11 +14,11 @@ import {
   vaultWriteReady,
 } from "@/domains/vault/application/saveEncryptedLedger";
 import { usePrivateLedger } from "@/domains/vault/ui/usePrivateLedger";
+import { assertOnlineForWrite } from "@/shared/offline/offlineWriteGuard";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useConvex } from "convex/react";
 import { PlusIcon } from "lucide-react";
 import { useState } from "react";
-import { assertOnlineForWrite } from "@/shared/offline/offlineWriteGuard";
 
 type TagsCellProps = {
   transactionId: string;
@@ -38,7 +38,6 @@ export function TagsCell({ transactionId, tags }: TagsCellProps) {
     mutationFn: async (input: { transactionId: string; tag: string }) => {
       assertOnlineForWrite();
       const write = vaultWriteReady({
-        encryptedLedger: privateLedger.encryptedLedger,
         userId: privateLedger.userId,
         vaultId: privateLedger.vaultId,
         keyId: privateLedger.keyId,
@@ -52,9 +51,7 @@ export function TagsCell({ transactionId, tags }: TagsCellProps) {
       );
       if (!tx) throw new Error("Encrypted transaction not found.");
       const nextTags = [
-        ...new Set(
-          [...(tx.tagNames ?? []), input.tag.trim()].filter(Boolean),
-        ),
+        ...new Set([...(tx.tagNames ?? []), input.tag.trim()].filter(Boolean)),
       ];
       await patchEncryptedTransaction(write, tx, { tagNames: nextTags });
       privateLedger.reload();

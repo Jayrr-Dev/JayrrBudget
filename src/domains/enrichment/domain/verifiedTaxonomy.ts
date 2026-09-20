@@ -61,6 +61,7 @@ export const VERIFIED_TAXONOMY: SeedTaxonomyNode[] = [
   { facet: "category", name: "Account Transfers", parentSlug: "transfers" },
 
   { facet: "subcategory", name: "Salary", parentSlug: "employment" },
+  { facet: "subcategory", name: "Wages", parentSlug: "employment" },
   { facet: "subcategory", name: "Tax Refunds", parentSlug: "tax" },
   { facet: "subcategory", name: "Tax Credits", parentSlug: "tax" },
   { facet: "subcategory", name: "Cashback Rewards", parentSlug: "cashback" },
@@ -158,6 +159,21 @@ export const VERIFIED_TAXONOMY: SeedTaxonomyNode[] = [
     name: "Remittances",
     parentSlug: "external-transfers",
   },
+  {
+    facet: "subcategory",
+    name: "P2P Apps",
+    parentSlug: "external-transfers",
+  },
+  {
+    facet: "subcategory",
+    name: "Cheques",
+    parentSlug: "external-transfers",
+  },
+  {
+    facet: "subcategory",
+    name: "Wire Transfers",
+    parentSlug: "external-transfers",
+  },
   { facet: "subcategory", name: "ATM Withdrawals", parentSlug: "atm" },
   { facet: "subcategory", name: "Cash Advances", parentSlug: "atm" },
 ];
@@ -213,6 +229,9 @@ export const LEGACY_SUBCATEGORY_MERGES: Array<{
 }> = [
   { from: "Paycheck", to: "Salary", parentSlug: "employment" },
   { from: "Payroll", to: "Salary", parentSlug: "employment" },
+  { from: "Hourly Wages", to: "Wages", parentSlug: "employment" },
+  { from: "Hourly", to: "Wages", parentSlug: "employment" },
+  { from: "Hourly Wage", to: "Wages", parentSlug: "employment" },
   { from: "Tax Credits", to: "Tax Credits", parentSlug: "tax" },
   { from: "GST/HST Credit", to: "Tax Credits", parentSlug: "tax" },
   { from: "Tax Refund", to: "Tax Refunds", parentSlug: "tax" },
@@ -327,7 +346,7 @@ export const LEGACY_SUBCATEGORY_MERGES: Array<{
   },
   {
     from: "Wire Transfer",
-    to: "Remittances",
+    to: "Wire Transfers",
     parentSlug: "external-transfers",
   },
   {

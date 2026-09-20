@@ -277,7 +277,6 @@ export function MoveMerchantDialog({
       };
       if (sameTaxonomy(taxonomyPatch, taxonomySnapshot)) return 0;
       const write = vaultWriteReady({
-        encryptedLedger: privateLedger.encryptedLedger,
         userId: privateLedger.userId,
         vaultId: privateLedger.vaultId,
         keyId: privateLedger.keyId,

@@ -40,6 +40,7 @@ import {
 } from "@/shared/convex/httpClient.server";
 import { errorMessage } from "@/shared/lib/error-message";
 import { api } from "@convex/_generated/api";
+import { PREMIUM_REQUIRED_MESSAGE } from "@convex/lib/aiCap";
 import {
   convertToModelMessages,
   stepCountIs,
@@ -74,10 +75,7 @@ export async function POST(request: Request) {
     return Response.json({ error: "Authentication required" }, { status: 401 });
   }
   if (me.role !== "admin" && me.role !== "premium") {
-    return Response.json(
-      { error: "Premium access required for canvas AI." },
-      { status: 403 },
-    );
+    return Response.json({ error: PREMIUM_REQUIRED_MESSAGE }, { status: 403 });
   }
 
   const loaded = await loadOpenRouterKeyOr503(convex);

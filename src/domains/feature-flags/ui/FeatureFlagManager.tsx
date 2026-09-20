@@ -19,6 +19,8 @@ import { api } from "@convex/_generated/api";
 import { useMutation, useQuery } from "convex/react";
 import { Info } from "lucide-react";
 
+const HIDDEN_FEATURE_FLAG_KEYS = new Set<FeatureFlagKey>(["cloudProcessing"]);
+
 function FlagRow({
   flagKey,
   enabled,
@@ -86,15 +88,11 @@ export function FeatureFlagManager() {
         </h2>
       </div>
       <div className="space-y-2">
-        {FEATURE_FLAG_KEYS.filter((key) => key !== "cloudProcessing").map(
-          (key) => (
-            <FlagRow
-              key={key}
-              flagKey={key}
-              enabled={Boolean(byKey.get(key))}
-            />
-          ),
-        )}
+        {FEATURE_FLAG_KEYS.filter(
+          (key) => !HIDDEN_FEATURE_FLAG_KEYS.has(key),
+        ).map((key) => (
+          <FlagRow key={key} flagKey={key} enabled={Boolean(byKey.get(key))} />
+        ))}
       </div>
     </section>
   );

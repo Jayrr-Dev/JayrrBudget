@@ -66,8 +66,8 @@ const SLIDES: readonly Slide[] = [
       lead: "Jev files new transactions into your buckets as they arrive.",
       bullets: [
         "Uses your own Section, Category, and Subcategory labels.",
-        "Learns from how you filed similar rows before.",
-        "Runs on import, so you review results instead of typing labels.",
+        "Follows Classify Rules such as ACME payroll is income.",
+        "Runs from Classify, so you review results instead of typing labels.",
       ],
     },
     features: [
@@ -125,7 +125,7 @@ const SLIDES: readonly Slide[] = [
       bullets: [
         "Up to 24 files per upload, 20MB each.",
         "Already-imported files are flagged before the scan.",
-        'Upload rules like "ACME payroll is income" guide the reader.',
+        "Classify Rules on Transactions tell Jev how to file the rows.",
       ],
     },
     features: [

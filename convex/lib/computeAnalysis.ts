@@ -460,6 +460,11 @@ const TYPE_ALIASES: Record<string, string> = {
   "e-transfer": "Interac e-Transfer",
   remittance: "Remittances",
   "international remittance": "Remittances",
+  cheque: "Cheques",
+  cheques: "Cheques",
+  chq: "Cheques",
+  "wire transfer": "Wire Transfers",
+  "wire transfers": "Wire Transfers",
   "interest charges": "Interest",
   interest: "Interest",
   saas: "Productivity",
@@ -471,6 +476,10 @@ const TYPE_ALIASES: Record<string, string> = {
   gyms: "Gym Memberships",
   paycheck: "Salary",
   payroll: "Salary",
+  wages: "Wages",
+  hourly: "Wages",
+  "hourly wage": "Wages",
+  "hourly wages": "Wages",
 };
 
 function typeKey(value: string) {

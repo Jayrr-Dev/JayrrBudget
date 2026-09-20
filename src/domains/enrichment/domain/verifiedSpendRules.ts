@@ -89,6 +89,26 @@ export const VERIFIED_SPEND_RULES: CategoryRule[] = [
     },
     patterns: [/e-?transfer/i],
   },
+  {
+    tree: {
+      section: "Transfers",
+      category: "External Transfers",
+      type: "Cheques",
+    },
+    patterns: [
+      /cleared\s+through\s+transit/i,
+      /cheque\s*#?\s*\d/i,
+      /\bchq\s*#?\s*\d/i,
+    ],
+  },
+  {
+    tree: {
+      section: "Transfers",
+      category: "External Transfers",
+      type: "Wire Transfers",
+    },
+    patterns: [/\bwire\s+transfer/i, /\bbank\s+wire\b/i],
+  },
 
   // --- AI Services (before generic SaaS) ---
   {

@@ -125,7 +125,7 @@ export const SEED_MODULES: SeedModule[] = [
   },
   {
     slug: "piggy-pings",
-    name: "Piggy Pings",
+    name: "Pings",
     description: "Reminders Jev can send as toast, email, popup, or banner.",
     href: "/piggy-pings",
     icon: "IconBell",

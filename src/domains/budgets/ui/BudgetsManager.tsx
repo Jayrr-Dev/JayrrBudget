@@ -645,7 +645,7 @@ function BudgetForm({
     { label: "Start date", value: formatCompactDisplayDate(startDate) },
     { label: "Warning", value: percentLabel(warningThreshold, 80) },
     { label: "Overage", value: percentLabel(overageThreshold, 100) },
-    { label: "Piggy pings", value: attachedPingTypeLabel(pingLinks, pings) },
+    { label: "Pings", value: attachedPingTypeLabel(pingLinks, pings) },
     { label: "Status", value: isActive ? "Active" : "Deactivated" },
   ];
 
@@ -839,15 +839,15 @@ function BudgetForm({
             <div className="grid gap-1.5">
               <FieldLabel
                 htmlFor={`${fieldId}-pings`}
-                infoTitle="Piggy pings"
-                infoBody="These reminders save on the Piggy Pings page."
+                infoTitle="Pings"
+                infoBody="These reminders save on the Pings page."
                 infoItems={[
                   "Toast is the default. You can also pick Dialog, Email, or Banner.",
                   "Warn and Over use the same wording for every type.",
-                  "Open Piggy Pings later if you want a custom message.",
+                  "Open Pings later if you want a custom message.",
                 ]}
               >
-                Piggy pings
+                Pings
               </FieldLabel>
               <BudgetPingLinksField
                 budgetName={name}

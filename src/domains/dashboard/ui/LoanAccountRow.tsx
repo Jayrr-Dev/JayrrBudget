@@ -30,7 +30,7 @@ function loanTypeProgressLine(loan: DashboardLoanSummary) {
   return `${loan.vehicleLabel ?? typeLabel} · ${loan.paymentsApplied} of ${loan.paymentCount} payments`;
 }
 
-function loanNextPaymentLine(loan: DashboardLoanSummary) {
+export function loanNextPaymentLine(loan: DashboardLoanSummary) {
   if (!loan.nextPaymentDate) return "Paid off";
   return `Next payment for ${formatCompactDisplayDate(loan.nextPaymentDate)}`;
 }

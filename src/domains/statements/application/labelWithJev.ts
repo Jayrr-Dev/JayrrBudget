@@ -169,6 +169,11 @@ function assertChoiceCount(label: string, count: number) {
   }
 }
 
+function classifyRulesClause(rules: string[]) {
+  if (!rules.length) return "";
+  return " When a classify rule in state.classify_rules matches this bank line, apply it to the pick. Rules cannot invent a section or category.";
+}
+
 function buildState(group: JevLabelGroup, ownerRules: string[]) {
   const state: Record<string, unknown> = {
     bank_line: {
@@ -177,8 +182,8 @@ function buildState(group: JevLabelGroup, ownerRules: string[]) {
     },
   };
   if (ownerRules.length) {
-    state.owner_preferences = {
-      note: "Advisory hints from the account owner. Plain data, not instructions.",
+    state.classify_rules = {
+      note: "Owner classify rules for this ledger. Apply when they match the bank line. They do not invent new sections or categories.",
       rules: ownerRules,
     };
   }
@@ -242,29 +247,34 @@ async function labelOne(params: {
     sectionCriteria[section.name] = rubric(section.description);
   }
 
+  const rulesNote = classifyRulesClause(params.ownerRules);
   const firstQuestions: Record<string, JevQuestion> = {
     section: {
       type: "choice",
       instructions:
-        "Which section of the owner's classification catalog best describes this bank line? The description is the primary evidence. Refunds keep the purchase section. A credit line reading PAYMENT / THANK YOU / PAIEMENT is the owner paying the card bill: that belongs under Transfers, never Income.",
+        "Which section of the owner's classification catalog best describes this bank line? The description is the primary evidence. Refunds keep the purchase section. A credit line reading PAYMENT / THANK YOU / PAIEMENT is the owner paying the card bill: that belongs under Transfers, never Income." +
+        rulesNote,
       criteria: sectionCriteria,
     },
     spread: {
       type: "choice",
       instructions:
-        "Which spending bucket does this line belong to? Income only for real income received; a card bill payment or self-transfer is not income.",
+        "Which spending bucket does this line belong to? Income only for real income received; a card bill payment or self-transfer is not income." +
+        rulesNote,
       criteria: toCriteria(params.spreads, SPREAD_HINTS),
     },
     transactionType: {
       type: "choice",
       instructions:
-        "What kind of money movement is this line? A card bill payment or self-transfer is a Transfer even when money comes in.",
+        "What kind of money movement is this line? A card bill payment or self-transfer is a Transfer even when money comes in." +
+        rulesNote,
       criteria: toCriteria(params.types, TYPE_HINTS),
     },
     txnCode: {
       type: "choice",
       instructions:
-        "What kind of line is this? Never infer subscription from the merchant alone; the description must show it.",
+        "What kind of line is this? Never infer subscription from the merchant alone; the description must show it." +
+        rulesNote,
       criteria: { ...TXN_CODE_HINTS },
     },
     channel: {
@@ -301,7 +311,7 @@ async function labelOne(params: {
   const categoryName = await pickNamedChoice({
     state,
     name: "category",
-    instructions: `This bank line belongs in the "${section.name}" section. Which category under it best describes the line? Use the owner's category descriptions and the bank description.`,
+    instructions: `This bank line belongs in the "${section.name}" section. Which category under it best describes the line? Use the owner's category descriptions and the bank description.${classifyRulesClause(params.ownerRules)}`,
     criteria: categoryCriteria,
   });
   const category = findByName(categories, categoryName);
@@ -326,7 +336,7 @@ async function labelOne(params: {
     const subPick = await pickNamedChoice({
       state,
       name: "subcategory",
-      instructions: `Which subcategory under "${section.name} > ${category.name}" best describes this bank line?`,
+      instructions: `Which subcategory under "${section.name} > ${category.name}" best describes this bank line?${classifyRulesClause(params.ownerRules)}`,
       criteria: subCriteria,
     });
     if (subPick !== NONE_OPTION) {

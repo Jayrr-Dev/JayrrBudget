@@ -37,9 +37,8 @@ import {
   skipNextPrivateLedgerReload,
   usePrivateLedger,
 } from "@/domains/vault/ui/usePrivateLedger";
-import { api } from "@convex/_generated/api";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useConvex, useQuery } from "convex/react";
+import { useConvex } from "convex/react";
 import { Info } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -59,25 +58,15 @@ export function LoanAccountActions({ accountId, accountName }: Props) {
   const [editOpen, setEditOpen] = useState(false);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
 
-  const vaultDoc = privateLedger.encryptedLedger
-    ? privateLedger.ledger.loanDocuments
-        .filter((doc) => doc.accountId === accountId && doc.ocrMarkdown?.trim())
-        .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0]
-    : null;
-  const convexDoc = useQuery(
-    api.loanDocuments.getByAccountId,
-    privateLedger.encryptedLedger ? "skip" : { accountId },
-  );
+  const vaultDoc = privateLedger.ledger.loanDocuments
+    .filter((doc) => doc.accountId === accountId && doc.ocrMarkdown?.trim())
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
 
-  const filename = vaultDoc?.filename ?? convexDoc?.filename ?? "Loan document";
-  const markdown = vaultDoc?.ocrMarkdown ?? convexDoc?.ocrMarkdown ?? "";
-  const hasOcr = markdown.trim().length > 0 || Boolean(convexDoc?.hasOcr);
-  const ocrLoading = !vaultDoc && convexDoc === undefined;
+  const filename = vaultDoc?.filename ?? "Loan document";
+  const markdown = vaultDoc?.ocrMarkdown ?? "";
+  const hasOcr = markdown.trim().length > 0;
   const canDelete = Boolean(
-    privateLedger.encryptedLedger &&
-    privateLedger.userId &&
-    privateLedger.vaultId &&
-    getVaultMasterKey(),
+    privateLedger.userId && privateLedger.vaultId && getVaultMasterKey(),
   );
 
   const remove = useMutation({
@@ -130,7 +119,7 @@ export function LoanAccountActions({ accountId, accountName }: Props) {
           {
             label: "View OCR",
             onSelect: () => setOcrOpen(true),
-            disabled: !hasOcr || ocrLoading,
+            disabled: !hasOcr,
           },
           {
             label: "Delete",

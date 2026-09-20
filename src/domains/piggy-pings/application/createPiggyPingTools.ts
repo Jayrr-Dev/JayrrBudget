@@ -1,4 +1,7 @@
-import { DEFAULT_PING_TYPES, PING_TYPES } from "@/domains/piggy-pings/domain/types";
+import {
+  DEFAULT_PING_TYPES,
+  PING_TYPES,
+} from "@/domains/piggy-pings/domain/types";
 import { api } from "@/shared/convex/httpClient";
 import type { Id } from "@convex/_generated/dataModel";
 import { tool } from "ai";
@@ -15,7 +18,9 @@ const pingFields = {
     .array(pingTypeSchema)
     .min(1)
     .optional()
-    .describe("Toast, Email, Dialog (Popup), and/or Banner. Pick one or more. Toast is the default."),
+    .describe(
+      "Toast, Email, Dialog (Popup), and/or Banner. Pick one or more. Toast is the default.",
+    ),
   pingType: pingTypeSchema
     .optional()
     .describe("Single type if pingTypes is omitted."),
@@ -52,7 +57,7 @@ export function createPiggyPingTools(client: ConvexHttpClient) {
   return {
     list_piggy_pings: tool({
       description:
-        "List this user's Piggy Pings reminders (name, title, types, cycle, dates).",
+        "List this user's Pings reminders (name, title, types, cycle, dates).",
       inputSchema: z.object({}),
       execute: async () => {
         return await client.query(api.piggyPings.list, {});
@@ -61,7 +66,7 @@ export function createPiggyPingTools(client: ConvexHttpClient) {
 
     create_piggy_ping: tool({
       description:
-        "Create a Piggy Ping reminder for the signed-in user. pingTypes can include Toast, Email, Popup (dialog), Banner. Toast is the default. Use cycle None plus trigger like Name + Warn for budget marks. Leave startDate or endDate empty for an open-ended window.",
+        "Create a ping reminder for the signed-in user. pingTypes can include Toast, Email, Popup (dialog), Banner. Toast is the default. Use cycle None plus trigger like Name + Warn for budget marks. Leave startDate or endDate empty for an open-ended window.",
       inputSchema: z.object(pingFields),
       execute: async (input) => {
         const fromList = input.pingTypes ?? [];
@@ -88,7 +93,7 @@ export function createPiggyPingTools(client: ConvexHttpClient) {
 
     delete_piggy_ping: tool({
       description:
-        "Delete one of the signed-in user's Piggy Pings. Only after they ask to remove it. confirmed must be true.",
+        "Delete one of the signed-in user's Pings. Only after they ask to remove it. confirmed must be true.",
       inputSchema: z.object({
         pingId: z.string(),
         confirmed: z.boolean(),
