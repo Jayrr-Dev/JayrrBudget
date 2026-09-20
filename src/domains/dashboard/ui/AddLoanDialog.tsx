@@ -79,7 +79,7 @@ import { cn } from "cn";
 import { useConvex } from "convex/react";
 import { Info, UploadIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 type AddLoanDialogProps = {
@@ -175,6 +175,7 @@ export function AddLoanDialog({
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [pendingFileHash, setPendingFileHash] = useState<string | null>(null);
+  const hydratedOpenKeyRef = useRef<string | null>(null);
   const stepMeta = LOAN_FORM_STEPS[step - 1];
   const typeMeta = loanTypeMeta(form.loanType);
   const busy = saving || uploading;
@@ -205,9 +206,15 @@ export function AddLoanDialog({
   }
 
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      hydratedOpenKeyRef.current = null;
+      return;
+    }
+    const openKey = accountId ?? "new";
+    if (hydratedOpenKeyRef.current === openKey) return;
     if (!accountId) {
       resetFormState();
+      hydratedOpenKeyRef.current = openKey;
       return;
     }
     const account = privateLedger.ledger.accounts.find(
@@ -222,6 +229,7 @@ export function AddLoanDialog({
     setForm(formFromLedger(account, loan));
     setStep(1);
     setPendingFileHash(null);
+    hydratedOpenKeyRef.current = openKey;
   }, [open, accountId, privateLedger.ledger, privateLedger.loading]);
 
   function stepError(current: LoanFormStep): string | null {
