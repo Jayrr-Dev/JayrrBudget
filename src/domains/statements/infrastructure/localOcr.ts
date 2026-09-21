@@ -68,9 +68,11 @@ async function getWorker(): Promise<TesseractWorker> {
 }
 
 async function ensurePdfWorker() {
-  const pdfjs = await import("pdfjs-dist");
+  // Legacy build polyfills Uint8Array#toHex. The modern worker calls it
+  // and throws "toHex is not a function" on browsers that lack it.
+  const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
   if (!pdfjs.GlobalWorkerOptions.workerSrc) {
-    pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
+    pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjs.version}/legacy/build/pdf.worker.min.mjs`;
   }
   return pdfjs;
 }
