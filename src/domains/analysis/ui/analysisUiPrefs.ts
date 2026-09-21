@@ -13,6 +13,7 @@ export type AnalysisTab =
   | "spreads"
   | "categories"
   | "subcategories"
+  | "subscriptions"
   | "tags"
   | "types"
   | "merchants"
@@ -53,6 +54,7 @@ const TABS = new Set<AnalysisTab>([
   "spreads",
   "categories",
   "subcategories",
+  "subscriptions",
   "tags",
   "types",
   "merchants",

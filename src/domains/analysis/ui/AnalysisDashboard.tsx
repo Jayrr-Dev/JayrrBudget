@@ -157,6 +157,7 @@ const TAB_OPTIONS: { value: AnalysisTab; label: string }[] = [
   { value: "sections", label: "Sections" },
   { value: "categories", label: "Categories" },
   { value: "subcategories", label: "Subcategories" },
+  { value: "subscriptions", label: "Subscriptions" },
   { value: "tags", label: "Tags" },
   { value: "types", label: "Code" },
   { value: "spreads", label: "Spreads" },
@@ -5828,6 +5829,123 @@ function SubcategoriesTab({
   );
 }
 
+const SUBSCRIPTION_TYPE_LABEL = "Subscription";
+
+function SubscriptionsTab({
+  data,
+  period,
+  onPeriodChange,
+  pane,
+  onPaneChange,
+}: {
+  data: AnalysisData;
+  period: AnalysisPeriod;
+  onPeriodChange: (value: AnalysisPeriod) => void;
+  pane: FacetPane;
+  onPaneChange: (value: FacetPane) => void;
+}) {
+  const breakdown = (data.typeBreakdowns ?? []).find(
+    (item) => item.type === SUBSCRIPTION_TYPE_LABEL,
+  );
+  const rows = breakdown?.merchants ?? [];
+  const total = data.summary.totalSpend;
+  const periodCount = Math.max(data.monthly.length, 1);
+  const periodMeta = ANALYSIS_PERIOD_META[period];
+  const subscriptionSpend = breakdown?.spend ?? 0;
+
+  if (!breakdown || rows.length === 0) {
+    return (
+      <EmptyPrompt
+        title="No subscriptions in this range"
+        description="Code a recurring charge as subscription. Each merchant charts here the same way a subcategory does."
+        href="/transactions"
+        actionLabel="Open transactions"
+      />
+    );
+  }
+
+  return (
+    <FacetPaneShell
+      pane={pane}
+      onPaneChange={onPaneChange}
+      visualizations={
+        <div className="space-y-6">
+          <RankedBarChart
+            title="Subscriptions"
+            info={`Merchant clean names on lines coded subscription. ${formatMoney(subscriptionSpend, data.currency)} in this range.`}
+            rows={rows}
+            currency={data.currency}
+            color="oklch(0.55 0.12 300)"
+            labelWidth={160}
+          />
+          <StackedMixChart
+            title="Subscription mix over time"
+            info={`${periodMeta.label} subscription spend by merchant. Named bands are the first 85%. The last 15% is Other.`}
+            series={breakdown.merchantSeries}
+            monthly={breakdown.merchantMonthly}
+            currency={data.currency}
+            period={period}
+            onPeriodChange={onPeriodChange}
+            variant="area"
+            other={breakdown.other}
+            otherByPeriod={breakdown.otherByPeriod}
+          />
+          <TaxonomyBreakdownTable
+            title="All subscriptions"
+            info="Every subscription merchant in this range with spend, count, and share of lifestyle outflow."
+            nameLabel="Merchant"
+            rows={rows}
+            currency={data.currency}
+            totalSpend={total}
+          />
+        </div>
+      }
+      summary={
+        <LeaderboardTable
+          title="Top subscriptions"
+          info="Biggest subscription merchants by lifestyle spend. Share is of all lifestyle outflow, not just subscriptions."
+          nameLabel="Merchant"
+          rows={rows}
+          currency={data.currency}
+          totalSpend={total}
+          transactionsForRow={(name) =>
+            peeksFor(data, "type-merchant", SUBSCRIPTION_TYPE_LABEL, name)
+          }
+        />
+      }
+      average={
+        <AverageLeaderboardTable
+          title="Average by subscription"
+          info={`Subscription spend and charge count for each merchant, divided by ${periodCount} ${periodMeta.nounPlural} in this range.`}
+          nameLabel="Merchant"
+          rows={rows}
+          currency={data.currency}
+          period={period}
+          periodCount={periodCount}
+          transactionsForRow={(name) =>
+            peeksFor(data, "type-merchant", SUBSCRIPTION_TYPE_LABEL, name)
+          }
+        />
+      }
+      range={
+        <RangeLeaderboardTable
+          title="High Mid Low by subscription"
+          info={`Highest, median, and lowest ${periodMeta.label.toLowerCase()} spend for each subscription merchant. Zero buckets are skipped.`}
+          nameLabel="Merchant"
+          rows={rows}
+          series={breakdown.merchantSeries}
+          monthly={breakdown.merchantMonthly}
+          currency={data.currency}
+          otherByPeriod={breakdown.otherByPeriod}
+          transactionsForRow={(name) =>
+            peeksFor(data, "type-merchant", SUBSCRIPTION_TYPE_LABEL, name)
+          }
+        />
+      }
+    />
+  );
+}
+
 function TagDrilldown({
   data,
   selected,
@@ -7212,6 +7330,15 @@ export function AnalysisDashboard() {
                   data={data}
                   subcategory={subcategory}
                   onSelectSubcategory={setSubcategory}
+                  period={period}
+                  onPeriodChange={setPeriod}
+                  pane={pane}
+                  onPaneChange={setPane}
+                />
+              ) : null}
+              {tab === "subscriptions" ? (
+                <SubscriptionsTab
+                  data={data}
                   period={period}
                   onPeriodChange={setPeriod}
                   pane={pane}
