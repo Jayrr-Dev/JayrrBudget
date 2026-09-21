@@ -16,8 +16,6 @@ import { ProfileAiByokCard } from "@/domains/ai-keys/ui/ProfileAiByokCard";
 import { ProfileAiUsageCard } from "@/domains/ai-keys/ui/ProfileAiUsageCard";
 import { ProfileBillingCard } from "@/domains/billing/ui/ProfileBillingCard";
 import { ProfileAvatarCard } from "@/domains/ledger-ai/ui/ProfileAvatarCard";
-import { resolveOcrMode } from "@/domains/statements/domain/ocrMode";
-import { ProfileOcrModeCard } from "@/domains/statements/ui/ProfileOcrModeCard";
 import { api } from "@convex/_generated/api";
 import { resolveUserIcon } from "@convex/lib/userIcons";
 import { useConvexAuth, useMutation, useQuery } from "convex/react";
@@ -26,7 +24,6 @@ import { useEffect, useState } from "react";
 
 const PROFILE_TABS = [
   { id: "personalize", label: "Personalize" },
-  { id: "documents", label: "Documents" },
   { id: "usage", label: "Usage" },
   { id: "security", label: "Security" },
 ] as const;
@@ -212,10 +209,6 @@ export default function ProfilePage() {
           <ProfileAvatarCard avatarIcon={resolveUserIcon(me.avatarIcon)} />
           <ProfileBillingCard />
         </div>
-      ) : null}
-
-      {tab === "documents" ? (
-        <ProfileOcrModeCard ocrMode={resolveOcrMode(me.ocrMode)} />
       ) : null}
 
       {tab === "usage" ? <ProfileAiUsageCard /> : null}

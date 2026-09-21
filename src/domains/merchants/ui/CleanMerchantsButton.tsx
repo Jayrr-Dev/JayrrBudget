@@ -20,6 +20,7 @@ import {
 import { useFeatureFlag } from "@/domains/feature-flags/ui/useFeatureFlag";
 import { applyVaultMerchantMerges } from "@/domains/merchants/application/applyVaultMerchantMerges";
 import { planBankLineMerchantNames } from "@/domains/merchants/domain/planBankLineMerchantNames";
+import { Spinner } from "@/components/ui/spinner";
 import { vaultWriteReady } from "@/domains/vault/application/saveEncryptedLedger";
 import { usePrivateLedger } from "@/domains/vault/ui/usePrivateLedger";
 import { errorMessage } from "@/shared/lib/error-message";
@@ -43,6 +44,8 @@ export function CleanMerchantsButton() {
   const client = useConvex();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [checked, setChecked] = useState(0);
+  const [total, setTotal] = useState(0);
   const encrypted = Boolean(privateLedger.encryptedLedger);
   const blocked = encrypted && !cloudProcessing;
 
@@ -69,6 +72,8 @@ export function CleanMerchantsButton() {
 
   async function runClean() {
     setBusy(true);
+    setChecked(0);
+    setTotal(vaultProbes.length);
     try {
       if (!encrypted) {
         throw new Error("Unlock your private ledger to edit.");
@@ -87,11 +92,45 @@ export function CleanMerchantsButton() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ planOnly: true, merchants: vaultProbes }),
       });
-      const body = (await response.json().catch(() => ({}))) as CleanResult & {
-        error?: string;
-      };
-      if (!response.ok) {
-        throw new Error(body.error ?? "Merchant clean failed");
+      if (!response.ok || !response.body) {
+        const failed = (await response.json().catch(() => null)) as {
+          error?: string;
+        } | null;
+        throw new Error(failed?.error ?? "Merchant clean failed");
+      }
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let body: (CleanResult & { error?: string }) | null = null;
+      while (true) {
+        const step = await reader.read();
+        if (step.done) break;
+        buffer += decoder.decode(step.value, { stream: true });
+        let newline = buffer.indexOf("\n");
+        while (newline >= 0) {
+          const line = buffer.slice(0, newline).trim();
+          buffer = buffer.slice(newline + 1);
+          newline = buffer.indexOf("\n");
+          if (!line) continue;
+          const event = JSON.parse(line) as {
+            type?: string;
+            checked?: number;
+            total?: number;
+            error?: string;
+          } & CleanResult;
+          if (event.type === "error") {
+            throw new Error(event.error ?? "Merchant clean failed");
+          }
+          if (event.type === "progress") {
+            setChecked(event.checked ?? 0);
+            setTotal(event.total ?? vaultProbes.length);
+            continue;
+          }
+          if (event.type === "result") body = event;
+        }
+      }
+      if (!body) {
+        throw new Error("Merchant clean failed");
       }
       if (!body.planOnly) {
         throw new Error("Merchant clean failed");
@@ -181,7 +220,8 @@ export function CleanMerchantsButton() {
                         Drops rails like Bill Payment, PAD, Direct Dep, EFT,
                         Online Payment
                       </li>
-                      <li>Drops trailing account and ATM numbers</li>
+                      <li>Drops reference numbers so Affirm, Stripe, and Wealthsimple stay the brand</li>
+                      <li>Jev merges names that are the same payee</li>
                       <li>
                         Fees and interest get the bank name (CIBC Monthly Plan
                         Fee)
@@ -199,6 +239,14 @@ export function CleanMerchantsButton() {
               Merged payees keep every linked transaction.
             </DialogDescription>
           </DialogHeader>
+          {busy ? (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Spinner />
+              <span className="tabular-nums">
+                {total > 0 ? `${checked} of ${total}` : "Starting…"}
+              </span>
+            </div>
+          ) : null}
           <DialogFooter>
             <Button
               type="button"
@@ -213,7 +261,14 @@ export function CleanMerchantsButton() {
               disabled={busy}
               onClick={() => void runClean()}
             >
-              {busy ? "Cleaning…" : "Run clean"}
+              {busy ? (
+                <span className="inline-flex items-center gap-2">
+                  <Spinner />
+                  Cleaning…
+                </span>
+              ) : (
+                "Run clean"
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>

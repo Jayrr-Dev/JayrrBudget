@@ -10,6 +10,7 @@ import {
 } from "@/domains/statements/domain/importProgress";
 import {
   paperFactsMetaSchema,
+  paperFactsStatementSchema,
   paperFactsToParsed,
   paperFactsTransactionSchemaFor,
   type PaperFactsStatementInput,
@@ -42,6 +43,57 @@ const paperFactsBatchSchema = z.object({
   transactions: z.array(paperFactsLineSchema),
 });
 
+const cleanPageSchema = z.object({
+  markdown: z
+    .string()
+    .min(1)
+    .describe(
+      "One short header line, then a markdown table of posted lines. No legal copy.",
+    ),
+});
+
+/**
+ * Turn a raw OCR page into a short header plus a transaction table.
+ * Falls back to the original page text if the cleanup call fails.
+ */
+export async function cleanOcrToTable(ocrMarkdown: string): Promise<string> {
+  const pages = splitOcrPages(ocrMarkdown);
+  const cleaned = await mapPool(pages, 2, async (pageText, index) => {
+    try {
+      const { object } = await generateObjectWithFallback({
+        schema: cleanPageSchema,
+        logLabel: "statements-ocr-clean",
+        temperature: 0,
+        prompt: [
+          "Rewrite this bank-statement OCR into clean text before anyone extracts transactions.",
+          "First line: institution, account, period, opening balance, withdrawals, deposits, closing balance. Omit any of those that are not on the page.",
+          "Then a markdown table with columns: Date | Description | Withdrawal | Deposit | Balance.",
+          "One posted line per row. Join a wrapped payee onto the line above it.",
+          "Keep amounts exactly as printed. Do not invent rows.",
+          "Drop legal paragraphs, phone numbers, websites, branch addresses, ads, and page numbers.",
+          "Drop spend-category recaps that repeat the same lines.",
+          `This is page ${index + 1} of ${pages.length}.`,
+          "",
+          pageText.slice(0, 40_000),
+        ].join("\n"),
+      });
+      const body = object.markdown.trim();
+      if (!body.includes("|")) {
+        return `## Page ${index + 1}\n\n${pageText.trim()}`;
+      }
+      return `## Page ${index + 1}\n\n${body}`;
+    } catch (error) {
+      console.warn(
+        `[statements-ocr-clean] page ${index + 1} kept raw: ${
+          error instanceof Error ? error.message : "cleanup failed"
+        }`,
+      );
+      return `## Page ${index + 1}\n\n${pageText.trim()}`;
+    }
+  });
+  return cleaned.join("\n\n");
+}
+
 function splitOcrPages(ocrMarkdown: string) {
   const parts = ocrMarkdown
     .split(/^## Page \d+\s*$/gim)
@@ -63,22 +115,22 @@ const SIGN_AND_BALANCE_RULES = [
   "Chequing/savings: a withdrawal that LOWERS cash is still POSITIVE. Do not copy the running-balance column sign.",
   "Credit card / LOC: a purchase that RAISES amount owing is POSITIVE. A payment is NEGATIVE.",
   "BALANCE: cards/LOC: openingBalance + sum(amounts) = closingBalance (±0.02).",
-  "BALANCE: chequing/savings: openingBalance - sum(amounts) = closingBalance (±0.02).",
+  "BALANCE: checking, chequing, or savings: openingBalance - sum(amounts) = closingBalance (±0.02).",
 ].join("\n");
 
 const LINE_DEDUP_RULES = [
-  "CRITICAL: Canadian credit cards (CIBC Visa etc.) list TWO dates per line: Trans date and Post date.",
+  "CRITICAL: Credit cards often list TWO dates per line: Trans date and Post date. US and Canadian statements both do this.",
   "Emit ONE transaction per statement LINE. Never create two rows for the same line.",
   "Same amount + same description + same Post date = one row, even if OCR repeated it.",
   "date = Post date as YYYY-MM-DD. authorizedDate = Trans date as YYYY-MM-DD (null only if absent).",
   "Never use month-day text like 'Jul 24'. Always use YYYY-MM-DD with the statement year.",
   "Skip CreditSmart / spend-category summary tables, payment slips, ads, and page footers.",
   "Skip section total rows (Total payments, Total for card, etc.).",
-  "Many chequing PDFs print the daily register, then a later 'transaction details' / Housing / Groceries recap of the SAME lines. Extract the register once. Do not emit the recap as extra transactions.",
+  "Many checking and chequing PDFs print the daily register, then a later recap of the SAME lines. Extract the register once.",
   "Never emit a description that is only a date ('Jan 01', 'January 1'). That is the date column, not a payee.",
   "openingBalance = Previous balance. closingBalance = Total balance / New balance.",
   "Strip OCR dingbats (arrows, stars, warning marks) from description.",
-  "WRAPPED LINES: chequing statements often print the rail on one OCR line and the payee on the next ('ONLINE PURCHASE -' then 'AMAZON.CA'; 'PAD -' then 'SPOTIFY'; 'BILL PAYMENT -' then 'CIBC VISA'). Join them into ONE description: 'ONLINE PURCHASE - AMAZON.CA'.",
+  "WRAPPED LINES: statements often print the rail on one OCR line and the payee on the next ('ONLINE PURCHASE -' then 'AMAZON'; 'ACH -' then 'SPOTIFY'; 'BILL PAYMENT -' then 'VISA'). Join them into ONE description.",
   "A description must name who was paid when the statement does. Never emit a description that is only a rail ('PAD -', 'ONLINE PURCHASE -', 'BILL PAYMENT -') or that ends with a dash; look at the neighbouring OCR line for the payee first.",
   "Keep FX notes like 'USD 12.00 @ 1.42' in description.",
 ];
@@ -168,9 +220,10 @@ export async function parseStatementWithOpenRouter(
       schema: parsedStatementSchema,
       logLabel: "statements",
       prompt: [
-        "Extract a rich structured ledger from this Canadian bank/credit-card OCR.",
-        "Extract EVERY posted transaction line. Prefer CAD.",
-        "accountType (pick one): chequing|checking, savings, credit|credit_card (Visa/Mastercard/Amex), lending|line_of_credit (LOC/HELOC/loan), other (TFSA/business/unclear).",
+        "Extract a rich structured ledger from this bank or credit-card OCR. US and Canadian statements both count.",
+        "Extract EVERY posted transaction line.",
+        "Currency is the ISO code on the statement. A US bank is USD. A Canadian bank is CAD. Do not assume CAD.",
+        "accountType (pick one): checking|chequing, savings, credit|credit_card (Visa/Mastercard/Amex), lending|line_of_credit (LOC/HELOC/loan), other.",
         ...hintBlock,
         BALANCE_AND_DEDUP_RULES,
         "Keep description as full original text (minus dingbats).",
@@ -192,9 +245,10 @@ export async function parseStatementWithOpenRouter(
     schema: statementMetaSchema,
     logLabel: "statements-meta",
     prompt: [
-      "Extract statement metadata only from this Canadian bank/credit-card OCR.",
-      "No transactions. Prefer CAD.",
-      "accountType (pick one): chequing|checking, savings, credit|credit_card, lending|line_of_credit, other.",
+      "Extract statement metadata only from this bank or credit-card OCR.",
+      "No transactions.",
+      "Currency is the ISO code on the statement. A US bank is USD. A Canadian bank is CAD. Do not assume CAD.",
+      "accountType (pick one): checking|chequing, savings, credit|credit_card, lending|line_of_credit, other.",
       ...hintBlock,
       MASK_RULES,
       "openingBalance = Previous balance. closingBalance = Total balance / New balance.",
@@ -210,7 +264,7 @@ export async function parseStatementWithOpenRouter(
       logLabel: "statements-page",
       prompt: [
         "Extract EVERY posted transaction LINE on this statement page OCR.",
-        "Canadian bank/credit card statement (often CIBC Visa).",
+        "US or Canadian bank or credit-card statement.",
         ...hintBlock,
         BALANCE_AND_DEDUP_RULES,
         "Keep description as full original text (minus dingbats).",
@@ -268,7 +322,7 @@ export async function rebalanceParsedStatement(
       `transactionSum=${balance.transactionSum} (positive = money out)`,
       `computedClosing=${balance.computedClosing}`,
       `delta=${balance.delta} (computedClosing - closingBalance).`,
-      "Likely cause: duplicate Trans/Post rows, missing/extra lines, or chequing amounts copied from the running-balance column.",
+      "Likely cause: duplicate Trans/Post rows, missing/extra lines, or amounts copied from the running-balance column.",
       "Return the FULL corrected statement object (metadata + unique posted transactions).",
       "Keep institution/account/period metadata unless clearly wrong.",
       ...categoryBlock,
@@ -335,9 +389,10 @@ export async function parseStatementPaperFacts(
       schema: paperFactsMetaSchema,
       logLabel: "statements-paper-meta",
       prompt: [
-        "Extract statement metadata only from this Canadian bank/credit-card OCR.",
-        "No transactions. Prefer CAD.",
-        "accountType (pick one): chequing|checking, savings, credit|credit_card, lending|line_of_credit, other.",
+        "Extract statement metadata only from this bank or credit-card OCR.",
+        "No transactions.",
+        "Currency is the ISO code on the statement. A US bank is USD. A Canadian bank is CAD. Do not assume CAD.",
+        "accountType (pick one): checking|chequing, savings, credit|credit_card, lending|line_of_credit, other.",
         ...hintBlock,
         MASK_RULES,
         "openingBalance = Previous balance. closingBalance = Total balance / New balance.",
@@ -361,7 +416,7 @@ export async function parseStatementPaperFacts(
         logLabel: "statements-paper-page",
         prompt: [
           "Extract EVERY posted transaction LINE on this statement page OCR.",
-          "Canadian bank/credit card statement (often CIBC Visa).",
+          "US or Canadian bank or credit-card statement.",
           ...hintBlock,
           rules,
           ...userBlock,
@@ -402,4 +457,61 @@ export async function parseStatementPaperFacts(
   } finally {
     clearInterval(beat);
   }
+}
+
+/** Extra read when opening plus the lines do not match closing. */
+export async function rebalancePaperFacts(
+  ocrMarkdown: string,
+  parsed: ParsedStatement,
+  balance: {
+    openingBalance: number | null;
+    closingBalance: number | null;
+    transactionSum: number;
+    computedClosing: number | null;
+    delta: number | null;
+  },
+  signs?: string,
+  attempt = 1,
+): Promise<ParsedStatement> {
+  const { object } = await generateObjectWithFallback({
+    schema: paperFactsStatementSchema,
+    logLabel: "statements-paper-rebalance",
+    temperature: 0,
+    prompt: [
+      `Correction ${attempt} of 3. The extract still does not balance. Read the table again and return the full statement.`,
+      "Sign comes from the Balance column, not the Withdrawal or Deposit heading.",
+      "If the balance went up, amount is negative (money in). If it went down, amount is positive (money out).",
+      "A foreign figure is foreignAmount, not the statement-currency amount. amount is the change in the Balance column. USD is foreign on a Canadian statement. CAD is foreign on a US statement.",
+      "Skip Opening balance and Balance forward rows. They are not transactions.",
+      "Keep reference numbers in the description. Two transfers of the same amount on the same day are both real when a reversal sits between them.",
+      "openingBalance and closingBalance come from the statement header, not a mid-statement balance.",
+      "Chequing, checking, or savings: opening - sum(amounts) = closing. Card: opening + sum(amounts) = closing.",
+      "Positive amount = money out. Do not invent lines.",
+      signs
+        ? "JEV LABELS. Trust these over the table columns. withdrawal = positive amount. deposit = negative amount. skip = do not emit that row. distinct = keep the row even if another line has the same day and amount. duplicate = emit that movement once. amount=balance_change means use the balance change in the statement currency. amount=12.50 means that printed figure is the statement-currency amount."
+        : "",
+      signs ? signs : "",
+      `accountType=${parsed.accountType}`,
+      `openingBalance=${balance.openingBalance}`,
+      `closingBalance=${balance.closingBalance}`,
+      `transactionSum=${balance.transactionSum}`,
+      `computedClosing=${balance.computedClosing}`,
+      `delta=${balance.delta} (computedClosing - closingBalance).`,
+      "TABLE:",
+      ocrMarkdown.slice(0, 80_000),
+      "PREVIOUS:",
+      JSON.stringify({
+        openingBalance: parsed.openingBalance,
+        closingBalance: parsed.closingBalance,
+        transactions: parsed.transactions.map((txn) => ({
+          date: txn.date,
+          description: txn.description,
+          amount: txn.amount,
+        })),
+      }).slice(0, 40_000),
+    ]
+      .filter(Boolean)
+      .join("\n"),
+  });
+  return paperFactsToParsed(object);
 }

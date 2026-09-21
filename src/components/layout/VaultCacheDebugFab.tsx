@@ -33,7 +33,7 @@ import {
 } from "@/shared/debug/vaultCacheDebug";
 import { useClientNow } from "@/shared/lib/useClientNow";
 import { api } from "@convex/_generated/api";
-import { useConvexAuth, useQuery } from "convex/react";
+import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import { Info, XIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
@@ -308,7 +308,7 @@ function DebuggerAboutInfo() {
           </PopoverDescription>
           <ul className="mt-1.5 list-disc space-y-1 pl-4 text-muted-foreground">
             <li>Cache logs IndexedDB hits and Convex ciphertext reads</li>
-            <li>AI Usage logs tokens from Jev / canvas and Mistral OCR pages</li>
+            <li>AI Usage logs Jev, canvas, Mistral OCR, and Tesseract scans ($0)</li>
             <li>Cost estimates use the rate card (OpenRouter + Mistral)</li>
             <li>Memory shows what Jev has saved about you</li>
             <li>Plaintext ledger never appears here</li>
@@ -345,6 +345,8 @@ export function VaultCacheDebugPanel({
     "usage" | "cost" | "team" | "memory"
   >("usage");
   const [capturing, setCapturing] = useState(isVaultCacheDebugCapturing);
+  const [clearingUsage, setClearingUsage] = useState(false);
+  const clearMyUsage = useMutation(api.aiUsage.clearMine);
   const [cacheEvents, setCacheEvents] = useState(() => [
     ...getVaultCacheDebugEvents(),
   ]);
@@ -538,6 +540,21 @@ export function VaultCacheDebugPanel({
             >
               Memory
             </button>
+            {aiSubTab === "usage" ? (
+              <button
+                type="button"
+                disabled={clearingUsage || (aiEvents?.length ?? 0) === 0}
+                onClick={() => {
+                  setClearingUsage(true);
+                  void clearMyUsage({})
+                    .catch(() => undefined)
+                    .finally(() => setClearingUsage(false));
+                }}
+                className="ml-auto rounded-md px-2 py-1 text-[11px] text-[var(--muted-foreground)] hover:bg-[var(--surface-2)] hover:text-[var(--foreground)] disabled:opacity-40"
+              >
+                {clearingUsage ? "Clearing" : "Clear"}
+              </button>
+            ) : null}
           </div>
 
           {aiSubTab === "cost" ? (
@@ -600,8 +617,8 @@ export function VaultCacheDebugPanel({
                   </li>
                 ) : aiEvents.length === 0 ? (
                   <li className="py-6 text-center text-xs text-[var(--muted-foreground)]">
-                    Send a Jev / canvas chat, or upload a statement with
-                    server OCR.
+                    Send a Jev / canvas chat, or upload a statement.
+                    Tesseract scans show here as $0.
                   </li>
                 ) : (
                   aiEvents.map((event) => (

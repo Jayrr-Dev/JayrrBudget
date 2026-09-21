@@ -6,6 +6,7 @@ export const FEATURE_FLAG_KEYS = [
   "cloudProcessing",
   "jevCategorization",
   "jevPiggy",
+  "tesseractOcr",
 ] as const;
 export type FeatureFlagKey = (typeof FEATURE_FLAG_KEYS)[number];
 
@@ -13,6 +14,7 @@ const keyValidator = v.union(
   v.literal("cloudProcessing"),
   v.literal("jevCategorization"),
   v.literal("jevPiggy"),
+  v.literal("tesseractOcr"),
 );
 
 function isKnownKey(key: string): key is FeatureFlagKey {
@@ -25,6 +27,7 @@ function enabledFor(
   row: { enabled: boolean } | null | undefined,
 ): boolean {
   if (key === "cloudProcessing") return true;
+  if (key === "tesseractOcr" && !row) return true;
   return Boolean(row?.enabled);
 }
 

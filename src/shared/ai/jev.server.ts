@@ -91,35 +91,40 @@ export async function askJev<Q extends Record<string, JevQuestion>>(params: {
   if (!apiKey) throw new Error("JEV_API_KEY is not set");
   assertChoiceSizes(params.questions);
 
-  const controller = new AbortController();
-  const timer = setTimeout(
-    () => controller.abort(),
-    params.timeoutMs ?? JEV_TIMEOUT_MS,
-  );
   const started = Date.now();
-  let response: Response;
-  try {
-    response = await fetch(JEV_ENDPOINT, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: JEV_MODEL,
-        state: params.state,
-        questions: params.questions,
-      }),
-      signal: controller.signal,
-    });
-  } catch (error) {
-    if (controller.signal.aborted) {
-      throw new Error(`[${params.logLabel}] Jev timed out`);
+  let response: Response | null = null;
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    const controller = new AbortController();
+    const timer = setTimeout(
+      () => controller.abort(),
+      params.timeoutMs ?? JEV_TIMEOUT_MS,
+    );
+    try {
+      response = await fetch(JEV_ENDPOINT, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: JEV_MODEL,
+          state: params.state,
+          questions: params.questions,
+        }),
+        signal: controller.signal,
+      });
+    } catch (error) {
+      if (controller.signal.aborted) {
+        throw new Error(`[${params.logLabel}] Jev timed out`);
+      }
+      throw error;
+    } finally {
+      clearTimeout(timer);
     }
-    throw error;
-  } finally {
-    clearTimeout(timer);
+    if (response.status !== 429 || attempt === 3) break;
+    await new Promise((resolve) => setTimeout(resolve, 400 * attempt));
   }
+  if (!response) throw new Error(`[${params.logLabel}] Jev did not respond`);
   const ms = Date.now() - started;
 
   if (!response.ok) {

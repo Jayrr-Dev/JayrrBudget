@@ -75,6 +75,18 @@ const DATE_ONLY_DESC =
 const REGISTER_RAIL =
   /^(pad|pos debit|pos return|direct dep(?:osit)?|interac e-transfer(?: in| out)?|bill payment|online purchase|online payment|atm withdrawal|transfer to|cheque|donation|credit interest|monthly plan fee)\b/;
 
+function referenceToken(description: string): string | null {
+  const matches = description.match(/\d{6,}/g);
+  return matches ? matches.join(" ") : null;
+}
+
+function sameMovement(left: ParsedTxn, right: ParsedTxn) {
+  const leftRef = referenceToken(left.description);
+  const rightRef = referenceToken(right.description);
+  if (leftRef && rightRef && leftRef !== rightRef) return false;
+  return true;
+}
+
 function lineKey(txn: ParsedTxn) {
   return `${txn.amount}|${normalizeStatementText(txn.description || txn.merchantName || "")}`;
 }
@@ -263,14 +275,19 @@ export function dedupeParsedTransactions(
     }
     const collapsed: ParsedTxn[] = [];
     for (const sameDate of byDate.values()) {
-      let keeper = sameDate[0];
-      for (let index = 1; index < sameDate.length; index += 1) {
-        const other = sameDate[index];
-        const preferred = preferPostedRow(keeper, other);
-        const drop = preferred === keeper ? other : keeper;
-        keeper = mergeTwin(preferred, drop);
+      const kept: ParsedTxn[] = [];
+      for (const txn of sameDate) {
+        const matchIndex = kept.findIndex((keeper) => sameMovement(keeper, txn));
+        if (matchIndex < 0) {
+          kept.push(txn);
+          continue;
+        }
+        const keeper = kept[matchIndex]!;
+        const preferred = preferPostedRow(keeper, txn);
+        const drop = preferred === keeper ? txn : keeper;
+        kept[matchIndex] = mergeTwin(preferred, drop);
       }
-      collapsed.push(keeper);
+      collapsed.push(...kept);
     }
 
     if (collapsed.length === 1) {

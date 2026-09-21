@@ -27,5 +27,7 @@ export function useFeatureFlags() {
       rows?.find((row) => row.key === "jevCategorization")?.enabled,
     ),
     jevPiggy: Boolean(rows?.find((row) => row.key === "jevPiggy")?.enabled),
+    tesseractOcr:
+      rows?.find((row) => row.key === "tesseractOcr")?.enabled !== false,
   };
 }

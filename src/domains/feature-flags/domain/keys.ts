@@ -2,6 +2,7 @@ export const FEATURE_FLAG_KEYS = [
   "cloudProcessing",
   "jevCategorization",
   "jevPiggy",
+  "tesseractOcr",
 ] as const;
 
 export type FeatureFlagKey = (typeof FEATURE_FLAG_KEYS)[number];
@@ -24,5 +25,10 @@ export const FEATURE_FLAG_COPY: Record<
     name: "Typed votes for Jev (beta)",
     description:
       "Lets Jev take typed votes: which board to draw, yes/no checks, and scores. Votes do not write chat or look at images.",
+  },
+  tesseractOcr: {
+    name: "Tesseract OCR",
+    description:
+      "Scans statement and loan photos on this device. Turn off to send the file to Mistral.",
   },
 };

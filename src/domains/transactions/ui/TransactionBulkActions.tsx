@@ -58,7 +58,7 @@ export function TransactionBulkActions({
       }
 
       let summary = emptySummary();
-      const chunkSize = 40;
+      const chunkSize = 50;
       for (let i = 0; i < visible.length; i += chunkSize) {
         const chunk = visible.slice(i, i + chunkSize);
         const response = await fetch("/api/statements/categorize-vault", {

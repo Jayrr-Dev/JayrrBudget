@@ -18,6 +18,8 @@ export type UploadBankStatementOptions = {
   onProgress?: (progress: StatementImportProgress) => void;
   signal?: AbortSignal;
   ocrMode?: OcrMode;
+  /** Saved scan. Skips a new OCR pass. */
+  savedOcr?: { markdown: string; pageCount: number; fileHash: string } | null;
 };
 
 export function isUploadAbortError(error: unknown) {
@@ -40,7 +42,17 @@ export async function uploadBankStatement(
     ...STATEMENT_IMPORT_STEPS.receive,
   });
 
-  const skipLocalOcr = isStatementTextSource(file.name, file.type);
+  const savedOcr = options?.savedOcr;
+  if (savedOcr?.markdown.trim()) {
+    form.append("ocrMarkdown", savedOcr.markdown);
+    form.append("ocrPageCount", String(savedOcr.pageCount));
+    form.append("fileHash", savedOcr.fileHash);
+    form.append("ocrAlreadyClean", "1");
+  }
+
+  const skipLocalOcr =
+    Boolean(savedOcr?.markdown.trim()) ||
+    isStatementTextSource(file.name, file.type);
   if (options?.ocrMode === "local" && !skipLocalOcr) {
     options.onProgress?.({
       step: "ocr",

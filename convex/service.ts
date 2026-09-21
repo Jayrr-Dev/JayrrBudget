@@ -2,20 +2,19 @@ import { v } from "convex/values";
 import type { Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { mutation, query } from "./_generated/server";
-import { AI_CAP_EXCEEDED_MESSAGE } from "./lib/aiCap";
 import { utcMonthKey } from "./lib/aiCostTable";
 import { requireRole, requireUser, userRole } from "./lib/auth";
+import {
+  DEFAULT_SERVICE_PLANS,
+  defaultPlanForRole,
+  type ServicePlanSeed,
+} from "./lib/servicePlans";
 import {
   chainFromPrimary,
   isCatalogModelId,
   OPENROUTER_MODEL_CATALOG,
 } from "./lib/openRouterModels";
 import { isUserRole, type UserRole } from "./lib/roles";
-import {
-  DEFAULT_SERVICE_PLANS,
-  defaultPlanForRole,
-  type ServicePlanSeed,
-} from "./lib/servicePlans";
 
 type DbCtx = Pick<QueryCtx, "db"> | Pick<MutationCtx, "db">;
 
@@ -102,10 +101,7 @@ async function platformSpendUsd(
   const row = await ctx.db
     .query("aiUsageMonths")
     .withIndex("by_userId_monthKey_billedTo", (q) =>
-      q
-        .eq("userId", userId)
-        .eq("monthKey", monthKey)
-        .eq("billedTo", "platform"),
+      q.eq("userId", userId).eq("monthKey", monthKey).eq("billedTo", "platform"),
     )
     .unique();
   return row?.estimatedUsd ?? 0;
@@ -223,13 +219,12 @@ export const savePlan = mutation({
     if (!isUserRole(args.role)) {
       throw new Error("Invalid role");
     }
-    const name =
-      args.name.trim().slice(0, 40) || defaultPlanForRole(args.role).name;
-    const priceUsd = Number.isFinite(args.priceUsd)
-      ? Math.max(0, args.priceUsd)
-      : 0;
+    const name = args.name.trim().slice(0, 40) || defaultPlanForRole(args.role).name;
+    const priceUsd = Number.isFinite(args.priceUsd) ? Math.max(0, args.priceUsd) : 0;
     const monthlyCapUsd =
-      args.monthlyCapUsd == null ? null : Math.max(0, args.monthlyCapUsd);
+      args.monthlyCapUsd == null
+        ? null
+        : Math.max(0, args.monthlyCapUsd);
     const rateMax = Math.min(Math.max(Math.floor(args.rateMax), 1), 200);
     const rateWindowMs = Math.min(
       Math.max(Math.floor(args.rateWindowMs), 5_000),
@@ -433,7 +428,8 @@ export const assertAiCall = mutation({
         return {
           ok: false as const,
           code: "cap_exceeded" as const,
-          error: AI_CAP_EXCEEDED_MESSAGE,
+          error:
+            "This month's included AI is used up. Add your own OpenRouter key or upgrade.",
         };
       }
     }

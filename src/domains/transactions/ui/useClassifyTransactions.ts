@@ -15,7 +15,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useConvex } from "convex/react";
 import { toast } from "sonner";
 
-const CLASSIFY_CHUNK = 40;
+const CLASSIFY_CHUNK = 50;
 const CLASSIFY_TOAST = "transactions-classify";
 
 function emptySummary(): CategorizationSummary {

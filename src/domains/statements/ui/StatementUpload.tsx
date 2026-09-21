@@ -79,6 +79,7 @@ import { errorMessage } from "@/shared/lib/error-message";
 import { mapPool } from "@/shared/lib/map-pool";
 import { toastIfOffline } from "@/shared/offline/offlineWriteGuard";
 import { useConnectionState } from "@/shared/offline/useConnectionState";
+import { api } from "@convex/_generated/api";
 import { useConvex } from "convex/react";
 import {
   CameraIcon,
@@ -92,6 +93,7 @@ import {
   XIcon,
 } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { PiggyPingToastIcon } from "@/domains/piggy-pings/ui/PiggyPingToastIcon";
 import { toast } from "sonner";
 
 const UPLOAD_TOAST = "statement-upload";
@@ -549,7 +551,18 @@ export function StatementUpload({
         });
 
         const copy = describeImportResult(result);
-        if (ocrMode !== "local" && result.pageCount > 0) {
+        if (ocrMode === "local" && result.pageCount > 0) {
+          void client.mutation(api.aiUsage.record, {
+            source: "statement-ocr",
+            modelId: "tesseract",
+            billedTo: "platform",
+            inputTokens: null,
+            outputTokens: null,
+            totalTokens: null,
+            pages: result.pageCount,
+            ms: null,
+          });
+        } else if (result.pageCount > 0) {
           logMistralOcrUsage({
             source: "statement-ocr",
             pages: result.pageCount,
@@ -605,18 +618,26 @@ export function StatementUpload({
       return;
     }
 
-    if (failCount === 0 && warningCount === 0) {
-      toast.success(
-        okCount === 1 ? "Statement imported" : `${okCount} statements imported`,
-        { id: UPLOAD_TOAST },
-      );
-      return;
-    }
-
     if (failCount === 0) {
-      toast.warning(`${okCount} imported · ${warningCount} with warnings`, {
-        id: UPLOAD_TOAST,
-      });
+      const imported = okCount + warningCount;
+      clearQueue();
+      setDialogOpen(false);
+      toast.success(
+        imported === 1 ? "Statement imported" : `${imported} statements imported`,
+        {
+          id: UPLOAD_TOAST,
+          description:
+            warningCount > 0
+              ? `${warningCount} didn't balance.`
+              : undefined,
+          icon: <PiggyPingToastIcon tone="default" />,
+          className: "cn-toast cn-toast-piggy",
+          classNames: {
+            toast: "cn-toast cn-toast-piggy",
+            icon: "cn-toast-piggy-icon",
+          },
+        },
+      );
       return;
     }
 

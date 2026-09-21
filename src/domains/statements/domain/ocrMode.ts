@@ -2,7 +2,7 @@ export const OCR_MODES = ["local", "server"] as const;
 
 export type OcrMode = (typeof OCR_MODES)[number];
 
-export const DEFAULT_OCR_MODE: OcrMode = "server";
+export const DEFAULT_OCR_MODE: OcrMode = "local";
 
 export const MAX_CLIENT_OCR_MARKDOWN = 1_500_000;
 
@@ -12,7 +12,7 @@ export type ClientOcrPayload = {
 };
 
 export function resolveOcrMode(value: unknown): OcrMode {
-  return value === "local" ? "local" : "server";
+  return value === "server" ? "server" : "local";
 }
 
 export function parseClientOcrForm(form: FormData): ClientOcrPayload | null {

@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 import type { Id } from "./_generated/dataModel";
-import { mutation, query } from "./_generated/server";
+import { internalMutation, mutation, query } from "./_generated/server";
 import { estimateAiUsageUsd, utcMonthKey } from "./lib/aiCostTable";
 import { requireRole, requireUser } from "./lib/auth";
 
@@ -83,14 +83,17 @@ export const record = mutation({
 
     const createdAt = Date.now();
     const monthKey = utcMonthKey(createdAt);
-    const estimatedUsd = estimateAiUsageUsd({
-      modelId: args.modelId,
-      inputTokens,
-      outputTokens,
-      pages,
-    });
     const source = args.source.trim().slice(0, 80) || "unknown";
     const modelId = args.modelId.trim().slice(0, 160) || "unknown";
+    const estimatedUsd =
+      modelId === "tesseract"
+        ? 0
+        : estimateAiUsageUsd({
+            modelId,
+            inputTokens,
+            outputTokens,
+            pages,
+          });
 
     await ctx.db.insert("aiUsageEvents", {
       userId: user._id,
@@ -200,6 +203,29 @@ export const myRecent = query({
   },
 });
 
+/** Wipe this admin's AI usage log. Month rollups stay. */
+export const clearMine = mutation({
+  args: {},
+  returns: v.object({ events: v.number() }),
+  handler: async (ctx) => {
+    const user = await requireRole(ctx, "admin");
+    let events = 0;
+    for (;;) {
+      const batch = await ctx.db
+        .query("aiUsageEvents")
+        .withIndex("by_userId_createdAt", (q) => q.eq("userId", user._id))
+        .take(200);
+      if (batch.length === 0) break;
+      for (const row of batch) {
+        await ctx.db.delete(row._id);
+      }
+      events += batch.length;
+      if (batch.length < 200) break;
+    }
+    return { events };
+  },
+});
+
 export const adminMonth = query({
   args: { monthKey: v.string() },
   returns: v.array(
@@ -263,5 +289,41 @@ export const adminMonth = query({
         b.byok.estimatedUsd -
         (a.platform.estimatedUsd + a.byok.estimatedUsd),
     );
+  },
+});
+
+/** CLI-only wipe of one user's AI meter. */
+export const resetUserUsage = internalMutation({
+  args: { userId: v.id("users") },
+  returns: v.object({
+    months: v.number(),
+    events: v.number(),
+  }),
+  handler: async (ctx, args) => {
+    const months = await ctx.db
+      .query("aiUsageMonths")
+      .withIndex("by_userId_monthKey_billedTo", (q) =>
+        q.eq("userId", args.userId),
+      )
+      .take(50);
+    for (const row of months) {
+      await ctx.db.delete(row._id);
+    }
+
+    let events = 0;
+    for (;;) {
+      const batch = await ctx.db
+        .query("aiUsageEvents")
+        .withIndex("by_userId_createdAt", (q) => q.eq("userId", args.userId))
+        .take(200);
+      if (batch.length === 0) break;
+      for (const row of batch) {
+        await ctx.db.delete(row._id);
+      }
+      events += batch.length;
+      if (batch.length < 200) break;
+    }
+
+    return { months: months.length, events };
   },
 });

@@ -75,6 +75,7 @@ import { logMistralOcrUsage } from "@/shared/debug/aiUsageDebug";
 import { errorMessage } from "@/shared/lib/error-message";
 import { toastIfOffline } from "@/shared/offline/offlineWriteGuard";
 import { useConnectionState } from "@/shared/offline/useConnectionState";
+import { api } from "@convex/_generated/api";
 import { cn } from "cn";
 import { useConvex } from "convex/react";
 import { Info, UploadIcon } from "lucide-react";
@@ -321,7 +322,18 @@ export function AddLoanDialog({
       });
       privateLedger.reload();
 
-      if (ocrMode !== "local" && result.pageCount > 0) {
+      if (ocrMode === "local" && result.pageCount > 0) {
+        void client.mutation(api.aiUsage.record, {
+          source: "loan-ocr",
+          modelId: "tesseract",
+          billedTo: "platform",
+          inputTokens: null,
+          outputTokens: null,
+          totalTokens: null,
+          pages: result.pageCount,
+          ms: null,
+        });
+      } else if (result.pageCount > 0) {
         logMistralOcrUsage({
           source: "loan-ocr",
           pages: result.pageCount,

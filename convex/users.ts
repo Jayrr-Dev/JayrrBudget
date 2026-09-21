@@ -23,7 +23,7 @@ export const me = query({
       email: user.email ?? null,
       name: user.name ?? null,
       role: userRole(user),
-      ocrMode: user.ocrMode === "local" ? "local" : "server",
+      ocrMode: user.ocrMode === "server" ? "server" : "local",
       avatarIcon: resolveUserIcon(user.avatarIcon),
     };
   },

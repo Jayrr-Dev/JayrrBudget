@@ -85,12 +85,15 @@ export async function POST(request: Request) {
           return;
         }
 
+        const keptHash = form.get("fileHash");
         const result = await importBankStatement({
           filename,
           bytes,
           mimeType,
           client,
           clientOcr,
+          fileHash: typeof keptHash === "string" ? keptHash : null,
+          alreadyClean: form.get("ocrAlreadyClean") === "1",
           onProgress: (progress) => {
             send({ type: "progress", progress });
           },

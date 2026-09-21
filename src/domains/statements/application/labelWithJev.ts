@@ -7,14 +7,12 @@ import {
   type JevQuestion,
 } from "@/shared/ai/jev.server";
 import { mapPool } from "@/shared/ai/openRouter";
-import { api } from "@/shared/convex/httpClient";
 import {
   normalizedLabel,
   type CategoryProfile,
 } from "@convex/lib/categorization";
 import { cleanMerchantDescriptor } from "@convex/lib/cleanMerchantDescriptor";
 import { TXN_CODES } from "@convex/lib/txnCodes";
-import type { ConvexHttpClient } from "convex/browser";
 
 /**
  * Categorize description groups with TypeSafe Jev Choice.
@@ -25,7 +23,10 @@ import type { ConvexHttpClient } from "convex/browser";
  */
 
 const LOG_LABEL = "categorization:jev";
-const CONCURRENCY = 4;
+/** One Jev call covers this many bank lines. */
+const BATCH = 50;
+/** Fallback when a batch fails. Public endpoint rate-limits. */
+const CONCURRENCY = 8;
 const TAG_NOUL_LIMIT = 24;
 const TAG_THRESHOLD = 0.85;
 const MAX_TAGS = 3;
@@ -204,42 +205,17 @@ function tagQuestions(tags: string[]) {
   return { usable, questions };
 }
 
-async function pickNamedChoice(params: {
-  state: Record<string, unknown>;
-  name: string;
-  instructions: string;
-  criteria: Record<string, string | null>;
-}): Promise<string> {
-  const keys = Object.keys(params.criteria);
-  assertChoiceCount(params.name, keys.length);
-  if (keys.length === 1) return keys[0]!;
-  const { answers } = await askJev({
-    state: params.state,
-    logLabel: LOG_LABEL,
-    questions: {
-      [params.name]: {
-        type: "choice",
-        instructions: params.instructions,
-        criteria: params.criteria,
-      },
-    },
-  });
-  return choiceAnswer(answers, params.name).choice;
-}
-
-async function labelOne(params: {
+function buildLabelQuestions(params: {
   group: JevLabelGroup;
-  paths: TaxonomyPath[];
   catalog: ClassificationCatalog;
   spreads: string[];
   types: string[];
   tags: string[];
   ownerRules: string[];
-}): Promise<CategoryProfile | null> {
+  prefix: string;
+}) {
   const sections = params.catalog.sections.filter((row) => row.name.trim());
   assertChoiceCount("Sections", sections.length);
-
-  const state = buildState(params.group, params.ownerRules);
   const { usable: tagNames, questions: tagNouls } = tagQuestions(params.tags);
 
   const sectionCriteria: Record<string, string | null> = {};
@@ -248,76 +224,139 @@ async function labelOne(params: {
   }
 
   const rulesNote = classifyRulesClause(params.ownerRules);
-  const firstQuestions: Record<string, JevQuestion> = {
-    section: {
+  const lineNote = `Bank line ${params.prefix || "0"} ("${params.group.description.slice(0, 180)}", ${params.group.amount < 0 ? "money in" : "money out"}). `;
+  const name = (key: string) => `${params.prefix}${key}`;
+  const questions: Record<string, JevQuestion> = {
+    [name("section")]: {
       type: "choice",
       instructions:
+        lineNote +
         "Which section of the owner's classification catalog best describes this bank line? The description is the primary evidence. Refunds keep the purchase section. A credit line reading PAYMENT / THANK YOU / PAIEMENT is the owner paying the card bill: that belongs under Transfers, never Income." +
         rulesNote,
       criteria: sectionCriteria,
     },
-    spread: {
+    [name("spread")]: {
       type: "choice",
       instructions:
+        lineNote +
         "Which spending bucket does this line belong to? Income only for real income received; a card bill payment or self-transfer is not income." +
         rulesNote,
       criteria: toCriteria(params.spreads, SPREAD_HINTS),
     },
-    transactionType: {
+    [name("transactionType")]: {
       type: "choice",
       instructions:
+        lineNote +
         "What kind of money movement is this line? A card bill payment or self-transfer is a Transfer even when money comes in." +
         rulesNote,
       criteria: toCriteria(params.types, TYPE_HINTS),
     },
-    txnCode: {
+    [name("txnCode")]: {
       type: "choice",
       instructions:
+        lineNote +
         "What kind of line is this? Never infer subscription from the merchant alone; the description must show it." +
         rulesNote,
       criteria: { ...TXN_CODE_HINTS },
     },
-    channel: {
+    [name("channel")]: {
       type: "choice",
-      instructions: "How was this purchase made?",
+      instructions: `${lineNote}How was this purchase made?`,
       criteria: { ...CHANNEL_CRITERIA },
     },
-    ...tagNouls,
   };
-  const { answers, ms } = await askJev({
-    state,
-    logLabel: LOG_LABEL,
-    questions: firstQuestions,
+  for (const [key, question] of Object.entries(tagNouls)) {
+    questions[name(key)] = {
+      ...question,
+      instructions: lineNote + question.instructions,
+    };
+  }
+
+  // Speculative fan-out: category and subcategory for every section ride in
+  // this same call. Jev answers them together; we keep the branch that matches.
+  const categoriesBySection = sections.map((section) =>
+    params.catalog.categories.filter(
+      (row) =>
+        row.sectionName != null &&
+        normalizedLabel(row.sectionName) === normalizedLabel(section.name),
+    ),
+  );
+  sections.forEach((section, sectionIndex) => {
+    const categories = categoriesBySection[sectionIndex] ?? [];
+    if (categories.length < 2) return;
+    const criteria: Record<string, string | null> = {};
+    for (const category of categories) {
+      criteria[category.name] = rubric(
+        category.description,
+        category.subcategoryNames.slice(0, 12),
+      );
+    }
+    questions[name(`category_${sectionIndex}`)] = {
+      type: "choice",
+      instructions: `${lineNote}If this bank line belongs in the "${section.name}" section, which category under it best describes the line?${rulesNote}`,
+      criteria,
+    };
+    categories.forEach((category, categoryIndex) => {
+      const leaves = params.catalog.subcategories.filter(
+        (row) =>
+          row.sectionName != null &&
+          row.categoryName != null &&
+          normalizedLabel(row.sectionName) === normalizedLabel(section.name) &&
+          normalizedLabel(row.categoryName) === normalizedLabel(category.name),
+      );
+      if (leaves.length === 0) return;
+      const subCriteria: Record<string, string | null> = {};
+      for (const leaf of leaves.slice(0, JEV_MAX_CHOICE_OPTIONS - 1)) {
+        subCriteria[leaf.name] = rubric(leaf.description);
+      }
+      subCriteria[NONE_OPTION] = "No listed subcategory fits this line";
+      questions[name(`subcategory_${sectionIndex}_${categoryIndex}`)] = {
+        type: "choice",
+        instructions: `${lineNote}If this bank line belongs in "${section.name} > ${category.name}", which subcategory fits?${rulesNote}`,
+        criteria: subCriteria,
+      };
+    });
   });
 
-  const sectionPick = choiceAnswer(answers, "section").choice;
-  const section = findByName(sections, sectionPick);
-  if (!section) {
+  return { sections, categoriesBySection, tagNames, questions };
+}
+
+function profileFromAnswers(params: {
+  group: JevLabelGroup;
+  answers: Record<string, JevAnswer>;
+  prefix: string;
+  paths: TaxonomyPath[];
+  catalog: ClassificationCatalog;
+  sections: ClassificationCatalog["sections"];
+  categoriesBySection: ClassificationCatalog["categories"][];
+  tagNames: string[];
+  types: string[];
+}): CategoryProfile {
+  const name = (key: string) => `${params.prefix}${key}`;
+  const sectionPick = choiceAnswer(params.answers, name("section")).choice;
+  const sectionIndex = params.sections.findIndex(
+    (row) => normalizedLabel(row.name) === normalizedLabel(sectionPick),
+  );
+  const section = sectionIndex >= 0 ? params.sections[sectionIndex] : undefined;
+  if (!section || sectionIndex < 0) {
     throw new Error(`Jev chose unknown section "${sectionPick}"`);
   }
 
-  const categories = params.catalog.categories.filter(
-    (row) =>
-      row.sectionName != null &&
-      normalizedLabel(row.sectionName) === normalizedLabel(section.name),
-  );
-  const categoryCriteria: Record<string, string | null> = {};
-  for (const category of categories) {
-    categoryCriteria[category.name] = rubric(
-      category.description,
-      category.subcategoryNames.slice(0, 12),
-    );
+  const categories = params.categoriesBySection[sectionIndex] ?? [];
+  if (!categories.length) {
+    throw new Error(`No categories under section "${section.name}"`);
   }
-  const categoryName = await pickNamedChoice({
-    state,
-    name: "category",
-    instructions: `This bank line belongs in the "${section.name}" section. Which category under it best describes the line? Use the owner's category descriptions and the bank description.${classifyRulesClause(params.ownerRules)}`,
-    criteria: categoryCriteria,
-  });
+  const categoryName =
+    categories.length === 1
+      ? categories[0]!.name
+      : choiceAnswer(params.answers, name(`category_${sectionIndex}`)).choice;
   const category = findByName(categories, categoryName);
   if (!category) {
     throw new Error(`Jev chose unknown category "${categoryName}"`);
   }
+  const categoryIndex = categories.findIndex(
+    (row) => normalizedLabel(row.name) === normalizedLabel(category.name),
+  );
 
   const leaves = params.catalog.subcategories.filter(
     (row) =>
@@ -327,21 +366,13 @@ async function labelOne(params: {
       normalizedLabel(row.categoryName) === normalizedLabel(category.name),
   );
   let subcategoryName: string | null = null;
-  if (leaves.length > 0) {
-    const subCriteria: Record<string, string | null> = {};
-    for (const leaf of leaves.slice(0, JEV_MAX_CHOICE_OPTIONS - 1)) {
-      subCriteria[leaf.name] = rubric(leaf.description);
-    }
-    subCriteria[NONE_OPTION] = "No listed subcategory fits this line";
-    const subPick = await pickNamedChoice({
-      state,
-      name: "subcategory",
-      instructions: `Which subcategory under "${section.name} > ${category.name}" best describes this bank line?${classifyRulesClause(params.ownerRules)}`,
-      criteria: subCriteria,
-    });
+  if (leaves.length > 0 && categoryIndex >= 0) {
+    const subPick = choiceAnswer(
+      params.answers,
+      name(`subcategory_${sectionIndex}_${categoryIndex}`),
+    ).choice;
     if (subPick !== NONE_OPTION) {
-      const leaf = findByName(leaves, subPick);
-      subcategoryName = leaf?.name ?? null;
+      subcategoryName = findByName(leaves, subPick)?.name ?? null;
     }
   }
 
@@ -357,20 +388,19 @@ async function labelOne(params: {
     );
   }
 
-  const tags = tagNames
-    .map((tag, index) => ({ tag, p: noulAnswer(answers, `tag_${index}`) }))
+  const tags = params.tagNames
+    .map((tag, index) => ({
+      tag,
+      p: noulAnswer(params.answers, name(`tag_${index}`)),
+    }))
     .filter((entry) => entry.p >= TAG_THRESHOLD)
     .sort((a, b) => b.p - a.p)
     .slice(0, MAX_TAGS)
     .map((entry) => entry.tag);
 
-  console.info(
-    `[${LOG_LABEL}] "${params.group.description.slice(0, 40)}" -> ${path.section} > ${path.category}${path.subcategory ? ` > ${path.subcategory}` : ""} (${ms}ms)`,
-  );
-
-  const txnCode = choiceAnswer(answers, "txnCode").choice;
-  let spread = choiceAnswer(answers, "spread").choice;
-  let transactionType = choiceAnswer(answers, "transactionType").choice;
+  const txnCode = choiceAnswer(params.answers, name("txnCode")).choice;
+  let spread = choiceAnswer(params.answers, name("spread")).choice;
+  let transactionType = choiceAnswer(params.answers, name("transactionType")).choice;
   const isTransfer =
     normalizedLabel(path.section) === "transfers" ||
     txnCode === "payment" ||
@@ -388,25 +418,115 @@ async function labelOne(params: {
     spread,
     transactionType,
     txnCode,
-    channel: choiceAnswer(answers, "channel").choice,
+    channel: choiceAnswer(params.answers, name("channel")).choice,
     tags,
   };
 }
 
-/**
- * First classify uses Jev only when `jevCategorization` is on.
- * Re-run / recategorize pass `force` so they use Jev even if the flag is off.
- */
-export async function shouldUseJevCategorization(
-  client: ConvexHttpClient,
-  options?: { force?: boolean },
-) {
-  if (!isJevConfigured()) return false;
-  if (options?.force) return true;
-  const flag = await client.query(api.featureFlags.get, {
-    key: "jevCategorization",
+async function labelGroup(
+  group: JevLabelGroup,
+  params: {
+    paths: TaxonomyPath[];
+    catalog: ClassificationCatalog;
+    spreads: string[];
+    types: string[];
+    tags: string[];
+    ownerRules: string[];
+  },
+): Promise<CategoryProfile> {
+  const built = buildLabelQuestions({ ...params, group, prefix: "" });
+  const { answers, ms } = await askJev({
+    state: buildState(group, params.ownerRules),
+    logLabel: LOG_LABEL,
+    questions: built.questions,
   });
-  return flag.enabled;
+  const profile = profileFromAnswers({
+    ...built,
+    group,
+    answers,
+    prefix: "",
+    paths: params.paths,
+    catalog: params.catalog,
+    types: params.types,
+  });
+  console.info(
+    `[${LOG_LABEL}] "${group.description.slice(0, 40)}" -> ${profile.pathKey} (${ms}ms)`,
+  );
+  return profile;
+}
+
+async function labelBatch(
+  slice: JevLabelGroup[],
+  params: {
+    paths: TaxonomyPath[];
+    catalog: ClassificationCatalog;
+    spreads: string[];
+    types: string[];
+    tags: string[];
+    ownerRules: string[];
+  },
+  result: JevLabelResult,
+) {
+  const questions: Record<string, JevQuestion> = {};
+  const built = slice.map((group, index) => {
+    const one = buildLabelQuestions({
+      ...params,
+      group,
+      prefix: `g${index}_`,
+    });
+    Object.assign(questions, one.questions);
+    return one;
+  });
+  const state: Record<string, unknown> = {
+    lines: slice.map((group, index) => ({
+      id: `g${index}`,
+      description: group.description,
+      direction: group.amount < 0 ? "money in" : "money out",
+    })),
+  };
+  if (params.ownerRules.length) {
+    state.classify_rules = {
+      note: "Owner classify rules for this ledger. Apply when they match the bank line. They do not invent new sections or categories.",
+      rules: params.ownerRules,
+    };
+  }
+  const { answers, ms } = await askJev({
+    state,
+    logLabel: LOG_LABEL,
+    questions,
+    timeoutMs: 90_000,
+  });
+  slice.forEach((group, index) => {
+    const one = built[index];
+    if (!one) {
+      result.failed.push(group.key);
+      return;
+    }
+    try {
+      const profile = profileFromAnswers({
+        ...one,
+        group,
+        answers,
+        prefix: `g${index}_`,
+        paths: params.paths,
+        catalog: params.catalog,
+        types: params.types,
+      });
+      result.matches.push({ key: group.key, profile });
+    } catch (error) {
+      result.failed.push(group.key);
+      result.error ??=
+        error instanceof Error ? error.message : "Jev categorization failed";
+    }
+  });
+  console.info(
+    `[${LOG_LABEL}] batch ${slice.length} lines in ${ms}ms`,
+  );
+}
+
+/** Classification always uses Jev when the key is set. */
+export function shouldUseJevCategorization() {
+  return isJevConfigured();
 }
 
 export async function labelGroupsWithJev(params: {
@@ -428,33 +548,32 @@ export async function labelGroupsWithJev(params: {
     };
   }
 
-  await mapPool(params.groups, CONCURRENCY, async (group) => {
+  for (let start = 0; start < params.groups.length; start += BATCH) {
     if (params.deadline - Date.now() < 1000) {
-      result.failed.push(group.key);
+      for (const group of params.groups.slice(start)) result.failed.push(group.key);
       result.error ??= "Categorization paused at its time limit.";
-      return;
+      break;
     }
+    const slice = params.groups.slice(start, start + BATCH);
     try {
-      const profile = await labelOne({
-        group,
-        paths: params.paths,
-        catalog: params.catalog,
-        spreads: params.spreads,
-        types: params.types,
-        tags: params.tags,
-        ownerRules: params.ownerRules,
-      });
-      if (profile) result.matches.push({ key: group.key, profile });
-      else result.failed.push(group.key);
+      await labelBatch(slice, params, result);
     } catch (error) {
-      result.failed.push(group.key);
-      result.error ??=
+      const message =
         error instanceof Error ? error.message : "Jev categorization failed";
-      console.warn(
-        `[${LOG_LABEL}] failed for "${group.description.slice(0, 40)}": ${result.error}`,
-      );
+      console.warn(`[${LOG_LABEL}] batch of ${slice.length} failed: ${message}`);
+      await mapPool(slice, CONCURRENCY, async (group) => {
+        try {
+          const profile = await labelGroup(group, params);
+          if (profile) result.matches.push({ key: group.key, profile });
+          else result.failed.push(group.key);
+        } catch (lineError) {
+          result.failed.push(group.key);
+          result.error ??=
+            lineError instanceof Error ? lineError.message : message;
+        }
+      });
     }
-  });
+  }
 
   return result;
 }

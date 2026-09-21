@@ -153,11 +153,12 @@ export function estimatePageCostUsd(input: {
   pages: number;
 }): number | null {
   if (input.pages <= 0) return null;
-  const row =
-    findAiPriceRow(input.modelId ?? "mistral-ocr-latest") ??
-    BY_ID.get("mistral-ocr-latest");
-  if (!row || row.unit !== "pages") return null;
-  return input.pages * row.perPageUsd;
+  const named = findAiPriceRow(input.modelId ?? null);
+  if (named?.unit === "pages") return input.pages * named.perPageUsd;
+  if (input.modelId) return null;
+  const fallback = BY_ID.get("mistral-ocr-latest");
+  if (!fallback || fallback.unit !== "pages") return null;
+  return input.pages * fallback.perPageUsd;
 }
 
 export function estimateAiUsageUsd(input: {

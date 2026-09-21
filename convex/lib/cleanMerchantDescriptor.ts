@@ -78,6 +78,12 @@ const BRAND_CASING: Record<string, string> = {
   ualberta: "UAlberta",
   ubereats: "Uber Eats",
   youtube: "YouTube",
+  affirm: "Affirm",
+  gocardless: "GoCardless",
+  wealthsimple: "Wealthsimple",
+  stripe: "Stripe",
+  coinbase: "Coinbase",
+  utilitek: "Utilitek",
 };
 
 const SMALL_WORDS = new Set([
@@ -179,6 +185,73 @@ const AMOUNT_CCY_FX = new RegExp(
   "gi",
 );
 const BARE_RATE = new RegExp(String.raw`(?:^|\s)${RATE}(?=\s|$)`, "gi");
+
+const KNOWN_PAYEE: Array<[RegExp, string]> = [
+  [/\baffirm\b/i, "Affirm"],
+  [/\bgocardless\b/i, "GoCardless"],
+  [/\bwealthsimple\b/i, "Wealthsimple"],
+  [/\bstripe\b/i, "Stripe"],
+  [/\bcoinbase\b/i, "Coinbase"],
+  [/\butilitek\b/i, "Utilitek"],
+  [/\bnslsc\b/i, "NSLSC"],
+  [/\bmbna\b/i, "MBNA"],
+  [/\bcibc\s+loans?\b/i, "CIBC Loans"],
+  [/\bstud(?:e)?nt\s+loa/i, "Student Loan"],
+];
+
+function stripReferenceTokens(value: string) {
+  return value
+    .replace(/\bref[-–—:\s]*[a-z0-9]{4,}\b/gi, " ")
+    .replace(/\bln\s*#\s*\d+\b/gi, " ")
+    .replace(/\bfulfill\s+request\b/gi, " ")
+    .replace(/\bcentree?dmonton\b/gi, " ")
+    .replace(/\b\d{6,}\b/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+const BANK_FEE =
+  /\b(?:fee|fees|service charge|global money transfer)\b/i;
+
+const BANK_IN_LINE: Array<[RegExp, string]> = [
+  [/\bcibc\b|canadian imperial/i, "CIBC"],
+  [/\btd\b|toronto[-\s]?dominion/i, "TD"],
+  [/\brbc\b|royal bank/i, "RBC"],
+  [/\bbmo\b|bank of montreal/i, "BMO"],
+  [/scotia/i, "Scotiabank"],
+];
+
+/** "CIBC Internet Global Money Transfer Fee 36628" → "CIBC". */
+function bankFeeName(value: string) {
+  if (!BANK_FEE.test(value)) return null;
+  for (const [pattern, name] of BANK_IN_LINE) {
+    if (pattern.test(value)) return name;
+  }
+  return null;
+}
+
+function knownPayee(value: string) {
+  for (const [pattern, name] of KNOWN_PAYEE) {
+    if (pattern.test(value)) return name;
+  }
+  return null;
+}
+
+function payeeFromTransfer(value: string) {
+  const internet = value.match(/^internet\s+transfer\b(?:\s+to\s+([a-z]+))?/i);
+  if (internet) {
+    const dest = internet[1];
+    return dest ? `Internet Transfer to ${formatWords(dest)}` : "Internet Transfer";
+  }
+  const sent = value.match(/^(?:e-?transfer|interac(?:\s+e-?transfer)?)\b(.*)$/i);
+  if (!sent) return null;
+  const rest = (sent[1] ?? "").replace(/^[\s\-–—:/]+/, "").trim();
+  if (!rest) return "E-Transfer";
+  if (/^(stop|network fee|fee|recall)$/i.test(rest)) {
+    return `E-Transfer ${formatWords(rest)}`;
+  }
+  return formatWords(rest);
+}
 
 function stripFxBlocks(value: string) {
   return value.replace(AMOUNT_CCY_FX, " ").replace(BARE_RATE, " ");
@@ -309,7 +382,15 @@ export function cleanMerchantDescriptor(
   value = stripTrailingNumbers(value);
   value = stripTrailingPlaces(value).replace(/\s+/g, " ").trim();
   value = stripTrailingNumbers(value);
+  value = stripReferenceTokens(value);
+  value = value.replace(/^(?:pay|payment|withdrawal)\s+/i, "").trim();
   value = value.replace(/[\\/,|;:–—-]+$/g, "").trim();
+  const bankFee = bankFeeName(value);
+  if (bankFee) return bankFee;
+  const brand = knownPayee(value);
+  if (brand) return brand;
+  const transfer = payeeFromTransfer(value);
+  if (transfer) return transfer;
 
   // Nothing but the rail survived ("Pad -", "Online Purchase -"): name the rail.
   if (!value) {

@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { DataTable } from "@/components/ui/data-table";
 import type { DataTableFeatures } from "@/components/ui/data-table-features";
 import type { StatementUploadLog } from "@/domains/statements/domain/types";
+import { StatementRerunButton } from "@/domains/statements/ui/StatementRerunButton";
 import { StatementUploadBulkActions } from "@/domains/statements/ui/StatementUploadBulkActions";
 import { StatementUploadRowActions } from "@/domains/statements/ui/StatementUploadRowActions";
 import type { PrivateStatementLog } from "@/domains/vault/domain/privateLedger";
@@ -163,32 +164,98 @@ const columns = columnHelper.columns([
     },
   }),
   columnHelper.display({
-    id: "balance",
+    id: "period",
     header: "Statement",
     enableHiding: false,
-    meta: { width: "16rem", nowrap: true },
+    meta: { width: "7.5rem", nowrap: true },
     cell: ({ row }) => {
-      const {
-        balanceOk,
-        balanceDelta,
-        statementPeriodStart,
-        statementPeriodEnd,
-      } = row.original;
-      const period = compactPeriod(statementPeriodStart, statementPeriodEnd);
-      const check =
-        balanceOk === true
-          ? "Balanced"
-          : balanceOk === false
-            ? `Unbalanced ${balanceDelta != null ? balanceDelta.toFixed(2) : "?"}`
-            : "No check";
-      const label = [period, check].filter(Boolean).join(" · ");
+      const period = compactPeriod(
+        row.original.statementPeriodStart,
+        row.original.statementPeriodEnd,
+      );
       return (
-        <span className="block truncate text-sm" title={label}>
-          {label}
+        <span className="block truncate text-sm" title={period ?? undefined}>
+          {period ?? "—"}
         </span>
       );
     },
   }),
+  columnHelper.accessor(
+    (row) => {
+      const group = row.balanceOk === false ? 0 : row.balanceOk == null ? 1 : 2;
+      const gap =
+        row.balanceDelta == null ? 0 : Math.min(Math.abs(row.balanceDelta), 999_999);
+      return group * 1_000_000 - gap;
+    },
+    {
+      id: "balance",
+      header: "Balance",
+      enableHiding: false,
+      sortFn: "basic",
+      meta: { width: "6.5rem", nowrap: true },
+      cell: ({ row }) => {
+        const { balanceOk } = row.original;
+        if (balanceOk == null) {
+          return (
+            <span className="text-sm text-[var(--muted-foreground)]">No check</span>
+          );
+        }
+        const ok = balanceOk === true;
+        return (
+          <span
+            className={
+              ok
+                ? "text-sm text-emerald-700 dark:text-emerald-400"
+                : "text-sm text-red-700 dark:text-red-400"
+            }
+          >
+            {ok ? "Balanced" : "Unbalanced"}
+          </span>
+        );
+      },
+    },
+  ),
+  columnHelper.accessor(
+    (row) => {
+      if (row.balanceOk == null || row.balanceDelta == null) {
+        return Number.POSITIVE_INFINITY;
+      }
+      if (row.balanceOk === false) return -Math.abs(row.balanceDelta);
+      return Math.abs(row.balanceDelta);
+    },
+    {
+      id: "difference",
+      header: "Difference",
+      enableHiding: false,
+      sortFn: "basic",
+      meta: { width: "10rem", nowrap: true },
+      cell: ({ row }) => {
+        const { balanceOk, balanceDelta } = row.original;
+        if (balanceOk == null || balanceDelta == null) {
+          return (
+            <span className="text-sm text-[var(--muted-foreground)]">—</span>
+          );
+        }
+        const ok = balanceOk === true;
+        const text = `${balanceDelta > 0 ? "+" : ""}${balanceDelta.toFixed(2)}`;
+        return (
+          <span className="flex items-center justify-end gap-1">
+            <span
+              className={
+                ok
+                  ? "text-sm tabular-nums text-emerald-700 dark:text-emerald-400"
+                  : "text-sm tabular-nums text-red-700 dark:text-red-400"
+              }
+              title={ok ? "Within two cents of the closing balance" : text}
+            >
+              {text}
+            </span>
+            <StatementRerunButton upload={row.original} />
+          </span>
+        );
+      },
+    },
+  ),
 ]);
 
 function vaultLogId(recordId: string, createdAt: string) {
@@ -246,6 +313,7 @@ function fromVaultLog(
     id: vaultLogId(log.recordId, log.createdAt),
     source: "vault",
     recordId: log.recordId,
+    fileHash: log.fileHash,
     transactionIds: log.transactionIds ?? [],
     ocrMarkdown: log.ocrMarkdown ?? null,
     filename: log.filename,
@@ -286,6 +354,7 @@ function StatementUploadLogsTable({ data }: { data: StatementUploadLog[] }) {
       searchKey="filename"
       searchPlaceholder="Filter files…"
       pageSize={10}
+      initialSorting={[{ id: "balance", desc: false }]}
       enableColumnToggle
       csvFilename="parse-logs.csv"
     />

@@ -29,7 +29,8 @@ import {
   isMistralConfigured,
   ocrDocument,
 } from "@/domains/statements/infrastructure/mistralOcr";
-import { parseStatementPaperFacts } from "@/domains/statements/infrastructure/openRouterParse";
+import { applyRunningBalance } from "@/domains/statements/application/applyRunningBalance";
+import { parseStatementPaperFacts, cleanOcrToTable, rebalancePaperFacts } from "@/domains/statements/infrastructure/openRouterParse";
 import { runMeteredOpenRouter } from "@/shared/ai/aiMeter.server";
 import { checkAiCall } from "@/shared/ai/enforceAiCall.server";
 import { OPENROUTER_NOT_CONFIGURED } from "@/shared/ai/openRouter";
@@ -71,6 +72,10 @@ export async function importBankStatement(params: {
   mimeType?: string | null;
   /** Browser Tesseract scan; skips server OCR when present. */
   clientOcr?: { markdown: string; pageCount: number } | null;
+  /** Keep this statement id when re-reading a saved scan. */
+  fileHash?: string | null;
+  /** Saved scan is already a table. Skip the clean step. */
+  alreadyClean?: boolean;
   onProgress?: (progress: StatementImportProgress) => void;
 }): Promise<ImportBankStatementResult> {
   const textExport = isStatementTextSource(params.filename, params.mimeType);
@@ -142,7 +147,10 @@ async function importBankStatementWithKey(
 
   try {
     emitProgress(params.onProgress, "receive");
-    const fileHash = statementFileHash(params.bytes);
+    const keptHash = params.fileHash?.trim().toLowerCase() ?? "";
+    const fileHash = /^[a-f0-9]{64}$/.test(keptHash)
+      ? keptHash
+      : statementFileHash(params.bytes);
 
     const textExport = isStatementTextSource(params.filename, params.mimeType);
     emitProgress(params.onProgress, "ocr");
@@ -178,18 +186,28 @@ async function importBankStatementWithKey(
       };
     }
 
+    let statementText = ocr.markdown;
+    if (!textExport && !params.alreadyClean) {
+      params.onProgress?.({
+        step: "parse",
+        percent: 32,
+        label: "Cleaning the scan into a table…",
+      });
+      statementText = await cleanOcrToTable(ocr.markdown);
+    }
+
     emitProgress(params.onProgress, "parse");
     const sourceHint = params.sourceHint?.trim() || params.filename;
     // Owner-scoped rules: authenticated Convex client only returns this user's list.
     // Injected only into paper-facts PDF parse below - not canvas/enrichment/other AI.
     const aiRules = await params.client.query(api.aiRules.get, {});
-    const rawParsed = await parseStatementPaperFacts(ocr.markdown, {
+    const rawParsed = await parseStatementPaperFacts(statementText, {
       sourceHint,
       userRules: aiRules.rules,
       onProgress: params.onProgress,
     });
-    const parsed = polishPaperFactsStatement(rawParsed, {
-      ocrMarkdown: ocr.markdown,
+    let parsed = polishPaperFactsStatement(rawParsed, {
+      ocrMarkdown: statementText,
       sourceHint,
       dedupe: dedupeParsedTransactions,
     });
@@ -197,7 +215,47 @@ async function importBankStatementWithKey(
       0,
       rawParsed.transactions.length - parsed.transactions.length,
     );
-    const balance = checkStatementBalance(parsed);
+    let balance = checkStatementBalance(parsed);
+    if (balance.balanced === false) {
+      const walked = applyRunningBalance(parsed, statementText);
+      if (walked) {
+        parsed = walked;
+        balance = checkStatementBalance(parsed);
+      }
+    }
+    for (let attempt = 1; attempt <= 3 && balance.balanced === false; attempt += 1) {
+      params.onProgress?.({
+        step: "parse",
+        percent: 78,
+        label: `Balance is off. Checking each line (${attempt} of 3)…`,
+      });
+      try {
+        const signs = await signTableWithJev(statementText).catch(() => "");
+        const corrected = polishPaperFactsStatement(
+          await rebalancePaperFacts(statementText, parsed, balance, signs, attempt),
+          {
+            ocrMarkdown: statementText,
+            sourceHint,
+            dedupe: dedupeParsedTransactions,
+          },
+        );
+        const next = checkStatementBalance(corrected);
+        const closer =
+          next.delta != null &&
+          balance.delta != null &&
+          Math.abs(next.delta) < Math.abs(balance.delta);
+        if (next.balanced === true || closer) {
+          parsed = corrected;
+          balance = next;
+        }
+      } catch (error) {
+        console.warn(
+          `[statements] rebalance ${attempt} of 3 skipped: ${
+            error instanceof Error ? error.message : "failed"
+          }`,
+        );
+      }
+    }
 
     const normalizedAccountType = normalizeStatementAccountType(
       parsed.accountType,
@@ -276,7 +334,7 @@ async function importBankStatementWithKey(
         currency,
         openingBalance: balance.openingBalance,
         closingBalance: balance.closingBalance,
-        ocrMarkdown: ocr.markdown,
+        ocrMarkdown: statementText,
         transactions,
       },
     };

@@ -49,14 +49,40 @@ export async function POST(request: Request) {
         .filter((row): row is NonNullable<typeof row> => row != null);
 
       if (probes.length > 0 || body.planOnly) {
-        const plan = await planSimilarMerchantMerges(probes);
-        return Response.json({
-          clustersFound: plan.clustersFound,
-          mergesApplied: 0,
-          merchantsDeleted: 0,
-          transactionsUpdated: 0,
-          merges: plan.merges,
-          planOnly: true,
+        const encoder = new TextEncoder();
+        const stream = new ReadableStream<Uint8Array>({
+          async start(controller) {
+            const send = (event: unknown) => {
+              controller.enqueue(encoder.encode(`${JSON.stringify(event)}\n`));
+            };
+            try {
+              const plan = await planSimilarMerchantMerges(probes, (checked, total) => {
+                send({ type: "progress", checked, total });
+              });
+              send({
+                type: "result",
+                clustersFound: plan.clustersFound,
+                mergesApplied: 0,
+                merchantsDeleted: 0,
+                transactionsUpdated: 0,
+                merges: plan.merges,
+                planOnly: true,
+              });
+            } catch (error) {
+              send({
+                type: "error",
+                error: errorMessage(error, "Merchant clean failed"),
+              });
+            }
+            controller.close();
+          },
+        });
+        return new Response(stream, {
+          headers: {
+            "Content-Type": "application/x-ndjson; charset=utf-8",
+            "Cache-Control": "no-cache, no-transform",
+            "X-Accel-Buffering": "no",
+          },
         });
       }
 

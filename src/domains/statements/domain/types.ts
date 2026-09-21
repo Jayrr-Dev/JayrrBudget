@@ -2,6 +2,7 @@ export type StatementUploadLog = {
   id: number;
   source?: "convex" | "vault";
   recordId?: string;
+  fileHash?: string | null;
   transactionIds?: string[];
   ocrMarkdown?: string | null;
   filename: string;

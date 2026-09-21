@@ -1,4 +1,6 @@
+import { canonicalMergesWithJev } from "@/domains/merchants/application/dupeMerchantsWithJev";
 import { MERCHANT_CLEAN_AI_RULES } from "@/domains/enrichment/domain/merchantCleanAiRules";
+import { isJevConfigured } from "@/shared/ai/jev.server";
 import { clusterSimilarMerchants } from "@/domains/merchants/domain/clusterSimilarMerchants";
 import { planDescriptorCleanMerges } from "@/domains/merchants/domain/planDescriptorCleanMerges";
 import { generateObjectWithFallback } from "@/shared/ai/openRouter";
@@ -133,14 +135,19 @@ export async function planSimilarMerchantMerges(
     slug: string;
     transactionCount: number;
   }>,
+  onProgress?: (checked: number, total: number) => void,
 ): Promise<PlanSimilarMerchantsResult> {
+  const total = listed.length;
+  onProgress?.(0, total);
   const descriptorMerges = planDescriptorCleanMerges(listed);
   const claimed = new Set(
     descriptorMerges.flatMap((merge) => merge.merchantIds),
   );
   const remaining = listed.filter((merchant) => !claimed.has(merchant.id));
   const clusters = clusterSimilarMerchants(remaining);
+  onProgress?.(claimed.size, total);
   if (clusters.length === 0) {
+    onProgress?.(total, total);
     return {
       clustersFound: descriptorMerges.length,
       merges: descriptorMerges,
@@ -157,6 +164,7 @@ export async function planSimilarMerchantMerges(
   }));
 
   const aiMerges: PlannedMerchantMerge[] = [];
+  let checked = claimed.size;
   for (let offset = 0; offset < payload.length; offset += AI_CLUSTER_CHUNK) {
     const chunk = payload.slice(offset, offset + AI_CLUSTER_CHUNK);
     const allowed = new Map(
@@ -165,7 +173,17 @@ export async function planSimilarMerchantMerges(
         new Set(cluster.members.map((member) => member.id)),
       ]),
     );
-    const raw = await askAiMerges(chunk);
+    const raw = isJevConfigured()
+      ? await canonicalMergesWithJev(
+          chunk.map((cluster) => ({
+            clusterId: cluster.clusterId,
+            members: cluster.members.map((member) => ({
+              id: member.id,
+              name: member.name,
+            })),
+          })),
+        )
+      : await askAiMerges(chunk);
     for (const merge of raw) {
       const ids = [...new Set(merge.merchantIds.map((id) => id.trim()))].filter(
         Boolean,
@@ -185,7 +203,10 @@ export async function planSimilarMerchantMerges(
       if (!canonicalName) continue;
       aiMerges.push({ canonicalName, merchantIds: inCluster });
     }
+    checked += chunk.reduce((count, cluster) => count + cluster.members.length, 0);
+    onProgress?.(Math.min(total, checked), total);
   }
+  onProgress?.(total, total);
 
   return {
     clustersFound: clusters.length + descriptorMerges.length,
