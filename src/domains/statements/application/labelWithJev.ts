@@ -79,22 +79,111 @@ const TYPE_HINTS: Record<string, string> = {
   expense: "Money out for goods, services, fees, or interest",
   income: "Money in that was earned or received as income",
   transfer:
-    "Card payment, e-transfer to self, or moving money between own accounts",
+    "Default for moving money: a payment on your own card or account. Not a wire.",
 };
 
 const TXN_CODE_HINTS: Record<(typeof TXN_CODES)[number], string> = {
   purchase: "One-off purchase of goods or services",
-  payment: "Payment toward a card or bill balance",
+  payment:
+    "Default for a transfer: paying your own card, bill, or account. Skip this only for a global money transfer or a real person's name.",
   refund: "Money back for an earlier purchase (keeps the purchase category)",
   fee: "Bank, service, ATM, or foreign-exchange fee",
   interest: "Interest charged or earned",
   cash_advance: "Cash advance or ATM withdrawal on credit",
-  transfer: "Transfer between own accounts or to a person",
+  transfer:
+    "Only a global money transfer, or a transfer that names a real person. A plain INTERNET TRANSFER, cheque, or wire with no name is a payment.",
   subscription:
     "Recurring plan named as such (streaming, software, membership)",
   statement: "Statement-level line such as opening/closing balance",
   other: "None of the above fits",
 };
+
+const NOT_A_PERSON_NAME = new Set([
+  "account",
+  "acct",
+  "atm",
+  "bank",
+  "bill",
+  "card",
+  "cards",
+  "cheque",
+  "chequing",
+  "checking",
+  "chq",
+  "cibc",
+  "credit",
+  "debit",
+  "deposit",
+  "fee",
+  "from",
+  "global",
+  "interac",
+  "internet",
+  "loc",
+  "mastercard",
+  "mbna",
+  "money",
+  "paiement",
+  "pay",
+  "payment",
+  "savings",
+  "self",
+  "send",
+  "sent",
+  "thank",
+  "to",
+  "transfer",
+  "transfers",
+  "transit",
+  "visa",
+  "wire",
+  "you",
+]);
+
+function isGlobalTransfer(description: string) {
+  return /global\s+money|\bcibc\s+global\b|\binternet\s+global\b/i.test(
+    description,
+  );
+}
+
+/** A real person's name after to/from, or right after an e-transfer. Account and card are not names. */
+function hasPersonName(description: string) {
+  const text = description.replace(/[*#\d]+/g, " ");
+  const markers =
+    /\b(?:to|from|sent|send)\b[\s*#:.-]+([A-Za-z][A-Za-z']{1,})(?:[\s*#:.-]+([A-Za-z][A-Za-z']{1,}))?|\be-?\s*t(?:ransfer|fr)\b[\s*#:.-]+([A-Za-z][A-Za-z']{1,})(?:[\s*#:.-]+([A-Za-z][A-Za-z']{1,}))?/gi;
+  for (const match of text.matchAll(markers)) {
+    const words = [match[1], match[2], match[3], match[4]].filter(
+      (word): word is string => Boolean(word),
+    );
+    if (words.some((word) => !NOT_A_PERSON_NAME.has(word.toLowerCase()))) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function externalLeaf(paths: TaxonomyPath[], subcategory: string) {
+  const leaf = normalizedLabel(subcategory);
+  return (
+    paths.find(
+      (path) =>
+        normalizedLabel(path.section) === "transfers" &&
+        normalizedLabel(path.category) === "external transfers" &&
+        normalizedLabel(path.subcategory ?? "") === leaf,
+    ) ?? null
+  );
+}
+
+function accountPaymentPath(paths: TaxonomyPath[]) {
+  return (
+    paths.find(
+      (path) =>
+        normalizedLabel(path.section) === "transfers" &&
+        normalizedLabel(path.category) === "account transfers" &&
+        normalizedLabel(path.subcategory ?? "") === "credit card payoffs",
+    ) ?? null
+  );
+}
 
 const CHANNEL_CRITERIA: Record<string, string> = {
   online: "Description clearly shows an online/web/app purchase",
@@ -255,7 +344,7 @@ function buildLabelQuestions(params: {
       type: "choice",
       instructions:
         lineNote +
-        "What kind of line is this? Never infer subscription from the merchant alone; the description must show it." +
+        "What kind of line is this? Never infer subscription from the merchant alone; the description must show it. A transfer defaults to payment. Use transfer only for a global money transfer or a line that names a real person." +
         rulesNote,
       criteria: { ...TXN_CODE_HINTS },
     },
@@ -291,9 +380,13 @@ function buildLabelQuestions(params: {
         category.subcategoryNames.slice(0, 12),
       );
     }
+    const transferDefault =
+      normalizedLabel(section.name) === "transfers"
+        ? " Default to Account Transfers (a payment on your own card or account). External Transfers only for a global money transfer or a real person's name."
+        : "";
     questions[name(`category_${sectionIndex}`)] = {
       type: "choice",
-      instructions: `${lineNote}If this bank line belongs in the "${section.name}" section, which category under it best describes the line?${rulesNote}`,
+      instructions: `${lineNote}If this bank line belongs in the "${section.name}" section, which category under it best describes the line?${transferDefault}${rulesNote}`,
       criteria,
     };
     categories.forEach((category, categoryIndex) => {
@@ -305,6 +398,14 @@ function buildLabelQuestions(params: {
           normalizedLabel(row.categoryName) === normalizedLabel(category.name),
       );
       if (leaves.length === 0) return;
+      const paymentDefault =
+        normalizedLabel(section.name) === "transfers" &&
+        normalizedLabel(category.name) === "account transfers"
+          ? " Default to Credit Card Payoffs. A plain INTERNET TRANSFER is a payment, not a wire."
+          : normalizedLabel(section.name) === "transfers" &&
+              normalizedLabel(category.name) === "external transfers"
+            ? " Only a global money transfer (Remittances) or a real person's name (Interac e-Transfer). A transfer with no name is a payment, not a wire."
+            : "";
       const subCriteria: Record<string, string | null> = {};
       for (const leaf of leaves.slice(0, JEV_MAX_CHOICE_OPTIONS - 1)) {
         subCriteria[leaf.name] = rubric(leaf.description);
@@ -312,7 +413,7 @@ function buildLabelQuestions(params: {
       subCriteria[NONE_OPTION] = "No listed subcategory fits this line";
       questions[name(`subcategory_${sectionIndex}_${categoryIndex}`)] = {
         type: "choice",
-        instructions: `${lineNote}If this bank line belongs in "${section.name} > ${category.name}", which subcategory fits?${rulesNote}`,
+        instructions: `${lineNote}If this bank line belongs in "${section.name} > ${category.name}", which subcategory fits?${paymentDefault}${rulesNote}`,
         criteria: subCriteria,
       };
     });
@@ -398,14 +499,39 @@ function profileFromAnswers(params: {
     .slice(0, MAX_TAGS)
     .map((entry) => entry.tag);
 
-  const txnCode = choiceAnswer(params.answers, name("txnCode")).choice;
+  let txnCode = choiceAnswer(params.answers, name("txnCode")).choice;
   let spread = choiceAnswer(params.answers, name("spread")).choice;
   let transactionType = choiceAnswer(params.answers, name("transactionType")).choice;
-  const isTransfer =
-    normalizedLabel(path.section) === "transfers" ||
+  let resolvedPath = path;
+  const sectionKey = normalizedLabel(resolvedPath.section);
+  const categoryKey = normalizedLabel(resolvedPath.category);
+  const transferLike =
+    sectionKey === "transfers" ||
     txnCode === "payment" ||
     txnCode === "transfer";
-  if (isTransfer) {
+  const description = params.group.description;
+  const globalTransfer = isGlobalTransfer(description);
+  const namedPerson = hasPersonName(description);
+  if (transferLike && sectionKey === "transfers" && categoryKey !== "atm") {
+    if (globalTransfer) {
+      const remittance = externalLeaf(params.paths, "remittances");
+      if (remittance) resolvedPath = remittance;
+      txnCode = "transfer";
+    } else if (namedPerson) {
+      if (categoryKey !== "external transfers" && categoryKey !== "money transfers") {
+        const interac = externalLeaf(params.paths, "interac e-transfer");
+        if (interac) resolvedPath = interac;
+      }
+      txnCode = "transfer";
+    } else {
+      if (categoryKey === "external transfers" || categoryKey === "money transfers") {
+        const paymentPath = accountPaymentPath(params.paths);
+        if (paymentPath) resolvedPath = paymentPath;
+      }
+      txnCode = "payment";
+    }
+  }
+  if (transferLike) {
     if (params.types.includes("Transfer")) transactionType = "Transfer";
     if (normalizedLabel(spread) === "income") spread = "Needs";
   }
@@ -414,7 +540,7 @@ function profileFromAnswers(params: {
     merchant:
       cleanMerchantDescriptor(params.group.description) ??
       params.group.description.trim().slice(0, 80),
-    pathKey: path.key,
+    pathKey: resolvedPath.key,
     spread,
     transactionType,
     txnCode,

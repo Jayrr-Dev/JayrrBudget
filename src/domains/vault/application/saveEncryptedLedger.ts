@@ -259,6 +259,52 @@ export async function rewriteEncryptedTaxonomyLabels(
   return matches.length;
 }
 
+function hasClassification(tx: PrivateTransaction) {
+  return Boolean(
+    tx.sectionName?.trim() ||
+      tx.categoryName?.trim() ||
+      tx.subcategoryName?.trim() ||
+      tx.spreadName?.trim() ||
+      tx.transactionTypeName?.trim() ||
+      tx.txnCode?.trim() ||
+      tx.channel?.trim(),
+  );
+}
+
+/** Wipe section, category, and the other classify labels. Leaves the lines. */
+export async function clearEncryptedClassification(
+  ctx: VaultWriteContext,
+  txs: PrivateTransaction[],
+) {
+  const matches = txs.filter(hasClassification);
+  for (let i = 0; i < matches.length; i += RENAME_CHUNK) {
+    const chunk = matches.slice(i, i + RENAME_CHUNK);
+    await saveEncryptedRecords(
+      ctx,
+      chunk.map((tx) => {
+        const next = {
+          ...tx,
+          sectionName: null,
+          categoryName: null,
+          subcategoryName: null,
+          spreadName: null,
+          transactionTypeName: null,
+          txnCode: null,
+          channel: null,
+        };
+        const { recordId, revision, ...value } = next;
+        return {
+          recordId,
+          kind: "tx" as const,
+          value: encryptedTxValue(value),
+          expectedRevision: revision,
+        };
+      }),
+    );
+  }
+  return matches.length;
+}
+
 function merchantKey(value: string | null | undefined) {
   return (value ?? "").trim().toLowerCase();
 }

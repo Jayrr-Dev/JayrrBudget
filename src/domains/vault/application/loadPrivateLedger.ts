@@ -20,6 +20,7 @@ import type {
   PrivateTransaction,
 } from "@/domains/vault/domain/privateLedger";
 import { logVaultCacheDebug } from "@/shared/debug/vaultCacheDebug";
+import { isFullyLocal } from "@/shared/offline/fullyLocalMode";
 import { api } from "@convex/_generated/api";
 
 export type VaultListClient = {
@@ -574,6 +575,11 @@ type LedgerMemo = {
 const inflightLoads = new Map<string, Promise<PrivateLedger>>();
 let lastLedger: LedgerMemo | null = null;
 
+/** Drop the in-memory decrypt so the next load reads IndexedDB again. */
+export function forgetPrivateLedgerMemo() {
+  lastLedger = null;
+}
+
 function memoKey(input: {
   userId: string;
   vaultId: string;
@@ -644,6 +650,20 @@ async function loadPrivateLedgerUncached(
 ): Promise<PrivateLedger> {
   const vaultUpdatedAt = input.vaultUpdatedAt;
   let records: CachedCiphertextRecord[] | null = null;
+  if (isFullyLocal()) {
+    const cached = await readVaultCiphertextCache(input.vaultId);
+    if (cached && cached.userId === input.userId) {
+      logVaultCacheDebug("cache-hit", "Fully local IndexedDB ledger", {
+        vaultId: input.vaultId,
+        records: cached.records.length,
+      });
+      return decryptLedgerFromRecords(
+        cached.records,
+        input.userId,
+        masterKey,
+      );
+    }
+  }
   if (vaultUpdatedAt > 0) {
     const cached = await readVaultCiphertextCache(input.vaultId);
     if (

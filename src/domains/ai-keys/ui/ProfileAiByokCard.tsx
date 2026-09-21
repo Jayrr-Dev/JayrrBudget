@@ -15,9 +15,107 @@ import { useConvexAuth, useQuery } from "convex/react";
 import { Info } from "lucide-react";
 import { useState, type FormEvent } from "react";
 
+type Provider = "openrouter" | "jev";
+
+const COPY: Record<
+  Provider,
+  {
+    label: string;
+    placeholder: string;
+    empty: string;
+    href: string;
+    hrefLabel: string;
+    saved: string;
+    removed: string;
+  }
+> = {
+  openrouter: {
+    label: "OpenRouter API key",
+    placeholder: "sk-or-…",
+    empty: "No personal OpenRouter key yet.",
+    href: "https://openrouter.ai/keys",
+    hrefLabel: "Get an OpenRouter key",
+    saved: "Saved. Chat and statement AI will use this key.",
+    removed: "Removed. The app key is used if the server has one.",
+  },
+  jev: {
+    label: "Jev API key",
+    placeholder: "Paste your TypeSafe key",
+    empty: "No personal Jev key yet.",
+    href: "https://console.typesafe.ai",
+    hrefLabel: "Get a Jev key",
+    saved: "Saved. Categorize, statement signs, and Piggy votes will use this key.",
+    removed: "Removed. The app key is used if the server has one.",
+  },
+};
+
 export function ProfileAiByokCard() {
   const { isAuthenticated } = useConvexAuth();
-  const status = useQuery(api.aiByok.status, isAuthenticated ? {} : "skip");
+  const openrouter = useQuery(
+    api.aiByok.status,
+    isAuthenticated ? { provider: "openrouter" } : "skip",
+  );
+  const jev = useQuery(
+    api.aiByok.status,
+    isAuthenticated ? { provider: "jev" } : "skip",
+  );
+
+  return (
+    <section className="space-y-4 rounded-xl border border-border bg-surface-elevated p-6">
+      <h2 className="type-section flex items-center gap-2">
+        Your AI keys
+        <Popover>
+          <PopoverTrigger asChild>
+            <button
+              type="button"
+              className="inline-flex size-6 shrink-0 items-center justify-center rounded-full text-accent hover:text-primary"
+              aria-label="About your AI keys"
+            >
+              <Info className="size-3.5" />
+            </button>
+          </PopoverTrigger>
+          <PopoverContent
+            align="start"
+            side="bottom"
+            sideOffset={8}
+            className="w-80 gap-0 p-3.5"
+          >
+            <PopoverHeader className="gap-1.5">
+              <PopoverTitle>Your AI keys</PopoverTitle>
+              <PopoverDescription>
+                Optional keys so chat and Jev bill your account.
+              </PopoverDescription>
+              <ul className="mt-1.5 list-disc space-y-1 pl-4 text-muted-foreground">
+                <li>Encrypted on the server before anything is stored</li>
+                <li>Convex keeps ciphertext only, never the raw key</li>
+                <li>Tied to your account, so another user cannot decrypt it</li>
+                <li>After save, the page only shows the last 4 characters</li>
+                <li>Skip either key and the server uses its own, if it has one</li>
+              </ul>
+            </PopoverHeader>
+          </PopoverContent>
+        </Popover>
+      </h2>
+      <p className="sr-only">
+        Optional OpenRouter and Jev keys. Each is encrypted before storage and
+        used instead of the server key when present.
+      </p>
+
+      <KeyForm provider="openrouter" status={openrouter} />
+      <KeyForm provider="jev" status={jev} />
+    </section>
+  );
+}
+
+function KeyForm({
+  provider,
+  status,
+}: {
+  provider: Provider;
+  status: { configured: boolean; last4: string | null } | undefined;
+}) {
+  const copy = COPY[provider];
+  const savedLast4 = status?.configured ? status.last4 : null;
   const [apiKey, setApiKey] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -32,16 +130,16 @@ export function ProfileAiByokCard() {
       const response = await fetch("/api/profile/ai-key", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ apiKey }),
+        body: JSON.stringify({ apiKey, provider }),
       });
       const payload = (await response.json()) as { error?: string };
       if (!response.ok) {
-        throw new Error(payload.error ?? "Could not save the AI key.");
+        throw new Error(payload.error ?? "Could not save the key.");
       }
       setApiKey("");
-      setMessage("Saved. Chat and statement AI will use this key.");
+      setMessage(copy.saved);
     } catch (err: unknown) {
-      setError(errorMessage(err, "Could not save the AI key."));
+      setError(errorMessage(err, "Could not save the key."));
     } finally {
       setPending(false);
     }
@@ -52,109 +150,77 @@ export function ProfileAiByokCard() {
     setMessage(null);
     setPending(true);
     try {
-      const response = await fetch("/api/profile/ai-key", { method: "DELETE" });
+      const response = await fetch(
+        `/api/profile/ai-key?provider=${provider}`,
+        { method: "DELETE" },
+      );
       const payload = (await response.json()) as { error?: string };
       if (!response.ok) {
-        throw new Error(payload.error ?? "Could not remove the AI key.");
+        throw new Error(payload.error ?? "Could not remove the key.");
       }
-      setMessage("Removed. The app key is used if the server has one.");
+      setMessage(copy.removed);
     } catch (err: unknown) {
-      setError(errorMessage(err, "Could not remove the AI key."));
+      setError(errorMessage(err, "Could not remove the key."));
     } finally {
       setPending(false);
     }
   }
 
   return (
-    <section className="space-y-4 rounded-xl border border-border bg-surface-elevated p-6">
-      <h2 className="type-section flex items-center gap-2">
-        Your AI key
-        <Popover>
-          <PopoverTrigger asChild>
-            <button
-              type="button"
-              className="inline-flex size-6 shrink-0 items-center justify-center rounded-full text-accent hover:text-primary"
-              aria-label="About your AI key"
-            >
-              <Info className="size-3.5" />
-            </button>
-          </PopoverTrigger>
-          <PopoverContent
-            align="start"
-            side="bottom"
-            sideOffset={8}
-            className="w-80 gap-0 p-3.5"
-          >
-            <PopoverHeader className="gap-1.5">
-              <PopoverTitle>Your AI key</PopoverTitle>
-              <PopoverDescription>
-                Optional OpenRouter key for chat, statement parse, and merchant
-                clean.
-              </PopoverDescription>
-              <ul className="mt-1.5 list-disc space-y-1 pl-4 text-muted-foreground">
-                <li>Encrypted on the server before it is stored</li>
-                <li>Convex keeps ciphertext only, never the raw key</li>
-                <li>If you skip this, the server can still use its own key</li>
-              </ul>
-            </PopoverHeader>
-          </PopoverContent>
-        </Popover>
-      </h2>
-      <p className="sr-only">
-        Optional OpenRouter key. Encrypted before storage. Used instead of the
-        server key when present.
-      </p>
-
-      {status?.configured && status.last4 ? (
+    <form
+      className={
+        provider === "jev"
+          ? "space-y-3 border-t border-border pt-4"
+          : "space-y-3"
+      }
+      onSubmit={save}
+    >
+      {savedLast4 ? (
         <p className="text-sm text-muted-foreground">
-          Saved key ends in {status.last4}. Paste a new one to replace it.
+          Saved key ends in {savedLast4}. Paste a new one to replace it.
         </p>
       ) : (
         <p className="text-sm text-muted-foreground">
-          No personal key yet.{" "}
+          {copy.empty}{" "}
           <a
-            href="https://openrouter.ai/keys"
+            href={copy.href}
             target="_blank"
             rel="noreferrer"
             className="text-accent underline-offset-2 hover:underline"
           >
-            Get an OpenRouter key
+            {copy.hrefLabel}
           </a>
         </p>
       )}
 
-      <form className="space-y-3" onSubmit={save}>
-        <label className="block space-y-2 text-sm">
-          <span className="text-muted-foreground">OpenRouter API key</span>
-          <input
-            type="password"
-            value={apiKey}
-            onChange={(event) => setApiKey(event.target.value)}
-            autoComplete="off"
-            spellCheck={false}
-            placeholder="sk-or-…"
-            className="w-full rounded-md border border-control-border bg-surface-elevated px-3 py-2 text-foreground outline-none focus:border-primary focus:outline-2 focus:outline-offset-1 focus:outline-ring"
-          />
-        </label>
-        <div className="flex flex-wrap gap-2">
+      <label className="block space-y-2 text-sm">
+        <span className="text-muted-foreground">{copy.label}</span>
+        <input
+          type="password"
+          name={`${provider}-api-key`}
+          value={apiKey}
+          onChange={(event) => setApiKey(event.target.value)}
+          autoComplete="off"
+          spellCheck={false}
+          placeholder={copy.placeholder}
+          className="w-full rounded-md border border-control-border bg-surface-elevated px-3 py-2 text-foreground outline-none focus:border-primary focus:outline-2 focus:outline-offset-1 focus:outline-ring"
+        />
+      </label>
+      <div className="flex flex-wrap gap-2">
+        <Button type="submit" disabled={pending || apiKey.trim().length === 0}>
+          {pending ? "Saving…" : "Save key"}
+        </Button>
+        {status?.configured ? (
           <Button
-            type="submit"
-            disabled={pending || apiKey.trim().length === 0}
+            type="button"
+            variant="outline"
+            disabled={pending}
+            onClick={() => void remove()}
           >
-            {pending ? "Saving…" : "Save key"}
+            Remove
           </Button>
-          {status?.configured ? (
-            <Button
-              type="button"
-              variant="outline"
-              disabled={pending}
-              onClick={() => void remove()}
-            >
-              Remove
-            </Button>
-          ) : null}
-        </div>
-      </form>
+        ) : null}
+      </div>
 
       {error ? (
         <p
@@ -167,6 +233,6 @@ export function ProfileAiByokCard() {
       {message ? (
         <p className="text-sm text-muted-foreground">{message}</p>
       ) : null}
-    </section>
+    </form>
   );
 }

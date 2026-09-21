@@ -2,6 +2,7 @@
 
 import type { ConvexReactClient } from "convex/react";
 import { toast } from "sonner";
+import { isFullyLocal } from "@/shared/offline/fullyLocalMode";
 
 export const OFFLINE_WRITE_TOAST =
   "You're offline. Try again when you're connected.";
@@ -17,8 +18,9 @@ export function toastIfOffline(): boolean {
   return true;
 }
 
-/** Fail closed: toast, then throw. No queued sync. */
+/** Fail closed: toast, then throw. No queued sync. Fully local writes stay on device. */
 export function assertOnlineForWrite() {
+  if (isFullyLocal()) return;
   if (toastIfOffline()) {
     throw new Error(OFFLINE_WRITE_TOAST);
   }

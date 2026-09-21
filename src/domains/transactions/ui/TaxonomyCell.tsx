@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/combobox";
 import type { DashboardData } from "@/domains/dashboard/domain/types";
 import { queryKeys } from "@/domains/dashboard/queries/query-keys";
-import type { TransactionTaxonomy } from "@/domains/transactions/application/getTransactionTaxonomy";
+import { builtinTransactionTaxonomy } from "@/domains/transactions/domain/builtinTaxonomy";
 import type { TaxonomyField } from "@/domains/transactions/application/updateTransactionTaxonomy";
 import {
   patchEncryptedTransaction,
@@ -23,10 +23,6 @@ import { useConvex } from "convex/react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
-type TaxonomyResponse =
-  | { ok: true; data: TransactionTaxonomy }
-  | { ok?: false; error: string };
-
 type UpdateResponse = {
   ok: true;
   transactionId: string;
@@ -36,13 +32,8 @@ type UpdateResponse = {
   spread: string | null;
 };
 
-async function fetchTaxonomy() {
-  const response = await fetch("/api/transactions/taxonomy");
-  const data = (await response.json()) as TaxonomyResponse;
-  if (!response.ok || !("data" in data)) {
-    throw new Error("error" in data ? data.error : "Failed to load taxonomy");
-  }
-  return data.data;
+function fetchTaxonomy() {
+  return builtinTransactionTaxonomy();
 }
 
 /** Patch every dashboard query (overview + /transactions all-rows). */

@@ -11,7 +11,8 @@ const SECTIONS: Record<string, string> = {
   finance: "Banking, debt, insurance, and investments.",
   lifestyle: "Shopping, entertainment, personal care, and hobbies.",
   food: "Groceries, restaurants, takeout, delivery, and drinks.",
-  transfers: "Money moved between accounts or people (not household spend).",
+  transfers:
+    "Most transfers are payments on your own card or account. Money to another person is the exception.",
   income: "Pay, benefits, cashback, and other real money in.",
   technology: "Software, AI tools, and cloud.",
   transport: "Daily getting around: fuel, transit, rideshare, and the car.",
@@ -61,7 +62,7 @@ const CATEGORIES: Record<string, string> = {
   employment: "Salary, wages, and employer pay.",
   entertainment: "Streaming, games, cinema, bars, and paid leisure.",
   "external transfers":
-    "e-Transfer, cheque, wire, remittance, and money to other people.",
+    "A global money transfer, or a transfer that names a real person. A transfer with no name is a payment.",
   flights: "Airline tickets and in-flight purchases.",
   food: "Use Groceries, Restaurants, Takeout, or Delivery instead.",
   groceries: "Supermarket, produce, convenience, and meal kits.",
@@ -132,7 +133,8 @@ const SUBCATEGORIES: Record<string, string> = {
   "courses & training": "Courses, classes, and training.",
   courses: "Courses, classes, and training.",
   cosmetics: "Makeup and beauty products.",
-  "credit card payoffs": "Paying down your own credit card.",
+  "credit card payoffs":
+    "Default for a transfer: paying your own card or account. Not a global transfer or a named person.",
   "department & online stores": "Department stores and big online retailers.",
   "online stores": "Department stores and big online retailers.",
   "developer & payment platforms": "Dev platforms and payment processors.",
@@ -160,9 +162,10 @@ const SUBCATEGORIES: Record<string, string> = {
   "hotels & vacation rentals": "Hotels and short-term stays.",
   "in-flight": "Purchases made on a flight.",
   infrastructure: "Cloud servers and hosting infra.",
-  "interac e-transfer": "Interac e-Transfer to/from a person.",
+  "interac e-transfer": "e-Transfer that names a real person.",
   cheques: "Paper cheques cleared to or from someone else.",
-  "wire transfers": "Bank wires sent to another person or institution.",
+  "wire transfers":
+    "A bank wire that names a person. A wire or internet transfer with no name is a card payment.",
   maintenance: "Vehicle repairs and maintenance.",
   "mobile & wireless": "Mobile/wireless plan charges.",
   mobile: "Mobile/wireless plan charges.",
@@ -376,7 +379,7 @@ const SUBCATEGORIES: Record<string, string> = {
 const TYPES: Record<string, string> = {
   expenses: "Money spent on goods and services.",
   income: "Money received as income.",
-  transfers: "Money moved, not spent or earned as income.",
+  transfers: "A payment on your own card or account, unless money clearly goes to someone else.",
 };
 
 const KINDS: Record<string, string> = {

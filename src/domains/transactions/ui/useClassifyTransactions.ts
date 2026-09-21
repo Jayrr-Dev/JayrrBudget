@@ -13,10 +13,33 @@ import { usePrivateLedger } from "@/domains/vault/ui/usePrivateLedger";
 import { toastIfOffline } from "@/shared/offline/offlineWriteGuard";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useConvex } from "convex/react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 const CLASSIFY_CHUNK = 50;
 const CLASSIFY_TOAST = "transactions-classify";
+
+type ClassifyProgress = { done: number; total: number };
+
+const progressListeners = new Set<() => void>();
+let classifyProgress: ClassifyProgress | null = null;
+
+function publishClassifyProgress(next: ClassifyProgress | null) {
+  classifyProgress = next;
+  for (const listener of progressListeners) listener();
+}
+
+export function useClassifyProgress() {
+  const [value, setValue] = useState(classifyProgress);
+  useEffect(() => {
+    const listener = () => setValue(classifyProgress);
+    progressListeners.add(listener);
+    return () => {
+      progressListeners.delete(listener);
+    };
+  }, []);
+  return value;
+}
 
 function emptySummary(): CategorizationSummary {
   return { ok: true, cached: 0, ai: 0, pending: 0 };
@@ -62,44 +85,52 @@ export function useClassifyTransactions() {
         throw new Error("Sign in again, then classify.");
       }
 
-      toast.loading(`Classifying ${rows.length} lines…`, {
-        id: CLASSIFY_TOAST,
-      });
+      publishClassifyProgress({ done: 0, total: rows.length });
+      toast.loading(`Classifying 0 of ${rows.length}`, { id: CLASSIFY_TOAST });
       let summary = emptySummary();
-      for (let i = 0; i < rows.length; i += CLASSIFY_CHUNK) {
-        const chunk = rows.slice(i, i + CLASSIFY_CHUNK);
-        const response = await fetch("/api/statements/categorize-vault", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            transactions: chunk.map((txn) => ({
-              transactionId: txn.transactionId,
-              description: txn.name,
-              amount: Number(txn.amount),
-            })),
-          }),
-        });
-        const result = (await response.json()) as {
-          error?: string;
-          summary?: CategorizationSummary;
-          labeled?: LabeledTransaction[];
-        };
-        if (!response.ok) {
-          throw new Error(result.error ?? "Classification failed");
+      try {
+        for (let i = 0; i < rows.length; i += CLASSIFY_CHUNK) {
+          const chunk = rows.slice(i, i + CLASSIFY_CHUNK);
+          const response = await fetch("/api/statements/categorize-vault", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              transactions: chunk.map((txn) => ({
+                transactionId: txn.transactionId,
+                description: txn.name,
+                amount: Number(txn.amount),
+              })),
+            }),
+          });
+          const result = (await response.json()) as {
+            error?: string;
+            summary?: CategorizationSummary;
+            labeled?: LabeledTransaction[];
+          };
+          if (!response.ok) {
+            throw new Error(result.error ?? "Classification failed");
+          }
+          await applyVaultCategorization({
+            client: client as unknown as MutationClient,
+            userId: privateLedger.userId,
+            vaultId: privateLedger.vaultId,
+            keyId: privateLedger.keyId,
+            masterKey,
+            ledger: privateLedger.ledger,
+            labeled: result.labeled ?? [],
+          });
+          summary = addSummaries(summary, result.summary ?? emptySummary());
+          const done = Math.min(rows.length, i + chunk.length);
+          publishClassifyProgress({ done, total: rows.length });
+          toast.loading(`Classifying ${done} of ${rows.length}`, {
+            id: CLASSIFY_TOAST,
+          });
         }
-        await applyVaultCategorization({
-          client: client as unknown as MutationClient,
-          userId: privateLedger.userId,
-          vaultId: privateLedger.vaultId,
-          keyId: privateLedger.keyId,
-          masterKey,
-          ledger: privateLedger.ledger,
-          labeled: result.labeled ?? [],
-        });
-        summary = addSummaries(summary, result.summary ?? emptySummary());
+        privateLedger.reload();
+        return summary;
+      } finally {
+        publishClassifyProgress(null);
       }
-      privateLedger.reload();
-      return summary;
     },
     onSuccess: async (result) => {
       const description = `${result.cached} reused, ${result.ai} classified, ${result.pending} pending.`;

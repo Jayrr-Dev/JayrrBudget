@@ -1,4 +1,11 @@
-import { createAccount, getAuthUserId } from "@convex-dev/auth/server";
+import {
+  createAccount,
+  getAuthSessionId,
+  getAuthUserId,
+  invalidateSessions,
+  modifyAccountCredentials,
+  retrieveAccount,
+} from "@convex-dev/auth/server";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
@@ -76,6 +83,86 @@ export const loadForPasswordSetup = internalQuery({
       email: gate.email,
       name: gate.name,
     };
+  },
+});
+
+/** True when this account can sign in with a password. */
+export const hasPassword = query({
+  args: {},
+  returns: v.boolean(),
+  handler: async (ctx) => {
+    const gate = await loadPasswordGate(ctx);
+    if (!gate) return false;
+    return gate.hasPassword;
+  },
+});
+
+export const loadForPasswordChange = internalQuery({
+  args: {},
+  returns: v.union(
+    v.object({
+      userId: v.id("users"),
+      email: v.string(),
+    }),
+    v.null(),
+  ),
+  handler: async (ctx) => {
+    const gate = await loadPasswordGate(ctx);
+    if (!gate?.hasPassword || !gate.email) return null;
+    return { userId: gate.userId, email: gate.email };
+  },
+});
+
+/**
+ * Replace the sign-in password after the current one checks out.
+ * Does not touch ledger ciphertext. The client re-wraps the same vault key.
+ */
+export const changePassword = action({
+  args: {
+    oldPassword: v.string(),
+    newPassword: v.string(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (userId === null) throw new Error("Not authenticated");
+    if (args.newPassword.length < MIN_PASSWORD_LENGTH) {
+      throw new Error(
+        `Password must be at least ${MIN_PASSWORD_LENGTH} characters`,
+      );
+    }
+    if (args.oldPassword === args.newPassword) {
+      throw new Error("Choose a different password");
+    }
+
+    const gate = await ctx.runQuery(
+      internal.passwordSetup.loadForPasswordChange,
+      {},
+    );
+    if (!gate || gate.userId !== userId) {
+      throw new Error("This account has no password to change");
+    }
+
+    try {
+      await retrieveAccount(ctx, {
+        provider: "password",
+        account: { id: gate.email, secret: args.oldPassword },
+      });
+    } catch {
+      throw new Error("Current password is wrong");
+    }
+
+    await modifyAccountCredentials(ctx, {
+      provider: "password",
+      account: { id: gate.email, secret: args.newPassword },
+    });
+
+    const sessionId = await getAuthSessionId(ctx);
+    await invalidateSessions(ctx, {
+      userId,
+      except: sessionId ? [sessionId] : [],
+    });
+    return null;
   },
 });
 

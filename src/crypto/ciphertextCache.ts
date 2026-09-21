@@ -113,8 +113,12 @@ export async function readVaultCiphertextCache(
 
 export async function writeVaultCiphertextCache(
   snapshot: VaultCiphertextSnapshot,
+  options?: { strict?: boolean },
 ): Promise<void> {
-  if (typeof indexedDB === "undefined") return;
+  if (typeof indexedDB === "undefined") {
+    if (options?.strict) throw new Error("IndexedDB unavailable.");
+    return;
+  }
   try {
     const db = await openDb();
     try {
@@ -132,7 +136,12 @@ export async function writeVaultCiphertextCache(
     } finally {
       db.close();
     }
-  } catch {
+  } catch (error) {
+    if (options?.strict) {
+      throw error instanceof Error
+        ? error
+        : new Error("Could not write ciphertext cache.");
+    }
     // Cache is best-effort; network load still works.
   }
 }

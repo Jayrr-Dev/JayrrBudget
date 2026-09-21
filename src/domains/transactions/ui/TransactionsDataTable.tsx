@@ -138,7 +138,7 @@ function buildColumns(
               {String(getValue())}
             </span>
           ),
-          filterFn: "equalsString",
+          filterFn: "oneOf",
           sortFn: "text",
         }),
         columnHelper.accessor("amount", {
@@ -227,6 +227,7 @@ function buildColumns(
             ),
             autoWidth: true,
             autoWidthPadCh: 8,
+            cardTaxonomy: true,
           },
           cell: ({ row, getValue }) => (
             <TaxonomyCell
@@ -244,6 +245,7 @@ function buildColumns(
             ...bandMeta(undefined, "invent", "Mid spend bucket under Section."),
             autoWidth: true,
             autoWidthPadCh: 8,
+            cardTaxonomy: true,
           },
           cell: ({ row, getValue }) => (
             <TaxonomyCell
@@ -266,6 +268,7 @@ function buildColumns(
             ),
             autoWidth: true,
             autoWidthPadCh: 8,
+            cardTaxonomy: true,
           },
           cell: ({ row, getValue }) => (
             <TaxonomyCell
@@ -431,7 +434,7 @@ function buildColumns(
               </span>
             );
           },
-          filterFn: "equalsString",
+          filterFn: "oneOf",
           sortFn: "text",
         }),
         columnHelper.accessor("source", {
@@ -785,11 +788,17 @@ export function TransactionsDataTable({
           columnId: "name",
           label: "Description",
           options: descriptionOptions,
+          multi: true,
+          searchable: true,
+          wide: true,
         },
         {
           columnId: "originalDescription",
           label: "Original description",
           options: originalDescriptionOptions,
+          multi: true,
+          searchable: true,
+          wide: true,
         },
         {
           columnId: "sectionName",

@@ -68,8 +68,9 @@ import {
   ArrowUpIcon,
   CalendarIcon,
   ListFilterIcon,
+  SearchIcon,
 } from "lucide-react";
-import { useMemo, useState, type ReactNode } from "react";
+import { useMemo, useRef, useState, type ReactNode } from "react";
 import type { DateRange } from "react-day-picker";
 
 type AutoWidthFormat = (value: unknown, row: unknown) => string;
@@ -85,6 +86,8 @@ type ColumnMeta = {
   cardSubtitle?: boolean;
   /** Mobile card: render this cell inline after the title, not as a row. */
   cardTitleAside?: boolean;
+  /** Mobile card: section / category / subcategory strip under the title. */
+  cardTaxonomy?: boolean;
   nowrap?: boolean;
   /** Allow wrapping. Default is a single clipped line. */
   wrap?: boolean;
@@ -273,6 +276,12 @@ export type DataTableFilterConfig = {
   label: string;
   options: DataTableFilterOption[];
   allLabel?: string;
+  /** Checkbox list. Filter value is a string array. */
+  multi?: boolean;
+  /** Search box above the options. */
+  searchable?: boolean;
+  /** Wide menu so long labels stay on one line. */
+  wide?: boolean;
   /**
    * When set, option list only includes values present on rows that match
    * these parent column filters (e.g. Category thins when Section is set).
@@ -415,6 +424,158 @@ function formatRangeLabel(from?: string, to?: string): string {
   return "Date range";
 }
 
+function selectedFilterValues(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => String(item))
+      .filter((item) => item && item !== "all");
+  }
+  if (typeof value === "string" && value && value !== "all") return [value];
+  return [];
+}
+
+function isListedFilterActive(value: unknown): boolean {
+  if (Array.isArray(value)) return value.length > 0;
+  if (value != null && typeof value === "object") return false;
+  return value != null && value !== "" && value !== "all";
+}
+
+function ColumnFilterMenu({
+  filter,
+  options,
+  value,
+  onSelect,
+}: {
+  filter: DataTableFilterConfig;
+  options: DataTableFilterOption[];
+  value: unknown;
+  onSelect: (next: string | string[] | undefined) => void;
+}) {
+  const [query, setQuery] = useState("");
+  const searchRef = useRef<HTMLInputElement>(null);
+  const allLabel =
+    filter.allLabel ?? `All ${filter.label.toLowerCase()}`;
+  const selected = selectedFilterValues(value);
+  const needle = query.trim().toLowerCase();
+  const visibleOptions = needle
+    ? options.filter((option) => option.label.toLowerCase().includes(needle))
+    : options;
+  const singleValue =
+    typeof value === "string" && value ? value : "all";
+
+  const toggleValue = (optionValue: string, checked: boolean) => {
+    const next = checked
+      ? [...selected, optionValue]
+      : selected.filter((item) => item !== optionValue);
+    onSelect(next.length > 0 ? next : undefined);
+  };
+
+  return (
+    <DropdownMenu
+      onOpenChange={(open) => {
+        if (!open) setQuery("");
+      }}
+      onOpenChangeComplete={(open) => {
+        if (open && filter.searchable) searchRef.current?.focus();
+      }}
+    >
+      <DropdownMenuTrigger
+        className={`inline-flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-md transition-colors ${
+          isListedFilterActive(value)
+            ? "bg-primary text-primary-foreground hover:bg-primary-hover"
+            : "text-foreground-muted opacity-50 hover:bg-[var(--muted)] hover:opacity-80"
+        }`}
+        aria-label={`Filter ${filter.label}`}
+        aria-pressed={isListedFilterActive(value)}
+      >
+        <ListFilterIcon className="size-3.5" />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent
+        align="start"
+        className={
+          filter.wide
+            ? "flex w-[min(36rem,calc(100vw-1.5rem))]! max-w-none flex-col overflow-hidden p-0"
+            : "max-h-72 min-w-44"
+        }
+      >
+        <div className={filter.searchable ? "shrink-0 p-1 pb-0" : undefined}>
+          <DropdownMenuLabel>Filter {filter.label}</DropdownMenuLabel>
+          {filter.searchable ? (
+            <div
+              className="px-1 pb-1"
+              onPointerDown={(event) => event.stopPropagation()}
+              onKeyDown={(event) => {
+                if (event.key === "Escape") return;
+                event.stopPropagation();
+              }}
+            >
+              <div className="relative">
+                <SearchIcon className="pointer-events-none absolute top-1/2 left-2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+                <input
+                  ref={searchRef}
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder="Search…"
+                  aria-label={`Search ${filter.label}`}
+                  className="h-8 w-full rounded-md border border-border bg-background pr-2 pl-7 text-sm outline-none placeholder:text-muted-foreground focus-visible:border-primary"
+                />
+              </div>
+            </div>
+          ) : null}
+        </div>
+        <DropdownMenuSeparator />
+        {filter.multi ? (
+          <div
+            className={
+              filter.wide ? "min-h-0 flex-1 overflow-y-auto p-1" : undefined
+            }
+          >
+            <DropdownMenuCheckboxItem
+              checked={selected.length === 0}
+              closeOnClick={false}
+              onCheckedChange={() => onSelect(undefined)}
+            >
+              {allLabel}
+            </DropdownMenuCheckboxItem>
+            <DropdownMenuSeparator />
+            {visibleOptions.length === 0 ? (
+              <p className="px-1.5 py-1 text-sm text-muted-foreground">
+                No matches
+              </p>
+            ) : (
+              visibleOptions.map((option) => (
+                <DropdownMenuCheckboxItem
+                  key={option.value}
+                  checked={selected.includes(option.value)}
+                  closeOnClick={false}
+                  className="whitespace-normal"
+                  onCheckedChange={(checked) =>
+                    toggleValue(option.value, Boolean(checked))
+                  }
+                >
+                  <span className="min-w-0 leading-snug">{option.label}</span>
+                </DropdownMenuCheckboxItem>
+              ))
+            )}
+          </div>
+        ) : (
+          <DropdownMenuRadioGroup
+            value={singleValue}
+            onValueChange={(next) => onSelect(next)}
+          >
+            <DropdownMenuRadioItem value="all">{allLabel}</DropdownMenuRadioItem>
+            {options.map((option) => (
+              <DropdownMenuRadioItem key={option.value} value={option.value}>
+                {option.label}
+              </DropdownMenuRadioItem>
+            ))}
+          </DropdownMenuRadioGroup>
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 function readDateWindow(value: unknown): DateWindowFilter {
   if (!isDateWindowActive(value)) return {};
   const legacy = value as DateWindowFilter & { month?: string };
@@ -495,6 +656,7 @@ export function DataTable<TData extends RowData>({
       (searchActive ? 1 : 0) +
       columnFilters.filter((filter) => {
         const value = filter.value;
+        if (Array.isArray(value)) return value.length > 0;
         if (value != null && typeof value === "object") {
           return isDateWindowActive(value);
         }
@@ -658,8 +820,16 @@ export function DataTable<TData extends RowData>({
     return filter.options.filter((option) => present.has(option.value));
   };
 
-  const setColumnFilterValue = (columnId: string, value: string) => {
-    const next = value === "all" ? undefined : value;
+  const setColumnFilterValue = (
+    columnId: string,
+    value: string | string[] | undefined,
+  ) => {
+    const next =
+      value === "all" ||
+      value === undefined ||
+      (Array.isArray(value) && value.length === 0)
+        ? undefined
+        : value;
     table.getColumn(columnId)?.setFilterValue(next);
 
     // Parent change clears dependent child filters.
@@ -1044,6 +1214,13 @@ export function DataTable<TData extends RowData>({
                 );
                 const cardMeta = (cell: (typeof dataCells)[number]) =>
                   cell.column.columnDef.meta as ColumnMeta | undefined;
+                const taxonomyCells = row
+                  .getAllCells()
+                  .filter(
+                    (cell) =>
+                      cell.column.id !== "actions" &&
+                      Boolean(cardMeta(cell)?.cardTaxonomy),
+                  );
                 const titleLabel = (cell: (typeof dataCells)[number]) =>
                   (csvColumnLabel(cell.column) ?? cell.column.id).toLowerCase();
                 const titleCell =
@@ -1069,10 +1246,14 @@ export function DataTable<TData extends RowData>({
                       Boolean(cardMeta(cell)?.cardTitleAside),
                     )
                   : [];
+                const taxonomyIds = new Set(
+                  taxonomyCells.map((cell) => cell.column.id),
+                );
                 const detailCells = dataCells.filter(
                   (cell) =>
                     cell.id !== titleCell?.id &&
                     cell.id !== subtitleCell?.id &&
+                    !taxonomyIds.has(cell.column.id) &&
                     !asideCells.some((aside) => aside.id === cell.id),
                 );
                 const showHeader =
@@ -1133,8 +1314,40 @@ export function DataTable<TData extends RowData>({
                           ) : null}
                         </CardHeader>
                       ) : null}
-                      {detailCells.length > 0 ? (
+                      {taxonomyCells.length > 0 || detailCells.length > 0 ? (
                         <CardContent>
+                          {taxonomyCells.length > 0 ? (
+                            <dl className="mb-3 grid grid-cols-1 gap-2 text-sm sm:grid-cols-3">
+                              {taxonomyCells.map((cell) => {
+                                const cellMeta = cell.column.columnDef.meta as
+                                  | ColumnMeta
+                                  | undefined;
+                                const dim = muted && !cellMeta?.keepOpaque;
+                                return (
+                                  <div key={cell.id} className="min-w-0">
+                                    <dt
+                                      className={cn(
+                                        "text-muted-foreground",
+                                        dim && "opacity-40",
+                                      )}
+                                    >
+                                      {csvColumnLabel(cell.column) ??
+                                        cell.column.id}
+                                    </dt>
+                                    <dd
+                                      className={cn(
+                                        "min-w-0 font-medium wrap-break-word",
+                                        dim && "opacity-40",
+                                      )}
+                                    >
+                                      <table.FlexRender cell={cell} />
+                                    </dd>
+                                  </div>
+                                );
+                              })}
+                            </dl>
+                          ) : null}
+                          {detailCells.length > 0 ? (
                           <dl className="grid grid-cols-2 gap-x-3 gap-y-2 text-sm">
                             {detailCells.map((cell) => {
                               const cellMeta = cell.column.columnDef.meta as
@@ -1164,6 +1377,7 @@ export function DataTable<TData extends RowData>({
                               );
                             })}
                           </dl>
+                          ) : null}
                         </CardContent>
                       ) : null}
                     </Card>
@@ -1224,12 +1438,6 @@ export function DataTable<TData extends RowData>({
                       const sorted = renderColumn.getIsSorted();
                       const columnFilter = filtersByColumnId.get(
                         renderColumn.id,
-                      );
-                      const filterValue =
-                        (renderColumn.getFilterValue() as string | undefined) ??
-                        "all";
-                      const filterActive = Boolean(
-                        columnFilter && filterValue !== "all",
                       );
                       const showGroupTitle = isGroupParent;
                       const columnMeta = withAutoWidth(
@@ -1333,52 +1541,17 @@ export function DataTable<TData extends RowData>({
                                 <table.FlexRender header={renderHeader} />
                               ) : null}
                               {columnFilter ? (
-                                <DropdownMenu>
-                                  <DropdownMenuTrigger
-                                    className={`inline-flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-md transition-colors ${
-                                      filterActive
-                                        ? "bg-primary text-primary-foreground hover:bg-primary-hover"
-                                        : "text-foreground-muted opacity-50 hover:bg-[var(--muted)] hover:opacity-80"
-                                    }`}
-                                    aria-label={`Filter ${columnFilter.label}`}
-                                    aria-pressed={filterActive}
-                                  >
-                                    <ListFilterIcon className="size-3.5" />
-                                  </DropdownMenuTrigger>
-                                  <DropdownMenuContent
-                                    align="start"
-                                    className="max-h-72 min-w-44"
-                                  >
-                                    <DropdownMenuRadioGroup
-                                      value={filterValue}
-                                      onValueChange={(value) =>
-                                        setColumnFilterValue(
-                                          columnFilter.columnId,
-                                          value,
-                                        )
-                                      }
-                                    >
-                                      <DropdownMenuLabel>
-                                        Filter {columnFilter.label}
-                                      </DropdownMenuLabel>
-                                      <DropdownMenuSeparator />
-                                      <DropdownMenuRadioItem value="all">
-                                        {columnFilter.allLabel ??
-                                          `All ${columnFilter.label.toLowerCase()}`}
-                                      </DropdownMenuRadioItem>
-                                      {optionsForFilter(columnFilter).map(
-                                        (option) => (
-                                          <DropdownMenuRadioItem
-                                            key={option.value}
-                                            value={option.value}
-                                          >
-                                            {option.label}
-                                          </DropdownMenuRadioItem>
-                                        ),
-                                      )}
-                                    </DropdownMenuRadioGroup>
-                                  </DropdownMenuContent>
-                                </DropdownMenu>
+                                <ColumnFilterMenu
+                                  filter={columnFilter}
+                                  options={optionsForFilter(columnFilter)}
+                                  value={renderColumn.getFilterValue()}
+                                  onSelect={(next) =>
+                                    setColumnFilterValue(
+                                      columnFilter.columnId,
+                                      next,
+                                    )
+                                  }
+                                />
                               ) : null}
                             </div>
                           ) : (

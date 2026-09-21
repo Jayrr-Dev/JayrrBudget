@@ -63,6 +63,27 @@ const filterFn_includesTag: FilterFn<any, RowData> = (
 filterFn_includesTag.autoRemove = (value) =>
   !value || value === "all" || value === "";
 
+/** Header menu: one value, or any of several selected values. */
+const filterFn_oneOf: FilterFn<any, RowData> = (row, columnId, filterValue) => {
+  const wanted = selectedOneOf(filterValue);
+  if (wanted.length === 0) return true;
+  const raw = row.getValue(columnId);
+  const cell = Array.isArray(raw)
+    ? raw.map((item) => String(item))
+    : [String(raw ?? "")];
+  return wanted.some((item) => cell.includes(item));
+};
+
+filterFn_oneOf.autoRemove = (value) => selectedOneOf(value).length === 0;
+
+function selectedOneOf(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value.map((item) => String(item)).filter((item) => item && item !== "all");
+  }
+  if (value == null || value === "" || value === "all") return [];
+  return [String(value)];
+}
+
 /** Posted-date toolbar filter: YYYY-MM months and/or YYYY-MM-DD range. */
 export type DateWindowFilter = {
   /** Selected YYYY-MM keys. Empty/absent = all months. */
@@ -139,6 +160,7 @@ export const dataTableFeatures = tableFeatures({
     fuzzy: filterFn_fuzzy,
     amountLogRange: filterFn_amountLogRange,
     includesTag: filterFn_includesTag,
+    oneOf: filterFn_oneOf,
     dateWindow: filterFn_dateWindow,
   },
   sortFns: {

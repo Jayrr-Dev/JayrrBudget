@@ -1,6 +1,7 @@
 "use client";
 
 import { VaultSecurityCard } from "@/components/layout/VaultSecurityCard";
+import { ChangePasswordCard } from "@/domains/auth/ui/ChangePasswordCard";
 import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
 import {
@@ -16,6 +17,7 @@ import { ProfileAiByokCard } from "@/domains/ai-keys/ui/ProfileAiByokCard";
 import { ProfileAiUsageCard } from "@/domains/ai-keys/ui/ProfileAiUsageCard";
 import { ProfileBillingCard } from "@/domains/billing/ui/ProfileBillingCard";
 import { ProfileAvatarCard } from "@/domains/ledger-ai/ui/ProfileAvatarCard";
+import { FullyLocalSwitch } from "@/domains/transactions/ui/FullyLocalSwitch";
 import { api } from "@convex/_generated/api";
 import { resolveUserIcon } from "@convex/lib/userIcons";
 import { useConvexAuth, useMutation, useQuery } from "convex/react";
@@ -217,6 +219,10 @@ export default function ProfilePage() {
         <div className="space-y-8">
           <ProfileAiByokCard />
           <VaultSecurityCard />
+          <ChangePasswordCard />
+          <section className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-6">
+            <FullyLocalSwitch />
+          </section>
         </div>
       ) : null}
     </div>

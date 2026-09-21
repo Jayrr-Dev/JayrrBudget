@@ -2,7 +2,9 @@ import "server-only";
 
 import { api } from "@convex/_generated/api";
 import type { ConvexHttpClient } from "convex/browser";
+import { runWithJevKey } from "@/shared/ai/jev.server";
 import { runWithModelChain, runWithOpenRouterKey } from "@/shared/ai/openRouter";
+import { resolveJevApiKey } from "@/shared/ai/resolveJev.server";
 import {
   emitAiUsage,
   runWithAiUsageSink,
@@ -74,12 +76,14 @@ export async function runMeteredOpenRouter<T>(
   fn: () => T,
 ): Promise<T> {
   const models = await client.query(api.service.getAiModels, {});
+  const jev = await resolveJevApiKey(client);
+  const run = () =>
+    runWithOpenRouterKey(loaded.apiKey, () =>
+      runWithModelChain(models.chain, fn),
+    );
   return runWithAiUsageSink(
     (event) => persistAiUsage(client, loaded.billedTo, event),
-    () =>
-      runWithOpenRouterKey(loaded.apiKey, () =>
-        runWithModelChain(models.chain, fn),
-      ),
+    () => (jev ? runWithJevKey(jev, run) : run()),
   );
 }
 

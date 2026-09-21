@@ -68,6 +68,7 @@ export async function applyVaultCategorization(input: {
     const existing = input.ledger.merchants.find(
       (row) => row.merchantId === merchantId,
     );
+    if (existing) continue;
     records.push({
       recordId: `merchant-${merchantId}`,
       kind: "note" as const,

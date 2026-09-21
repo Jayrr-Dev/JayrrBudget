@@ -2,7 +2,10 @@ import "server-only";
 
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 
-const AAD_PREFIX = "openrouter:";
+const OPENROUTER_AAD = "openrouter:";
+const JEV_AAD = "jev:";
+
+export type ByokProvider = "openrouter" | "jev";
 
 function wrapKeyBytes(): Buffer {
   const raw = process.env.AI_BYOK_WRAP_KEY?.trim();
@@ -44,10 +47,26 @@ export function openRouterKeyLast4(apiKey: string) {
   return compact.slice(-4);
 }
 
-export function encryptOpenRouterKey(apiKey: string, userId: string) {
+function aadFor(provider: ByokProvider, userId: string) {
+  const prefix = provider === "jev" ? JEV_AAD : OPENROUTER_AAD;
+  return Buffer.from(`${prefix}${userId}`, "utf8");
+}
+
+export function isJevKeyShape(value: string) {
+  const trimmed = value.trim();
+  if (trimmed.length < 20 || trimmed.length > 256) return false;
+  if (trimmed.startsWith("sk-or-")) return false;
+  return /^[A-Za-z0-9_\-./+=]+$/.test(trimmed);
+}
+
+export function encryptByokKey(
+  provider: ByokProvider,
+  apiKey: string,
+  userId: string,
+) {
   const iv = randomBytes(12);
   const cipher = createCipheriv("aes-256-gcm", wrapKeyBytes(), iv);
-  cipher.setAAD(Buffer.from(`${AAD_PREFIX}${userId}`, "utf8"));
+  cipher.setAAD(aadFor(provider, userId));
   const encrypted = Buffer.concat([
     cipher.update(apiKey.trim(), "utf8"),
     cipher.final(),
@@ -59,11 +78,18 @@ export function encryptOpenRouterKey(apiKey: string, userId: string) {
   };
 }
 
-export function decryptOpenRouterKey(input: {
-  userId: string;
-  ciphertext: string;
-  iv: string;
-}) {
+export function encryptOpenRouterKey(apiKey: string, userId: string) {
+  return encryptByokKey("openrouter", apiKey, userId);
+}
+
+export function decryptByokKey(
+  provider: ByokProvider,
+  input: {
+    userId: string;
+    ciphertext: string;
+    iv: string;
+  },
+) {
   const packed = Buffer.from(input.ciphertext, "base64");
   if (packed.length < 17) {
     throw new Error("Invalid encrypted key");
@@ -75,9 +101,17 @@ export function decryptOpenRouterKey(input: {
     wrapKeyBytes(),
     Buffer.from(input.iv, "base64"),
   );
-  decipher.setAAD(Buffer.from(`${AAD_PREFIX}${input.userId}`, "utf8"));
+  decipher.setAAD(aadFor(provider, input.userId));
   decipher.setAuthTag(tag);
   return Buffer.concat([decipher.update(encrypted), decipher.final()]).toString(
     "utf8",
   );
+}
+
+export function decryptOpenRouterKey(input: {
+  userId: string;
+  ciphertext: string;
+  iv: string;
+}) {
+  return decryptByokKey("openrouter", input);
 }

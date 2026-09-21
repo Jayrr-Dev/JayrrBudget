@@ -2,7 +2,13 @@ import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { requireUser } from "./lib/auth";
 
-const providerValidator = v.literal("openrouter");
+const providerValidator = v.union(v.literal("openrouter"), v.literal("jev"));
+
+function providerOf(
+  provider: "openrouter" | "jev" | undefined,
+): "openrouter" | "jev" {
+  return provider ?? "openrouter";
+}
 
 const statusValidator = v.object({
   configured: v.boolean(),
@@ -17,14 +23,15 @@ const encryptedValidator = v.object({
 
 /** Masked status for Profile. Never returns ciphertext. */
 export const status = query({
-  args: {},
+  args: { provider: v.optional(providerValidator) },
   returns: statusValidator,
-  handler: async (ctx) => {
+  handler: async (ctx, args) => {
     const user = await requireUser(ctx);
+    const provider = providerOf(args.provider);
     const row = await ctx.db
       .query("userAiKeys")
       .withIndex("by_userId_provider", (q) =>
-        q.eq("userId", user._id).eq("provider", "openrouter"),
+        q.eq("userId", user._id).eq("provider", provider),
       )
       .unique();
     if (!row) {
@@ -36,14 +43,15 @@ export const status = query({
 
 /** Ciphertext for the Next.js AI routes. Plaintext is never stored. */
 export const getEncrypted = query({
-  args: {},
+  args: { provider: v.optional(providerValidator) },
   returns: v.union(encryptedValidator, v.null()),
-  handler: async (ctx) => {
+  handler: async (ctx, args) => {
     const user = await requireUser(ctx);
+    const provider = providerOf(args.provider);
     const row = await ctx.db
       .query("userAiKeys")
       .withIndex("by_userId_provider", (q) =>
-        q.eq("userId", user._id).eq("provider", "openrouter"),
+        q.eq("userId", user._id).eq("provider", provider),
       )
       .unique();
     if (!row) return null;

@@ -23,7 +23,7 @@ import {
 type ComboboxLayout = "list" | "table";
 
 const TABLE_GRID_COLS =
-  "grid-cols-[10rem_minmax(0,1fr)_7.25rem] [&>*]:min-w-0 [&>*]:overflow-hidden";
+  "grid-cols-[7.5rem_minmax(16rem,1fr)_7rem] [&>*]:min-w-0 [&>*]:overflow-hidden";
 
 const ComboboxLayoutContext = React.createContext<{
   layout: ComboboxLayout;
@@ -148,11 +148,20 @@ function ComboboxContent({
             data-slot="combobox-content"
             data-chips={!!anchor}
             data-layout={table ? "table" : "list"}
-            className={cn(
-              "group/combobox-content pointer-events-auto relative flex max-h-[min(18rem,var(--available-height,18rem))] w-(--anchor-width) max-w-(--available-width) min-w-[calc(var(--anchor-width)+--spacing(7))] origin-(--transform-origin) flex-col overflow-hidden rounded-lg bg-popover text-popover-foreground shadow-md ring-1 ring-foreground/10 duration-100 data-[chips=true]:min-w-(--anchor-width) data-[side=bottom]:slide-in-from-top-2 data-[side=inline-end]:slide-in-from-left-2 data-[side=inline-start]:slide-in-from-right-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 *:data-[slot=input-group]:m-1 *:data-[slot=input-group]:mb-0 *:data-[slot=input-group]:h-8 *:data-[slot=input-group]:border-input/30 *:data-[slot=input-group]:bg-input/30 *:data-[slot=input-group]:shadow-none data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
+            style={
               table
-                ? "w-[40rem] min-w-[40rem] max-w-[min(40rem,calc(100vw-1.5rem))]"
-                : null,
+                ? {
+                    width: "min(52rem, calc(100vw - 2rem))",
+                    minWidth: "min(52rem, calc(100vw - 2rem))",
+                    maxWidth: "min(52rem, calc(100vw - 2rem))",
+                  }
+                : undefined
+            }
+            className={cn(
+              "group/combobox-content pointer-events-auto relative flex max-h-[min(24rem,var(--available-height,24rem))] origin-(--transform-origin) flex-col overflow-hidden rounded-lg bg-popover text-popover-foreground shadow-md ring-1 ring-foreground/10 duration-100 data-[side=bottom]:slide-in-from-top-2 data-[side=inline-end]:slide-in-from-left-2 data-[side=inline-start]:slide-in-from-right-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 *:data-[slot=input-group]:m-1 *:data-[slot=input-group]:mb-0 *:data-[slot=input-group]:h-8 *:data-[slot=input-group]:border-input/30 *:data-[slot=input-group]:bg-input/30 *:data-[slot=input-group]:shadow-none data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
+              table
+                ? "w-[min(52rem,calc(100vw-2rem))] max-w-[min(52rem,calc(100vw-2rem))]"
+                : "w-(--anchor-width) max-w-(--available-width) min-w-[calc(var(--anchor-width)+--spacing(7))] data-[chips=true]:min-w-(--anchor-width)",
               className,
             )}
             {...props}
@@ -255,7 +264,7 @@ function ComboboxItem({
         "relative flex w-full cursor-pointer items-center gap-2 rounded-md py-1 pr-8 pl-1.5 text-sm outline-hidden select-none data-highlighted:bg-primary-subtle data-highlighted:text-primary-subtle-foreground not-data-[variant=destructive]:data-highlighted:**:text-primary-subtle-foreground data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
         layout === "table"
           ? cn(
-              "grid items-center gap-4 rounded-none border-b border-border/70 py-1.5 pr-8 pl-2 last:border-b-0",
+              "grid items-start gap-4 rounded-none border-b border-border/70 py-2 pr-8 pl-2 last:border-b-0",
               TABLE_GRID_COLS,
             )
           : null,

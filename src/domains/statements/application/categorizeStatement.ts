@@ -128,7 +128,7 @@ export async function labelDescriptionGroups(
     }
     if (!shouldUseJevCategorization()) {
       throw new Error(
-        "Jev is not configured. Set JEV_API_KEY to classify transactions.",
+        "Jev is not configured. Add a Jev key on Profile, or set JEV_API_KEY.",
       );
     }
     const aiRules = await client.query(api.aiRules.get, {});

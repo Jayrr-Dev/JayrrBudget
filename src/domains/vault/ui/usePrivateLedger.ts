@@ -6,14 +6,18 @@ import {
   type VaultClient,
 } from "@/domains/vault/application/ensureVaultFromPasscode";
 import {
+  forgetPrivateLedgerMemo,
   loadPrivateLedger,
   type VaultListClient,
 } from "@/domains/vault/application/loadPrivateLedger";
+import { subscribeFullyLocal } from "@/shared/offline/fullyLocalMode";
 import { mergePlaceholderAccounts } from "@/domains/vault/application/mergePlaceholderAccounts";
 import {
+  clearEncryptedClassification,
   rewriteEncryptedTaxonomyLabels,
   vaultWriteReady,
 } from "@/domains/vault/application/saveEncryptedLedger";
+import { toast } from "sonner";
 import type { PrivateLedger } from "@/domains/vault/domain/privateLedger";
 import { api } from "@convex/_generated/api";
 import { useConvex, useConvexAuth, useQuery } from "convex/react";
@@ -29,6 +33,8 @@ const EMPTY: PrivateLedger = {
   statementLogs: [],
   loanDocuments: [],
 };
+
+const CLASSIFICATION_CLEARED = "jayrr-classification-cleared";
 
 const ledgerListeners = new Set<() => void>();
 let ledgerEpoch = 0;
@@ -69,6 +75,7 @@ export function usePrivateLedger() {
   const vaultId = vault?.vaultId ?? null;
   const hasLedger = useRef(false);
   const rewritingLabels = useRef(false);
+  const clearingLabels = useRef(false);
   const mergingPlaceholders = useRef(false);
 
   useEffect(() => {
@@ -83,6 +90,13 @@ export function usePrivateLedger() {
     setUnlocked(Boolean(getVaultMasterKey()));
     return subscribeVaultSession(() => {
       setUnlocked(Boolean(getVaultMasterKey()));
+      bumpLedgerEpoch();
+    });
+  }, []);
+
+  useEffect(() => {
+    return subscribeFullyLocal(() => {
+      forgetPrivateLedgerMemo();
       bumpLedgerEpoch();
     });
   }, []);
@@ -137,7 +151,36 @@ export function usePrivateLedger() {
             client,
           });
           if (write) {
-            if (!rewritingLabels.current) {
+            const shouldClear =
+              me.role === "admin" &&
+              !clearingLabels.current &&
+              localStorage.getItem(CLASSIFICATION_CLEARED) !== "1" &&
+              next.transactions.some(
+                (tx) => tx.categoryName?.trim() || tx.sectionName?.trim(),
+              );
+            if (shouldClear) {
+              clearingLabels.current = true;
+              void clearEncryptedClassification(write, next.transactions)
+                .then((count) => {
+                  localStorage.setItem(CLASSIFICATION_CLEARED, "1");
+                  toast.success(
+                    count
+                      ? `Cleared labels on ${count} lines.`
+                      : "Those lines had no labels left.",
+                  );
+                })
+                .catch((error: unknown) => {
+                  const message =
+                    error instanceof Error
+                      ? error.message
+                      : "Could not clear labels.";
+                  toast.error(message);
+                })
+                .finally(() => {
+                  clearingLabels.current = false;
+                });
+            }
+            if (!clearingLabels.current && !rewritingLabels.current) {
               rewritingLabels.current = true;
               void rewriteEncryptedTaxonomyLabels(write, next.transactions)
                 .catch(() => undefined)

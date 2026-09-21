@@ -175,7 +175,7 @@ export function TxnDescriptionLookupCombobox({
       </ComboboxChips>
       <ComboboxContent
         anchor={anchor}
-        className="z-60 w-[min(40rem,calc(100vw-1.5rem))]"
+        className="z-60"
         layout="table"
         columns={["Date", "Description", "Amount"]}
         sort={{ column: sortColumn, direction: sortDirection }}
@@ -200,7 +200,7 @@ export function TxnDescriptionLookupCombobox({
               <span className="overflow-hidden whitespace-nowrap font-mono text-sm tabular-nums">
                 {item.date}
               </span>
-              <span className="min-w-0 truncate text-left">
+              <span className="min-w-0 text-left text-sm leading-snug wrap-break-word whitespace-normal">
                 {item.description}
               </span>
               <span className="whitespace-nowrap text-right font-mono text-xs tabular-nums">

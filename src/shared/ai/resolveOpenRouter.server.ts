@@ -14,7 +14,9 @@ export type ResolvedOpenRouter = {
 export async function resolveOpenRouterApiKey(
   client: ConvexHttpClient,
 ): Promise<ResolvedOpenRouter | undefined> {
-  const material = await client.query(api.aiByok.getEncrypted, {});
+  const material = await client.query(api.aiByok.getEncrypted, {
+    provider: "openrouter",
+  });
   if (material) {
     try {
       return {

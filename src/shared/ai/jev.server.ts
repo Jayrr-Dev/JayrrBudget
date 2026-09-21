@@ -1,6 +1,7 @@
 import "server-only";
 
-import { emitAiUsage } from "@/shared/ai/aiUsageSink";
+import { emitAiUsage, type AiBilledTo } from "@/shared/ai/aiUsageSink";
+import { AsyncLocalStorage } from "node:async_hooks";
 
 /**
  * TypeSafe Jev (System One) client. Jev does not write text: it answers typed
@@ -63,8 +64,25 @@ type JevResponseBody = {
   usage?: { input_tokens?: number; output_tokens?: number };
 };
 
+type JevKeyContext = { apiKey: string; billedTo: AiBilledTo };
+
+const requestJevKey = new AsyncLocalStorage<JevKeyContext>();
+
+/** User key for this request. Falls through to JEV_API_KEY when unset. */
+export function runWithJevKey<T>(context: JevKeyContext, fn: () => T): T {
+  return requestJevKey.run(context, fn);
+}
+
+function currentJevAuth(): JevKeyContext | null {
+  const stored = requestJevKey.getStore();
+  if (stored?.apiKey) return stored;
+  const apiKey = process.env.JEV_API_KEY?.trim();
+  if (!apiKey) return null;
+  return { apiKey, billedTo: "platform" };
+}
+
 export function isJevConfigured() {
-  return Boolean(process.env.JEV_API_KEY?.trim());
+  return currentJevAuth() != null;
 }
 
 function assertChoiceSizes(questions: Record<string, JevQuestion>) {
@@ -87,8 +105,8 @@ export async function askJev<Q extends Record<string, JevQuestion>>(params: {
   logLabel: string;
   timeoutMs?: number;
 }): Promise<{ answers: JevAnswers<Q>; modelId: string; ms: number }> {
-  const apiKey = process.env.JEV_API_KEY?.trim();
-  if (!apiKey) throw new Error("JEV_API_KEY is not set");
+  const auth = currentJevAuth();
+  if (!auth) throw new Error("JEV_API_KEY is not set");
   assertChoiceSizes(params.questions);
 
   const started = Date.now();
@@ -103,7 +121,7 @@ export async function askJev<Q extends Record<string, JevQuestion>>(params: {
       response = await fetch(JEV_ENDPOINT, {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${apiKey}`,
+          Authorization: `Bearer ${auth.apiKey}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
@@ -151,7 +169,7 @@ export async function askJev<Q extends Record<string, JevQuestion>>(params: {
   await emitAiUsage({
     source: params.logLabel,
     modelId,
-    billedTo: "platform",
+    billedTo: auth.billedTo,
     ms,
     usage: {
       inputTokens,

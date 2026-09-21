@@ -29,7 +29,7 @@ import {
 import { analysisQueryKeys } from "@/domains/analysis/queries/query-keys";
 import { queryKeys } from "@/domains/dashboard/queries/query-keys";
 import { dbExplorerQueryKeys } from "@/domains/db-explorer/queries/query-keys";
-import type { TransactionTaxonomy } from "@/domains/transactions/application/getTransactionTaxonomy";
+import { builtinTransactionTaxonomy } from "@/domains/transactions/domain/builtinTaxonomy";
 import type { RenameDescriptionTaxonomy } from "@/domains/transactions/application/renameTransactionDescriptions";
 import {
   recategorizeEncryptedByMerchant,
@@ -42,17 +42,8 @@ import { Info } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
-type TaxonomyResponse =
-  | { ok: true; data: TransactionTaxonomy }
-  | { ok?: false; error: string };
-
-async function fetchTaxonomy() {
-  const response = await fetch("/api/transactions/taxonomy");
-  const data = (await response.json()) as TaxonomyResponse;
-  if (!response.ok || !("data" in data)) {
-    throw new Error("error" in data ? data.error : "Failed to load taxonomy");
-  }
-  return data.data;
+function fetchTaxonomy() {
+  return builtinTransactionTaxonomy();
 }
 
 function normName(value: string | null | undefined) {

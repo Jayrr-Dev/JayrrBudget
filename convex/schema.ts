@@ -652,7 +652,7 @@ export default defineSchema({
    */
   userAiKeys: defineTable({
     userId: v.id("users"),
-    provider: v.literal("openrouter"),
+    provider: v.union(v.literal("openrouter"), v.literal("jev")),
     ciphertext: v.string(),
     iv: v.string(),
     last4: v.string(),
