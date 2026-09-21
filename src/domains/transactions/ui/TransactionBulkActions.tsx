@@ -58,9 +58,16 @@ export function TransactionBulkActions({
       }
 
       let summary = emptySummary();
+      let ledger = privateLedger.ledger;
       const chunkSize = 50;
+      const toastId = "txn-bulk-rerun";
+      toast.loading(`Re-running 0 of ${visible.length}`, { id: toastId });
       for (let i = 0; i < visible.length; i += chunkSize) {
         const chunk = visible.slice(i, i + chunkSize);
+        const done = Math.min(i + chunk.length, visible.length);
+        toast.loading(`Re-running ${i + 1}–${done} of ${visible.length}`, {
+          id: toastId,
+        });
         const response = await fetch("/api/statements/categorize-vault", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -77,21 +84,21 @@ export function TransactionBulkActions({
         if (!response.ok) {
           throw new Error(result.error ?? "Recategorize failed");
         }
-        await applyVaultCategorization({
+        ledger = await applyVaultCategorization({
           client: client as unknown as MutationClient,
           userId: privateLedger.userId,
           vaultId: privateLedger.vaultId,
           keyId: privateLedger.keyId,
           masterKey,
-          ledger: privateLedger.ledger,
+          ledger,
           labeled: result.labeled,
         });
+        privateLedger.applyLedger(ledger);
         summary = addSummaries(
           summary,
           result.summary as CategorizationSummary,
         );
       }
-      privateLedger.reload();
       return summary;
     },
     onSuccess: async (result) => {

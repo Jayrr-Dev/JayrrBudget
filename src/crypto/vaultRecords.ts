@@ -60,10 +60,12 @@ export async function savePrivateRecords(
   if (isFullyLocal()) {
     return saveRecordsLocally(input.userId, input.vaultId, encrypted);
   }
-  return client.mutation(api.vaults.saveRecords, {
+  const saved = (await client.mutation(api.vaults.saveRecords, {
     vaultId: input.vaultId,
     records: encrypted,
-  }) as Promise<SavePrivateRecordsResult>;
+  })) as SavePrivateRecordsResult;
+  forgetPrivateLedgerMemo();
+  return saved;
 }
 
 type EncryptedSaveRow = {

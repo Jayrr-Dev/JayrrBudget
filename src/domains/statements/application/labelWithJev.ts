@@ -174,6 +174,14 @@ function externalLeaf(paths: TaxonomyPath[], subcategory: string) {
   );
 }
 
+function isPlainInternetTransfer(description: string) {
+  const text = description.trim();
+  if (!/^internet\s+transfer\b/i.test(text)) return false;
+  if (isGlobalTransfer(text)) return false;
+  if (hasPersonName(text)) return false;
+  return true;
+}
+
 function accountPaymentPath(paths: TaxonomyPath[]) {
   return (
     paths.find(
@@ -531,6 +539,11 @@ function profileFromAnswers(params: {
       txnCode = "payment";
     }
   }
+  if (isPlainInternetTransfer(description)) {
+    const paymentPath = accountPaymentPath(params.paths);
+    if (paymentPath) resolvedPath = paymentPath;
+    txnCode = "payment";
+  }
   if (transferLike) {
     if (params.types.includes("Transfer")) transactionType = "Transfer";
     if (normalizedLabel(spread) === "income") spread = "Needs";
@@ -648,6 +661,31 @@ async function labelBatch(
   console.info(
     `[${LOG_LABEL}] batch ${slice.length} lines in ${ms}ms`,
   );
+}
+
+/** Plain internet transfers are payments. Jev is not asked. */
+export function presetTransferProfile(params: {
+  description: string;
+  paths: TaxonomyPath[];
+  types: string[];
+}): CategoryProfile | null {
+  if (!isPlainInternetTransfer(params.description)) return null;
+  const path = accountPaymentPath(params.paths);
+  if (!path) return null;
+  const transactionType = params.types.includes("Transfer")
+    ? "Transfer"
+    : (params.types[0] ?? "Transfer");
+  return {
+    merchant:
+      cleanMerchantDescriptor(params.description) ??
+      params.description.trim().slice(0, 80),
+    pathKey: path.key,
+    spread: "Needs",
+    transactionType,
+    txnCode: "payment",
+    channel: "other",
+    tags: [],
+  };
 }
 
 /** Classification always uses Jev when the key is set. */

@@ -21,6 +21,7 @@ import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuLabel,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
@@ -498,7 +499,9 @@ function ColumnFilterMenu({
             : "max-h-72 min-w-44"
         }
       >
-        <div className={filter.searchable ? "shrink-0 p-1 pb-0" : undefined}>
+        <DropdownMenuGroup
+          className={filter.searchable ? "shrink-0 p-1 pb-0" : undefined}
+        >
           <DropdownMenuLabel>Filter {filter.label}</DropdownMenuLabel>
           {filter.searchable ? (
             <div
@@ -522,7 +525,7 @@ function ColumnFilterMenu({
               </div>
             </div>
           ) : null}
-        </div>
+        </DropdownMenuGroup>
         <DropdownMenuSeparator />
         {filter.multi ? (
           <div

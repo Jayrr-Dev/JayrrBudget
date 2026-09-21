@@ -84,7 +84,7 @@ export async function applyVaultCategorization(input: {
       expectedRevision: existing?.revision ?? null,
     });
   }
-  if (!records.length) return;
+  if (!records.length) return input.ledger;
   await savePrivateRecords(input.client, {
     userId: input.userId,
     vaultId: input.vaultId,
@@ -92,4 +92,26 @@ export async function applyVaultCategorization(input: {
     masterKey: input.masterKey,
     records,
   });
+  const byId = new Map(
+    input.labeled.map((label) => [label.transactionId, label]),
+  );
+  return {
+    ...input.ledger,
+    transactions: input.ledger.transactions.map((tx) => {
+      const label = byId.get(tx.recordId);
+      if (!label) return tx;
+      return {
+        ...tx,
+        merchantName: label.profile.merchant,
+        merchantClean: label.profile.merchant,
+        sectionName: label.section,
+        categoryName: label.category,
+        subcategoryName: label.subcategory,
+        spreadName: label.profile.spread,
+        transactionTypeName: label.profile.transactionType,
+        txnCode: label.profile.txnCode,
+        channel: label.profile.channel,
+      };
+    }),
+  };
 }

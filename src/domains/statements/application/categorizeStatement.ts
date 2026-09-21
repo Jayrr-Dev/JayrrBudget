@@ -8,7 +8,11 @@ import { cleanMerchantDescriptor } from "@convex/lib/cleanMerchantDescriptor";
 import type { ConvexHttpClient } from "convex/browser";
 import type { CategorizationSummary } from "../domain/importResult";
 import { normalizeUserAiRules } from "../domain/userAiRules";
-import { labelGroupsWithJev, shouldUseJevCategorization } from "./labelWithJev";
+import {
+  labelGroupsWithJev,
+  presetTransferProfile,
+  shouldUseJevCategorization,
+} from "./labelWithJev";
 
 type Row = {
   transactionId: string;
@@ -116,6 +120,25 @@ export async function labelDescriptionGroups(
         }
         remember(cached, "cached");
       }
+    }
+    if (unknown.length) {
+      const stillUnknown: string[] = [];
+      const preset: { key: string; profile: CategoryProfile }[] = [];
+      for (const key of unknown) {
+        const row = groups.get(key)?.[0];
+        const profile = row
+          ? presetTransferProfile({
+              description: row.description,
+              paths,
+              types: vocabulary.types,
+            })
+          : null;
+        if (profile) preset.push({ key, profile });
+        else stillUnknown.push(key);
+      }
+      remember(preset, "ai");
+      unknown.length = 0;
+      unknown.push(...stillUnknown);
     }
     if (!unknown.length) {
       return { summary: { ...summary, ok: summary.pending === 0 }, labeled };
