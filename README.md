@@ -34,4 +34,4 @@ npm run dev
 
 ## License
 
-[MIT](LICENSE). Copy the env names from `.env.example`. Keep real keys in `.env.local` and on the Convex dashboard.
+[Apache-2.0](LICENSE). Copy the env names from `.env.example`. Keep real keys in `.env.local` and on the Convex dashboard.
