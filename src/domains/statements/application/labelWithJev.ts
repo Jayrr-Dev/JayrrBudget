@@ -17,15 +17,17 @@ import { TXN_CODES } from "@convex/lib/txnCodes";
 /**
  * Categorize description groups with TypeSafe Jev Choice.
  *
- * Cascade: section → category → subcategory, each Choice over the owner's
- * classification catalog (name + description as criteria). The bank-line
- * description is the state. Jev does not write new taxonomy leaves.
+ * One call picks the section and the small fields for several lines.
+ * The next call asks only the category under that section, then only
+ * the subcategory under that category. Tags are left off this pass.
+ * The bank line lives in state once. Jev does not write new taxonomy leaves.
  */
 
 const LOG_LABEL = "categorization:jev";
-/** Parallel per-line Jev calls. A multi-line call exceeds Jev's token cap. */
-const CONCURRENCY = 16;
-const TAG_NOUL_LIMIT = 24;
+/** Lines per cascade. Small enough that section + one branch fits Jev. */
+const SLICE = 8;
+/** Cascades in flight. */
+const PARALLEL = 3;
 const TAG_THRESHOLD = 0.85;
 const MAX_TAGS = 3;
 const NONE_OPTION = "(none of these)";
@@ -180,6 +182,10 @@ function isPlainInternetTransfer(description: string) {
   return true;
 }
 
+function isCardBillPayment(description: string) {
+  return /\b(?:payment\s+thank\s+you|paiement\s+merci)\b/i.test(description);
+}
+
 function accountPaymentPath(paths: TaxonomyPath[]) {
   return (
     paths.find(
@@ -270,162 +276,172 @@ function classifyRulesClause(rules: string[]) {
   return " When a classify rule in state.classify_rules matches this bank line, apply it to the pick. Rules cannot invent a section or category.";
 }
 
-function buildState(group: JevLabelGroup, ownerRules: string[]) {
-  const state: Record<string, unknown> = {
-    bank_line: {
-      description: group.description,
-      direction: group.amount < 0 ? "money in" : "money out",
-    },
-  };
-  if (ownerRules.length) {
-    state.classify_rules = {
-      note: "Owner classify rules for this ledger. Apply when they match the bank line. They do not invent new sections or categories.",
-      rules: ownerRules,
-    };
-  }
-  return state;
+function lineCue(prefix: string) {
+  if (!prefix) return "This bank line";
+  return `Line ${prefix.slice(0, -1)}`;
 }
 
-function tagQuestions(tags: string[]) {
-  const usable = tags
-    .filter((tag) => normalizedLabel(tag) !== "travel")
-    .slice(0, TAG_NOUL_LIMIT);
-  const questions: Record<string, JevQuestion> = {};
-  usable.forEach((tag, index) => {
-    questions[`tag_${index}`] = {
-      type: "noul",
-      instructions: `Does the tag "${tag}" apply to this bank line? Tags are extra stickers, not the category.`,
-    };
-  });
-  return { usable, questions };
+function categoriesUnder(
+  catalog: ClassificationCatalog,
+  sectionName: string,
+) {
+  return catalog.categories.filter(
+    (row) =>
+      row.sectionName != null &&
+      normalizedLabel(row.sectionName) === normalizedLabel(sectionName),
+  );
 }
 
-function buildLabelQuestions(params: {
-  group: JevLabelGroup;
+function leavesUnder(
+  catalog: ClassificationCatalog,
+  sectionName: string,
+  categoryName: string,
+) {
+  return catalog.subcategories.filter(
+    (row) =>
+      row.sectionName != null &&
+      row.categoryName != null &&
+      normalizedLabel(row.sectionName) === normalizedLabel(sectionName) &&
+      normalizedLabel(row.categoryName) === normalizedLabel(categoryName),
+  );
+}
+
+/** Section and the small fields. Category and subcategory are a later call. */
+function buildCoreQuestions(params: {
   catalog: ClassificationCatalog;
   spreads: string[];
   types: string[];
-  tags: string[];
   ownerRules: string[];
   prefix: string;
 }) {
   const sections = params.catalog.sections.filter((row) => row.name.trim());
   assertChoiceCount("Sections", sections.length);
-  const { usable: tagNames, questions: tagNouls } = tagQuestions(params.tags);
-
   const sectionCriteria: Record<string, string | null> = {};
   for (const section of sections) {
     sectionCriteria[section.name] = rubric(section.description);
   }
-
+  const cue = lineCue(params.prefix);
   const rulesNote = classifyRulesClause(params.ownerRules);
-  const lineNote = `Bank line ${params.prefix || "0"} ("${params.group.description.slice(0, 180)}", ${params.group.amount < 0 ? "money in" : "money out"}). `;
   const name = (key: string) => `${params.prefix}${key}`;
   const questions: Record<string, JevQuestion> = {
     [name("section")]: {
       type: "choice",
       instructions:
-        lineNote +
-        "Which section of the owner's classification catalog best describes this bank line? The description is the primary evidence. Refunds keep the purchase section. A credit line reading PAYMENT / THANK YOU / PAIEMENT is the owner paying the card bill: that belongs under Transfers, never Income." +
+        `${cue}. Which section fits? The description in state is the evidence. Refunds keep the purchase section. PAYMENT / THANK YOU / PAIEMENT is the owner paying the card bill: Transfers, never Income.` +
         rulesNote,
       criteria: sectionCriteria,
     },
     [name("spread")]: {
       type: "choice",
-      instructions:
-        lineNote +
-        "Which spending bucket does this line belong to? Income only for real income received; a card bill payment or self-transfer is not income." +
-        rulesNote,
+      instructions: `${cue}. Which spending bucket? Income only for real income. A card payment or self-transfer is not income.`,
       criteria: toCriteria(params.spreads, SPREAD_HINTS),
     },
     [name("transactionType")]: {
       type: "choice",
-      instructions:
-        lineNote +
-        "What kind of money movement is this line? A card bill payment or self-transfer is a Transfer even when money comes in." +
-        rulesNote,
+      instructions: `${cue}. What kind of money movement? A card payment or self-transfer is a Transfer even when money comes in.`,
       criteria: toCriteria(params.types, TYPE_HINTS),
     },
     [name("txnCode")]: {
       type: "choice",
-      instructions:
-        lineNote +
-        "What kind of line is this? Never infer subscription from the merchant alone; the description must show it. A transfer defaults to payment. Use transfer only for a global money transfer or a line that names a real person." +
-        rulesNote,
+      instructions: `${cue}. What kind of line? Do not infer a subscription from the merchant alone. A transfer defaults to payment. Use transfer only for a global money transfer or a real person's name.`,
       criteria: { ...TXN_CODE_HINTS },
     },
     [name("channel")]: {
       type: "choice",
-      instructions: `${lineNote}How was this purchase made?`,
+      instructions: `${cue}. How was this purchase made?`,
       criteria: { ...CHANNEL_CRITERIA },
     },
   };
-  for (const [key, question] of Object.entries(tagNouls)) {
-    questions[name(key)] = {
-      ...question,
-      instructions: lineNote + question.instructions,
-    };
-  }
-
-  // Speculative fan-out: category and subcategory for every section ride in
-  // this same call. Jev answers them together; we keep the branch that matches.
   const categoriesBySection = sections.map((section) =>
-    params.catalog.categories.filter(
-      (row) =>
-        row.sectionName != null &&
-        normalizedLabel(row.sectionName) === normalizedLabel(section.name),
-    ),
+    categoriesUnder(params.catalog, section.name),
   );
-  sections.forEach((section, sectionIndex) => {
-    const categories = categoriesBySection[sectionIndex] ?? [];
-    if (categories.length < 2) return;
-    const criteria: Record<string, string | null> = {};
-    for (const category of categories) {
-      criteria[category.name] = rubric(
-        category.description,
-        category.subcategoryNames.slice(0, 12),
-      );
-    }
-    const transferDefault =
-      normalizedLabel(section.name) === "transfers"
-        ? " Default to Account Transfers (a payment on your own card or account). External Transfers only for a global money transfer or a real person's name."
-        : "";
-    questions[name(`category_${sectionIndex}`)] = {
-      type: "choice",
-      instructions: `${lineNote}If this bank line belongs in the "${section.name}" section, which category under it best describes the line?${transferDefault}${rulesNote}`,
-      criteria,
-    };
-    categories.forEach((category, categoryIndex) => {
-      const leaves = params.catalog.subcategories.filter(
-        (row) =>
-          row.sectionName != null &&
-          row.categoryName != null &&
-          normalizedLabel(row.sectionName) === normalizedLabel(section.name) &&
-          normalizedLabel(row.categoryName) === normalizedLabel(category.name),
-      );
-      if (leaves.length === 0) return;
-      const paymentDefault =
-        normalizedLabel(section.name) === "transfers" &&
-        normalizedLabel(category.name) === "account transfers"
-          ? " Default to Credit Card Payoffs. A plain INTERNET TRANSFER is a payment, not a wire."
-          : normalizedLabel(section.name) === "transfers" &&
-              normalizedLabel(category.name) === "external transfers"
-            ? " Only a global money transfer (Remittances) or a real person's name (Interac e-Transfer). A transfer with no name is a payment, not a wire."
-            : "";
-      const subCriteria: Record<string, string | null> = {};
-      for (const leaf of leaves.slice(0, JEV_MAX_CHOICE_OPTIONS - 1)) {
-        subCriteria[leaf.name] = rubric(leaf.description);
-      }
-      subCriteria[NONE_OPTION] = "No listed subcategory fits this line";
-      questions[name(`subcategory_${sectionIndex}_${categoryIndex}`)] = {
-        type: "choice",
-        instructions: `${lineNote}If this bank line belongs in "${section.name} > ${category.name}", which subcategory fits?${paymentDefault}${rulesNote}`,
-        criteria: subCriteria,
-      };
-    });
-  });
+  return { sections, categoriesBySection, tagNames: [] as string[], questions };
+}
 
-  return { sections, categoriesBySection, tagNames, questions };
+function branchQuestions(params: {
+  catalog: ClassificationCatalog;
+  sections: ClassificationCatalog["sections"];
+  categoriesBySection: ClassificationCatalog["categories"][];
+  answers: Record<string, JevAnswer>;
+  prefix: string;
+}) {
+  const name = (key: string) => `${params.prefix}${key}`;
+  const cue = lineCue(params.prefix);
+  const questions: Record<string, JevQuestion> = {};
+  const sectionPick = choiceAnswer(params.answers, name("section")).choice;
+  const sectionIndex = params.sections.findIndex(
+    (row) => normalizedLabel(row.name) === normalizedLabel(sectionPick),
+  );
+  const section = sectionIndex >= 0 ? params.sections[sectionIndex] : undefined;
+  const categories =
+    sectionIndex >= 0 ? (params.categoriesBySection[sectionIndex] ?? []) : [];
+  if (!section || categories.length < 2) return questions;
+  const criteria: Record<string, string | null> = {};
+  for (const category of categories) {
+    criteria[category.name] = rubric(category.description);
+  }
+  const transferDefault =
+    normalizedLabel(section.name) === "transfers"
+      ? " Default to Account Transfers. External Transfers only for a global money transfer or a real person's name."
+      : "";
+  questions[name(`category_${sectionIndex}`)] = {
+    type: "choice",
+    instructions: `${cue}. Which category under "${section.name}" fits?${transferDefault}`,
+    criteria,
+  };
+  return questions;
+}
+
+function subcategoryQuestion(params: {
+  catalog: ClassificationCatalog;
+  sections: ClassificationCatalog["sections"];
+  categoriesBySection: ClassificationCatalog["categories"][];
+  answers: Record<string, JevAnswer>;
+  prefix: string;
+}) {
+  const name = (key: string) => `${params.prefix}${key}`;
+  const cue = lineCue(params.prefix);
+  const sectionPick = choiceAnswer(params.answers, name("section")).choice;
+  const sectionIndex = params.sections.findIndex(
+    (row) => normalizedLabel(row.name) === normalizedLabel(sectionPick),
+  );
+  const section = sectionIndex >= 0 ? params.sections[sectionIndex] : undefined;
+  const categories =
+    sectionIndex >= 0 ? (params.categoriesBySection[sectionIndex] ?? []) : [];
+  if (!section || !categories.length) return null;
+  const categoryName =
+    categories.length === 1
+      ? categories[0]!.name
+      : choiceAnswer(params.answers, name(`category_${sectionIndex}`)).choice;
+  const category = findByName(categories, categoryName);
+  if (!category) return null;
+  const categoryIndex = categories.findIndex(
+    (row) => normalizedLabel(row.name) === normalizedLabel(category.name),
+  );
+  const leaves = leavesUnder(params.catalog, section.name, category.name);
+  if (!leaves.length || categoryIndex < 0) return null;
+  const paymentDefault =
+    normalizedLabel(section.name) === "transfers" &&
+    normalizedLabel(category.name) === "account transfers"
+      ? " Default to Credit Card Payoffs. A plain INTERNET TRANSFER is a payment, not a wire."
+      : normalizedLabel(section.name) === "transfers" &&
+          normalizedLabel(category.name) === "external transfers"
+        ? " Only a global money transfer (Remittances) or a real person's name (Interac e-Transfer)."
+        : "";
+  const criteria: Record<string, string | null> = {};
+  for (const leaf of leaves.slice(0, JEV_MAX_CHOICE_OPTIONS - 1)) {
+    criteria[leaf.name] = rubric(leaf.description);
+  }
+  criteria[NONE_OPTION] = "No listed subcategory fits this line";
+  const question: JevQuestion = {
+    type: "choice",
+    instructions: `${cue}. Which subcategory under "${section.name} > ${category.name}" fits?${paymentDefault}`,
+    criteria,
+  };
+  return {
+    key: name(`subcategory_${sectionIndex}_${categoryIndex}`),
+    question,
+  };
 }
 
 function profileFromAnswers(params: {
@@ -537,7 +553,7 @@ function profileFromAnswers(params: {
       txnCode = "payment";
     }
   }
-  if (isPlainInternetTransfer(description)) {
+  if (isPlainInternetTransfer(description) || isCardBillPayment(description)) {
     const paymentPath = accountPaymentPath(params.paths);
     if (paymentPath) resolvedPath = paymentPath;
     txnCode = "payment";
@@ -560,45 +576,18 @@ function profileFromAnswers(params: {
   };
 }
 
-async function labelGroup(
-  group: JevLabelGroup,
-  params: {
-    paths: TaxonomyPath[];
-    catalog: ClassificationCatalog;
-    spreads: string[];
-    types: string[];
-    tags: string[];
-    ownerRules: string[];
-  },
-): Promise<CategoryProfile> {
-  const built = buildLabelQuestions({ ...params, group, prefix: "" });
-  const { answers, ms } = await askJev({
-    state: buildState(group, params.ownerRules),
-    logLabel: LOG_LABEL,
-    questions: built.questions,
-  });
-  const profile = profileFromAnswers({
-    ...built,
-    group,
-    answers,
-    prefix: "",
-    paths: params.paths,
-    catalog: params.catalog,
-    types: params.types,
-  });
-  console.info(
-    `[${LOG_LABEL}] "${group.description.slice(0, 40)}" -> ${profile.pathKey} (${ms}ms)`,
-  );
-  return profile;
-}
-
-/** Plain internet transfers are payments. Jev is not asked. */
+/** Plain internet transfers and card-bill payments. Jev is not asked. */
 export function presetTransferProfile(params: {
   description: string;
   paths: TaxonomyPath[];
   types: string[];
 }): CategoryProfile | null {
-  if (!isPlainInternetTransfer(params.description)) return null;
+  if (
+    !isPlainInternetTransfer(params.description) &&
+    !isCardBillPayment(params.description)
+  ) {
+    return null;
+  }
   const path = accountPaymentPath(params.paths);
   if (!path) return null;
   const transactionType = params.types.includes("Transfer")
@@ -642,25 +631,181 @@ export async function labelGroupsWithJev(params: {
     };
   }
 
-  await mapPool(params.groups, CONCURRENCY, async (group) => {
-    if (params.deadline - Date.now() < 1000) {
-      result.failed.push(group.key);
-      result.error ??= "Categorization paused at its time limit.";
-      return;
-    }
-    try {
-      const profile = await labelGroup(group, params);
-      const match = { key: group.key, profile };
-      result.matches.push(match);
-      params.onMatch?.(match);
-    } catch (lineError) {
-      result.failed.push(group.key);
-      result.error ??=
-        lineError instanceof Error
-          ? lineError.message
-          : "Jev categorization failed";
-    }
+  const slices: JevLabelGroup[][] = [];
+  for (let start = 0; start < params.groups.length; start += SLICE) {
+    slices.push(params.groups.slice(start, start + SLICE));
+  }
+  await mapPool(slices, PARALLEL, async (slice) => {
+    await labelSlice(slice, params, result);
   });
 
   return result;
+}
+
+function batchState(slice: JevLabelGroup[], ownerRules: string[]) {
+  const state: Record<string, unknown> = {
+    lines: slice.map((group, index) => ({
+      id: `g${index}`,
+      description: group.description,
+      direction: group.amount < 0 ? "money in" : "money out",
+    })),
+  };
+  if (ownerRules.length) {
+    state.classify_rules = {
+      note: "Owner classify rules for this ledger. Apply when they match the bank line. They do not invent new sections or categories.",
+      rules: ownerRules,
+    };
+  }
+  return state;
+}
+
+function shouldSplit(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  if (message.includes("JEV_API_KEY")) return false;
+  if (message.includes("HTTP 401") || message.includes("HTTP 403")) return false;
+  return true;
+}
+
+async function labelSlice(
+  slice: JevLabelGroup[],
+  params: {
+    paths: TaxonomyPath[];
+    catalog: ClassificationCatalog;
+    spreads: string[];
+    types: string[];
+    ownerRules: string[];
+    deadline: number;
+    onMatch?: (match: { key: string; profile: CategoryProfile }) => void;
+  },
+  result: JevLabelResult,
+) {
+  if (!slice.length) return;
+  if (params.deadline - Date.now() < 1000) {
+    for (const group of slice) result.failed.push(group.key);
+    result.error ??= "Categorization paused at its time limit.";
+    return;
+  }
+  try {
+    await labelSliceCascade(slice, params, result);
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Jev categorization failed";
+    if (slice.length === 1 || !shouldSplit(error)) {
+      for (const group of slice) result.failed.push(group.key);
+      result.error ??= message;
+      console.warn(`[${LOG_LABEL}] batch of ${slice.length} failed: ${message}`);
+      return;
+    }
+    console.warn(`[${LOG_LABEL}] batch of ${slice.length} split: ${message}`);
+    const mid = Math.ceil(slice.length / 2);
+    await labelSlice(slice.slice(0, mid), params, result);
+    await labelSlice(slice.slice(mid), params, result);
+  }
+}
+
+async function labelSliceCascade(
+  slice: JevLabelGroup[],
+  params: {
+    paths: TaxonomyPath[];
+    catalog: ClassificationCatalog;
+    spreads: string[];
+    types: string[];
+    ownerRules: string[];
+    onMatch?: (match: { key: string; profile: CategoryProfile }) => void;
+  },
+  result: JevLabelResult,
+) {
+  const started = Date.now();
+  const state = batchState(slice, params.ownerRules);
+  const built = slice.map((_, index) =>
+    buildCoreQuestions({
+      catalog: params.catalog,
+      spreads: params.spreads,
+      types: params.types,
+      ownerRules: params.ownerRules,
+      prefix: `g${index}_`,
+    }),
+  );
+  const core: Record<string, JevQuestion> = {};
+  for (const one of built) Object.assign(core, one.questions);
+  const first = await askJev({
+    state,
+    logLabel: LOG_LABEL,
+    questions: core,
+    timeoutMs: 30_000,
+  });
+  const answers: Record<string, JevAnswer> = { ...first.answers };
+
+  const categoryQuestions: Record<string, JevQuestion> = {};
+  built.forEach((one, index) => {
+    Object.assign(
+      categoryQuestions,
+      branchQuestions({
+        catalog: params.catalog,
+        sections: one.sections,
+        categoriesBySection: one.categoriesBySection,
+        answers,
+        prefix: `g${index}_`,
+      }),
+    );
+  });
+  if (Object.keys(categoryQuestions).length > 0) {
+    const second = await askJev({
+      state,
+      logLabel: LOG_LABEL,
+      questions: categoryQuestions,
+      timeoutMs: 30_000,
+    });
+    Object.assign(answers, second.answers);
+  }
+
+  const subQuestions: Record<string, JevQuestion> = {};
+  built.forEach((one, index) => {
+    const sub = subcategoryQuestion({
+      catalog: params.catalog,
+      sections: one.sections,
+      categoriesBySection: one.categoriesBySection,
+      answers,
+      prefix: `g${index}_`,
+    });
+    if (sub) subQuestions[sub.key] = sub.question;
+  });
+  if (Object.keys(subQuestions).length > 0) {
+    const third = await askJev({
+      state,
+      logLabel: LOG_LABEL,
+      questions: subQuestions,
+      timeoutMs: 30_000,
+    });
+    Object.assign(answers, third.answers);
+  }
+
+  slice.forEach((group, index) => {
+    const one = built[index];
+    if (!one) {
+      result.failed.push(group.key);
+      return;
+    }
+    try {
+      const profile = profileFromAnswers({
+        ...one,
+        group,
+        answers,
+        prefix: `g${index}_`,
+        paths: params.paths,
+        catalog: params.catalog,
+        types: params.types,
+      });
+      const match = { key: group.key, profile };
+      result.matches.push(match);
+      params.onMatch?.(match);
+    } catch (error) {
+      result.failed.push(group.key);
+      result.error ??=
+        error instanceof Error ? error.message : "Jev categorization failed";
+    }
+  });
+  console.info(
+    `[${LOG_LABEL}] cascade ${slice.length} lines in ${Date.now() - started}ms`,
+  );
 }

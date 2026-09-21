@@ -2,6 +2,7 @@ import { invalidateConvexUserCache } from "@/shared/convex/cachedRead";
 import { api } from "@/shared/convex/httpClient";
 import {
   descriptionKey,
+  merchantRuleKey,
   type CategoryProfile,
 } from "@convex/lib/categorization";
 import { cleanMerchantDescriptor } from "@convex/lib/cleanMerchantDescriptor";
@@ -20,6 +21,7 @@ type Row = {
   amount: number;
   updatedAt?: number;
   key: string;
+  exactKey?: string;
 };
 
 export type LabeledTransaction = {
@@ -73,8 +75,12 @@ export async function labelDescriptionGroups(
   };
   const groups = new Map<string, Row[]>();
   for (const row of input) {
-    const key = descriptionKey(row.description, row.amount);
-    const next = { ...row, key };
+    const key = merchantRuleKey(row.description, row.amount);
+    const next = {
+      ...row,
+      key,
+      exactKey: descriptionKey(row.description, row.amount),
+    };
     const group = groups.get(key);
     if (group) group.push(next);
     else groups.set(key, [next]);
@@ -124,18 +130,39 @@ export async function labelDescriptionGroups(
     if (options?.skipCache) {
       unknown.push(...keys);
     } else {
-      for (let i = 0; i < keys.length; i += 100) {
-        const matches = await client.query(api.categorization.lookup, {
-          keys: keys.slice(i, i + 100),
-        });
-        const cached: { key: string; profile: CategoryProfile }[] = [];
-        for (const match of matches) {
-          if (match.profile && match.profile.tags !== undefined) {
-            cached.push({ key: match.key, profile: match.profile });
-          } else unknown.push(match.key);
+      const exactToShop = new Map<string, string>();
+      for (const [shopKey, rows] of groups) {
+        for (const row of rows) {
+          if (row.exactKey) exactToShop.set(row.exactKey, shopKey);
         }
-        remember(cached, "cached");
       }
+      const lookupKeys = [...new Set([...keys, ...exactToShop.keys()])];
+      const shopHits = new Set<string>();
+      const exactHits = new Map<string, CategoryProfile>();
+      for (let i = 0; i < lookupKeys.length; i += 100) {
+        const matches = await client.query(api.categorization.lookup, {
+          keys: lookupKeys.slice(i, i + 100),
+        });
+        for (const match of matches) {
+          if (!match.profile || match.profile.tags === undefined) continue;
+          if (groups.has(match.key)) {
+            shopHits.add(match.key);
+            remember([{ key: match.key, profile: match.profile }], "cached");
+          } else exactHits.set(match.key, match.profile);
+        }
+      }
+      const seeded: { key: string; profile: CategoryProfile }[] = [];
+      for (const key of keys) {
+        if (shopHits.has(key)) continue;
+        const rows = groups.get(key) ?? [];
+        const prior = rows
+          .map((row) => exactHits.get(row.exactKey))
+          .find((profile) => profile != null);
+        if (prior) seeded.push({ key, profile: prior });
+        else unknown.push(key);
+      }
+      remember(seeded, "cached");
+      await persistLearnedRules(client, seeded);
     }
     if (unknown.length) {
       const stillUnknown: string[] = [];

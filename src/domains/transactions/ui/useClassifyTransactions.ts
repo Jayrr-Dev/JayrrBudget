@@ -11,7 +11,7 @@ import type { CategorizationSummary } from "@/domains/statements/domain/importRe
 import { applyVaultCategorization } from "@/domains/vault/application/applyVaultCategorization";
 import { usePrivateLedger } from "@/domains/vault/ui/usePrivateLedger";
 import { toastIfOffline } from "@/shared/offline/offlineWriteGuard";
-import { descriptionKey } from "@convex/lib/categorization";
+import { merchantRuleKey } from "@convex/lib/categorization";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useConvex } from "convex/react";
 import { useEffect, useState } from "react";
@@ -69,7 +69,7 @@ function groupByDescription(rows: DashboardTransaction[]) {
   const groups: KeyGroup[] = [];
   const index = new Map<string, KeyGroup>();
   for (const txn of rows) {
-    const key = descriptionKey(txn.name, Number(txn.amount));
+    const key = merchantRuleKey(txn.name, Number(txn.amount));
     const existing = index.get(key);
     if (existing) {
       existing.rows.push(txn);
@@ -110,6 +110,54 @@ function fanLabels(
   return { fanned, failedRows };
 }
 
+type ClassifyStreamEvent =
+  | { type: "labeled"; item: LabeledTransaction }
+  | { type: "done"; summary: CategorizationSummary }
+  | { type: "error"; error: string };
+
+function showClassifyCount(done: number, total: number) {
+  publishClassifyProgress({ done, total });
+  toast.loading(`Classifying ${done} of ${total}`, { id: CLASSIFY_TOAST });
+}
+
+async function readClassifyStream(
+  response: Response,
+  onLabeled: (item: LabeledTransaction) => void,
+) {
+  if (!response.body) throw new Error("Classification failed");
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let summary = emptySummary();
+  const take = async (line: string) => {
+    const event = JSON.parse(line) as ClassifyStreamEvent;
+    if (event.type === "labeled") {
+      onLabeled(event.item);
+      await new Promise<void>((resolve) => {
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+      });
+      return;
+    }
+    if (event.type === "done") {
+      summary = event.summary;
+      return;
+    }
+    throw new Error(event.error || "Classification failed");
+  };
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split("\n");
+    buffer = lines.pop() ?? "";
+    for (const line of lines) {
+      if (line.trim()) await take(line);
+    }
+  }
+  if (buffer.trim()) await take(buffer);
+  return summary;
+}
+
 export function useClassifyTransactions() {
   const queryClient = useQueryClient();
   const client = useConvex();
@@ -134,19 +182,27 @@ export function useClassifyTransactions() {
       }
 
       const groups = groupByDescription(rows);
-      publishClassifyProgress({ done: 0, total: rows.length });
-      toast.loading(`Classifying 0 of ${rows.length}`, { id: CLASSIFY_TOAST });
+      showClassifyCount(0, rows.length);
       let summary = emptySummary();
       let resolved = 0;
       try {
         for (let i = 0; i < groups.length; i += CLASSIFY_CHUNK) {
           const chunk = groups.slice(i, i + CLASSIFY_CHUNK);
+          const byRepId = new Map(
+            chunk.map((group) => [group.rows[0]!.transactionId, group]),
+          );
+          const labeled: LabeledTransaction[] = [];
+          const seen = new Set<string>();
+          let chunkRows = 0;
+          let chunkDone = 0;
           const response = await fetch("/api/statements/categorize-vault", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
+              stream: true,
               transactions: chunk.map((group) => {
                 const txn = group.rows[0]!;
+                chunkRows += group.rows.length;
                 return {
                   transactionId: txn.transactionId,
                   description: txn.name,
@@ -155,15 +211,18 @@ export function useClassifyTransactions() {
               }),
             }),
           });
-          const result = (await response.json()) as {
-            error?: string;
-            summary?: CategorizationSummary;
-            labeled?: LabeledTransaction[];
-          };
           if (!response.ok) {
+            const result = (await response.json()) as { error?: string };
             throw new Error(result.error ?? "Classification failed");
           }
-          const labeled = result.labeled ?? [];
+          const chunkSummary = await readClassifyStream(response, (item) => {
+            if (seen.has(item.transactionId)) return;
+            seen.add(item.transactionId);
+            labeled.push(item);
+            const group = byRepId.get(item.transactionId);
+            chunkDone += group ? group.rows.length : 1;
+            showClassifyCount(resolved + chunkDone, rows.length);
+          });
           const { fanned, failedRows } = fanLabels(labeled, chunk);
           await applyVaultCategorization({
             client: client as unknown as MutationClient,
@@ -174,19 +233,16 @@ export function useClassifyTransactions() {
             ledger: privateLedger.ledger,
             labeled: fanned,
           });
-          const chunkSummary = result.summary ?? emptySummary();
           summary = addSummaries(summary, {
             ok: chunkSummary.ok ? failedRows === 0 : false,
-            cached: chunkSummary.cached + Math.max(0, fanned.length - labeled.length),
+            cached:
+              chunkSummary.cached + Math.max(0, fanned.length - labeled.length),
             ai: chunkSummary.ai,
             pending: failedRows,
             error: chunkSummary.error,
           });
-          resolved += chunk.reduce((count, group) => count + group.rows.length, 0);
-          publishClassifyProgress({ done: resolved, total: rows.length });
-          toast.loading(`Classifying ${resolved} of ${rows.length}`, {
-            id: CLASSIFY_TOAST,
-          });
+          resolved += chunkRows;
+          showClassifyCount(resolved, rows.length);
         }
         privateLedger.reload();
         return summary;

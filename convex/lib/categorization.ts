@@ -1,4 +1,5 @@
 import { v } from "convex/values";
+import { cleanMerchantDescriptor } from "./cleanMerchantDescriptor";
 
 export const profileValidator = v.object({
   merchant: v.string(),
@@ -35,6 +36,14 @@ export function descriptionKey(description: string, amount: number) {
     .replace(/\b(?:ref(?:erence)?|auth(?:orization)?)\s*[:#]\s*[a-z0-9-]+\b/g, " ")
     .replace(/\s+/g, " ").trim();
   return JSON.stringify(["v1", amount < 0 ? "in" : amount > 0 ? "out" : "zero", text]);
+}
+
+/** Shop plus direction. Order codes and store numbers collapse to one rule. */
+export function merchantRuleKey(description: string, amount: number) {
+  const cleaned = cleanMerchantDescriptor(description)?.trim();
+  const text = normalizedLabel(cleaned ? cleaned : description);
+  const direction = amount < 0 ? "in" : amount > 0 ? "out" : "zero";
+  return JSON.stringify(["v2", direction, text]);
 }
 
 export function isCategorized(row: {
