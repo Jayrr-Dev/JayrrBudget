@@ -22,7 +22,21 @@ export function planDescriptorCleanMerges(
 
   for (const merchant of listed) {
     const canonical = cleanMerchantDescriptor(merchant.name);
-    if (!canonical) continue;
+    if (!canonical) {
+      // "( )" has no payee left. Clear it instead of keeping the punctuation.
+      if (!/[a-z0-9]/i.test(merchant.name)) {
+        const existing = groups.get("");
+        if (existing) {
+          existing.ids.add(merchant.id);
+          continue;
+        }
+        groups.set("", {
+          canonicalName: "",
+          ids: new Set([merchant.id]),
+        });
+      }
+      continue;
+    }
     if (canonical.toLowerCase() === merchant.name.trim().toLowerCase())
       continue;
     const key = canonical.toLowerCase();

@@ -119,6 +119,10 @@ const TRAILING_PLACES = [
   "lapu lapu",
   "mandaluyong",
   "edmonton",
+  "st. albert",
+  "st albert",
+  "cornwall",
+  "whyte",
   "calgary",
   "toronto",
   "vancouver",
@@ -187,6 +191,9 @@ const AMOUNT_CCY_FX = new RegExp(
 const BARE_RATE = new RegExp(String.raw`(?:^|\s)${RATE}(?=\s|$)`, "gi");
 
 const KNOWN_PAYEE: Array<[RegExp, string]> = [
+  [/\bamzn(?:\s+mktp(?:lace)?)?\b/i, "Amazon"],
+  [/\bzoho\b/i, "Zoho"],
+  [/\b7-?\s*eleven(?:\s+store)?\b/i, "7-Eleven"],
   [/\baffirm\b/i, "Affirm"],
   [/\bgocardless\b/i, "GoCardless"],
   [/\bwealthsimple\b/i, "Wealthsimple"],
@@ -247,6 +254,8 @@ function payeeFromTransfer(value: string) {
   if (!sent) return null;
   const rest = (sent[1] ?? "").replace(/^[\s\-–—:/]+/, "").trim();
   if (!rest) return "E-Transfer";
+  // "Out" / "In" is the direction, not a payee.
+  if (/^(in|out)$/i.test(rest)) return null;
   if (/^(stop|network fee|fee|recall)$/i.test(rest)) {
     return `E-Transfer ${formatWords(rest)}`;
   }
@@ -255,6 +264,116 @@ function payeeFromTransfer(value: string) {
 
 function stripFxBlocks(value: string) {
   return value.replace(AMOUNT_CCY_FX, " ").replace(BARE_RATE, " ");
+}
+
+/** CIBC spend column glued after the payee. Longest first. */
+const SPEND_LABELS = [
+  "professional and financial services",
+  "personal and household expenses",
+  "foreign currency transactions",
+  "home and office improvement",
+  "home & office improvement",
+  "software and subscriptions",
+  "health and education",
+  "retail and grocery",
+  "digital content",
+  "transportation",
+  "restaurants",
+];
+
+const SPEND_TAIL = SPEND_LABELS.map(
+  (label) => new RegExp(String.raw`\s+${escapeRe(label)}$`, "i"),
+);
+
+/** Dollars with cents and no currency code: "14.70", "1,024.50". */
+const BARE_AMOUNT = /\s+\d{1,3}(?:,\d{3})*\.\d{2}$/;
+/** Province codes that are not also English words. */
+const SAFE_PROVINCE = /\s+(?:AB|BC|MB|NB|NL|NS|NT|NU|PE|QC|SK|YT)$/i;
+const LEGAL_SUFFIX = /\s+(?:corp|inc|ltd|llc)\.?$/i;
+const SUBSCR_TAIL = /\s+subscr(?:iption)?$/i;
+const COUNTRY_CA = /\s+ca$/i;
+const CUTOFF_LETTER = /\s+&\s+[A-Za-z]$/;
+const REFUND_PAREN = /\s*\(\s*refund\s*\)/gi;
+const EMPTY_PAREN = /\(\s*\)/g;
+const DOMAIN = /\b[a-z0-9][a-z0-9.-]*\.(?:com|net|org|ca|io|co|ph|uk)\b/gi;
+
+const DOMAIN_BRAND: Record<string, string> = {
+  amazon: "Amazon",
+  amzn: "Amazon",
+};
+
+function endsWithPlace(value: string) {
+  return PLACE_RE.test(value.trim());
+}
+
+/** "Cornwall on" is the city plus Ontario. "Pizza on" keeps the word. */
+function stripOnProvince(value: string) {
+  const match = value.match(/^(.*\S)\s+on$/i);
+  if (!match?.[1]) return value;
+  if (!endsWithPlace(match[1])) return value;
+  return match[1].trim();
+}
+
+function collapseRepeatedBrand(value: string) {
+  const match = value.match(/^(.+?)(?:-\1)+$/i);
+  if (!match?.[1]) return value;
+  return match[1].trim();
+}
+
+/**
+ * Peel statement columns that got glued onto the payee:
+ * amount, bank spend label, city, province, then leftover tokens.
+ */
+function peelStatementTail(value: string) {
+  let next = value;
+  for (let step = 0; step < 8; step += 1) {
+    const before = next;
+    REFUND_PAREN.lastIndex = 0;
+    EMPTY_PAREN.lastIndex = 0;
+    next = next.replace(BARE_AMOUNT, "").trim();
+    for (const pattern of SPEND_TAIL) {
+      if (!pattern.test(next)) continue;
+      next = next.replace(pattern, "").trim();
+      break;
+    }
+    next = next
+      .replace(REFUND_PAREN, " ")
+      .replace(EMPTY_PAREN, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    next = next.replace(CUTOFF_LETTER, "").trim();
+    next = next.replace(SUBSCR_TAIL, "").trim();
+    next = next.replace(COUNTRY_CA, "").trim();
+    const withoutProvince = next.replace(SAFE_PROVINCE, "").trim();
+    next =
+      withoutProvince === next ? stripOnProvince(next) : withoutProvince;
+    next = stripTrailingPlaces(next).replace(/\s+/g, " ").trim();
+    if (LEGAL_SUFFIX.test(next)) {
+      const stripped = next.replace(LEGAL_SUFFIX, "").trim();
+      if (stripped) next = stripped;
+    }
+    next = collapseRepeatedBrand(next);
+    next = next.replace(/[\\/,|;:–—-]+$/g, "").trim();
+    if (next === before) return next;
+    if (!next) return "";
+  }
+  return next;
+}
+
+/** "Amazon.ca AMAZON.CA" → Amazon. A line with other words is left alone. */
+function domainOnlyBrand(value: string): string | null {
+  const domain = new RegExp(DOMAIN.source, "gi");
+  const found = value.match(domain);
+  if (!found || found.length === 0) return null;
+  const rest = value
+    .replace(new RegExp(DOMAIN.source, "gi"), " ")
+    .replace(/[^a-z0-9]+/gi, " ")
+    .trim();
+  if (rest) return null;
+  const host = found[0].replace(/^www\./i, "");
+  const label = host.split(".")[0] ?? "";
+  if (!label) return null;
+  return DOMAIN_BRAND[label.toLowerCase()] ?? formatWords(label);
 }
 
 /**
@@ -374,16 +493,17 @@ export function cleanMerchantDescriptor(
 
   const first = stripPaymentRails(value);
   const rails = [...first.rails];
+  const domainBrand = domainOnlyBrand(first.value);
+  if (domainBrand) return domainBrand;
   value = stripRefsAndDomains(first.value);
   value = stripFxBlocks(value).replace(/\s+/g, " ").trim();
   const second = stripPaymentRails(value);
   rails.push(...second.rails);
   value = second.value;
   value = stripTrailingNumbers(value);
-  value = stripTrailingPlaces(value).replace(/\s+/g, " ").trim();
+  value = peelStatementTail(value).replace(/\s+/g, " ").trim();
   value = stripTrailingNumbers(value);
   value = stripReferenceTokens(value);
-  value = value.replace(/^(?:pay|payment|withdrawal)\s+/i, "").trim();
   value = value.replace(/[\\/,|;:–—-]+$/g, "").trim();
   const bankFee = bankFeeName(value);
   if (bankFee) return bankFee;

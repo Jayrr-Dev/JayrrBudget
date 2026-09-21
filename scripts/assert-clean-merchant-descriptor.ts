@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import { cleanMerchantDescriptor } from "../convex/lib/cleanMerchantDescriptor";
+import { merchantRewriteName } from "../src/domains/merchants/domain/acceptMerchantRewrite";
+import { planDescriptorCleanMerges } from "../src/domains/merchants/domain/planDescriptorCleanMerges";
 
 function check(input: string, expected: string) {
   const got = cleanMerchantDescriptor(input);
@@ -64,5 +66,72 @@ check("Air Canada Vancouver", "Air Canada");
 check("Uber Canada", "Uber");
 check("Interac E-transfer Out", "Interac E-transfer Out");
 check("Payment Protector Insurance", "Payment Protector Insurance");
+
+// CIBC columns glued onto the payee: city, spend label, amount.
+check(
+  "Donair & Shawarma House Edmonton Ab Restaurants 14.70",
+  "Donair & Shawarma House",
+);
+check(
+  "OpenAI Subscr Ca Foreign Currency Transactions 29.82",
+  "OpenAI",
+);
+check(
+  "Or Foreign Currency Transactions 30.62",
+  "Or",
+);
+check(
+  "Zoho-Zoho Corp Cornwall on Home and Office Improvement 19.69",
+  "Zoho",
+);
+check(
+  "Bmo Foreign Currency Transactions 102.54",
+  "BMO",
+);
+check(
+  "7-Eleven Store Edmonton Ab Transportation 76.10",
+  "7-Eleven",
+);
+check(
+  "Desi Adda Bar and Grill Edmonton Ab Restaurants 21.72",
+  "Desi Adda Bar and Grill",
+);
+check("Amzn Mktp Ca (refund)", "Amazon");
+check("Glasshouse Kitchen & B St Albert", "Glasshouse Kitchen");
+check("Primetime Donair Whyte", "Primetime Donair");
+check("Amazon.ca AMAZON.CA", "Amazon");
+check("Pho Tasty Ltd.", "Pho Tasty");
+check("PocketPills", "PocketPills");
+check("London( )", "London");
+check("Pizza On", "Pizza on");
+assert.equal(cleanMerchantDescriptor("( )"), null);
+assert.equal(cleanMerchantDescriptor("()"), null);
+
+const cleared = planDescriptorCleanMerges([
+  { id: "junk", name: "( )" },
+  { id: "keep", name: "PocketPills" },
+]);
+assert.equal(cleared.length, 1);
+assert.equal(cleared[0]?.canonicalName, "");
+assert.deepEqual(cleared[0]?.merchantIds, ["junk"]);
+
+assert.equal(
+  merchantRewriteName(
+    "Donair & Shawarma House Edmonton Ab Restaurants 14.70",
+    "Donair & Shawarma House",
+  ),
+  "Donair & Shawarma House",
+);
+assert.equal(merchantRewriteName("Tim Hortons", "Starbucks"), null);
+assert.equal(
+  merchantRewriteName("Amzn Mktp Ca (refund)", "Amazon"),
+  "Amazon",
+);
+assert.equal(
+  merchantRewriteName("Or Foreign Currency Transactions 30.62", "Cursor"),
+  null,
+);
+assert.equal(merchantRewriteName("( )", ""), "");
+assert.equal(merchantRewriteName("PocketPills", "PocketPills"), null);
 
 console.log("ok");

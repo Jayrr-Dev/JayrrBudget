@@ -48,7 +48,73 @@ export async function applyVaultMerchantMerges(input: {
     if (members.length === 0) continue;
 
     const canonicalName = merge.canonicalName.trim();
-    if (!canonicalName) continue;
+    if (!canonicalName) {
+      const fromNames = new Set(members.map((member) => member.name.trim()));
+      const matches = txs.filter((tx) => fromNames.has(txnMerchantLabel(tx)));
+      for (let i = 0; i < matches.length; i += TX_CHUNK) {
+        const chunk = matches.slice(i, i + TX_CHUNK);
+        await saveEncryptedRecords(
+          input.ctx,
+          chunk.map((tx) => {
+            const merchantName = fromNames.has((tx.merchantName ?? "").trim())
+              ? null
+              : (tx.merchantName ?? null);
+            const { recordId, revision, ...value } = tx;
+            return {
+              recordId,
+              kind: "tx" as const,
+              value: {
+                date: value.date,
+                authorizedDate: value.authorizedDate ?? null,
+                description: value.description,
+                amount: value.amount,
+                currency: value.currency,
+                accountId: value.accountId ?? null,
+                pending: Boolean(value.pending),
+                city: value.city ?? null,
+                region: value.region ?? null,
+                country: value.country ?? null,
+                merchantName,
+                merchantClean: null,
+                sectionName: value.sectionName ?? null,
+                categoryName: value.categoryName ?? null,
+                subcategoryName: value.subcategoryName ?? null,
+                spreadName: value.spreadName ?? null,
+                transactionTypeName: value.transactionTypeName ?? null,
+                txnCode: value.txnCode ?? null,
+                channel: value.channel ?? null,
+                statementRecordId: value.statementRecordId ?? null,
+                source: value.source ?? "statement",
+                tagNames: value.tagNames ?? [],
+              },
+              expectedRevision: revision,
+            };
+          }),
+        );
+        for (const tx of chunk) {
+          tx.merchantClean = null;
+          if (fromNames.has((tx.merchantName ?? "").trim())) tx.merchantName = null;
+          tx.revision += 1;
+        }
+        transactionsUpdated += chunk.length;
+      }
+      await deletePrivateRecords(
+        input.ctx.client as unknown as MutationClient,
+        {
+          vaultId: input.ctx.vaultId,
+          recordIds: members.map((member) => member.recordId),
+        },
+      );
+      merchantsDeleted += members.length;
+      for (const member of members) {
+        const index = merchants.findIndex(
+          (row) => row.recordId === member.recordId,
+        );
+        if (index >= 0) merchants.splice(index, 1);
+      }
+      mergesApplied += 1;
+      continue;
+    }
 
     const exact = members.find(
       (member) =>

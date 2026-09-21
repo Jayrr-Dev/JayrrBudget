@@ -3,6 +3,7 @@ import { MERCHANT_CLEAN_AI_RULES } from "@/domains/enrichment/domain/merchantCle
 import { isJevConfigured } from "@/shared/ai/jev.server";
 import { clusterSimilarMerchants } from "@/domains/merchants/domain/clusterSimilarMerchants";
 import { planDescriptorCleanMerges } from "@/domains/merchants/domain/planDescriptorCleanMerges";
+import { rewriteMerchantNames } from "@/domains/merchants/application/rewriteMerchantNames";
 import { generateObjectWithFallback } from "@/shared/ai/openRouter";
 import { invalidateConvexUserCache } from "@/shared/convex/cachedRead";
 import { api } from "@/shared/convex/httpClient";
@@ -139,18 +140,27 @@ export async function planSimilarMerchantMerges(
 ): Promise<PlanSimilarMerchantsResult> {
   const total = listed.length;
   onProgress?.(0, total);
-  const descriptorMerges = planDescriptorCleanMerges(listed);
-  const claimed = new Set(
-    descriptorMerges.flatMap((merge) => merge.merchantIds),
+  const modelMerges = await rewriteMerchantNames(listed, (done, count) => {
+    onProgress?.(done, count);
+  });
+  const claimedByModel = new Set(
+    modelMerges.flatMap((merge) => merge.merchantIds),
   );
+  const descriptorMerges = planDescriptorCleanMerges(
+    listed.filter((merchant) => !claimedByModel.has(merchant.id)),
+  );
+  const claimed = new Set([
+    ...claimedByModel,
+    ...descriptorMerges.flatMap((merge) => merge.merchantIds),
+  ]);
   const remaining = listed.filter((merchant) => !claimed.has(merchant.id));
   const clusters = clusterSimilarMerchants(remaining);
   onProgress?.(claimed.size, total);
   if (clusters.length === 0) {
     onProgress?.(total, total);
     return {
-      clustersFound: descriptorMerges.length,
-      merges: descriptorMerges,
+      clustersFound: descriptorMerges.length + modelMerges.length,
+      merges: [...modelMerges, ...descriptorMerges],
     };
   }
 
@@ -209,8 +219,8 @@ export async function planSimilarMerchantMerges(
   onProgress?.(total, total);
 
   return {
-    clustersFound: clusters.length + descriptorMerges.length,
-    merges: [...descriptorMerges, ...aiMerges],
+    clustersFound: clusters.length + descriptorMerges.length + modelMerges.length,
+    merges: [...modelMerges, ...descriptorMerges, ...aiMerges],
   };
 }
 

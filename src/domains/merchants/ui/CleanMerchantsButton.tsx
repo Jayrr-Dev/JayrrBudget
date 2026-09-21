@@ -212,16 +212,15 @@ export function CleanMerchantsButton() {
                   <PopoverHeader className="gap-1.5">
                     <PopoverTitle>Clean similar merchants</PopoverTitle>
                     <PopoverDescription>
-                      Turns statement lines into payee names and merges
-                      near-duplicates.
+                      Reads each bank line and writes the store name.
                     </PopoverDescription>
                     <ul className="mt-1.5 list-disc space-y-1 pl-4 text-muted-foreground">
+                      <li>A model names the payee from the statement line</li>
                       <li>
-                        Drops rails like Bill Payment, PAD, Direct Dep, EFT,
-                        Online Payment
+                        A first pass drops the city, the bank category, and the
+                        amount when those columns are glued on
                       </li>
-                      <li>Drops reference numbers so Affirm, Stripe, and Wealthsimple stay the brand</li>
-                      <li>Jev merges names that are the same payee</li>
+                      <li>A title that does not match the line is thrown out</li>
                       <li>
                         Fees and interest get the bank name (CIBC Monthly Plan
                         Fee)
@@ -234,9 +233,9 @@ export function CleanMerchantsButton() {
               </Popover>
             </DialogTitle>
             <DialogDescription className="sr-only">
-              Strips payment rails, trailing account numbers, and names bank
-              fees after the bank, then merges near-duplicate payee names.
-              Merged payees keep every linked transaction.
+              A model writes a payee name for each statement line. Titles that
+              do not match the line are dropped. Near-duplicate payees merge,
+              and every linked transaction stays.
             </DialogDescription>
           </DialogHeader>
           {busy ? (
