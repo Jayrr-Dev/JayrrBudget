@@ -31,3 +31,7 @@ npm run dev
 - Vercel: `NEXT_PUBLIC_CONVEX_URL` (no Clerk keys)
 - `npx convex deploy` and set `JWT_PRIVATE_KEY` + `JWKS` on the production Convex deployment
 - Do not require Turso `DATABASE_URL` for the live app
+
+## License
+
+[MIT](LICENSE). Copy the env names from `.env.example`. Keep real keys in `.env.local` and on the Convex dashboard.
