@@ -156,7 +156,7 @@ export async function labelDescriptionGroups(
         if (shopHits.has(key)) continue;
         const rows = groups.get(key) ?? [];
         const prior = rows
-          .map((row) => exactHits.get(row.exactKey))
+          .map((row) => (row.exactKey ? exactHits.get(row.exactKey) : undefined))
           .find((profile) => profile != null);
         if (prior) seeded.push({ key, profile: prior });
         else unknown.push(key);
