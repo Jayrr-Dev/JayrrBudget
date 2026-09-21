@@ -23,10 +23,8 @@ import { TXN_CODES } from "@convex/lib/txnCodes";
  */
 
 const LOG_LABEL = "categorization:jev";
-/** One Jev call covers this many bank lines. */
-const BATCH = 50;
-/** Fallback when a batch fails. Public endpoint rate-limits. */
-const CONCURRENCY = 8;
+/** Parallel per-line Jev calls. A multi-line call exceeds Jev's token cap. */
+const CONCURRENCY = 16;
 const TAG_NOUL_LIMIT = 24;
 const TAG_THRESHOLD = 0.85;
 const MAX_TAGS = 3;
@@ -594,75 +592,6 @@ async function labelGroup(
   return profile;
 }
 
-async function labelBatch(
-  slice: JevLabelGroup[],
-  params: {
-    paths: TaxonomyPath[];
-    catalog: ClassificationCatalog;
-    spreads: string[];
-    types: string[];
-    tags: string[];
-    ownerRules: string[];
-  },
-  result: JevLabelResult,
-) {
-  const questions: Record<string, JevQuestion> = {};
-  const built = slice.map((group, index) => {
-    const one = buildLabelQuestions({
-      ...params,
-      group,
-      prefix: `g${index}_`,
-    });
-    Object.assign(questions, one.questions);
-    return one;
-  });
-  const state: Record<string, unknown> = {
-    lines: slice.map((group, index) => ({
-      id: `g${index}`,
-      description: group.description,
-      direction: group.amount < 0 ? "money in" : "money out",
-    })),
-  };
-  if (params.ownerRules.length) {
-    state.classify_rules = {
-      note: "Owner classify rules for this ledger. Apply when they match the bank line. They do not invent new sections or categories.",
-      rules: params.ownerRules,
-    };
-  }
-  const { answers, ms } = await askJev({
-    state,
-    logLabel: LOG_LABEL,
-    questions,
-    timeoutMs: 90_000,
-  });
-  slice.forEach((group, index) => {
-    const one = built[index];
-    if (!one) {
-      result.failed.push(group.key);
-      return;
-    }
-    try {
-      const profile = profileFromAnswers({
-        ...one,
-        group,
-        answers,
-        prefix: `g${index}_`,
-        paths: params.paths,
-        catalog: params.catalog,
-        types: params.types,
-      });
-      result.matches.push({ key: group.key, profile });
-    } catch (error) {
-      result.failed.push(group.key);
-      result.error ??=
-        error instanceof Error ? error.message : "Jev categorization failed";
-    }
-  });
-  console.info(
-    `[${LOG_LABEL}] batch ${slice.length} lines in ${ms}ms`,
-  );
-}
-
 /** Plain internet transfers are payments. Jev is not asked. */
 export function presetTransferProfile(params: {
   description: string;
@@ -702,6 +631,7 @@ export async function labelGroupsWithJev(params: {
   tags: string[];
   ownerRules: string[];
   deadline: number;
+  onMatch?: (match: { key: string; profile: CategoryProfile }) => void;
 }): Promise<JevLabelResult> {
   const result: JevLabelResult = { matches: [], failed: [] };
   if (!params.catalog.sections.length) {
@@ -712,32 +642,25 @@ export async function labelGroupsWithJev(params: {
     };
   }
 
-  for (let start = 0; start < params.groups.length; start += BATCH) {
+  await mapPool(params.groups, CONCURRENCY, async (group) => {
     if (params.deadline - Date.now() < 1000) {
-      for (const group of params.groups.slice(start)) result.failed.push(group.key);
+      result.failed.push(group.key);
       result.error ??= "Categorization paused at its time limit.";
-      break;
+      return;
     }
-    const slice = params.groups.slice(start, start + BATCH);
     try {
-      await labelBatch(slice, params, result);
-    } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Jev categorization failed";
-      console.warn(`[${LOG_LABEL}] batch of ${slice.length} failed: ${message}`);
-      await mapPool(slice, CONCURRENCY, async (group) => {
-        try {
-          const profile = await labelGroup(group, params);
-          if (profile) result.matches.push({ key: group.key, profile });
-          else result.failed.push(group.key);
-        } catch (lineError) {
-          result.failed.push(group.key);
-          result.error ??=
-            lineError instanceof Error ? lineError.message : message;
-        }
-      });
+      const profile = await labelGroup(group, params);
+      const match = { key: group.key, profile };
+      result.matches.push(match);
+      params.onMatch?.(match);
+    } catch (lineError) {
+      result.failed.push(group.key);
+      result.error ??=
+        lineError instanceof Error
+          ? lineError.message
+          : "Jev categorization failed";
     }
-  }
+  });
 
   return result;
 }

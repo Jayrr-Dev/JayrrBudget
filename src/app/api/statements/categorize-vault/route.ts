@@ -24,6 +24,7 @@ export async function POST(request: Request) {
         amount: number;
       }>;
       skipCache?: boolean;
+      stream?: boolean;
     };
     const transactions = (body.transactions ?? []).filter(
       (row) =>
@@ -34,6 +35,40 @@ export async function POST(request: Request) {
         { error: "No transactions to categorize." },
         { status: 400 },
       );
+    }
+    if (body.stream === true) {
+      const encoder = new TextEncoder();
+      const stream = new ReadableStream({
+        async start(controller) {
+          const send = (event: unknown) => {
+            controller.enqueue(encoder.encode(`${JSON.stringify(event)}\n`));
+          };
+          try {
+            await runMeteredOpenRouter(client, loaded, async () => {
+              const result = await labelDescriptionGroups(client, transactions, {
+                skipCache: body.skipCache === true,
+                onLabeled: (item) => send({ type: "labeled", item }),
+              });
+              send({ type: "done", summary: result.summary });
+            });
+          } catch (error) {
+            send({
+              type: "error",
+              error:
+                error instanceof Error ? error.message : "Categorization failed",
+            });
+          } finally {
+            controller.close();
+          }
+        },
+      });
+      return new Response(stream, {
+        headers: {
+          "Content-Type": "application/x-ndjson; charset=utf-8",
+          "Cache-Control": "no-cache, no-transform",
+          "X-Accel-Buffering": "no",
+        },
+      });
     }
     return runMeteredOpenRouter(client, loaded, async () =>
       Response.json(

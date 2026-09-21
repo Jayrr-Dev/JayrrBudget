@@ -2,7 +2,7 @@ import { normalizeStatementAccountType } from "@/domains/dashboard/domain/accoun
 import { resolveAccountMask } from "@/domains/statements/application/accountMask";
 import type { CategoryVocabulary } from "@/domains/statements/application/categoryVocabulary";
 import { normalizeParsedCategories } from "@/domains/statements/application/normalizeParsedCategories";
-import { fillFxGapsFromDescription } from "@/domains/statements/domain/extractFxFromDescription";
+import { convertForeignFaceAmounts } from "@/domains/statements/domain/convertForeignAmounts";
 import type { ParsedStatement } from "@/domains/statements/domain/parsedStatement";
 import { cleanMerchantDescriptor } from "@convex/lib/cleanMerchantDescriptor";
 
@@ -263,7 +263,7 @@ export type PolishParsedOptions = {
   dedupe: (parsed: ParsedStatement) => ParsedStatement;
 };
 
-/** Clean OCR junk, lock mask, map categories, then fix deposit vs card signs. */
+/** Clean OCR junk, lock mask, map categories, convert foreign face values, then fix signs. */
 export function polishParsedStatement(
   raw: ParsedStatement,
   options: PolishParsedOptions,
@@ -282,11 +282,7 @@ export function polishParsedStatement(
     normalizeParsedCategories(withMask, options.vocabulary),
   );
   const deduped = options.dedupe(categorized);
-  const withFx = {
-    ...deduped,
-    transactions: deduped.transactions.map(fillFxGapsFromDescription),
-  };
-  return alignParsedAmountSigns(withFx);
+  return alignParsedAmountSigns(convertForeignFaceAmounts(deduped));
 }
 
 export type PolishPaperFactsOptions = {
@@ -296,7 +292,7 @@ export type PolishPaperFactsOptions = {
 };
 
 /**
- * Paper-facts polish only: clean text, lock mask, dedupe twins, fix amount signs.
+ * Paper-facts polish only: clean text, lock mask, dedupe twins, convert foreign face values, fix amount signs.
  * Does not invent categories, channels, or merchant labels.
  */
 export function polishPaperFactsStatement(
@@ -314,9 +310,5 @@ export function polishPaperFactsStatement(
     }),
   };
   const deduped = options.dedupe(withMask);
-  const withFx = {
-    ...deduped,
-    transactions: deduped.transactions.map(fillFxGapsFromDescription),
-  };
-  return alignParsedAmountSigns(withFx);
+  return alignParsedAmountSigns(convertForeignFaceAmounts(deduped));
 }

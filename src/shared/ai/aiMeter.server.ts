@@ -81,10 +81,17 @@ export async function runMeteredOpenRouter<T>(
     runWithOpenRouterKey(loaded.apiKey, () =>
       runWithModelChain(models.chain, fn),
     );
-  return runWithAiUsageSink(
-    (event) => persistAiUsage(client, loaded.billedTo, event),
+  const pending: AiUsageSinkEvent[] = [];
+  const result = await runWithAiUsageSink(
+    async (event) => {
+      pending.push(event);
+    },
     () => (jev ? runWithJevKey(jev, run) : run()),
   );
+  await Promise.all(
+    pending.map((event) => persistAiUsage(client, loaded.billedTo, event)),
+  );
+  return result;
 }
 
 export { emitAiUsage };

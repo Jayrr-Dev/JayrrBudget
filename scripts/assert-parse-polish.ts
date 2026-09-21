@@ -16,6 +16,7 @@ import {
   cleanStatementLine,
   polishParsedStatement,
 } from "../src/domains/statements/application/polishParsedStatement";
+import { convertForeignFaceAmounts } from "../src/domains/statements/domain/convertForeignAmounts";
 import { extractFxFromDescription } from "../src/domains/statements/domain/extractFxFromDescription";
 import type { ParsedStatement } from "../src/domains/statements/domain/parsedStatement";
 
@@ -221,6 +222,67 @@ const usdFx = extractFxFromDescription("AIRBNB *X USD 12.00 @ 1.42");
 assert(usdFx.foreignCurrency === "USD", "usd currency");
 assert(usdFx.foreignAmount === 12, `usd amount was ${usdFx.foreignAmount}`);
 assert(usdFx.exchangeRate === 1.42, `usd rate was ${usdFx.exchangeRate}`);
+
+const phpFace = extractFxFromDescription(
+  "L CAMINADE TAN MKTG CEBU CITY 5,275.00 PHP",
+);
+assert(phpFace.foreignCurrency === "PHP", "php face currency");
+assert(phpFace.foreignAmount === 5275, `php face was ${phpFace.foreignAmount}`);
+assert(phpFace.exchangeRate == null, "php face has no rate");
+
+const cardFx: ParsedStatement = {
+  ...chequingCash,
+  accountType: "credit",
+  currency: "CAD",
+  transactions: [
+    txn({
+      date: "2026-03-22",
+      description: "L CAMINADE TAN MKTG CEBU CITY 5,275.00 PHP",
+      amount: 5275,
+    }),
+    txn({
+      date: "2026-04-02",
+      description: "GRAB MAKATI 230.72 PHP @ 0.023708391",
+      amount: 230.72,
+    }),
+    txn({
+      date: "2026-04-04",
+      description: "NONKI JAPANESE RESTAUR CEBU 8,261.00 PHP @ 0.023777993",
+      amount: 1.96,
+    }),
+    txn({
+      date: "2026-04-05",
+      description: "VERCEL INC. 20.00 USD @ 1.430500000",
+      amount: 20,
+    }),
+    txn({
+      date: "2026-04-13",
+      description: "WINDSURF 10.00 USD @ 1.420000000",
+      amount: 14.2,
+    }),
+    txn({
+      date: "2026-04-08",
+      description: "Netflix.com Los Gatos",
+      amount: 14.68,
+    }),
+  ],
+};
+const converted = convertForeignFaceAmounts(cardFx);
+const byDesc = (needle: string) =>
+  converted.transactions.find((row) => row.description.includes(needle));
+const camina = byDesc("CAMINADE");
+assert(camina?.amount === 125.25, `caminade cad was ${camina?.amount}`);
+assert(camina?.foreignCurrency === "PHP", "caminade kept php");
+const grab = byDesc("GRAB");
+assert(grab?.amount === 5.47, `grab cad was ${grab?.amount}`);
+const nonki = byDesc("NONKI");
+assert(nonki?.amount === 196.43, `nonki cad was ${nonki?.amount}`);
+const vercel = byDesc("VERCEL");
+assert(vercel?.amount === 28.61, `vercel cad was ${vercel?.amount}`);
+const windsurf = byDesc("WINDSURF");
+assert(windsurf?.amount === 14.2, "already-converted usd stays");
+const netflix = byDesc("Netflix");
+assert(netflix?.amount === 14.68, "domestic cad stays");
 
 const recapTwins: ParsedStatement = {
   ...chequingCash,

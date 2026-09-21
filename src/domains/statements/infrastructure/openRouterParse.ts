@@ -138,7 +138,8 @@ const LINE_DEDUP_RULES = [
 const DEDUP_AND_META_RULES = [
   ...LINE_DEDUP_RULES,
   "totalDebits = purchases/charges total when shown. totalCredits = payments/credits total when shown.",
-  "Keep FX notes like 'USD 12.00 @ 1.42' in description, and ALSO fill foreignAmount, foreignCurrency, and exchangeRate when present.",
+  "Keep FX notes like 'USD 12.00 @ 1.42' or '5,275.00 PHP' in description, and ALSO fill foreignAmount, foreignCurrency, and exchangeRate when present.",
+  "amount is always the statement currency. Never copy a PHP, USD, or EUR face value into amount. When a rate is printed, amount = foreignAmount × exchangeRate.",
   MERCHANT_CLEAN_AI_RULES,
 ].join("\n");
 
@@ -481,7 +482,7 @@ export async function rebalancePaperFacts(
       `Correction ${attempt} of 3. The extract still does not balance. Read the table again and return the full statement.`,
       "Sign comes from the Balance column, not the Withdrawal or Deposit heading.",
       "If the balance went up, amount is negative (money in). If it went down, amount is positive (money out).",
-      "A foreign figure is foreignAmount, not the statement-currency amount. amount is the change in the Balance column. USD is foreign on a Canadian statement. CAD is foreign on a US statement.",
+      "A foreign figure is foreignAmount, not the statement-currency amount. amount = foreignAmount × exchangeRate in the statement currency. USD is foreign on a Canadian statement. CAD is foreign on a US statement.",
       "Skip Opening balance and Balance forward rows. They are not transactions.",
       "Keep reference numbers in the description. Two transfers of the same amount on the same day are both real when a reversal sits between them.",
       "openingBalance and closingBalance come from the statement header, not a mid-statement balance.",

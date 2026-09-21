@@ -11,6 +11,7 @@ import type { CategorizationSummary } from "@/domains/statements/domain/importRe
 import { applyVaultCategorization } from "@/domains/vault/application/applyVaultCategorization";
 import { usePrivateLedger } from "@/domains/vault/ui/usePrivateLedger";
 import { toastIfOffline } from "@/shared/offline/offlineWriteGuard";
+import { descriptionKey } from "@convex/lib/categorization";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useConvex } from "convex/react";
 import { useEffect, useState } from "react";
@@ -62,6 +63,53 @@ export function needsClassify(txn: DashboardTransaction) {
   return !txn.categoryName?.trim();
 }
 
+type KeyGroup = { key: string; rows: DashboardTransaction[] };
+
+function groupByDescription(rows: DashboardTransaction[]) {
+  const groups: KeyGroup[] = [];
+  const index = new Map<string, KeyGroup>();
+  for (const txn of rows) {
+    const key = descriptionKey(txn.name, Number(txn.amount));
+    const existing = index.get(key);
+    if (existing) {
+      existing.rows.push(txn);
+      continue;
+    }
+    const group = { key, rows: [txn] };
+    index.set(key, group);
+    groups.push(group);
+  }
+  return groups;
+}
+
+/** One Jev answer covers every row that shares the description key. */
+function fanLabels(
+  labeled: LabeledTransaction[],
+  groups: KeyGroup[],
+) {
+  const byRepId = new Map(
+    groups.map((group) => [group.rows[0]!.transactionId, group]),
+  );
+  const hit = new Set<string>();
+  const fanned: LabeledTransaction[] = [];
+  for (const label of labeled) {
+    const group = byRepId.get(label.transactionId);
+    if (!group) {
+      fanned.push(label);
+      continue;
+    }
+    hit.add(group.key);
+    for (const txn of group.rows) {
+      fanned.push({ ...label, transactionId: txn.transactionId });
+    }
+  }
+  let failedRows = 0;
+  for (const group of groups) {
+    if (!hit.has(group.key)) failedRows += group.rows.length;
+  }
+  return { fanned, failedRows };
+}
+
 export function useClassifyTransactions() {
   const queryClient = useQueryClient();
   const client = useConvex();
@@ -85,21 +133,26 @@ export function useClassifyTransactions() {
         throw new Error("Sign in again, then classify.");
       }
 
+      const groups = groupByDescription(rows);
       publishClassifyProgress({ done: 0, total: rows.length });
       toast.loading(`Classifying 0 of ${rows.length}`, { id: CLASSIFY_TOAST });
       let summary = emptySummary();
+      let resolved = 0;
       try {
-        for (let i = 0; i < rows.length; i += CLASSIFY_CHUNK) {
-          const chunk = rows.slice(i, i + CLASSIFY_CHUNK);
+        for (let i = 0; i < groups.length; i += CLASSIFY_CHUNK) {
+          const chunk = groups.slice(i, i + CLASSIFY_CHUNK);
           const response = await fetch("/api/statements/categorize-vault", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              transactions: chunk.map((txn) => ({
-                transactionId: txn.transactionId,
-                description: txn.name,
-                amount: Number(txn.amount),
-              })),
+              transactions: chunk.map((group) => {
+                const txn = group.rows[0]!;
+                return {
+                  transactionId: txn.transactionId,
+                  description: txn.name,
+                  amount: Number(txn.amount),
+                };
+              }),
             }),
           });
           const result = (await response.json()) as {
@@ -110,6 +163,8 @@ export function useClassifyTransactions() {
           if (!response.ok) {
             throw new Error(result.error ?? "Classification failed");
           }
+          const labeled = result.labeled ?? [];
+          const { fanned, failedRows } = fanLabels(labeled, chunk);
           await applyVaultCategorization({
             client: client as unknown as MutationClient,
             userId: privateLedger.userId,
@@ -117,12 +172,19 @@ export function useClassifyTransactions() {
             keyId: privateLedger.keyId,
             masterKey,
             ledger: privateLedger.ledger,
-            labeled: result.labeled ?? [],
+            labeled: fanned,
           });
-          summary = addSummaries(summary, result.summary ?? emptySummary());
-          const done = Math.min(rows.length, i + chunk.length);
-          publishClassifyProgress({ done, total: rows.length });
-          toast.loading(`Classifying ${done} of ${rows.length}`, {
+          const chunkSummary = result.summary ?? emptySummary();
+          summary = addSummaries(summary, {
+            ok: chunkSummary.ok ? failedRows === 0 : false,
+            cached: chunkSummary.cached + Math.max(0, fanned.length - labeled.length),
+            ai: chunkSummary.ai,
+            pending: failedRows,
+            error: chunkSummary.error,
+          });
+          resolved += chunk.reduce((count, group) => count + group.rows.length, 0);
+          publishClassifyProgress({ done: resolved, total: rows.length });
+          toast.loading(`Classifying ${resolved} of ${rows.length}`, {
             id: CLASSIFY_TOAST,
           });
         }

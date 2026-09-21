@@ -616,6 +616,66 @@ export const apply = mutation({
   },
 });
 
+/** Save description-key rules without touching transaction rows. */
+export const rememberRules = mutation({
+  args: {
+    rules: v.array(
+      v.object({
+        key: v.string(),
+        profile: profileValidator,
+      }),
+    ),
+  },
+  returns: v.object({ saved: v.number() }),
+  handler: async (ctx, args) => {
+    const user = await requireUser(ctx);
+    if (args.rules.length > 100) throw new Error("Batch too large");
+    const tagCatalog = await loadTagCatalog(ctx, user._id);
+    let saved = 0;
+    for (const input of args.rules) {
+      const p = input.profile;
+      if (
+        !input.key.trim() ||
+        !p.merchant.trim() ||
+        p.merchant.length > 160 ||
+        !(TXN_CODES as readonly string[]).includes(p.txnCode) ||
+        !["online", "in_store", "other"].includes(p.channel)
+      ) {
+        throw new Error("Invalid categorization");
+      }
+      const path = await ctx.db
+        .query("sharedCategoryPaths")
+        .withIndex("by_key", (q) => q.eq("key", p.pathKey))
+        .unique();
+      if (!path) throw new Error("Choose an existing category path");
+      const resolvedTags = resolveProfileTags(p.tags, tagCatalog);
+      if (resolvedTags) await rememberUserTags(ctx, user._id, resolvedTags);
+      const stored = resolvedTags ? { ...p, tags: resolvedTags } : p;
+      const rule = await ctx.db
+        .query("categorizationRules")
+        .withIndex("by_userId_key", (q) =>
+          q.eq("userId", user._id).eq("key", input.key),
+        )
+        .unique();
+      if (rule) {
+        await ctx.db.patch(rule._id, {
+          profile: stored,
+          updatedAt: Date.now(),
+        });
+      } else {
+        await ctx.db.insert("categorizationRules", {
+          userId: user._id,
+          key: input.key,
+          profile: stored,
+          updatedAt: Date.now(),
+        });
+      }
+      saved += 1;
+    }
+    return { saved };
+  },
+});
+
 /** Overwrite one owned row and refresh its description-key rule. */
 export const recategorize = mutation({
   args: {

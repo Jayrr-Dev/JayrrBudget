@@ -37,6 +37,17 @@ type Path = {
   subcategory: string | null;
 };
 
+async function persistLearnedRules(
+  client: ConvexHttpClient,
+  matches: { key: string; profile: CategoryProfile }[],
+) {
+  for (let i = 0; i < matches.length; i += 100) {
+    await client.mutation(api.categorization.rememberRules, {
+      rules: matches.slice(i, i + 100),
+    });
+  }
+}
+
 function cleanProfileMerchant(profile: CategoryProfile): CategoryProfile {
   return {
     ...profile,
@@ -49,7 +60,10 @@ function cleanProfileMerchant(profile: CategoryProfile): CategoryProfile {
 export async function labelDescriptionGroups(
   client: ConvexHttpClient,
   input: Array<{ transactionId: string; description: string; amount: number }>,
-  options?: { skipCache?: boolean },
+  options?: {
+    skipCache?: boolean;
+    onLabeled?: (item: LabeledTransaction) => void;
+  },
 ): Promise<{ summary: CategorizationSummary; labeled: LabeledTransaction[] }> {
   const summary: CategorizationSummary = {
     ok: true,
@@ -89,15 +103,17 @@ export async function labelDescriptionGroups(
       if (!rows) continue;
       const path = paths.find((item) => item.key === match.profile.pathKey);
       for (const row of rows) {
-        labeled.push({
+        const item: LabeledTransaction = {
           transactionId: row.transactionId,
           profile: cleanProfileMerchant(match.profile),
           section: path?.section ?? "",
           category: path?.category ?? "",
           subcategory: path?.subcategory ?? null,
-        });
+        };
+        labeled.push(item);
         summary[source] += 1;
         summary.pending -= 1;
+        options?.onLabeled?.(item);
       }
     }
   };
@@ -137,6 +153,7 @@ export async function labelDescriptionGroups(
         else stillUnknown.push(key);
       }
       remember(preset, "ai");
+      await persistLearnedRules(client, preset);
       unknown.length = 0;
       unknown.push(...stillUnknown);
     }
@@ -170,8 +187,9 @@ export async function labelDescriptionGroups(
       tags: tagCatalog,
       ownerRules: normalizeUserAiRules(aiRules.rules ?? []),
       deadline,
+      onMatch: (match) => remember([match], "ai"),
     });
-    remember(jev.matches, "ai");
+    await persistLearnedRules(client, jev.matches);
     if (jev.error) {
       summary.error = jev.error;
       console.warn(
