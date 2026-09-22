@@ -1,4 +1,4 @@
-import type { MutationClient } from "@/crypto/vaultRecords";
+import type { MutationClient, PrivateRecordInput } from "@/crypto/vaultRecords";
 import { savePrivateRecords } from "@/crypto/vaultRecords";
 import { toSlug } from "@/domains/enrichment/domain/slug";
 import type { LabeledTransaction } from "@/domains/statements/application/categorizeStatement";
@@ -48,16 +48,25 @@ export async function applyVaultCategorization(input: {
   ledger: PrivateLedger;
   labeled: LabeledTransaction[];
 }) {
-  const records = [];
+  const records = new Map<
+    string,
+    {
+      recordId: string;
+      kind: "tx";
+      value: ReturnType<typeof labeledTxValue>;
+      expectedRevision: number;
+    }
+  >();
   const merchants = new Map<string, string>();
+  const merchantRecords: PrivateRecordInput[] = [];
   for (const label of input.labeled) {
     const tx = input.ledger.transactions.find(
       (row) => row.recordId === label.transactionId,
     );
     if (!tx) continue;
-    records.push({
+    records.set(tx.recordId, {
       recordId: tx.recordId,
-      kind: "tx" as const,
+      kind: "tx",
       value: labeledTxValue(tx, label),
       expectedRevision: tx.revision,
     });
@@ -69,7 +78,7 @@ export async function applyVaultCategorization(input: {
       (row) => row.merchantId === merchantId,
     );
     if (existing) continue;
-    records.push({
+    merchantRecords.push({
       recordId: `merchant-${merchantId}`,
       kind: "note" as const,
       value: {
@@ -84,14 +93,18 @@ export async function applyVaultCategorization(input: {
       expectedRevision: null,
     });
   }
-  if (!records.length) return input.ledger;
-  await savePrivateRecords(input.client, {
+  const pending = [...records.values(), ...merchantRecords];
+  if (!pending.length) return input.ledger;
+  const saved = await savePrivateRecords(input.client, {
     userId: input.userId,
     vaultId: input.vaultId,
     keyId: input.keyId,
     masterKey: input.masterKey,
-    records,
+    records: pending,
   });
+  const revisionById = new Map(
+    saved.revisions.map((row) => [row.recordId, row.revision]),
+  );
   const byId = new Map(
     input.labeled.map((label) => [label.transactionId, label]),
   );
@@ -99,9 +112,11 @@ export async function applyVaultCategorization(input: {
     ...input.ledger,
     transactions: input.ledger.transactions.map((tx) => {
       const label = byId.get(tx.recordId);
-      if (!label) return tx;
+      const revision = revisionById.get(tx.recordId) ?? tx.revision;
+      if (!label) return tx.revision === revision ? tx : { ...tx, revision };
       return {
         ...tx,
+        revision,
         merchantName: label.profile.merchant,
         merchantClean: label.profile.merchant,
         sectionName: label.section,

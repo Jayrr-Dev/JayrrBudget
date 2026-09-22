@@ -10,18 +10,18 @@ import {
   loadPrivateLedger,
   type VaultListClient,
 } from "@/domains/vault/application/loadPrivateLedger";
-import { subscribeFullyLocal } from "@/shared/offline/fullyLocalMode";
 import { mergePlaceholderAccounts } from "@/domains/vault/application/mergePlaceholderAccounts";
 import {
   clearEncryptedClassification,
   rewriteEncryptedTaxonomyLabels,
   vaultWriteReady,
 } from "@/domains/vault/application/saveEncryptedLedger";
-import { toast } from "sonner";
 import type { PrivateLedger } from "@/domains/vault/domain/privateLedger";
+import { subscribeFullyLocal } from "@/shared/offline/fullyLocalMode";
 import { api } from "@convex/_generated/api";
 import { useConvex, useConvexAuth, useQuery } from "convex/react";
 import { useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 
 const EMPTY: PrivateLedger = {
   transactions: [],
@@ -35,6 +35,44 @@ const EMPTY: PrivateLedger = {
 };
 
 const CLASSIFICATION_CLEARED = "jayrr-classification-cleared";
+
+let ledgerMaintenance: Promise<PrivateLedger | null> | null = null;
+
+/** One pass for every mounted hook, so the same transaction is not saved twice. */
+function maintainPrivateLedger(input: {
+  write: NonNullable<ReturnType<typeof vaultWriteReady>>;
+  ledger: PrivateLedger;
+  role: string | undefined;
+}) {
+  if (ledgerMaintenance) return ledgerMaintenance;
+  const run = (async () => {
+    const txs = input.ledger.transactions;
+    if (
+      input.role === "admin" &&
+      localStorage.getItem(CLASSIFICATION_CLEARED) !== "1" &&
+      txs.some((tx) => tx.categoryName?.trim() || tx.sectionName?.trim())
+    ) {
+      const count = await clearEncryptedClassification(input.write, txs);
+      localStorage.setItem(CLASSIFICATION_CLEARED, "1");
+      if (count) toast.success(`Cleared labels on ${count} lines.`);
+    } else {
+      await rewriteEncryptedTaxonomyLabels(input.write, txs);
+    }
+    return mergePlaceholderAccounts({
+      ctx: input.write,
+      ledger: input.ledger,
+    });
+  })().catch((error: unknown) => {
+    console.error(error);
+    toast.error("Could not finish updating the ledger.");
+    return null;
+  });
+  ledgerMaintenance = run;
+  void run.finally(() => {
+    if (ledgerMaintenance === run) ledgerMaintenance = null;
+  });
+  return run;
+}
 
 const ledgerListeners = new Set<() => void>();
 let ledgerEpoch = 0;
@@ -74,9 +112,6 @@ export function usePrivateLedger() {
   const vaultUpdatedAt = vault?.updatedAt ?? 0;
   const vaultId = vault?.vaultId ?? null;
   const hasLedger = useRef(false);
-  const rewritingLabels = useRef(false);
-  const clearingLabels = useRef(false);
-  const mergingPlaceholders = useRef(false);
 
   useEffect(() => {
     const onBump = () => setVersion(ledgerEpoch);
@@ -151,55 +186,14 @@ export function usePrivateLedger() {
             client,
           });
           if (write) {
-            const shouldClear =
-              me.role === "admin" &&
-              !clearingLabels.current &&
-              localStorage.getItem(CLASSIFICATION_CLEARED) !== "1" &&
-              next.transactions.some(
-                (tx) => tx.categoryName?.trim() || tx.sectionName?.trim(),
-              );
-            if (shouldClear) {
-              clearingLabels.current = true;
-              void clearEncryptedClassification(write, next.transactions)
-                .then((count) => {
-                  localStorage.setItem(CLASSIFICATION_CLEARED, "1");
-                  toast.success(
-                    count
-                      ? `Cleared labels on ${count} lines.`
-                      : "Those lines had no labels left.",
-                  );
-                })
-                .catch((error: unknown) => {
-                  const message =
-                    error instanceof Error
-                      ? error.message
-                      : "Could not clear labels.";
-                  toast.error(message);
-                })
-                .finally(() => {
-                  clearingLabels.current = false;
-                });
-            }
-            if (!clearingLabels.current && !rewritingLabels.current) {
-              rewritingLabels.current = true;
-              void rewriteEncryptedTaxonomyLabels(write, next.transactions)
-                .catch(() => undefined)
-                .finally(() => {
-                  rewritingLabels.current = false;
-                });
-            }
-            if (!mergingPlaceholders.current) {
-              mergingPlaceholders.current = true;
-              void mergePlaceholderAccounts({ ctx: write, ledger: next })
-                .then((merged) => {
-                  if (cancelled) return;
-                  if (merged !== next) setLedger(merged);
-                })
-                .catch(() => undefined)
-                .finally(() => {
-                  mergingPlaceholders.current = false;
-                });
-            }
+            void maintainPrivateLedger({
+              write,
+              ledger: next,
+              role: me.role,
+            }).then((merged) => {
+              if (cancelled || !merged || merged === next) return;
+              setLedger(merged);
+            });
           }
         }
       } catch (cause) {

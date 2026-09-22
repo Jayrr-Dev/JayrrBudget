@@ -83,10 +83,7 @@ function groupByDescription(rows: DashboardTransaction[]) {
 }
 
 /** One Jev answer covers every row that shares the description key. */
-function fanLabels(
-  labeled: LabeledTransaction[],
-  groups: KeyGroup[],
-) {
+function fanLabels(labeled: LabeledTransaction[], groups: KeyGroup[]) {
   const byRepId = new Map(
     groups.map((group) => [group.rows[0]!.transactionId, group]),
   );
@@ -185,6 +182,7 @@ export function useClassifyTransactions() {
       showClassifyCount(0, rows.length);
       let summary = emptySummary();
       let resolved = 0;
+      let ledger = privateLedger.ledger;
       try {
         for (let i = 0; i < groups.length; i += CLASSIFY_CHUNK) {
           const chunk = groups.slice(i, i + CLASSIFY_CHUNK);
@@ -224,13 +222,13 @@ export function useClassifyTransactions() {
             showClassifyCount(resolved + chunkDone, rows.length);
           });
           const { fanned, failedRows } = fanLabels(labeled, chunk);
-          await applyVaultCategorization({
+          ledger = await applyVaultCategorization({
             client: client as unknown as MutationClient,
             userId: privateLedger.userId,
             vaultId: privateLedger.vaultId,
             keyId: privateLedger.keyId,
             masterKey,
-            ledger: privateLedger.ledger,
+            ledger,
             labeled: fanned,
           });
           summary = addSummaries(summary, {

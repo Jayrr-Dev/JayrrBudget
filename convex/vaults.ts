@@ -255,7 +255,9 @@ export const saveRecords = mutation({
     if (!vault) throw new Error("Encryption is not set up");
     const now = Date.now();
     const revisions: Array<{ recordId: string; revision: number }> = [];
-    for (const record of args.records) {
+    const pending = new Map<string, (typeof args.records)[number]>();
+    for (const record of args.records) pending.set(record.recordId, record);
+    for (const record of pending.values()) {
       const existing = await ctx.db
         .query("encryptedRecords")
         .withIndex("by_userId_vaultId_recordId", (q) =>

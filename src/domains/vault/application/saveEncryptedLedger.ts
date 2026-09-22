@@ -233,7 +233,9 @@ export async function rewriteEncryptedTaxonomyLabels(
   ctx: VaultWriteContext,
   txs: PrivateTransaction[],
 ) {
-  const matches = txs.filter((tx) => taxonomyRewritePatch(tx).changed);
+  const matches = uniqueByRecordId(
+    txs.filter((tx) => taxonomyRewritePatch(tx).changed),
+  );
   if (matches.length === 0) return 0;
   for (let i = 0; i < matches.length; i += RENAME_CHUNK) {
     const chunk = matches.slice(i, i + RENAME_CHUNK);
@@ -255,6 +257,7 @@ export async function rewriteEncryptedTaxonomyLabels(
         };
       }),
     );
+    for (const tx of chunk) tx.revision += 1;
   }
   return matches.length;
 }
@@ -262,12 +265,12 @@ export async function rewriteEncryptedTaxonomyLabels(
 function hasClassification(tx: PrivateTransaction) {
   return Boolean(
     tx.sectionName?.trim() ||
-      tx.categoryName?.trim() ||
-      tx.subcategoryName?.trim() ||
-      tx.spreadName?.trim() ||
-      tx.transactionTypeName?.trim() ||
-      tx.txnCode?.trim() ||
-      tx.channel?.trim(),
+    tx.categoryName?.trim() ||
+    tx.subcategoryName?.trim() ||
+    tx.spreadName?.trim() ||
+    tx.transactionTypeName?.trim() ||
+    tx.txnCode?.trim() ||
+    tx.channel?.trim(),
   );
 }
 
@@ -276,7 +279,7 @@ export async function clearEncryptedClassification(
   ctx: VaultWriteContext,
   txs: PrivateTransaction[],
 ) {
-  const matches = txs.filter(hasClassification);
+  const matches = uniqueByRecordId(txs.filter(hasClassification));
   for (let i = 0; i < matches.length; i += RENAME_CHUNK) {
     const chunk = matches.slice(i, i + RENAME_CHUNK);
     await saveEncryptedRecords(
@@ -301,8 +304,24 @@ export async function clearEncryptedClassification(
         };
       }),
     );
+    for (const tx of chunk) {
+      tx.revision += 1;
+      tx.sectionName = null;
+      tx.categoryName = null;
+      tx.subcategoryName = null;
+      tx.spreadName = null;
+      tx.transactionTypeName = null;
+      tx.txnCode = null;
+      tx.channel = null;
+    }
   }
   return matches.length;
+}
+
+function uniqueByRecordId(txs: PrivateTransaction[]) {
+  const byId = new Map<string, PrivateTransaction>();
+  for (const tx of txs) byId.set(tx.recordId, tx);
+  return [...byId.values()];
 }
 
 function merchantKey(value: string | null | undefined) {
