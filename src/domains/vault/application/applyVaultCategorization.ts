@@ -75,13 +75,13 @@ export async function applyVaultCategorization(input: {
       value: {
         merchantId,
         name,
-        rawName: existing?.rawName ?? name,
-        company: existing?.company ?? null,
-        brand: existing?.brand ?? null,
-        website: existing?.website ?? null,
-        logoUrl: existing?.logoUrl ?? null,
+        rawName: name,
+        company: null,
+        brand: null,
+        website: null,
+        logoUrl: null,
       },
-      expectedRevision: existing?.revision ?? null,
+      expectedRevision: null,
     });
   }
   if (!records.length) return input.ledger;

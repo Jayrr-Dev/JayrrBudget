@@ -9,7 +9,10 @@ import {
   PopoverTitle,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { changePasswordKeepingVault } from "@/domains/auth/application/changePasswordKeepingVault";
+import {
+  changePasswordKeepingVault,
+  type PasswordClient,
+} from "@/domains/auth/application/changePasswordKeepingVault";
 import { api } from "@convex/_generated/api";
 import { useConvex, useConvexAuth, useQuery } from "convex/react";
 import { Info } from "lucide-react";
@@ -42,7 +45,11 @@ export function ChangePasswordCard() {
     }
     setPending(true);
     try {
-      await changePasswordKeepingVault(client, currentPassword, nextPassword);
+      await changePasswordKeepingVault(
+        client as unknown as PasswordClient,
+        currentPassword,
+        nextPassword,
+      );
       setCurrentPassword("");
       setNextPassword("");
       setConfirmPassword("");

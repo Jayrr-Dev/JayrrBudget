@@ -9,12 +9,13 @@ import { api } from "@convex/_generated/api";
 
 const MIN_PASSWORD_LENGTH = 8;
 
-type PasswordClient = VaultClient & {
+export type PasswordClient = VaultClient & {
   action: (reference: unknown, args: unknown) => Promise<unknown>;
 };
 
 function passwordError(error: unknown) {
-  const raw = error instanceof Error ? error.message : "Could not change the password.";
+  const raw =
+    error instanceof Error ? error.message : "Could not change the password.";
   const marker = "Uncaught Error: ";
   const index = raw.lastIndexOf(marker);
   return index === -1 ? raw : raw.slice(index + marker.length);
@@ -39,7 +40,10 @@ export async function changePasswordKeepingVault(
     throw new Error("Choose a different password.");
   }
 
-  const vault = (await client.query(api.vaults.get, {})) as VaultUnlockRecord | null;
+  const vault = (await client.query(
+    api.vaults.get,
+    {},
+  )) as VaultUnlockRecord | null;
   let masterKey: CryptoKey | null = null;
   if (vault) {
     try {

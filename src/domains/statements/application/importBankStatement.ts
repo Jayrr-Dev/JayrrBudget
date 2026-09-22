@@ -2,11 +2,13 @@ import {
   normalizeStatementAccountType,
   statementTypeToLedgerFields,
 } from "@/domains/dashboard/domain/accountCategory";
+import { applyRunningBalance } from "@/domains/statements/application/applyRunningBalance";
 import {
   checkStatementBalance,
   dedupeParsedTransactions,
 } from "@/domains/statements/application/balanceStatement";
 import { polishPaperFactsStatement } from "@/domains/statements/application/polishParsedStatement";
+import { signTableWithJev } from "@/domains/statements/application/signTableWithJev";
 import {
   STATEMENT_IMPORT_STEPS,
   type StatementImportProgress,
@@ -29,8 +31,11 @@ import {
   isMistralConfigured,
   ocrDocument,
 } from "@/domains/statements/infrastructure/mistralOcr";
-import { applyRunningBalance } from "@/domains/statements/application/applyRunningBalance";
-import { parseStatementPaperFacts, cleanOcrToTable, rebalancePaperFacts } from "@/domains/statements/infrastructure/openRouterParse";
+import {
+  cleanOcrToTable,
+  parseStatementPaperFacts,
+  rebalancePaperFacts,
+} from "@/domains/statements/infrastructure/openRouterParse";
 import { runMeteredOpenRouter } from "@/shared/ai/aiMeter.server";
 import { checkAiCall } from "@/shared/ai/enforceAiCall.server";
 import { OPENROUTER_NOT_CONFIGURED } from "@/shared/ai/openRouter";
@@ -223,7 +228,11 @@ async function importBankStatementWithKey(
         balance = checkStatementBalance(parsed);
       }
     }
-    for (let attempt = 1; attempt <= 3 && balance.balanced === false; attempt += 1) {
+    for (
+      let attempt = 1;
+      attempt <= 3 && balance.balanced === false;
+      attempt += 1
+    ) {
       params.onProgress?.({
         step: "parse",
         percent: 78,
@@ -232,7 +241,13 @@ async function importBankStatementWithKey(
       try {
         const signs = await signTableWithJev(statementText).catch(() => "");
         const corrected = polishPaperFactsStatement(
-          await rebalancePaperFacts(statementText, parsed, balance, signs, attempt),
+          await rebalancePaperFacts(
+            statementText,
+            parsed,
+            balance,
+            signs,
+            attempt,
+          ),
           {
             ocrMarkdown: statementText,
             sourceHint,
