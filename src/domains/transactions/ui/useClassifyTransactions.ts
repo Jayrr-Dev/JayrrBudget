@@ -249,7 +249,11 @@ export function useClassifyTransactions() {
       }
     },
     onSuccess: async (result) => {
-      const description = `${result.cached} reused, ${result.ai} classified, ${result.pending} pending.`;
+      const classified = result.cached + result.ai;
+      const description =
+        result.pending > 0
+          ? `${classified} classified, ${result.pending} pending.`
+          : `${classified} classified.`;
       if (result.ok) {
         toast.success("Classification complete", {
           description,
